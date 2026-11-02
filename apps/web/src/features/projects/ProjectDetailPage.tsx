@@ -1,4 +1,4 @@
-import { PIPELINE_STAGES, type Project } from "@vg/shared";
+import type { Project } from "@vg/shared";
 import { Link, Navigate, NavLink, useNavigate, useParams } from "react-router-dom";
 import { useState } from "react";
 import { ConfirmDialog } from "../../components/ConfirmDialog";
@@ -8,16 +8,15 @@ import { StatusBadge } from "../../components/StatusBadge";
 import { useDeleteProject, useDuplicateProject, useProject, useSetProjectArchived } from "../../hooks/useProjects";
 import { ApiRequestError } from "../../services/apiClient";
 import { EditProjectDialog } from "./EditProjectDialog";
+import { PipelinePanel } from "../pipeline/PipelinePanel";
 
 const TABS = ["overview", "script", "scenes", "visuals", "voice", "music", "timeline", "render"] as const;
-const STAGE_LABELS = PIPELINE_STAGES.map((stage) => stage.replaceAll("_", " "));
 
 function formatUpdated(value: string): string {
   return new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" }).format(new Date(value));
 }
 
 function ProjectOverview({ project }: { project: Project }) {
-  const currentIndex = PIPELINE_STAGES.indexOf(project.stage);
   return (
     <div className="overview-grid">
       <section className="panel overview-card">
@@ -40,18 +39,7 @@ function ProjectOverview({ project }: { project: Project }) {
           <div><dt>Updated</dt><dd>{formatUpdated(project.updatedAt)}</dd></div>
         </dl>
       </section>
-      <section className="panel pipeline-card">
-        <p className="eyebrow">PIPELINE</p><h2>Production stages</h2>
-        <ol className="pipeline-list">
-          {PIPELINE_STAGES.map((stage, index) => (
-            <li className={index === currentIndex ? "current-stage" : index < currentIndex ? "completed-stage" : ""} key={stage}>
-              <span className="pipeline-marker">{index < currentIndex ? "✓" : index + 1}</span>
-              <span>{STAGE_LABELS[index]}</span>
-              {index === currentIndex && <span className="current-label">Current</span>}
-            </li>
-          ))}
-        </ol>
-      </section>
+      <PipelinePanel projectId={project.id} />
     </div>
   );
 }

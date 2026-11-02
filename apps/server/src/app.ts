@@ -10,6 +10,12 @@ import { createProjectService } from "./services/projectService.js";
 import { registerDashboardRoutes } from "./api/dashboard.js";
 import { registerHealthRoutes } from "./api/health.js";
 import { registerProjectRoutes } from "./api/projects.js";
+import { registerPipelineRoutes } from "./api/pipeline.js";
+import { PipelineEventBus } from "./jobs/eventBus.js";
+import { JobRepository } from "./jobs/jobRepository.js";
+import { JobWorker } from "./jobs/worker.js";
+import { createExecutorRegistry } from "./pipeline/executorRegistry.js";
+import { PipelineOrchestrator } from "./pipeline/orchestrator.js";
 
 export function buildApp({ config }: { config: AppConfig }) {
   const server = Fastify({
@@ -22,11 +28,28 @@ export function buildApp({ config }: { config: AppConfig }) {
   const database = openDatabase(config.DATABASE_PATH);
   migrateDatabase(database.db);
   const projectService = createProjectService(database.db, config, server.log);
+  const events = new PipelineEventBus();
+  const jobRepository = new JobRepository(database.sqlite, events);
+  const orchestrator = new PipelineOrchestrator(jobRepository, config, server.log);
+  const worker = new JobWorker(
+    jobRepository,
+    orchestrator,
+    createExecutorRegistry({ delayMs: config.FAKE_STAGE_DELAY_MS }),
+    config,
+    server.log,
+  );
 
   server.register(cors, { origin: config.CORS_ORIGIN });
   registerHealthRoutes(server, database.sqlite);
   registerProjectRoutes(server, projectService);
   registerDashboardRoutes(server, projectService);
+  registerPipelineRoutes(server, projectService, jobRepository, orchestrator, events);
+
+  server.addHook("onReady", async () => worker.start());
+  server.addHook("onClose", async () => {
+    await worker.stop();
+    database.sqlite.close();
+  });
 
   server.setErrorHandler((error, request, reply) => {
     if (error instanceof AppError) {
@@ -57,10 +80,6 @@ export function buildApp({ config }: { config: AppConfig }) {
         message: "An internal server error occurred",
       },
     });
-  });
-
-  server.addHook("onClose", async () => {
-    database.sqlite.close();
   });
 
   return server;

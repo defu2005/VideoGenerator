@@ -3,6 +3,7 @@ import { and, asc, count, desc, eq, inArray, isNotNull, isNull, sql } from "driz
 import {
   PROJECT_STATUSES,
   ProjectSchema,
+  PipelineStageSchema,
   ProjectStatusSchema,
   type CreateProjectInput,
   type DashboardStats,
@@ -14,7 +15,7 @@ import {
 } from "@vg/shared";
 import type { FastifyBaseLogger } from "fastify";
 import type { AppDatabase } from "../db/client.js";
-import { projects, type ProjectRow } from "../db/schema.js";
+import { jobs, projects, type ProjectRow } from "../db/schema.js";
 import type { AppConfig } from "../lib/config.js";
 import { AppError } from "../lib/errors.js";
 import { createProjectDir, removeProjectDir } from "../storage/paths.js";
@@ -168,7 +169,11 @@ export function createProjectService(db: AppDatabase, config: AppConfig, logger:
   async function deleteProject(id: string): Promise<"not_found" | "busy" | "deleted"> {
     const project = await getProject(id);
     if (!project) return "not_found";
-    if (project.status === "GENERATING" || project.status === "RENDERING") return "busy";
+    const activeJob = await db.select({ id: jobs.id })
+      .from(jobs)
+      .where(and(eq(jobs.projectId, id), inArray(jobs.status, ["QUEUED", "RUNNING"])))
+      .get();
+    if (activeJob || project.status === "GENERATING" || project.status === "RENDERING") return "busy";
 
     await db.delete(projects).where(eq(projects.id, id)).run();
     try {
@@ -180,7 +185,7 @@ export function createProjectService(db: AppDatabase, config: AppConfig, logger:
   }
 
   async function dashboardStats(): Promise<DashboardStats> {
-    const [statusCounts, archivedRow, recentRows] = await Promise.all([
+    const [statusCounts, archivedRow, recentRows, failedJobs] = await Promise.all([
       db.select({ status: projects.status, total: count() })
         .from(projects)
         .where(isNull(projects.archivedAt))
@@ -195,6 +200,20 @@ export function createProjectService(db: AppDatabase, config: AppConfig, logger:
         .where(isNull(projects.archivedAt))
         .orderBy(desc(projects.updatedAt), asc(projects.id))
         .limit(5)
+        .all(),
+      db.select({
+        jobId: jobs.id,
+        projectId: jobs.projectId,
+        projectTitle: projects.title,
+        stage: jobs.stage,
+        error: jobs.error,
+        at: jobs.finishedAt,
+      })
+        .from(jobs)
+        .innerJoin(projects, eq(jobs.projectId, projects.id))
+        .where(eq(jobs.status, "FAILED"))
+        .orderBy(desc(jobs.finishedAt), desc(jobs.createdAt))
+        .limit(10)
         .all(),
     ]);
 
@@ -218,7 +237,18 @@ export function createProjectService(db: AppDatabase, config: AppConfig, logger:
       byStatus,
       archived: archivedRow?.total ?? 0,
       recent: recentRows.map(toProject),
-      recentErrors: [],
+      recentErrors: failedJobs.map((job) => {
+        const error = job.error as { code: string; message: string } | null;
+        return {
+          jobId: job.jobId,
+          projectId: job.projectId,
+          projectTitle: job.projectTitle,
+          stage: PipelineStageSchema.parse(job.stage),
+          code: error?.code ?? "JOB_FAILED",
+          message: error?.message ?? "Job failed without an error message",
+          at: job.at ?? new Date().toISOString(),
+        };
+      }),
     };
   }
 

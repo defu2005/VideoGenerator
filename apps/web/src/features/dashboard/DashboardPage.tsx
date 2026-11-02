@@ -93,7 +93,14 @@ export function DashboardPage() {
       {data.recentErrors.length > 0 && (
         <section className="panel recent-errors" aria-label="Recent errors">
           <div className="section-heading"><div><p className="eyebrow">ATTENTION</p><h2>Recent errors</h2></div></div>
-          <ul>{data.recentErrors.map((error, index) => <li key={index}>{String(error)}</li>)}</ul>
+          <ul className="recent-error-list">{data.recentErrors.map((error) => (
+            <li key={error.jobId}>
+              <Link to={`/projects/${error.projectId}/overview`}><strong>{error.projectTitle}</strong></Link>
+              <span>{error.stage.replaceAll("_", " ")}</span>
+              <p>{error.message}</p>
+              <time dateTime={error.at}>{formatUpdated(error.at)}</time>
+            </li>
+          ))}</ul>
         </section>
       )}
       <CreateProjectDialog open={createOpen} onClose={() => setCreateOpen(false)} />
