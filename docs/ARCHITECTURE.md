@@ -191,7 +191,7 @@ Lỗi luôn có dạng: `{ "error": { "code": "PROJECT_NOT_FOUND", "message": ".
 | TASK-003 | Job queue + worker + SSE + pipeline state machine + gates + modes (dùng stage giả để test) | 001 | 2 |
 | TASK-004 | LLM đa provider + Research/Script (gộp 1 call) + Script editor UI | 003 | 2 |
 | TASK-004B | MCP server cho Claude Desktop + provider claude-cli (dùng subscription) | 004 | 2 |
-| TASK-004D | Provider GitHub Models + GitHub Copilot (copilot-cli, MCP với Copilot Chat) + giới hạn token theo provider (pre-flight) + đếm số call/tháng (không áp trần) | 004B | 2 |
+| TASK-004D | ~~GitHub Models~~ (đã bị GitHub khai tử 30/7/2026) + GitHub Copilot (copilot-cli, MCP với Copilot Chat) + giới hạn token theo provider (pre-flight) + đếm số call/tháng (không áp trần) | 004B | 2 |
 | TASK-004C | Tham số video (topic bắt buộc, còn lại tùy chọn) + khuyến nghị tự động bằng luật, 0 LLM call; quick create | 004 | 2 |
 | TASK-005 | Scene planning **bằng code, 0 LLM call** (tách scene từ script, thời lượng theo số từ, query/mood lấy từ output của script call) + Scene Board UI + invalidation | 004 | 3 |
 | TASK-006 | Image provider interface + Wikimedia/Openverse/Pexels + candidate store + ranking + dedupe | 005 | 4 |

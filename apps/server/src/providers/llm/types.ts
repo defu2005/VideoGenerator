@@ -6,7 +6,14 @@ export type LlmErrorCode =
   | "LLM_BAD_REQUEST"
   | "LLM_INVALID_OUTPUT"
   | "LLM_OUTPUT_TRUNCATED"
-  | "LLM_NOT_CONFIGURED";
+  | "LLM_NOT_CONFIGURED"
+  | "LLM_LIMIT_TOO_SMALL"
+  | "LLM_QUOTA_EXHAUSTED";
+
+export type LlmProviderLimits = {
+  maxInputTokens?: number;
+  maxOutputTokens?: number;
+};
 
 export type LlmRequest = {
   model: string;
@@ -19,7 +26,7 @@ export type LlmRequest = {
 
 export type LlmResponse = {
   text: string;
-  usage: { inputTokens: number; outputTokens: number };
+  usage: { inputTokens: number; outputTokens: number; tokensUnknown?: boolean };
   model: string;
   provider: string;
   finishReason: "stop" | "length" | "other";
@@ -29,6 +36,7 @@ export interface LlmProvider {
   id: string;
   label: string;
   defaultModel: string | null;
+  limits?: LlmProviderLimits;
   generate(req: LlmRequest, signal: AbortSignal): Promise<LlmResponse>;
 }
 
@@ -38,7 +46,12 @@ export class LlmError extends Error {
     public readonly code: LlmErrorCode,
     public readonly retryable: boolean,
     public readonly status?: number,
-    public readonly usage?: { llmCalls: number; inputTokens: number; outputTokens: number },
+    public readonly usage?: {
+      llmCalls: number;
+      inputTokens: number;
+      outputTokens: number;
+      tokensUnknown?: boolean;
+    },
   ) {
     super(message);
     this.name = "LlmError";

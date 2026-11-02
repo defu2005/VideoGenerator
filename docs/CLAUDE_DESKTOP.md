@@ -52,3 +52,27 @@ LLM_DEFAULT_PROVIDER=claude-cli
 Nếu CLI không nằm trên `PATH`, đặt `CLAUDE_CLI_PATH` thành đường dẫn executable. CLI chạy ở thư mục tạm rỗng, không có quyền truy cập công cụ; prompt được gửi qua stdin. Chế độ này dành cho mục đích sử dụng cá nhân trên máy của bạn. Hãy kiểm tra điều khoản của Anthropic trước khi cung cấp cho người dùng khác.
 
 Có thể đặt `CLAUDE_CLI_MODEL` để chọn model mặc định; lựa chọn model theo project hoặc `LLM_DEFAULT_MODEL` vẫn được ưu tiên.
+
+## VS Code Copilot Chat
+
+Copilot Chat trong VS Code có thể kết nối cùng MCP server. Build project bằng `npm run build`, mở workspace trong VS Code, rồi tạo file cấu hình cục bộ `.vscode/mcp.json` (không commit file này):
+
+```json
+{
+  "servers": {
+    "video-agent": {
+      "type": "stdio",
+      "command": "node",
+      "args": ["${workspaceFolder}\\apps\\mcp\\dist\\index.js"],
+      "env": {
+        "VG_API_URL": "http://127.0.0.1:3001"
+      }
+    }
+  }
+}
+```
+
+Khởi động API bằng `npm run dev`, sau đó trong Copilot Chat thử:
+
+- “Liệt kê project”
+- “Viết story cho project `<id>`”

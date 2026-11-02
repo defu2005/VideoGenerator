@@ -2,6 +2,8 @@ import { existsSync, readFileSync } from "node:fs";
 import { config as loadDotenv } from "dotenv";
 import { dirname, isAbsolute, join, resolve } from "node:path";
 import { z } from "zod";
+import type { LlmProviderId } from "@vg/shared";
+import type { LlmProviderLimits } from "../providers/llm/types.js";
 
 function findWorkspaceRoot(startDirectory: string): string | undefined {
   let directory = resolve(startDirectory);
@@ -43,6 +45,9 @@ const ConfigSchema = z.object({
   CLAUDE_CLI_ENABLED: z.stringbool().default(false),
   CLAUDE_CLI_PATH: z.string().min(1).default("claude"),
   CLAUDE_CLI_MODEL: z.string().optional(),
+  COPILOT_CLI_ENABLED: z.stringbool().default(false),
+  COPILOT_CLI_PATH: z.string().min(1).default("copilot"),
+  COPILOT_CLI_MODEL: z.string().optional(),
   ANTHROPIC_API_KEY: z.string().optional(),
   ANTHROPIC_MODEL: z.string().default("claude-haiku-5-5"),
   GEMINI_API_KEY: z.string().optional(),
@@ -81,6 +86,7 @@ export type AppConfig = {
   LLM_TIMEOUT_MS: number;
   LLM_CACHE_ENABLED: boolean;
   LLM_ENABLE_MOCK: boolean;
+  LLM_PROVIDER_LIMITS: Partial<Record<LlmProviderId, LlmProviderLimits>>;
   LLM_DEFAULT_PROVIDER?: string;
   LLM_DEFAULT_MODEL?: string;
   LLM_RESEARCH_PROVIDER?: string;
@@ -91,6 +97,9 @@ export type AppConfig = {
   CLAUDE_CLI_ENABLED: boolean;
   CLAUDE_CLI_PATH: string;
   CLAUDE_CLI_MODEL?: string;
+  COPILOT_CLI_ENABLED: boolean;
+  COPILOT_CLI_PATH: string;
+  COPILOT_CLI_MODEL?: string;
   ANTHROPIC_API_KEY?: string;
   ANTHROPIC_MODEL: string;
   GEMINI_API_KEY?: string;
@@ -116,6 +125,20 @@ export type AppConfig = {
   FAKE_STAGE_DELAY_MS: number;
 };
 
+const providerLimitPrefixes: Partial<Record<LlmProviderId, string>> = {
+  anthropic: "ANTHROPIC",
+  gemini: "GEMINI",
+  openai: "OPENAI",
+  ollama: "OLLAMA",
+  openrouter: "OPENROUTER",
+  deepseek: "DEEPSEEK",
+  groq: "GROQ",
+  custom: "CUSTOM_LLM",
+  mock: "MOCK",
+  "claude-cli": "CLAUDE_CLI",
+  "copilot-cli": "COPILOT_CLI",
+};
+
 export function parseConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
   const parsed = ConfigSchema.safeParse(env);
   if (!parsed.success) {
@@ -126,16 +149,43 @@ export function parseConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
   }
 
   const values = parsed.data;
+  const providerLimits = parseProviderLimits(env);
   const isProduction = env.NODE_ENV === "production";
   const dataDirectory = isAbsolute(values.DATA_DIR)
     ? values.DATA_DIR
     : resolve(workspaceRoot, values.DATA_DIR);
   return {
     ...values,
+    LLM_PROVIDER_LIMITS: providerLimits,
     DATA_DIR: dataDirectory,
     LLM_ENABLE_MOCK: values.LLM_ENABLE_MOCK ?? !isProduction,
     DATABASE_PATH: values.DATABASE_PATH
       ? isAbsolute(values.DATABASE_PATH) ? values.DATABASE_PATH : resolve(workspaceRoot, values.DATABASE_PATH)
       : join(dataDirectory, "app.db"),
   };
+}
+
+function parseProviderLimits(
+  env: NodeJS.ProcessEnv,
+): Partial<Record<LlmProviderId, LlmProviderLimits>> {
+  const limits: Partial<Record<LlmProviderId, LlmProviderLimits>> = {};
+  for (const [provider, prefix] of Object.entries(providerLimitPrefixes) as [LlmProviderId, string][]) {
+    const maxInputTokens = parseOptionalTokenLimit(env, `${prefix}_MAX_INPUT_TOKENS`);
+    const maxOutputTokens = parseOptionalTokenLimit(env, `${prefix}_MAX_OUTPUT_TOKENS`);
+    if (maxInputTokens !== undefined || maxOutputTokens !== undefined) {
+      limits[provider] = {
+        ...(maxInputTokens === undefined ? {} : { maxInputTokens }),
+        ...(maxOutputTokens === undefined ? {} : { maxOutputTokens }),
+      };
+    }
+  }
+  return limits;
+}
+
+function parseOptionalTokenLimit(env: NodeJS.ProcessEnv, name: string): number | undefined {
+  const value = env[name]?.trim();
+  if (!value) return undefined;
+  const parsed = z.coerce.number().int().positive().safeParse(value);
+  if (!parsed.success) throw new Error(`Invalid server configuration: ${name}: expected a positive integer`);
+  return parsed.data;
 }

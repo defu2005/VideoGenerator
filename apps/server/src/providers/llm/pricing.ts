@@ -9,6 +9,7 @@ export function estimateLlmCost(
   model: string,
   usage: { inputTokens: number; outputTokens: number },
 ): number {
+  if (provider === "claude-cli" || provider === "copilot-cli") return 0;
   if (!config.LLM_PRICES_JSON) return 0;
   let prices: Record<string, ModelPrice>;
   try {

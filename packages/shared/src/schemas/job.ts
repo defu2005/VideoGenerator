@@ -15,6 +15,9 @@ export const JobUsageSchema = z.object({
   inputTokens: z.number().int().nonnegative(),
   outputTokens: z.number().int().nonnegative(),
   costUsd: z.number().nonnegative(),
+  provider: z.string().optional(),
+  model: z.string().optional(),
+  tokensUnknown: z.boolean().optional(),
 });
 export type JobUsage = z.infer<typeof JobUsageSchema>;
 

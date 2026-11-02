@@ -1,10 +1,14 @@
+import Database from "better-sqlite3";
+import Fastify from "fastify";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { serializerCompiler, validatorCompiler, type ZodTypeProvider } from "fastify-type-provider-zod";
 import { parseConfig } from "../src/lib/config.js";
 import { AnthropicProvider } from "../src/providers/llm/anthropic.js";
 import { GeminiProvider } from "../src/providers/llm/gemini.js";
 import { OpenAiCompatibleProvider } from "../src/providers/llm/openaiCompatible.js";
 import { LlmProviderRegistry } from "../src/providers/llm/registry.js";
 import { LlmError, type LlmRequest } from "../src/providers/llm/types.js";
+import { registerLlmRoutes } from "../src/api/llm.js";
 
 const request: LlmRequest = {
   model: "unit-model",
@@ -202,5 +206,75 @@ describe("LLM registry", () => {
     expect(installed.list().find((provider) => provider.id === "claude-cli"))
       .toMatchObject({ configured: true, defaultModel: "sonnet" });
     expect(installed.resolve({ provider: "claude-cli" }, undefined, "script").model).toBe("sonnet");
+  });
+
+  it("lists optional provider limits and the Copilot CLI without requiring a configured model", () => {
+    const missingCli = new LlmProviderRegistry(parseConfig({
+      LLM_ENABLE_MOCK: "false",
+      COPILOT_CLI_ENABLED: "true",
+      COPILOT_CLI_PATH: "video-agent-copilot-command-not-installed",
+    }));
+    expect(missingCli.list().find((provider) => provider.id === "copilot-cli"))
+      .toMatchObject({
+        configured: false,
+        hint: "Install GitHub Copilot CLI and sign in once",
+      });
+
+    const registry = new LlmProviderRegistry(parseConfig({
+      LLM_ENABLE_MOCK: "false",
+      OPENAI_API_KEY: "openai-secret",
+      OPENAI_MODEL: "openai-model",
+      OPENAI_MAX_INPUT_TOKENS: "8000",
+      OPENAI_MAX_OUTPUT_TOKENS: "4000",
+      COPILOT_CLI_ENABLED: "true",
+      COPILOT_CLI_PATH: process.execPath,
+    }));
+    expect(registry.list().find((provider) => provider.id === "openai")?.limits)
+      .toEqual({ maxInputTokens: 8000, maxOutputTokens: 4000 });
+    expect(registry.list().find((provider) => provider.id === "copilot-cli"))
+      .toMatchObject({ configured: true, defaultModel: null });
+    expect(registry.resolve({ provider: "copilot-cli" }, undefined, "research").model).toBe("");
+  });
+
+  it("reports current-month provider calls without imposing a call cap", async () => {
+    const sqlite = new Database(":memory:");
+    sqlite.exec("CREATE TABLE jobs (created_at TEXT NOT NULL, usage TEXT)");
+    const now = new Date();
+    const currentMonth = new Date(now.getFullYear(), now.getMonth(), 2).toISOString();
+    const previousMonth = new Date(now.getFullYear(), now.getMonth(), 0).toISOString();
+    const usage = JSON.stringify({
+      llmCalls: 1,
+      inputTokens: 0,
+      outputTokens: 0,
+      costUsd: 0,
+      provider: "copilot-cli",
+      model: "auto",
+      tokensUnknown: true,
+    });
+    sqlite.prepare("INSERT INTO jobs (created_at, usage) VALUES (?, ?), (?, ?)")
+      .run(currentMonth, usage, currentMonth, usage);
+    sqlite.prepare("INSERT INTO jobs (created_at, usage) VALUES (?, ?)")
+      .run(previousMonth, usage);
+
+    const registry = new LlmProviderRegistry(parseConfig({
+      LLM_ENABLE_MOCK: "false",
+      COPILOT_CLI_ENABLED: "true",
+      COPILOT_CLI_PATH: process.execPath,
+    }));
+    const app = Fastify().withTypeProvider<ZodTypeProvider>();
+    app.setValidatorCompiler(validatorCompiler);
+    app.setSerializerCompiler(serializerCompiler);
+    registerLlmRoutes(app, registry, sqlite);
+    try {
+      const response = await app.inject({ method: "GET", url: "/api/llm/providers" });
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toEqual(expect.arrayContaining([
+        expect.objectContaining({ id: "copilot-cli", usage: { monthCalls: 2 } }),
+      ]));
+      expect(() => registry.resolve({ provider: "copilot-cli" }, undefined, "script")).not.toThrow();
+    } finally {
+      await app.close();
+      sqlite.close();
+    }
   });
 });

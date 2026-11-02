@@ -93,8 +93,23 @@ describe("generateStructured", () => {
       schemaName: "Example", schemaVersion: "1", maxOutputTokens: 100, signal: controller(), cache,
     })).rejects.toMatchObject({
       code: "LLM_UNAVAILABLE",
-      usage: { llmCalls: 1, inputTokens: 3, outputTokens: 5 },
+      usage: { llmCalls: 2, inputTokens: 3, outputTokens: 5 },
     });
+    db.close();
+  });
+
+  it("clamps each provider request to its declared output-token limit", async () => {
+    const { db, cache } = cacheDb();
+    const provider = providerFrom(["{\"answer\":\"ok\"}"]);
+    provider.limits = { maxOutputTokens: 7 };
+    await generateStructured({
+      provider, model: "mock-v1", system: "system", prompt: "prompt", schema,
+      schemaName: "Example", schemaVersion: "1", maxOutputTokens: 100, signal: controller(), cache,
+    });
+    expect(provider.generate).toHaveBeenCalledWith(
+      expect.objectContaining({ maxOutputTokens: 7 }),
+      expect.anything(),
+    );
     db.close();
   });
 

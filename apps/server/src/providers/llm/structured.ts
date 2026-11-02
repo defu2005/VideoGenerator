@@ -19,7 +19,7 @@ export async function generateStructured<T>(input: {
   logger?: FastifyBaseLogger;
 }): Promise<{
   value: T;
-  usage: { llmCalls: number; inputTokens: number; outputTokens: number };
+  usage: { llmCalls: number; inputTokens: number; outputTokens: number; tokensUnknown?: boolean };
   provider: string;
   model: string;
   cached: boolean;
@@ -52,22 +52,30 @@ export async function generateStructured<T>(input: {
   let totalInputTokens = 0;
   let totalOutputTokens = 0;
   let calls = 0;
-  const usage = () => ({ llmCalls: calls, inputTokens: totalInputTokens, outputTokens: totalOutputTokens });
+  let tokensUnknown = false;
+  const usage = () => ({
+    llmCalls: calls,
+    inputTokens: totalInputTokens,
+    outputTokens: totalOutputTokens,
+    ...(tokensUnknown ? { tokensUnknown: true } : {}),
+  });
+  const maxOutputTokens = Math.min(input.maxOutputTokens, input.provider.limits?.maxOutputTokens ?? Number.POSITIVE_INFINITY);
   let response;
   try {
     response = await input.provider.generate({
       model: input.model,
       system: input.system,
       messages: [{ role: "user", content: input.prompt }],
-      maxOutputTokens: input.maxOutputTokens,
+      maxOutputTokens,
       json: true,
     }, input.signal);
   } catch (error) {
-    throw withUsage(error, usage());
+    throw withUsage(error, { ...usage(), llmCalls: calls + 1 }, input.provider.id === "copilot-cli");
   }
   calls += 1;
   totalInputTokens += response.usage.inputTokens;
   totalOutputTokens += response.usage.outputTokens;
+  tokensUnknown ||= response.usage.tokensUnknown === true;
 
   if (response.finishReason === "length") {
     throw new LlmError(
@@ -91,15 +99,16 @@ export async function generateStructured<T>(input: {
           { role: "assistant", content: rawText },
           { role: "user", content: `Correct the JSON to satisfy these validation issues. Return only corrected JSON:\n${JSON.stringify(validation.issues)}` },
         ],
-        maxOutputTokens: input.maxOutputTokens,
+        maxOutputTokens,
         json: true,
       }, input.signal);
     } catch (error) {
-      throw withUsage(error, usage());
+      throw withUsage(error, { ...usage(), llmCalls: calls + 1 }, input.provider.id === "copilot-cli");
     }
     calls += 1;
     totalInputTokens += response.usage.inputTokens;
     totalOutputTokens += response.usage.outputTokens;
+    tokensUnknown ||= response.usage.tokensUnknown === true;
     if (response.finishReason === "length") {
       throw new LlmError(
         "LLM output was truncated by the provider limit. Try a shorter target duration or a higher output-token limit.",
@@ -127,12 +136,18 @@ export async function generateStructured<T>(input: {
   };
 }
 
-function withUsage(error: unknown, usage: { llmCalls: number; inputTokens: number; outputTokens: number }): LlmError {
+function withUsage(
+  error: unknown,
+  usage: { llmCalls: number; inputTokens: number; outputTokens: number; tokensUnknown?: boolean },
+  tokensUnknown = false,
+): LlmError {
   if (error instanceof LlmError) {
+    const unknownTokens = tokensUnknown || usage.tokensUnknown === true || error.usage?.tokensUnknown === true;
     return new LlmError(error.message, error.code, error.retryable, error.status, {
-      llmCalls: usage.llmCalls + (error.usage?.llmCalls ?? 0),
+      llmCalls: Math.max(usage.llmCalls, error.usage?.llmCalls ?? 0),
       inputTokens: usage.inputTokens + (error.usage?.inputTokens ?? 0),
       outputTokens: usage.outputTokens + (error.usage?.outputTokens ?? 0),
+      ...(unknownTokens ? { tokensUnknown: true } : {}),
     });
   }
   return new LlmError(
@@ -140,7 +155,7 @@ function withUsage(error: unknown, usage: { llmCalls: number; inputTokens: numbe
     "LLM_UNAVAILABLE",
     true,
     undefined,
-    usage,
+    { ...usage, ...(tokensUnknown ? { tokensUnknown: true } : {}) },
   );
 }
 

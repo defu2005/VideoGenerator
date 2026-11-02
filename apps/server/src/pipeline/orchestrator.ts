@@ -267,6 +267,9 @@ export class PipelineOrchestrator {
           inputTokens: previous.inputTokens + (usage.inputTokens ?? 0),
           outputTokens: previous.outputTokens + (usage.outputTokens ?? 0),
           costUsd: previous.costUsd + (usage.costUsd ?? 0),
+          ...(usage.provider ?? previous.provider ? { provider: usage.provider ?? previous.provider } : {}),
+          ...(usage.model ?? previous.model ? { model: usage.model ?? previous.model } : {}),
+          ...(usage.tokensUnknown || previous.tokensUnknown ? { tokensUnknown: true } : {}),
         },
       });
     });

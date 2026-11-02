@@ -77,6 +77,7 @@ export function ProjectFormFields({
 }) {
   const providers = useQuery({ queryKey: ["llm-providers"], queryFn: getLlmProviders });
   const availableProviders = providers.data ?? [];
+  const selectedProvider = availableProviders.find((provider) => provider.id === draft.llmProvider);
   return (
     <>
       <label className="form-field">
@@ -202,9 +203,28 @@ export function ProjectFormFields({
                 </option>
               ))}
             </select>
-            {availableProviders.find((provider) => provider.id === draft.llmProvider && !provider.configured)?.hint && (
+            {selectedProvider?.hint && !selectedProvider.configured && (
+              <small className="field-hint">{selectedProvider.hint}</small>
+            )}
+            {selectedProvider?.id === "copilot-cli" && (
               <small className="field-hint">
-                {availableProviders.find((provider) => provider.id === draft.llmProvider && !provider.configured)?.hint}
+                Uses your Copilot plan quota (shared with coding) · {selectedProvider.usage?.monthCalls ?? 0} calls this month
+              </small>
+            )}
+            {selectedProvider && selectedProvider.id !== "copilot-cli" && selectedProvider.usage && (
+              <small className="field-hint">{selectedProvider.usage.monthCalls} calls this month</small>
+            )}
+            {selectedProvider?.limits && (
+              <small className="field-hint">
+                Provider limits:{" "}
+                {selectedProvider.limits.maxInputTokens
+                  ? `${selectedProvider.limits.maxInputTokens.toLocaleString()} input tokens`
+                  : ""}
+                {selectedProvider.limits.maxInputTokens && selectedProvider.limits.maxOutputTokens ? " · " : ""}
+                {selectedProvider.limits.maxOutputTokens
+                  ? `${selectedProvider.limits.maxOutputTokens.toLocaleString()} output tokens`
+                  : ""}
+                {" per request"}
               </small>
             )}
             {!providers.isPending && !providers.isError && availableProviders.length === 0 && (

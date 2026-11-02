@@ -7,6 +7,7 @@ import { estimateLlmCost } from "../../providers/llm/pricing.js";
 import type { LlmProviderRegistry } from "../../providers/llm/registry.js";
 import { generateStructured } from "../../providers/llm/structured.js";
 import { LlmError } from "../../providers/llm/types.js";
+import { preflight } from "../../providers/llm/preflight.js";
 import { computeSectionDurations, maxOutputTokensForDuration, scriptTotalDuration, researchInputHash } from "../script/scriptUtils.js";
 import { researchPrompt } from "./prompt.js";
 import { mergedStoryPrompt } from "../script/mergedStoryPrompt.js";
@@ -30,17 +31,44 @@ export class ResearchExecutor implements StageExecutor {
     context.reportProgress(10, "Building research prompt");
     const project = context.project;
     const mode = project.settings.researchMode ?? this.config.LLM_RESEARCH_MODE;
-    let spentUsage: { llmCalls: number; inputTokens: number; outputTokens: number } | undefined;
+    let spentUsage: { llmCalls: number; inputTokens: number; outputTokens: number; tokensUnknown?: boolean } | undefined;
     let usageRecorded = false;
+    let selected: ReturnType<LlmProviderRegistry["resolve"]> | undefined;
     try {
       if (mode === "off") {
         throw new StageError("Research is disabled by the project's research mode.", "LLM_RESEARCH_DISABLED", false);
       }
-      const selected = this.registry.resolve(project.settings.llm?.research, project.settings.llm?.default, "research");
+      selected = this.registry.resolve(project.settings.llm?.research, project.settings.llm?.default, "research");
       const inputHash = researchInputHash(project);
-      const { system, prompt } = mode === "merged"
+      let effectiveMode = mode;
+      let promptInput = mode === "merged"
         ? mergedStoryPrompt(project, this.config.SPEECH_WORDS_PER_MINUTE)
         : researchPrompt(project);
+      let limitMessage: string | undefined;
+      let check = preflight({
+        provider: selected.provider,
+        mode,
+        project,
+        wordsPerMinute: this.config.SPEECH_WORDS_PER_MINUTE,
+        maxOutputTokens: maxOutputTokensForDuration(project.settings.targetDurationSec, this.config.SPEECH_WORDS_PER_MINUTE),
+        input: promptInput,
+      });
+      if (check.decision === "reject") throw check.error;
+      if (check.decision === "switch-to-separate") {
+        limitMessage = check.message;
+        effectiveMode = "separate";
+        promptInput = researchPrompt(project);
+        check = preflight({
+          provider: selected.provider,
+          mode: "separate",
+          project,
+          wordsPerMinute: this.config.SPEECH_WORDS_PER_MINUTE,
+          maxOutputTokens: maxOutputTokensForDuration(project.settings.targetDurationSec, this.config.SPEECH_WORDS_PER_MINUTE),
+          input: promptInput,
+        });
+        if (check.decision === "reject") throw check.error;
+      }
+      const { system, prompt } = check.input;
       const mergedSchema = MergedStorySchema.superRefine(({ script }, ctx) => {
         const duration = scriptTotalDuration(script, this.config.SPEECH_WORDS_PER_MINUTE);
         const target = project.settings.targetDurationSec;
@@ -58,16 +86,13 @@ export class ResearchExecutor implements StageExecutor {
         model: selected.model,
         system,
         prompt,
-        maxOutputTokens: maxOutputTokensForDuration(
-          project.settings.targetDurationSec,
-          this.config.SPEECH_WORDS_PER_MINUTE,
-        ),
+        maxOutputTokens: check.maxOutputTokens,
         signal: context.signal,
         cache: this.cache,
         cacheKeyExtra: inputHash,
         logger: context.logger,
       };
-      const generated = mode === "merged"
+      const generated = effectiveMode === "merged"
         ? await generateStructured({
           ...request,
           schema: mergedSchema,
@@ -83,7 +108,7 @@ export class ResearchExecutor implements StageExecutor {
       spentUsage = generated.usage;
       context.reportProgress(80, "Validating research notes");
       const costUsd = estimateLlmCost(this.config, generated.provider, generated.model, generated.usage);
-      const research = mode === "merged"
+      const research = effectiveMode === "merged"
         ? MergedStorySchema.parse(generated.value).research
         : ResearchNotesSchema.parse(generated.value);
       this.sqlite.prepare(
@@ -97,7 +122,7 @@ export class ResearchExecutor implements StageExecutor {
         new Date().toISOString(),
         JSON.stringify(research),
       );
-      if (mode === "merged") {
+      if (effectiveMode === "merged") {
         const merged = MergedStorySchema.parse(generated.value);
         const script = computeSectionDurations(merged.script, this.config.SPEECH_WORDS_PER_MINUTE);
         const existing = this.sqlite.prepare("SELECT data, version FROM scripts WHERE project_id = ?")
@@ -121,16 +146,21 @@ export class ResearchExecutor implements StageExecutor {
         inputTokens: generated.usage.inputTokens,
         outputTokens: generated.usage.outputTokens,
         costUsd,
+        provider: generated.provider,
+        model: generated.model,
+        ...(generated.usage.tokensUnknown ? { tokensUnknown: true } : {}),
       });
       usageRecorded = true;
-      context.reportProgress(100, mode === "merged" ? "Research and script saved" : "Research notes saved");
+      context.reportProgress(100, effectiveMode === "merged" ? "Research and script saved" : "Research notes saved");
       return {
-        message: generated.cached
-          ? mode === "merged" ? "Research and script loaded from cache" : "Research notes loaded from cache"
-          : mode === "merged" ? "Research and script saved from one call" : "Research notes saved",
+        message: limitMessage
+          ? `${limitMessage}. Research notes saved; the script will run in a separate call`
+          : generated.cached
+            ? effectiveMode === "merged" ? "Research and script loaded from cache" : "Research notes loaded from cache"
+            : effectiveMode === "merged" ? "Research and script saved from one call" : "Research notes saved",
       };
     } catch (error) {
-      if (!usageRecorded) recordFailureUsage(error, context, spentUsage);
+      if (!usageRecorded) recordFailureUsage(error, context, spentUsage, selected?.provider.id, selected?.model);
       throw asStageError(error);
     }
   }
@@ -139,13 +169,18 @@ export class ResearchExecutor implements StageExecutor {
 function recordFailureUsage(
   error: unknown,
   context: StageContext,
-  spentUsage?: { llmCalls: number; inputTokens: number; outputTokens: number },
+  spentUsage?: { llmCalls: number; inputTokens: number; outputTokens: number; tokensUnknown?: boolean },
+  provider?: string,
+  model?: string,
 ): void {
   const usage = error instanceof LlmError ? error.usage ?? spentUsage : spentUsage;
   if (!usage) return;
   context.recordUsage({
     ...usage,
     costUsd: 0,
+    ...(provider ? { provider } : {}),
+    ...(model ? { model } : {}),
+    ...(usage.tokensUnknown ? { tokensUnknown: true } : {}),
   });
 }
 

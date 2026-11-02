@@ -27,9 +27,11 @@ The web development server proxies `/api` requests to `http://127.0.0.1:3001` by
 
 ## LLM providers
 
-Set `LLM_DEFAULT_PROVIDER` to `anthropic`, `gemini`, `openai`, `ollama`, `openrouter`, `deepseek`, `groq`, `custom`, or `mock`, and set the matching API key or base URL in `.env`. Models can be selected globally with `LLM_DEFAULT_MODEL`, for each stage with `LLM_RESEARCH_MODEL` / `LLM_SCRIPT_MODEL`, or per project in its Advanced settings. Providers other than Anthropic require an explicit model ID. The mock provider is enabled by default outside production; set `LLM_ENABLE_MOCK=false` to disable it in development or tests.
+Set `LLM_DEFAULT_PROVIDER` to `anthropic`, `gemini`, `openai`, `ollama`, `openrouter`, `deepseek`, `groq`, `custom`, `mock`, `claude-cli`, or `copilot-cli`, and set the matching API key or base URL in `.env`. Models can be selected globally with `LLM_DEFAULT_MODEL`, for each stage with `LLM_RESEARCH_MODEL` / `LLM_SCRIPT_MODEL`, or per project in its Advanced settings. Providers other than Anthropic and the CLI providers require an explicit model ID. The mock provider is enabled by default outside production; set `LLM_ENABLE_MOCK=false` to disable it in development or tests.
 
 LLM requests time out after `LLM_TIMEOUT_MS` (120 seconds by default) and are cached by provider, model, stage prompt, and input. Optional token prices can be supplied as `LLM_PRICES_JSON`, for example `{"openai:gpt-model":{"inputPerMTok":1,"outputPerMTok":2}}`; unknown prices are reported as zero. Adjust `SPEECH_WORDS_PER_MINUTE` to change script duration estimates. API keys stay in the server environment and are never exposed by the providers API.
+
+Providers can declare optional `*_MAX_INPUT_TOKENS` and `*_MAX_OUTPUT_TOKENS` environment limits. Requests are preflighted before provider calls, input research is trimmed only when needed, and output-token requests are clamped to the configured provider limit. The provider selector shows a current-month call counter. It is informational only: there is no monthly call cap and calls are never blocked based on the counter.
 
 `LLM_RESEARCH_MODE` defaults to `merged`, which creates research notes and the script in one provider call per Generate All run. Use `separate` for one research call and one script call, or `off` to skip research and generate a script from the topic. A project can override this in its Advanced settings.
 
@@ -38,6 +40,10 @@ LLM requests time out after `LLM_TIMEOUT_MS` (120 seconds by default) and are ca
 Build the MCP server with `npm run build`, then configure Claude Desktop as described in [docs/CLAUDE_DESKTOP.md](./docs/CLAUDE_DESKTOP.md). It connects through the Video Agent REST API and can read projects or save research/scripts; it has no direct database, file, shell, or approval-gate access.
 
 To use your Claude subscription for automatic text stages on this personal local installation, install Claude Code CLI, log in once, set `CLAUDE_CLI_ENABLED=true`, and select `claude-cli` with `LLM_DEFAULT_PROVIDER`. Set `CLAUDE_CLI_PATH` if the executable is not on `PATH`; `CLAUDE_CLI_MODEL` is optional. This provider runs in a temporary empty directory and costs zero API-key usage, but uses your Claude subscription. Check Anthropic's terms before offering this feature to other users.
+
+To use GitHub Copilot for automatic text stages on your personal installation, install the official [GitHub Copilot CLI](https://docs.github.com/en/copilot/get-started/cli-quickstart), sign in once, set `COPILOT_CLI_ENABLED=true`, and select `copilot-cli` with `LLM_DEFAULT_PROVIDER`. `COPILOT_CLI_PATH` defaults to `copilot`; `COPILOT_CLI_MODEL` is optional. The CLI runs with an empty temporary working directory and no available tools. Copilot Free has historically included about 50 monthly chat/agent requests; GitHub is transitioning to usage-based AI credits in 2026. Usage is shared with coding. The app displays calls this month but does not impose a cap; confirm the current allowance in [Copilot plans](https://docs.github.com/en/copilot/about-github-copilot/plans-for-github-copilot).
+
+**GitHub Models is not available:** GitHub's official documentation says the playground, model catalog, and inference API were fully retired on July 30, 2026 ([GitHub Models notice](https://docs.github.com/en/github-models)). This project therefore does not configure or call the retired service.
 
 ## Development
 

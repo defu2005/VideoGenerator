@@ -202,7 +202,10 @@ function usageLabel(job: Job | undefined): string {
   }
   const cost = usage.costUsd > 0 ? ` · $${usage.costUsd.toFixed(6)}` : "";
   const callLabel = `${usage.llmCalls} ${usage.llmCalls === 1 ? "call" : "calls"}`;
-  return `${callLabel} · ${usage.inputTokens + usage.outputTokens} tokens${cost}`;
+  const tokenLabel = usage.tokensUnknown
+    ? "token count unknown"
+    : `${usage.inputTokens + usage.outputTokens} tokens`;
+  return `${callLabel} · ${tokenLabel}${cost}`;
 }
 
 function runUsageLabel(researchJob: Job | undefined, scriptJob: Job | undefined): string {
@@ -211,7 +214,9 @@ function runUsageLabel(researchJob: Job | undefined, scriptJob: Job | undefined)
   const usage = jobs.reduce((total, job) => ({
     calls: total.calls + (job.usage?.llmCalls ?? 0),
     tokens: total.tokens + (job.usage?.inputTokens ?? 0) + (job.usage?.outputTokens ?? 0),
-  }), { calls: 0, tokens: 0 });
+    tokensUnknown: total.tokensUnknown || job.usage?.tokensUnknown === true,
+  }), { calls: 0, tokens: 0, tokensUnknown: false });
   const cached = usage.calls === 0 && usage.tokens === 0 && jobs.some((job) => job.message?.toLowerCase().includes("cache"));
-  return `LLM calls this run: ${usage.calls} · ${usage.tokens} tokens${cached ? " (cached)" : ""}`;
+  const tokenLabel = usage.tokensUnknown ? "token count unknown" : `${usage.tokens} tokens`;
+  return `LLM calls this run: ${usage.calls} · ${tokenLabel}${cached ? " (cached)" : ""}`;
 }

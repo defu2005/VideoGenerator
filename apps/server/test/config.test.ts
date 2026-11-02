@@ -17,4 +17,24 @@ describe("server configuration", () => {
   it("defaults the research mode to the merged single-call flow", () => {
     expect(parseConfig({}).LLM_RESEARCH_MODE).toBe("merged");
   });
+
+  it("parses optional token limits and Copilot CLI configuration", () => {
+    expect(parseConfig({
+      OPENAI_MAX_INPUT_TOKENS: "8000",
+      OPENAI_MAX_OUTPUT_TOKENS: "4000",
+      COPILOT_CLI_ENABLED: "true",
+      COPILOT_CLI_PATH: "copilot",
+      COPILOT_CLI_MODEL: "auto",
+    })).toMatchObject({
+      LLM_PROVIDER_LIMITS: { openai: { maxInputTokens: 8000, maxOutputTokens: 4000 } },
+      COPILOT_CLI_ENABLED: true,
+      COPILOT_CLI_PATH: "copilot",
+      COPILOT_CLI_MODEL: "auto",
+    });
+  });
+
+  it("rejects malformed optional provider token limits", () => {
+    expect(() => parseConfig({ OPENAI_MAX_OUTPUT_TOKENS: "0" }))
+      .toThrow("OPENAI_MAX_OUTPUT_TOKENS: expected a positive integer");
+  });
 });

@@ -1,5 +1,7 @@
 # TASK-004D — GitHub providers: GitHub Models + GitHub Copilot (Free) + provider limits & usage counter
 
+> **AMENDMENT (architect, 2026-11-03): GitHub Models was fully retired by GitHub on 2026-07-30** (playground, catalog, inference API and BYOK no longer available — see https://docs.github.com/en/github-models). **Do not ship a `github-models` provider.** Keep: §2 provider limits, §3 pre-flight (generic, configurable per provider via `<PROVIDER>_MAX_INPUT_TOKENS` / `_MAX_OUTPUT_TOKENS`), §4 `copilot-cli`, §5 usage counter, §6 Copilot Chat + MCP docs. Pre-flight tests should use the `mock` provider configured with small limits instead of github-models. If code for github-models was already written in this round, remove it in the fix round.
+
 ## GOAL
 Add two GitHub-based LLM options:
 1. **GitHub Models** (official API, free tier with a GitHub account).

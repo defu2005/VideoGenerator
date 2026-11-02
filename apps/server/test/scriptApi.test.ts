@@ -206,12 +206,13 @@ describe("script API", () => {
   it("returns provider metadata without exposing API keys", async () => {
     const response = await app.inject({ method: "GET", url: "/api/llm/providers" });
     expect(response.statusCode).toBe(200);
-    expect(response.json()).toContainEqual({
+    expect(response.json()).toContainEqual(expect.objectContaining({
       id: "anthropic",
       label: "Anthropic",
       configured: true,
       defaultModel: "claude-haiku-5-5",
-    });
+      usage: { monthCalls: 0 },
+    }));
     expect(response.body).not.toContain("never-return-this");
     expect(response.json().find((provider: { id: string }) => provider.id === "ollama"))
       .toMatchObject({ configured: false, hint: "Set OLLAMA_MODEL" });

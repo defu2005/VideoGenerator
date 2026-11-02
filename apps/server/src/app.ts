@@ -63,7 +63,7 @@ export function buildApp({ config }: { config: AppConfig }) {
   registerProjectRoutes(server, projectService);
   registerDashboardRoutes(server, projectService);
   registerPipelineRoutes(server, projectService, jobRepository, orchestrator, events);
-  registerLlmRoutes(server, llmProviders);
+  registerLlmRoutes(server, llmProviders, database.sqlite);
   registerScriptRoutes(server, scriptService, projectService, config);
 
   server.addHook("onReady", async () => worker.start());

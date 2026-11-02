@@ -239,7 +239,13 @@ describe("research and script stages", () => {
     await harness.worker.tick();
     const job = harness.repository.listJobs(harness.projectId, 20).find((item) => item.stage === "RESEARCH");
     expect(job?.status).toBe("FAILED");
-    expect(job?.usage).toMatchObject({ llmCalls: 2, inputTokens: 14, outputTokens: 22 });
+    expect(job?.usage).toMatchObject({
+      llmCalls: 2,
+      inputTokens: 14,
+      outputTokens: 22,
+      provider: "mock",
+      model: "mock-v1",
+    });
   });
 
   it("records truncated output usage and does not issue a repair call", async () => {
@@ -312,5 +318,46 @@ describe("research and script stages", () => {
     expect(generate).toHaveBeenCalledTimes(2);
     expect(generate.mock.calls[1][0].messages[0]?.content).toContain("Research notes");
     expect(scriptCall.usage[0]).toMatchObject({ llmCalls: 1, inputTokens: 10, outputTokens: 20 });
+  });
+
+  it("uses preflight to keep short stories merged, split medium stories, and reject oversized stories", async () => {
+    const makeLimitedRegistry = (duration: number) => {
+      const harness = makeHarness({ LLM_DEFAULT_PROVIDER: "mock", LLM_ENABLE_MOCK: true });
+      const project = harness.repository.getProject(harness.projectId)!;
+      harness.sqlite.prepare("UPDATE projects SET settings = ? WHERE id = ?").run(
+        JSON.stringify({
+          ...project.settings,
+          language: "vi",
+          targetDurationSec: duration,
+          researchMode: "merged",
+        }),
+        harness.projectId,
+      );
+      const registry = new LlmProviderRegistry(harness.config);
+      const provider = registry.get("mock")!;
+      provider.limits = { maxInputTokens: 8_000, maxOutputTokens: 5_000 };
+      return { harness, registry, generate: vi.spyOn(provider, "generate") };
+    };
+
+    const short = makeLimitedRegistry(120);
+    const shortResearch = new ResearchExecutor(short.harness.sqlite, short.registry, short.harness.config);
+    const shortResult = await shortResearch.run(contextFor(short.harness, "RESEARCH").context);
+    expect(short.generate).toHaveBeenCalledTimes(1);
+    expect(shortResult.message).toContain("one call");
+    expect(short.generate.mock.calls[0][0].maxOutputTokens).toBe(2_050);
+
+    const medium = makeLimitedRegistry(600);
+    const mediumResearch = new ResearchExecutor(medium.harness.sqlite, medium.registry, medium.harness.config);
+    const mediumScript = new ScriptExecutor(medium.harness.sqlite, medium.registry, medium.harness.config);
+    const researchResult = await mediumResearch.run(contextFor(medium.harness, "RESEARCH").context);
+    expect(researchResult.message).toContain("Merged output (~5050 tokens) exceeds Mock (development) limit (5000); using 2 calls");
+    await mediumScript.run(contextFor(medium.harness, "SCRIPT").context);
+    expect(medium.generate).toHaveBeenCalledTimes(2);
+
+    const long = makeLimitedRegistry(1800);
+    const longResearch = new ResearchExecutor(long.harness.sqlite, long.registry, long.harness.config);
+    await expect(longResearch.run(contextFor(long.harness, "RESEARCH").context))
+      .rejects.toMatchObject({ code: "LLM_LIMIT_TOO_SMALL", retryable: false });
+    expect(long.generate).not.toHaveBeenCalled();
   });
 });

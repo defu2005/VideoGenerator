@@ -166,6 +166,39 @@ describe("ScriptTab", () => {
     expect(screen.getByText("Script: 0 tokens (merged call)")).toBeTruthy();
   });
 
+  it("labels Copilot usage when the CLI cannot report token counts", async () => {
+    installFetch({ script: null, research, origin: null, version: 0, stale: false }, pipeline, [
+      {
+        id: "research-job",
+        projectId,
+        stage: "RESEARCH",
+        scope: null,
+        status: "SUCCEEDED",
+        progress: 100,
+        message: "Research notes saved",
+        attempt: 1,
+        maxAttempts: 3,
+        error: null,
+        usage: {
+          llmCalls: 1,
+          inputTokens: 0,
+          outputTokens: 0,
+          costUsd: 0,
+          provider: "copilot-cli",
+          model: "auto",
+          tokensUnknown: true,
+        },
+        createdAt: "2026-11-03T00:00:00.000Z",
+        startedAt: "2026-11-03T00:00:00.000Z",
+        finishedAt: "2026-11-03T00:00:01.000Z",
+        runAfter: "2026-11-03T00:00:00.000Z",
+      },
+    ]);
+    renderWithProviders(<ScriptTab project={project} />);
+    expect(await screen.findByText("LLM calls this run: 1 · token count unknown")).toBeTruthy();
+    expect(screen.getByText("Research: 1 call · token count unknown")).toBeTruthy();
+  });
+
   it("shows Claude Desktop guidance for a USER executor and copies the ready-to-paste prompt", async () => {
     const userProject = {
       ...project,

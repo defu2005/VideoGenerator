@@ -8,6 +8,7 @@ import { estimateLlmCost } from "../../providers/llm/pricing.js";
 import type { LlmProviderRegistry } from "../../providers/llm/registry.js";
 import { generateStructured } from "../../providers/llm/structured.js";
 import { LlmError } from "../../providers/llm/types.js";
+import { preflight } from "../../providers/llm/preflight.js";
 import { scriptPrompt } from "./prompt.js";
 import { computeSectionDurations, maxOutputTokensForDuration, researchInputHash, scriptInputHash, scriptTotalDuration } from "./scriptUtils.js";
 
@@ -77,15 +78,33 @@ export class ScriptExecutor implements StageExecutor {
       }
     }
 
-    let spentUsage: { llmCalls: number; inputTokens: number; outputTokens: number } | undefined;
+    let spentUsage: { llmCalls: number; inputTokens: number; outputTokens: number; tokensUnknown?: boolean } | undefined;
     let usageRecorded = false;
+    let selected: ReturnType<LlmProviderRegistry["resolve"]> | undefined;
     try {
-      const selected = this.registry.resolve(project.settings.llm?.script, project.settings.llm?.default, "script");
+      selected = this.registry.resolve(project.settings.llm?.script, project.settings.llm?.default, "script");
       const research = applicableResearch
         ? ResearchNotesSchema.parse(JSON.parse(applicableResearch.data) as unknown)
         : undefined;
       const inputHash = scriptInputHash(project, applicableResearch?.input_hash);
-      const { system, prompt } = scriptPrompt(project, research, this.config.SPEECH_WORDS_PER_MINUTE);
+      const initialPrompt = scriptPrompt(project, research, this.config.SPEECH_WORDS_PER_MINUTE);
+      const check = preflight({
+        provider: selected.provider,
+        mode: "off",
+        project,
+        wordsPerMinute: this.config.SPEECH_WORDS_PER_MINUTE,
+        maxOutputTokens: maxOutputTokensForDuration(
+          project.settings.targetDurationSec,
+          this.config.SPEECH_WORDS_PER_MINUTE,
+        ),
+        input: initialPrompt,
+        ...(research ? {
+          research,
+          rebuildInput: (trimmedResearch) => scriptPrompt(project, trimmedResearch, this.config.SPEECH_WORDS_PER_MINUTE),
+        } : {}),
+      });
+      if (check.decision === "reject") throw check.error;
+      const { system, prompt } = check.input;
       const validatedSchema = ScriptSchema.superRefine((script, ctx) => {
         const duration = scriptTotalDuration(script, this.config.SPEECH_WORDS_PER_MINUTE);
         const target = project.settings.targetDurationSec;
@@ -105,10 +124,7 @@ export class ScriptExecutor implements StageExecutor {
         schema: validatedSchema,
         schemaName: "Script",
         schemaVersion: "2",
-        maxOutputTokens: maxOutputTokensForDuration(
-          project.settings.targetDurationSec,
-          this.config.SPEECH_WORDS_PER_MINUTE,
-        ),
+        maxOutputTokens: check.maxOutputTokens,
         signal: context.signal,
         cache: this.cache,
         cacheKeyExtra: inputHash,
@@ -136,12 +152,15 @@ export class ScriptExecutor implements StageExecutor {
         inputTokens: generated.usage.inputTokens,
         outputTokens: generated.usage.outputTokens,
         costUsd,
+        provider: generated.provider,
+        model: generated.model,
+        ...(generated.usage.tokensUnknown ? { tokensUnknown: true } : {}),
       });
       usageRecorded = true;
       context.reportProgress(100, "Script saved");
       return { message: generated.cached ? "Script loaded from cache" : "Script saved" };
     } catch (error) {
-      if (!usageRecorded) recordFailureUsage(error, context, spentUsage);
+      if (!usageRecorded) recordFailureUsage(error, context, spentUsage, selected?.provider.id, selected?.model);
       throw asStageError(error);
     }
   }
@@ -150,13 +169,18 @@ export class ScriptExecutor implements StageExecutor {
 function recordFailureUsage(
   error: unknown,
   context: StageContext,
-  spentUsage?: { llmCalls: number; inputTokens: number; outputTokens: number },
+  spentUsage?: { llmCalls: number; inputTokens: number; outputTokens: number; tokensUnknown?: boolean },
+  provider?: string,
+  model?: string,
 ): void {
   const usage = error instanceof LlmError ? error.usage ?? spentUsage : spentUsage;
   if (!usage) return;
   context.recordUsage({
     ...usage,
     costUsd: 0,
+    ...(provider ? { provider } : {}),
+    ...(model ? { model } : {}),
+    ...(usage.tokensUnknown ? { tokensUnknown: true } : {}),
   });
 }
 
