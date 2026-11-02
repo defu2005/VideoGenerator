@@ -1,0 +1,156 @@
+{
+  "research": {
+    "summary": "Tháng 3 năm 2016, chương trình AlphaGo của DeepMind đấu năm ván cờ vây với kỳ thủ Lee Sedol tại Seoul. AlphaGo thắng 4–1; trận đấu trở thành dấu mốc nổi bật trong lịch sử trí tuệ nhân tạo.",
+    "keyFacts": [
+      {
+        "fact": "Trận đấu diễn ra từ ngày 9 đến 15 tháng 3 năm 2016 tại Seoul, Hàn Quốc.",
+        "confidence": "Cao",
+        "sourceHint": "Thông tin trận đấu và hồ sơ DeepMind"
+      },
+      {
+        "fact": "AlphaGo, do DeepMind phát triển, thắng loạt đấu với tỷ số 4–1.",
+        "confidence": "Cao",
+        "sourceHint": "Kết quả chính thức của loạt đấu"
+      },
+      {
+        "fact": "Lee Sedol là kỳ thủ cờ vây hàng đầu thế giới, từng giữ vị trí số một theo một số bảng xếp hạng.",
+        "confidence": "Cao",
+        "sourceHint": "Hồ sơ kỳ thủ và tư liệu cờ vây đương thời"
+      },
+      {
+        "fact": "AlphaGo kết hợp mạng nơ-ron với tìm kiếm cây trò chơi để chọn nước đi.",
+        "confidence": "Cao",
+        "sourceHint": "Bài báo Nature về AlphaGo, 2016"
+      },
+      {
+        "fact": "Ở ván hai, nước 37 của AlphaGo gây ngạc nhiên cho nhiều chuyên gia bình luận.",
+        "confidence": "Cao",
+        "sourceHint": "Bản ghi ván đấu và bình luận trực tiếp"
+      },
+      {
+        "fact": "Lee Sedol thắng ván bốn; nước 78 của ông thường được nhắc đến như bước ngoặt của ván.",
+        "confidence": "Cao",
+        "sourceHint": "Biên bản ván bốn và phân tích sau trận"
+      },
+      {
+        "fact": "AlphaGo thắng ván cuối ngày 15 tháng 3, khép lại loạt đấu với tỷ số 4–1.",
+        "confidence": "Cao",
+        "sourceHint": "Kết quả ván năm"
+      }
+    ],
+    "timeline": [
+      {
+        "date": "9-3-2016",
+        "event": "AlphaGo thắng ván đầu tiên."
+      },
+      {
+        "date": "10-3-2016",
+        "event": "AlphaGo thắng ván hai; nước 37 thu hút chú ý."
+      },
+      {
+        "date": "12-3-2016",
+        "event": "AlphaGo thắng ván ba, đảm bảo chiến thắng loạt đấu."
+      },
+      {
+        "date": "13-3-2016",
+        "event": "Lee Sedol thắng ván bốn."
+      },
+      {
+        "date": "15-3-2016",
+        "event": "AlphaGo thắng ván năm, tỷ số chung cuộc 4–1."
+      }
+    ],
+    "angles": [
+      "Cuộc đối đầu giữa trực giác và một hệ thống học từ dữ liệu cùng tự chơi.",
+      "Ý nghĩa của thất bại và chiến thắng riêng lẻ trong một bước ngoặt công nghệ.",
+      "Ván thắng của Lee Sedol cho thấy con người vẫn có thể tạo ra những khoảnh khắc bất ngờ."
+    ],
+    "outline": [
+      "Mở bằng câu hỏi liệu máy tính có thể vượt kỳ thủ hàng đầu.",
+      "Giới thiệu Lee Sedol, AlphaGo và bối cảnh Seoul năm 2016.",
+      "Tóm lược ba ván thắng đầu và nước đi gây ngạc nhiên.",
+      "Kể ván bốn Lee Sedol giành chiến thắng.",
+      "Khép lại bằng tỷ số 4–1 và ý nghĩa của sự kiện."
+    ],
+    "cautions": [
+      "Không mô tả AlphaGo như thể có ý thức hay cảm xúc; đó là hệ thống máy học.",
+      "Tránh khẳng định trận đấu chứng minh AI vượt trội con người trong mọi lĩnh vực.",
+      "Nước 78 nổi tiếng nhưng không nên giản lược toàn bộ chiến thắng ván bốn vào một nước đi.",
+      "Mốc xếp hạng của Lee Sedol tùy cách tính và thời điểm; nên gọi ông là kỳ thủ hàng đầu."
+    ]
+  },
+  "script": {
+    "title": "AlphaGo – ngày cờ vây đổi khác",
+    "hook": "Một ván cờ. Một kỳ thủ huyền thoại. Và đối thủ không phải con người.",
+    "sections": [
+      {
+        "id": "opening",
+        "heading": "Seoul, tháng 3 năm 2016",
+        "narration": "Tháng 3 năm 2016, tại Seoul, Lee Sedol bước vào cuộc đấu năm ván với AlphaGo, chương trình trí tuệ nhân tạo của DeepMind. Câu hỏi trước trận rất đơn giản: liệu máy tính có thể đánh bại một trong những kỳ thủ cờ vây xuất sắc nhất thế giới?",
+        "visualQueries": {
+          "primary": "Lee Sedol AlphaGo match Seoul 2016",
+          "alternatives": [
+            "Four Seasons Hotel Seoul 2016 exterior",
+            "Go board stones close up"
+          ]
+        },
+        "visualNotes": "Dùng ảnh tư liệu có chú thích thời gian, địa điểm; mở bằng bàn cờ và không khí căng thẳng.",
+        "musicMood": "Điềm tĩnh, hồi hộp",
+        "energy": 3
+      },
+      {
+        "id": "match",
+        "heading": "Những nước đi lạ",
+        "narration": "AlphaGo thắng ba ván đầu, khép lại chiến thắng chung cuộc trước khi loạt đấu kết thúc. Ở ván hai, nước 37 của chương trình khiến nhiều chuyên gia bất ngờ: một lựa chọn khác thường, khó đánh giá bằng trực giác cờ vây quen thuộc.",
+        "visualQueries": {
+          "primary": "AlphaGo Lee Sedol game 2 move 37 Go board",
+          "alternatives": [
+            "AlphaGo match 2016 game analysis"
+          ]
+        },
+        "visualNotes": "Hiển thị sơ đồ bàn cờ và làm nổi bật nước 37; tránh dựng nước đi sai.",
+        "musicMood": "Tò mò, căng thẳng",
+        "energy": 4
+      },
+      {
+        "id": "comeback",
+        "heading": "Ván thắng của Lee Sedol",
+        "narration": "Nhưng cuộc đấu không chỉ có những chiến thắng của máy. Trong ván bốn, Lee Sedol tìm được cách đánh bại AlphaGo. Nước 78 của ông trở thành khoảnh khắc đáng nhớ, giữa một loạt đấu mà mỗi quyết định đều được thế giới theo dõi.",
+        "visualQueries": {
+          "primary": "Lee Sedol game 4 AlphaGo move 78",
+          "alternatives": [
+            "Lee Sedol Go match 2016"
+          ]
+        },
+        "visualNotes": "Tập trung vào Lee Sedol và bàn cờ; dùng hình nước 78 từ nguồn tư liệu đáng tin cậy.",
+        "musicMood": "Cảm xúc, kiềm chế",
+        "energy": 4
+      },
+      {
+        "id": "legacy",
+        "heading": "Tỷ số 4–1",
+        "narration": "Ngày 15 tháng 3, AlphaGo thắng ván cuối, kết thúc loạt đấu với tỷ số 4–1. Kết quả không làm con người biến mất khỏi bàn cờ. Nó đánh dấu một bước ngoặt: trí tuệ nhân tạo đã có thể cạnh tranh ở một lĩnh vực từng được xem là phép thử sâu sắc của tư duy.",
+        "visualQueries": {
+          "primary": "AlphaGo Lee Sedol final game 2016",
+          "alternatives": [
+            "DeepMind AlphaGo 2016 press conference"
+          ]
+        },
+        "visualNotes": "Kết bằng tỷ số trên màn hình và hình ảnh bàn cờ; tránh khẳng định AI thay thế con người.",
+        "musicMood": "Trang trọng, suy ngẫm",
+        "energy": 3
+      }
+    ],
+    "outro": "Một chiến thắng áp đảo, một ván thắng của con người—và một thời khắc khiến thế giới nhìn AI bằng con mắt khác.",
+    "music": {
+      "mood": "Trang trọng, hồi hộp, suy ngẫm",
+      "energy": 3,
+      "keywords": [
+        "documentary tension",
+        "minimal piano",
+        "subtle strings",
+        "measured pulse"
+      ]
+    }
+  }
+}

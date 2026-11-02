@@ -6,9 +6,13 @@ import {
 } from "./cliProvider.js";
 import { LlmError } from "./types.js";
 
+// Verified against GitHub Copilot CLI 1.0.105 on 2026-11-03: `-p` requires the prompt as an
+// argument, so the prompt is piped on stdin with no `-p` (piped stdin runs non-interactively).
+// Built-in MCP servers (GitHub MCP, 18 tools) load by default and are not covered by
+// --available-tools, so they are disabled explicitly.
 export const COPILOT_CLI_FLAGS = {
-  prompt: "-p",
   silent: "-s",
+  disableBuiltinMcps: "--disable-builtin-mcps",
   outputFormat: ["--output-format", "json"],
   disableTelemetry: "--disable-client-telemetry",
   model: "--model",
@@ -40,11 +44,11 @@ export class CopilotCliProvider extends CliProviderBase {
       hint: "Install GitHub Copilot CLI and sign in once",
       limits,
       args: (request, cwd) => [
-        COPILOT_CLI_FLAGS.prompt,
         COPILOT_CLI_FLAGS.silent,
         ...COPILOT_CLI_FLAGS.outputFormat,
         COPILOT_CLI_FLAGS.disableTelemetry,
         COPILOT_CLI_FLAGS.availableTools,
+        COPILOT_CLI_FLAGS.disableBuiltinMcps,
         COPILOT_CLI_FLAGS.disallowTempDir,
         COPILOT_CLI_FLAGS.logDir,
         cwd,
@@ -82,6 +86,7 @@ function parseCopilotResponse(output: string): ParsedCliResponse | undefined {
   }
 
   let result = "";
+  let finalAnswer: string | undefined;
   let model: string | undefined;
   let inputTokens: number | undefined;
   let outputTokens: number | undefined;
@@ -107,9 +112,14 @@ function parseCopilotResponse(output: string): ParsedCliResponse | undefined {
             return typeof block.text === "string" ? block.text : "";
           }).join("")
           : undefined;
-    const candidate = typeof event.result === "string" ? event.result
-      : type === "assistant.message" || type === "assistant_message" || type === "result"
-        ? content ?? message
+    // Real 1.0.105 JSONL: the answer is `assistant.message` with phase "final_answer";
+    // other events (e.g. model.call_final_result) carry status strings like "success".
+    const isAssistantMessage = type === "assistant.message" || type === "assistant_message";
+    if (isAssistantMessage && event.phase === "final_answer" && (content ?? message) !== undefined) {
+      finalAnswer = content ?? message;
+    }
+    const candidate = isAssistantMessage ? content ?? message
+      : type === "result" && typeof event.result === "string" ? event.result
         : undefined;
     if (candidate !== undefined && candidate.length >= result.length) result = candidate;
     if (typeof event.model === "string") model = event.model;
@@ -129,6 +139,7 @@ function parseCopilotResponse(output: string): ParsedCliResponse | undefined {
       isError: false,
     } : undefined;
   }
+  if (finalAnswer !== undefined) result = finalAnswer;
   if (!result) return undefined;
   return {
     result,
@@ -149,6 +160,10 @@ function classifyCopilotFailure(message: string): LlmError {
   }
   if (/not signed in|not licensed to use copilot|no copilot access|not authenticated|authentication required|unauthorized|\b401\b|\b403\b|run.*login/.test(normalized)) {
     return new LlmError("Copilot CLI is not signed in or this account has no Copilot access", "LLM_AUTH", false);
+  }
+  // CLI argument/usage errors are rejected locally before any request is sent.
+  if (/for more information, try '--help'|unexpected argument|a value is required for/.test(normalized)) {
+    return new LlmError(`GitHub Copilot CLI rejected its arguments: ${message.slice(0, 300)}`, "LLM_NOT_CONFIGURED", false);
   }
   if (/rate.?limit|too many requests|overloaded/.test(normalized)) {
     return new LlmError("GitHub Copilot CLI rate limit reached.", "LLM_RATE_LIMIT", true);

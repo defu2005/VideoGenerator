@@ -10,7 +10,7 @@ import { generateStructured } from "../../providers/llm/structured.js";
 import { LlmError } from "../../providers/llm/types.js";
 import { preflight } from "../../providers/llm/preflight.js";
 import { scriptPrompt } from "./prompt.js";
-import { computeSectionDurations, maxOutputTokensForDuration, researchInputHash, scriptInputHash, scriptTotalDuration } from "./scriptUtils.js";
+import { checkScriptDuration, computeSectionDurations, maxOutputTokensForDuration, researchInputHash, scriptInputHash, scriptTotalDuration } from "./scriptUtils.js";
 
 type ResearchRow = { input_hash: string; data: string; provider: string; model: string };
 type ExistingScript = {
@@ -59,17 +59,19 @@ export class ScriptExecutor implements StageExecutor {
     ) {
       try {
         const parsed = ScriptSchema.parse(JSON.parse(existing.data) as unknown);
-        const duration = scriptTotalDuration(parsed, this.config.SPEECH_WORDS_PER_MINUTE);
-        const target = project.settings.targetDurationSec;
-        if (duration < target * 0.8 || duration > target * 1.2) {
+        const durationCheck = checkScriptDuration(parsed, project.settings.targetDurationSec, this.config.SPEECH_WORDS_PER_MINUTE);
+        if (durationCheck.reject) {
           throw new LlmError("The merged script no longer matches the target duration.", "LLM_INVALID_OUTPUT", false);
         }
         const data = computeSectionDurations(parsed, this.config.SPEECH_WORDS_PER_MINUTE);
         this.sqlite.prepare("UPDATE scripts SET data = ?, updated_at = ? WHERE project_id = ?")
           .run(JSON.stringify(data), new Date().toISOString(), project.id);
         context.recordUsage({ llmCalls: 0, inputTokens: 0, outputTokens: 0, costUsd: 0 });
-        context.reportProgress(100, "Script from merged call (0 tokens)");
-        return { message: "Script from merged call (0 tokens)" };
+        const mergedMessage = durationCheck.warning
+          ? `Script from merged call (0 tokens); ${durationCheck.warning}`
+          : "Script from merged call (0 tokens)";
+        context.reportProgress(100, mergedMessage);
+        return { message: mergedMessage };
       } catch (error) {
         if (error instanceof LlmError) throw asStageError(error);
         if (error instanceof SyntaxError) throw new StageError(error.message, "LLM_INVALID_OUTPUT", false);
@@ -106,14 +108,8 @@ export class ScriptExecutor implements StageExecutor {
       if (check.decision === "reject") throw check.error;
       const { system, prompt } = check.input;
       const validatedSchema = ScriptSchema.superRefine((script, ctx) => {
-        const duration = scriptTotalDuration(script, this.config.SPEECH_WORDS_PER_MINUTE);
-        const target = project.settings.targetDurationSec;
-        if (duration < target * 0.8 || duration > target * 1.2) {
-          ctx.addIssue({
-            code: z.ZodIssueCode.custom,
-            message: `Total estimated duration must be between ${Math.round(target * 0.8)} and ${Math.round(target * 1.2)} seconds; got ${duration}.`,
-          });
-        }
+        const { reject } = checkScriptDuration(script, project.settings.targetDurationSec, this.config.SPEECH_WORDS_PER_MINUTE);
+        if (reject) ctx.addIssue({ code: z.ZodIssueCode.custom, message: reject });
       });
       context.reportProgress(20, "Calling script provider");
       const generated = await generateStructured({

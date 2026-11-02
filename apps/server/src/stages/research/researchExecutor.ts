@@ -8,7 +8,7 @@ import type { LlmProviderRegistry } from "../../providers/llm/registry.js";
 import { generateStructured } from "../../providers/llm/structured.js";
 import { LlmError } from "../../providers/llm/types.js";
 import { preflight } from "../../providers/llm/preflight.js";
-import { computeSectionDurations, maxOutputTokensForDuration, scriptTotalDuration, researchInputHash } from "../script/scriptUtils.js";
+import { checkScriptDuration, computeSectionDurations, maxOutputTokensForDuration, scriptTotalDuration, researchInputHash } from "../script/scriptUtils.js";
 import { researchPrompt } from "./prompt.js";
 import { mergedStoryPrompt } from "../script/mergedStoryPrompt.js";
 import { z } from "zod";
@@ -70,15 +70,8 @@ export class ResearchExecutor implements StageExecutor {
       }
       const { system, prompt } = check.input;
       const mergedSchema = MergedStorySchema.superRefine(({ script }, ctx) => {
-        const duration = scriptTotalDuration(script, this.config.SPEECH_WORDS_PER_MINUTE);
-        const target = project.settings.targetDurationSec;
-        if (duration < target * 0.8 || duration > target * 1.2) {
-          ctx.addIssue({
-            code: z.ZodIssueCode.custom,
-            path: ["script"],
-            message: `Total estimated duration must be between ${Math.round(target * 0.8)} and ${Math.round(target * 1.2)} seconds; got ${duration}.`,
-          });
-        }
+        const { reject } = checkScriptDuration(script, project.settings.targetDurationSec, this.config.SPEECH_WORDS_PER_MINUTE);
+        if (reject) ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["script"], message: reject });
       });
       context.reportProgress(20, "Calling research provider");
       const request = {

@@ -76,6 +76,23 @@ describe("generateStructured", () => {
     db.close();
   });
 
+  it("counts zero calls when the provider fails before sending (e.g. CLI not found)", async () => {
+    const { db, cache } = cacheDb();
+    const { LlmError } = await import("../src/providers/llm/types.js");
+    const provider: LlmProvider = {
+      id: "copilot-cli",
+      label: "Copilot",
+      defaultModel: null,
+      generate: vi.fn(async () => { throw new LlmError("CLI was not found", "LLM_NOT_CONFIGURED", false); }),
+    };
+    const result = await generateStructured({
+      provider, model: "auto", system: "system", prompt: "prompt", schema,
+      schemaName: "Example", schemaVersion: "1", maxOutputTokens: 100, signal: controller(), cache,
+    }).catch((error: unknown) => error);
+    expect(result).toMatchObject({ code: "LLM_NOT_CONFIGURED", usage: { llmCalls: 0 } });
+    db.close();
+  });
+
   it("records the first response usage when the repair provider call fails", async () => {
     const { db, cache } = cacheDb();
     const provider = providerFrom(["invalid"]);

@@ -70,7 +70,7 @@ export async function generateStructured<T>(input: {
       json: true,
     }, input.signal);
   } catch (error) {
-    throw withUsage(error, { ...usage(), llmCalls: calls + 1 }, input.provider.id === "copilot-cli");
+    throw withUsage(error, { ...usage(), llmCalls: calls + attemptedCalls(error) }, input.provider.id === "copilot-cli");
   }
   calls += 1;
   totalInputTokens += response.usage.inputTokens;
@@ -103,7 +103,7 @@ export async function generateStructured<T>(input: {
         json: true,
       }, input.signal);
     } catch (error) {
-      throw withUsage(error, { ...usage(), llmCalls: calls + 1 }, input.provider.id === "copilot-cli");
+      throw withUsage(error, { ...usage(), llmCalls: calls + attemptedCalls(error) }, input.provider.id === "copilot-cli");
     }
     calls += 1;
     totalInputTokens += response.usage.inputTokens;
@@ -122,7 +122,11 @@ export async function generateStructured<T>(input: {
     validation = validateOutput(input.schema, rawText);
   }
   if (!validation.success) {
-    input.logger?.warn({ preview: rawText.slice(0, 240), schema: input.schemaName }, "LLM output failed structured validation");
+    input.logger?.warn({
+      preview: rawText.slice(0, 240),
+      schema: input.schemaName,
+      issues: validation.success ? [] : validation.issues.slice(0, 15),
+    }, "LLM output failed structured validation");
     throw new LlmError("The LLM response did not match the required output format.", "LLM_INVALID_OUTPUT", false, undefined, usage());
   }
 
@@ -134,6 +138,13 @@ export async function generateStructured<T>(input: {
     model: input.model,
     cached: false,
   };
+}
+
+// Errors raised before a request reaches the provider (missing CLI, nothing configured) spend no call.
+const NOT_SENT_CODES = new Set(["LLM_NOT_CONFIGURED", "LLM_LIMIT_TOO_SMALL"]);
+
+function attemptedCalls(error: unknown): number {
+  return error instanceof LlmError && NOT_SENT_CODES.has(error.code) ? 0 : 1;
 }
 
 function withUsage(

@@ -1,10 +1,44 @@
 import { z } from "zod";
 
+// Deterministic normalizers for common LLM deviations (localized enum words, numeric levels,
+// string outline items). Fixing these in code avoids paying for a repair LLM call.
+const LEVEL_WORDS: Record<string, "low" | "medium" | "high"> = {
+  low: "low", medium: "medium", high: "high", med: "medium", mid: "medium", moderate: "medium",
+  "thấp": "low", "trung bình": "medium", "vừa": "medium", "cao": "high",
+};
+
+function normalizeLevel(value: unknown): unknown {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    // Accept 1–5 integer scales and fractions strictly between 0 and 1.
+    const scaled = value > 0 && value < 1 ? value * 5 : value;
+    return scaled <= 2 ? "low" : scaled <= 3 ? "medium" : "high";
+  }
+  if (typeof value === "string") {
+    const key = value.trim().toLowerCase();
+    if (/^\d+(\.\d+)?$/.test(key)) return normalizeLevel(Number(key));
+    return LEVEL_WORDS[key] ?? value;
+  }
+  return value;
+}
+
+const LevelSchema = z.preprocess(normalizeLevel, z.enum(["low", "medium", "high"]));
+
+const OutlineItemSchema = z.preprocess((value) => {
+  if (typeof value === "string" && value.trim()) {
+    return { section: value.trim(), purpose: value.trim(), points: [] };
+  }
+  return value;
+}, z.object({
+  section: z.string().min(1),
+  purpose: z.string().min(1),
+  points: z.array(z.string()),
+}).strict());
+
 export const ResearchNotesSchema = z.object({
   summary: z.string().min(1),
   keyFacts: z.array(z.object({
     fact: z.string().min(1),
-    confidence: z.enum(["high", "medium", "low"]),
+    confidence: LevelSchema,
     sourceHint: z.string().nullable(),
   }).strict()).min(5).max(12),
   timeline: z.array(z.object({
@@ -12,16 +46,12 @@ export const ResearchNotesSchema = z.object({
     event: z.string().min(1),
   }).strict()).max(10),
   angles: z.array(z.string().min(1)).max(6),
-  outline: z.array(z.object({
-    section: z.string().min(1),
-    purpose: z.string().min(1),
-    points: z.array(z.string()),
-  }).strict()).min(3).max(8),
+  outline: z.array(OutlineItemSchema).min(3).max(8),
   cautions: z.array(z.string()).max(6),
 }).strict();
 export type ResearchNotes = z.infer<typeof ResearchNotesSchema>;
 
-export const ScriptEnergySchema = z.enum(["low", "medium", "high"]);
+export const ScriptEnergySchema = z.preprocess(normalizeLevel, z.enum(["low", "medium", "high"]));
 
 const ScriptSectionObjectSchema = z.object({
   id: z.string().min(1),

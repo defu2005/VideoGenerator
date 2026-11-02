@@ -172,7 +172,9 @@ export function resolveCliPath(binary: string, env: NodeJS.ProcessEnv = process.
   const isPath = isAbsolute(binary) || binary.includes("/") || binary.includes("\\");
   if (isPath) return isRunnableFile(resolve(binary)) ? resolve(binary) : null;
   const searchPath = env.PATH ?? env.Path ?? "";
-  const extensions = process.platform === "win32" ? [".EXE", ""] : [""];
+  // On Windows, npm also installs an extension-less POSIX shell shim next to the .cmd/.ps1
+  // wrappers; it cannot be spawned without a shell, so only real executables count here.
+  const extensions = process.platform === "win32" ? [".EXE"] : [""];
   for (const directory of searchPath.split(delimiter)) {
     if (!directory) continue;
     for (const extension of extensions) {

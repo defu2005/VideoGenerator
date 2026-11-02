@@ -1,4 +1,5 @@
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { spawn, type ChildProcessWithoutNullStreams, type SpawnOptions } from "node:child_process";
@@ -76,6 +77,22 @@ describe("GitHub Copilot CLI provider", () => {
     });
   });
 
+  it("ignores npm's extension-less POSIX shim on Windows (real npm layout)", () => {
+    if (process.platform !== "win32") return;
+    const bin = join(root, "npm-layout");
+    const loader = join(bin, "node_modules", "@github", "copilot", "npm-loader.js");
+    mkdirSync(join(bin, "node_modules", "@github", "copilot"), { recursive: true });
+    writeFileSync(join(bin, "copilot"), "#!/bin/sh\nexec node npm-loader.js \"$@\"\n");
+    writeFileSync(join(bin, "copilot.cmd"), "@ECHO off");
+    writeFileSync(join(bin, "copilot.ps1"), "#!/usr/bin/env pwsh");
+    writeFileSync(loader, "");
+    expect(resolveCopilotCliLaunch("copilot", { PATH: bin })).toEqual({
+      command: process.execPath,
+      argsPrefix: [loader],
+      binaryPath: loader,
+    });
+  });
+
   it("uses the documented text-only invocation and parses JSONL output", async () => {
     let capturedOptions: SpawnOptions | undefined;
     let capturedArgs: string[] = [];
@@ -99,16 +116,38 @@ describe("GitHub Copilot CLI provider", () => {
       cwd: expect.stringContaining(join(root, "tmp", "copilot-cli")),
     });
     expect(capturedArgs).toEqual(expect.arrayContaining([
-      COPILOT_CLI_FLAGS.prompt,
       COPILOT_CLI_FLAGS.silent,
       "--output-format",
       "json",
       COPILOT_CLI_FLAGS.availableTools,
+      COPILOT_CLI_FLAGS.disableBuiltinMcps,
       COPILOT_CLI_FLAGS.disallowTempDir,
       "--model",
       "copilot-model",
     ]));
+    // Prompt goes over stdin; `-p` would require an argument (verified on CLI 1.0.105).
+    expect(capturedArgs).not.toContain("-p");
     expect(capturedArgs).not.toContain("--allow-all-tools");
+  });
+
+  it("parses real CLI 1.0.105 JSONL: final_answer wins over status strings like 'success'", async () => {
+    const realJsonl = readFileSync(fileURLToPath(new URL("./fixtures/copilot-cli-1.0.105.jsonl", import.meta.url)), "utf8");
+    writeFileSync(fakeScript, `
+process.stdin.resume();
+process.stdin.on("end", () => process.stdout.write(${JSON.stringify(realJsonl)}));
+`);
+    const result = await provider().generate(request(), new AbortController().signal);
+    expect(result.text).toBe("OK");
+    expect(result.usage.tokensUnknown).toBe(true);
+  });
+
+  it("treats CLI argument errors as not sent and non-retryable", async () => {
+    writeFileSync(fakeScript, `
+process.stdin.resume();
+process.stdin.on("end", () => { process.stderr.write("error: a value is required for '--prompt <text>' but none was supplied\\n\\nFor more information, try '--help'.\\n"); process.exit(2); });
+`);
+    await expect(provider().generate(request(), new AbortController().signal))
+      .rejects.toMatchObject({ code: "LLM_NOT_CONFIGURED", retryable: false });
   });
 
   it("marks missing token counts and maps auth and quota failures as non-retryable", async () => {
