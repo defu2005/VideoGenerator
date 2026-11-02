@@ -73,6 +73,15 @@ describe("research and script stages", () => {
     await researchExecutor.run(cachedCall.context);
     expect(cachedCall.usage[0]).toMatchObject({ llmCalls: 0, inputTokens: 0, outputTokens: 0 });
     expect(generate).toHaveBeenCalledTimes(2);
+
+    const project = harness.repository.getProject(harness.projectId)!;
+    harness.sqlite.prepare("UPDATE projects SET settings = ? WHERE id = ?")
+      .run(JSON.stringify({ ...project.settings, style: "news" }), harness.projectId);
+    const changedStyleCall = contextFor(harness, "RESEARCH");
+    await researchExecutor.run(changedStyleCall.context);
+    expect(changedStyleCall.usage[0]).toMatchObject({ llmCalls: 1 });
+    expect(generate).toHaveBeenCalledTimes(3);
+    expect(generate.mock.calls[2][0].messages[0]?.content).toContain("Style: news;");
   });
 
   it("returns a non-retryable configuration error without a provider", async () => {
@@ -116,6 +125,16 @@ describe("research and script stages", () => {
     const registry = new LlmProviderRegistry(harness.config);
     const provider = registry.get("mock")!;
     const generate = vi.spyOn(provider, "generate");
+    const initialProject = harness.repository.getProject(harness.projectId)!;
+    harness.sqlite.prepare("UPDATE projects SET settings = ? WHERE id = ?")
+      .run(JSON.stringify({
+        ...initialProject.settings,
+        style: "documentary",
+        tone: "serious",
+        audience: "students",
+        platform: "youtube_shorts",
+        aspectRatio: "9:16",
+      }), harness.projectId);
     harness.executors.set("RESEARCH", new ResearchExecutor(harness.sqlite, registry, harness.config));
     harness.executors.set("SCRIPT", new ScriptExecutor(harness.sqlite, registry, harness.config));
     harness.orchestrator.runAll(harness.projectId);
@@ -130,6 +149,9 @@ describe("research and script stages", () => {
     expect(firstScriptJob?.usage).toMatchObject({ llmCalls: 0, inputTokens: 0, outputTokens: 0 });
     expect(firstScriptJob?.message).toContain("Script from merged call");
     expect(generate).toHaveBeenCalledTimes(1);
+    expect(generate.mock.calls[0][0].messages[0]?.content).toContain(
+      "Style: documentary; tone: serious; audience: students; platform: youtube_shorts (vertical, fast pacing)",
+    );
     expect(harness.sqlite.prepare("SELECT COUNT(*) AS count FROM research_notes WHERE project_id = ?").get(harness.projectId))
       .toMatchObject({ count: 1 });
     expect(harness.sqlite.prepare("SELECT COUNT(*) AS count FROM scripts WHERE project_id = ?").get(harness.projectId))

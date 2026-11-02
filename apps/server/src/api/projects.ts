@@ -3,8 +3,10 @@ import {
   CreateProjectInputSchema,
   ProjectListQuerySchema,
   ProjectListResponseSchema,
+  CreateProjectResponseSchema,
   ProjectSchema,
   UpdateProjectInputSchema,
+  recommendBrief,
 } from "@vg/shared";
 import { z } from "zod";
 import type { FastifyInstance } from "fastify";
@@ -31,11 +33,18 @@ export function registerProjectRoutes(app: FastifyInstance, service: ProjectServ
   app.post("/api/projects", {
     schema: {
       body: CreateProjectInputSchema,
-      response: { 201: ProjectSchema, ...ErrorResponses },
+      response: { 201: CreateProjectResponseSchema, ...ErrorResponses },
     },
   }, async (request, reply) => {
     const project = await service.createProject(CreateProjectInputSchema.parse(request.body));
-    return reply.code(201).send(project);
+    const brief = recommendBrief({
+      topic: project.topic,
+      title: project.title,
+      description: project.description,
+      mode: project.mode,
+      settings: project.settings,
+    });
+    return reply.code(201).send({ ...project, recommendations: brief.recommendations, warnings: brief.warnings });
   });
 
   app.get("/api/projects/:id", {

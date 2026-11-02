@@ -69,6 +69,100 @@ async function createProject(
 }
 
 describe("project API", () => {
+  it("creates a topic-only project with explained deterministic recommendations", async () => {
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/projects",
+      payload: { topic: "Lịch sử trận đấu AlphaGo và Lee Sedol năm 2016" },
+    });
+    const created = response.json<Project & { recommendations: Record<string, { value: unknown; reason: string; source: string }> }>();
+
+    expect(response.statusCode).toBe(201);
+    expect(created).toMatchObject({
+      title: "Lịch sử trận đấu AlphaGo và Lee Sedol năm 2016",
+      settings: {
+        language: "vi",
+        platform: "youtube",
+        aspectRatio: "16:9",
+        targetDurationSec: 180,
+        style: "documentary",
+        userSet: [],
+      },
+    });
+    expect(created.recommendations.title.source).toBe("recommended");
+    expect(created.recommendations.language).toMatchObject({
+      value: "vi",
+      reason: "Detected Vietnamese characters in the topic",
+      source: "recommended",
+    });
+    expect(created.recommendations.style.reason).toContain("lịch sử");
+  });
+
+  it("resolves partial platform briefs without replacing the user's platform", async () => {
+    const created = await createProject({
+      topic: "5 sự thật về mèo",
+      platform: "tiktok",
+    });
+    expect(created).toMatchObject({
+      title: "5 sự thật về mèo",
+      settings: {
+        platform: "tiktok",
+        aspectRatio: "9:16",
+        targetDurationSec: 45,
+        sceneDurationSec: 3,
+        style: "listicle",
+        userSet: ["platform"],
+      },
+    });
+  });
+
+  it("recommends changed brief values without overwriting user-set values and supports reset", async () => {
+    const created = await createProject({
+      topic: "An introduction to science",
+      settings: { tone: "humorous" },
+    });
+    const updated = await app.inject({
+      method: "PATCH",
+      url: `/api/projects/${created.id}`,
+      payload: { topic: "How to learn science" },
+    });
+    expect(updated.json<Project>()).toMatchObject({
+      topic: "How to learn science",
+      settings: { style: "explainer", tone: "humorous", userSet: ["tone"] },
+    });
+
+    const reset = await app.inject({
+      method: "PATCH",
+      url: `/api/projects/${created.id}`,
+      payload: { resetToRecommended: ["tone"] },
+    });
+    expect(reset.json<Project>()).toMatchObject({
+      settings: { style: "explainer", tone: "neutral", userSet: [] },
+    });
+  });
+
+  it("previews recommendations without writing a project", async () => {
+    const database = new Database(config.DATABASE_PATH);
+    const before = database.prepare("SELECT COUNT(*) AS count FROM projects").get() as { count: number };
+    database.close();
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/recommendations",
+      payload: { topic: "5 things about space", platform: "tiktok" },
+    });
+    const readback = new Database(config.DATABASE_PATH);
+    const after = readback.prepare("SELECT COUNT(*) AS count FROM projects").get() as { count: number };
+    readback.close();
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({
+      values: { settings: { platform: "tiktok", aspectRatio: "9:16", targetDurationSec: 45, style: "listicle" } },
+      recommendations: { platform: { source: "user" }, style: { source: "recommended" } },
+      warnings: [],
+    });
+    expect(after.count).toBe(before.count);
+  });
+
   it("creates and retrieves a project with defaults", async () => {
     const created = await createProject({ title: "  Sample video  ", topic: "  Sample topic  " });
     const response = await app.inject({ method: "GET", url: `/api/projects/${created.id}` });
@@ -81,8 +175,8 @@ describe("project API", () => {
       topic: "Sample topic",
       mode: "ASSISTED",
       settings: {
-        language: "vi",
-        targetDurationSec: 120,
+        language: "en",
+        targetDurationSec: 180,
         aspectRatio: "16:9",
         stageExecutors: {},
         autoRender: false,
@@ -144,7 +238,7 @@ describe("project API", () => {
     expect(updated.title).toBe("Updated");
     expect(updated.settings).toMatchObject({
       language: "en",
-      targetDurationSec: 120,
+      targetDurationSec: 180,
       aspectRatio: "16:9",
       stageExecutors: { visuals: "USER", voice: "USER" },
       autoRender: true,

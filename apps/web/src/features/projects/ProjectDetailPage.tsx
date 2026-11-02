@@ -1,4 +1,4 @@
-import type { Project } from "@vg/shared";
+import { recommendBrief, type Project } from "@vg/shared";
 import { Link, Navigate, NavLink, useNavigate, useParams } from "react-router-dom";
 import { useState } from "react";
 import { ConfirmDialog } from "../../components/ConfirmDialog";
@@ -18,12 +18,31 @@ function formatUpdated(value: string): string {
 }
 
 function ProjectOverview({ project }: { project: Project }) {
+  const warnings = recommendBrief({
+    topic: project.topic,
+    title: project.title,
+    description: project.description,
+    settings: project.settings,
+  }).warnings;
+  const duration = project.settings.targetDurationSec >= 60
+    ? `${project.settings.targetDurationSec / 60} min`
+    : `${project.settings.targetDurationSec} sec`;
   return (
     <div className="overview-grid">
       <section className="panel overview-card">
         <p className="eyebrow">PROJECT BRIEF</p>
         <h2>Topic</h2><p>{project.topic}</p>
         {project.description && <><h2>Description</h2><p>{project.description}</p></>}
+        <h2>Video brief</h2>
+        <p>
+          {project.settings.platform.replaceAll("_", " ")} · {project.settings.aspectRatio} · {duration} ·
+          {" "}{project.settings.language} · {project.settings.style}
+        </p>
+        {warnings.length > 0 && (
+          <ul className="brief-warning-list" aria-label="Brief warnings">
+            {warnings.map((warning) => <li key={warning}>{warning}</li>)}
+          </ul>
+        )}
       </section>
       <section className="panel overview-card">
         <p className="eyebrow">CONFIGURATION</p>
@@ -32,6 +51,9 @@ function ProjectOverview({ project }: { project: Project }) {
           <div><dt>Language</dt><dd>{project.settings.language}</dd></div>
           <div><dt>Target duration</dt><dd>{project.settings.targetDurationSec} sec</dd></div>
           <div><dt>Aspect ratio</dt><dd>{project.settings.aspectRatio}</dd></div>
+          <div><dt>Style / tone</dt><dd>{project.settings.style} / {project.settings.tone}</dd></div>
+          <div><dt>Audience</dt><dd>{project.settings.audience}</dd></div>
+          <div><dt>Scene duration</dt><dd>{project.settings.sceneDurationSec} sec</dd></div>
           <div><dt>Auto render</dt><dd>{project.settings.autoRender ? "On" : "Off"}</dd></div>
         </dl>
         <h2>Dates</h2>

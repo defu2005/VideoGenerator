@@ -51,12 +51,14 @@ describe("Video Agent MCP tools", () => {
     const tools = await client.listTools();
     const prompts = await client.listPrompts();
     expect(tools.tools.map((tool) => tool.name).sort()).toEqual([
+      "create_project",
       "get_pipeline",
       "get_project",
       "get_research",
       "get_script",
       "get_writing_brief",
       "list_projects",
+      "recommend_brief",
       "run_pipeline",
       "save_research",
       "save_script",
@@ -66,6 +68,57 @@ describe("Video Agent MCP tools", () => {
       "write_research",
       "write_script",
       "write_story",
+    ]);
+  });
+
+  it("creates projects and previews briefs through the REST API without LLM tools", async () => {
+    const calls: { url: string; body: unknown }[] = [];
+    const fetchImpl = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      const body = init?.body ? JSON.parse(String(init.body)) : undefined;
+      calls.push({ url, body });
+      if (url.endsWith("/api/recommendations")) {
+        return jsonResponse({
+          values: { title: "Cats", mode: "ASSISTED", settings: { platform: "tiktok" } },
+          recommendations: { platform: { value: "tiktok", reason: "Set by user", source: "user" } },
+          warnings: [],
+        });
+      }
+      return jsonResponse({
+        ...project,
+        title: "Cats",
+        settings: { platform: "tiktok" },
+        recommendations: { platform: { value: "tiktok", reason: "Set by user", source: "user" } },
+        warnings: [],
+      }, 201);
+    }) as typeof fetch;
+    const client = await connect(fetchImpl);
+    const created = await client.callTool({
+      name: "create_project",
+      arguments: { topic: "Cats", platform: "tiktok", targetDurationSec: 45 },
+    });
+    expect(JSON.parse(resultText(created))).toMatchObject({
+      id: projectId,
+      brief: { platform: "tiktok" },
+      recommendations: { platform: { source: "user" } },
+    });
+    const preview = await client.callTool({
+      name: "recommend_brief",
+      arguments: { topic: "Cats", platform: "tiktok" },
+    });
+    expect(JSON.parse(resultText(preview))).toMatchObject({
+      values: { settings: { platform: "tiktok" } },
+      warnings: [],
+    });
+    expect(calls).toEqual([
+      {
+        url: "http://127.0.0.1:3001/api/projects",
+        body: { topic: "Cats", settings: { platform: "tiktok", targetDurationSec: 45 } },
+      },
+      {
+        url: "http://127.0.0.1:3001/api/recommendations",
+        body: { topic: "Cats", settings: { platform: "tiktok" } },
+      },
     ]);
   });
 

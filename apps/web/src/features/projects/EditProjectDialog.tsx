@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
-import { UpdateProjectInputSchema, type Project } from "@vg/shared";
+import { recommendBrief, UpdateProjectInputSchema, type Project, type ProjectSettings } from "@vg/shared";
 import { ApiRequestError } from "../../services/apiClient";
 import { useUpdateProject } from "../../hooks/useProjects";
 import { ProjectFormFields, type ProjectDraft } from "./ProjectFormFields";
+import { BriefFields } from "./BriefFields";
 
 function draftFromProject(project: Project): ProjectDraft {
   return {
@@ -48,6 +49,10 @@ export function EditProjectDialog({
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [requestError, setRequestError] = useState("");
   const [advanced, setAdvanced] = useState(false);
+  const [briefSettings, setBriefSettings] = useState<ProjectSettings>(project.settings);
+  const [briefUserSet, setBriefUserSet] = useState<string[]>(project.settings.userSet);
+  const [briefChanges, setBriefChanges] = useState<string[]>([]);
+  const [briefResets, setBriefResets] = useState<string[]>([]);
 
   useEffect(() => {
     const dialog = dialogRef.current;
@@ -62,6 +67,10 @@ export function EditProjectDialog({
   useEffect(() => {
     if (open) {
       setDraft(draftFromProject(project));
+      setBriefSettings(project.settings);
+      setBriefUserSet(project.settings.userSet);
+      setBriefChanges([]);
+      setBriefResets([]);
       setErrors({});
       setRequestError("");
       mutation.reset();
@@ -71,6 +80,34 @@ export function EditProjectDialog({
   function change(field: keyof ProjectDraft, value: string | boolean) {
     setDraft((current) => ({ ...current, [field]: value }));
     setErrors((current) => ({ ...current, [field]: "" }));
+  }
+
+  function changeBrief(path: string, value: string | number | boolean) {
+    setBriefSettings((current) => {
+      if (path === "subtitles.enabled") return { ...current, subtitles: { ...current.subtitles, enabled: Boolean(value) } };
+      if (path === "subtitles.maxCharsPerLine") return { ...current, subtitles: { ...current.subtitles, maxCharsPerLine: Number(value) } };
+      if (path === "music.enabled") return { ...current, music: { ...current.music, enabled: Boolean(value) } };
+      if (path === "music.volume") return { ...current, music: { ...current.music, volume: Number(value) } };
+      return { ...current, [path]: value } as ProjectSettings;
+    });
+    setBriefUserSet((current) => [...new Set([...current, path])]);
+    setBriefChanges((current) => [...new Set([...current, path])]);
+    setBriefResets((current) => current.filter((field) => field !== path));
+  }
+
+  function resetBrief(path: string) {
+    const userSet = briefUserSet.filter((field) => field !== path);
+    const resolved = recommendBrief({ topic: draft.topic, settings: { ...briefSettings, userSet } }).values.settings;
+    setBriefSettings((current) => {
+      if (path === "subtitles.enabled") return { ...current, subtitles: { ...current.subtitles, enabled: resolved.subtitles.enabled } };
+      if (path === "subtitles.maxCharsPerLine") return { ...current, subtitles: { ...current.subtitles, maxCharsPerLine: resolved.subtitles.maxCharsPerLine } };
+      if (path === "music.enabled") return { ...current, music: { ...current.music, enabled: resolved.music.enabled } };
+      if (path === "music.volume") return { ...current, music: { ...current.music, volume: resolved.music.volume } };
+      return { ...current, [path]: resolved[path as keyof typeof resolved] } as ProjectSettings;
+    });
+    setBriefUserSet(userSet);
+    setBriefChanges((current) => current.filter((field) => field !== path));
+    setBriefResets((current) => [...new Set([...current, path])]);
   }
 
   async function submit(event: FormEvent<HTMLFormElement>) {
@@ -83,10 +120,18 @@ export function EditProjectDialog({
       if (draft[key] !== initial[key]) patch[key] = draft[key];
     }
     const settings: Record<string, unknown> = {};
-    for (const key of ["language", "targetDurationSec", "aspectRatio", "autoRender"] as const) {
-      const value = key === "targetDurationSec" ? Number(draft[key]) : draft[key];
-      const oldValue = key === "targetDurationSec" ? project.settings[key] : project.settings[key];
-      if (value !== oldValue) settings[key] = value;
+    for (const path of briefChanges) {
+      if (path === "subtitles.enabled") {
+        settings.subtitles = { ...(settings.subtitles as object | undefined), enabled: briefSettings.subtitles.enabled };
+      } else if (path === "subtitles.maxCharsPerLine") {
+        settings.subtitles = { ...(settings.subtitles as object | undefined), maxCharsPerLine: briefSettings.subtitles.maxCharsPerLine };
+      } else if (path === "music.enabled") {
+        settings.music = { ...(settings.music as object | undefined), enabled: briefSettings.music.enabled };
+      } else if (path === "music.volume") {
+        settings.music = { ...(settings.music as object | undefined), volume: briefSettings.music.volume };
+      } else {
+        settings[path] = briefSettings[path as keyof ProjectSettings];
+      }
     }
     if (draft.researchMode !== (project.settings.researchMode ?? "")) {
       settings.researchMode = draft.researchMode || undefined;
@@ -125,6 +170,7 @@ export function EditProjectDialog({
       };
     }
     if (Object.keys(settings).length) patch.settings = settings;
+    if (briefResets.length) patch.resetToRecommended = briefResets;
 
     const result = UpdateProjectInputSchema.safeParse(patch);
     if (!result.success) {
@@ -172,6 +218,12 @@ export function EditProjectDialog({
             onChange={change}
             advanced={advanced}
             onToggleAdvanced={() => setAdvanced((value) => !value)}
+          />
+          <BriefFields
+            topic={draft.topic}
+            settings={{ ...briefSettings, userSet: briefUserSet }}
+            onChange={changeBrief}
+            onReset={resetBrief}
           />
         </div>
         <div className="dialog-actions">

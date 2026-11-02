@@ -16,6 +16,16 @@ const project: Project = {
     language: "en",
     targetDurationSec: 120,
     aspectRatio: "16:9",
+    platform: "youtube",
+    style: "storytelling",
+    tone: "dramatic",
+    audience: "general",
+    wordsPerMinute: 150,
+    sceneDurationSec: 7,
+    visualStyle: "mixed",
+    subtitles: { enabled: true, maxCharsPerLine: 42 },
+    music: { enabled: true, volume: 0.15 },
+    userSet: [],
     stageExecutors: {},
     autoRender: false,
   },
@@ -84,32 +94,27 @@ describe("ProjectListPage", () => {
 });
 
 describe("CreateProjectDialog", () => {
-  it("opens as a modal, focuses the title, and closes on Escape cancellation", () => {
+  it("opens as a modal, focuses the topic, and closes on Escape cancellation", () => {
     const onClose = vi.fn();
     renderWithProviders(<CreateProjectDialog open onClose={onClose} />);
 
     const dialog = screen.getByRole("dialog");
     expect(dialog).toHaveAttribute("open");
-    expect(screen.getByLabelText(/Title/)).toHaveFocus();
+    expect(screen.getByLabelText(/Topic/)).toHaveFocus();
     fireEvent(dialog, new Event("cancel", { cancelable: true }));
     expect(onClose).toHaveBeenCalledOnce();
   });
 
-  it("blocks an empty title using the shared schema", async () => {
-    renderWithProviders(<CreateProjectDialog open onClose={vi.fn()} />);
-    fireEvent.change(screen.getByLabelText(/Topic/), { target: { value: "Ocean life" } });
-    fireEvent.click(screen.getByRole("button", { name: "Create project" }));
-    expect(await screen.findByText("Too small: expected string to have >=1 characters")).toBeInTheDocument();
-  });
-
-  it("posts validated fields and navigates to the new project's overview", async () => {
+  it("requires a topic and creates with only the topic in quick-create mode", async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL, _init?: RequestInit) =>
       String(input) === "/api/llm/providers" ? jsonResponse([]) : jsonResponse(project, 201));
     vi.stubGlobal("fetch", fetchMock);
     renderWithProviders(<CreateProjectDialog open onClose={vi.fn()} />);
-    fireEvent.change(screen.getByLabelText(/Title/), { target: { value: "Ocean documentary" } });
-    fireEvent.change(screen.getByLabelText(/Topic/), { target: { value: "Life under the sea" } });
-    fireEvent.click(screen.getByRole("button", { name: "Create project" }));
+    fireEvent.click(screen.getByRole("button", { name: "Tạo" }));
+    expect(await screen.findByText("Too small: expected string to have >=1 characters")).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText(/Topic/), { target: { value: "Lịch sử đại dương" } });
+    expect(await screen.findByText(/YouTube · 16:9 · 3 phút · Tiếng Việt · Documentary/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Tạo" }));
 
     await waitFor(() => expect(fetchMock).toHaveBeenCalledWith(
       "/api/projects",
@@ -117,11 +122,21 @@ describe("CreateProjectDialog", () => {
     ));
     const requestCall = fetchMock.mock.calls.find(([input]) => String(input) === "/api/projects");
     const request = requestCall?.[1] as RequestInit;
-    expect(JSON.parse(String(request.body))).toMatchObject({
-      title: "Ocean documentary",
-      topic: "Life under the sea",
-      mode: "ASSISTED",
-    });
-    await waitFor(() => expect(screen.getByTestId("current-location")).toHaveTextContent(`/projects/${project.id}/overview`));
+    expect(JSON.parse(String(request.body))).toEqual({ topic: "Lịch sử đại dương" });
+  });
+
+  it("shows recommendations and lets a user reset a customized field", () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse([])));
+    renderWithProviders(<CreateProjectDialog open onClose={vi.fn()} />);
+    fireEvent.change(screen.getByLabelText(/Topic/), { target: { value: "Ocean life" } });
+    fireEvent.click(screen.getByRole("button", { name: /Customize/ }));
+    const platform = screen.getByLabelText("Platform");
+    expect(platform).toHaveValue("youtube");
+    expect(screen.getAllByText("Gợi ý").length).toBeGreaterThan(0);
+    fireEvent.change(platform, { target: { value: "tiktok" } });
+    expect(screen.getByRole("button", { name: "Reset Platform to recommendation" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Reset Platform to recommendation" }));
+    expect(screen.getByLabelText("Platform")).toHaveValue("youtube");
+    expect(screen.getAllByText("Gợi ý").length).toBeGreaterThan(0);
   });
 });

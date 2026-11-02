@@ -1,6 +1,8 @@
 import type { Project } from "@vg/shared";
 
 export function mergedStoryPrompt(project: Project, wordsPerMinute: number): { system: string; prompt: string } {
+  const pace = project.settings.wordsPerMinute ?? wordsPerMinute;
+  const pacing = project.settings.aspectRatio === "9:16" ? " (vertical, fast pacing)" : "";
   return {
     system: [
       "You are generating a merged story: research notes and a documentary script in one response.",
@@ -12,8 +14,9 @@ export function mergedStoryPrompt(project: Project, wordsPerMinute: number): { s
       `Topic: ${project.topic}`,
       `Description: ${project.description || "(none)"}`,
       `Language: ${project.settings.language}`,
+      `Style: ${project.settings.style}; tone: ${project.settings.tone}; audience: ${project.settings.audience}; platform: ${project.settings.platform}${pacing}`,
       `Target duration: ${project.settings.targetDurationSec} seconds`,
-      `Speaking pace: ${wordsPerMinute} words per minute`,
+      `Speaking pace: ${pace} words per minute`,
       "Return {research:{summary,keyFacts,timeline,angles,outline,cautions},script:{title,hook,sections,outro,music}}.",
       "Research: 5-12 keyFacts[{fact,confidence,sourceHint}], at most 10 timeline entries and 6 cautions; outline 3-8 sections.",
       "Script: narration within 20% of target; sections[{id,heading,narration,visualQueries:{primary,alternatives},visualNotes,musicMood,energy}]. Provide 0-3 visual-query alternatives per section; the server calculates duration. Music:{mood,energy,keywords}.",

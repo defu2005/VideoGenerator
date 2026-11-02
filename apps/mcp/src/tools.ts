@@ -30,6 +30,51 @@ export function registerVideoAgentTools(
   server: McpServer,
   api: VideoAgentApiClient = new VideoAgentApiClient(),
 ): void {
+  const briefFields = {
+    title: z.string().optional(),
+    platform: z.enum(["youtube", "youtube_shorts", "tiktok", "facebook_reels", "custom"]).optional(),
+    targetDurationSec: z.number().int().min(30).max(1800).optional(),
+    language: z.string().optional(),
+    style: z.enum(["storytelling", "documentary", "explainer", "news", "listicle"]).optional(),
+    tone: z.enum(["neutral", "dramatic", "inspiring", "humorous", "serious"]).optional(),
+    audience: z.enum(["general", "kids", "students", "professionals"]).optional(),
+    aspectRatio: z.enum(["16:9", "9:16", "1:1"]).optional(),
+  };
+  function briefInput(input: {
+    topic: string;
+    title?: string;
+    platform?: "youtube" | "youtube_shorts" | "tiktok" | "facebook_reels" | "custom";
+    targetDurationSec?: number;
+    language?: string;
+    style?: "storytelling" | "documentary" | "explainer" | "news" | "listicle";
+    tone?: "neutral" | "dramatic" | "inspiring" | "humorous" | "serious";
+    audience?: "general" | "kids" | "students" | "professionals";
+    aspectRatio?: "16:9" | "9:16" | "1:1";
+  }) {
+    const { topic, title, ...fields } = input;
+    const settings = Object.fromEntries(
+      Object.entries(fields).filter(([, value]) => value !== undefined),
+    );
+    return {
+      topic,
+      ...(title === undefined ? {} : { title }),
+      ...(Object.keys(settings).length ? { settings } : {}),
+    };
+  }
+
+  server.tool("create_project", "Create a Video Agent project with deterministic video-brief recommendations.", {
+    topic: z.string().trim().min(1).max(2000),
+    ...briefFields,
+  }, (input) => invoke(
+    () => api.createProject(briefInput(input)),
+    ({ id, title, settings, recommendations }) => ({ id, title, brief: settings, recommendations }),
+  ));
+
+  server.tool("recommend_brief", "Preview deterministic video-brief values without creating a project or using an LLM.", {
+    topic: z.string().trim().min(1).max(2000),
+    ...briefFields,
+  }, (input) => invoke(() => api.recommendBrief(briefInput(input))));
+
   server.tool("list_projects", "List up to 20 Video Agent projects, optionally filtered by title or status.", {
     q: z.string().optional(),
     status: ProjectStatusSchema.optional(),

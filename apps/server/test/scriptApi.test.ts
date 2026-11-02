@@ -160,6 +160,20 @@ describe("script API", () => {
     expect(script.json().user).toBe(scriptPrompt(project, ResearchNotesSchema.parse(researchNotes), config.SPEECH_WORDS_PER_MINUTE).prompt);
   });
 
+  it("includes the compact resolved brief line in the existing story prompt", async () => {
+    const project = await createProject({
+      platform: "youtube_shorts",
+      style: "documentary",
+      tone: "serious",
+      audience: "students",
+    });
+    const response = await app.inject({ method: "GET", url: `/api/projects/${project.id}/prompts/STORY` });
+    expect(response.statusCode).toBe(200);
+    expect(response.json().user).toContain(
+      "Style: documentary; tone: serious; audience: students; platform: youtube_shorts (vertical, fast pacing)",
+    );
+  });
+
   it("stores user scripts, skips research, versions edits, and stales downstream stages", async () => {
     const project = await createProject({ stageExecutors: { script: "USER" } });
     const initial = await app.inject({ method: "GET", url: `/api/projects/${project.id}/script` });

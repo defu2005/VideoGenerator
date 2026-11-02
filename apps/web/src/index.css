@@ -170,6 +170,12 @@ button:disabled { cursor: not-allowed; opacity: .58; }
 .form-field input[aria-invalid="true"], .form-field textarea[aria-invalid="true"] { border-color: #d95d68; }
 .field-error { color: #bf414d; font-size: 10px; font-weight: 500; }
 .field-hint { color: #929bac; font-size: 10px; font-weight: 450; }
+.brief-summary { margin: -5px 0 15px; color: #52617b; font-size: 11px; font-weight: 600; }
+.brief-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 13px; }
+.recommendation-badge { display: inline-block; margin-left: 7px; border-radius: 9px; background: #edf2ff; padding: 2px 6px; color: #4c66bd; font-size: 9px; font-weight: 650; }
+.recommendation-reset { margin-left: 7px; border: 0; background: transparent; padding: 0 3px; color: #526bca; cursor: pointer; font-size: 14px; }
+.field-warning { grid-column: 1 / -1; margin: -7px 0 12px; color: #9a6a20; font-size: 10px; }
+.brief-warning-list { margin: 12px 0 0; padding-left: 18px; color: #9a6a20; font-size: 10px; line-height: 1.5; }
 .form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: 13px; }
 .advanced-toggle { margin: 0 0 15px; padding: 4px 0; }
 .advanced-settings { border-top: 1px solid #eff0f4; padding-top: 13px; }

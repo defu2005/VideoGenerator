@@ -5,12 +5,14 @@ import {
   ProjectSchema,
   PipelineStageSchema,
   ProjectStatusSchema,
+  recommendBrief,
   type CreateProjectInput,
   type DashboardStats,
   type Project,
   type ProjectListQuery,
   type ProjectListResponse,
   type ProjectSettings,
+  type ProjectSettingsInput,
   type UpdateProjectInput,
 } from "@vg/shared";
 import type { FastifyBaseLogger } from "fastify";
@@ -21,11 +23,49 @@ import { AppError } from "../lib/errors.js";
 import { createProjectDir, removeProjectDir } from "../storage/paths.js";
 
 const toProject = (row: ProjectRow): Project => ProjectSchema.parse(row);
+const BRIEF_SETTING_FIELDS = new Set([
+  "platform",
+  "style",
+  "tone",
+  "audience",
+  "language",
+  "targetDurationSec",
+  "aspectRatio",
+  "wordsPerMinute",
+  "sceneDurationSec",
+  "visualStyle",
+]);
 
-function mergeSettings(current: ProjectSettings, update: Partial<ProjectSettings>): ProjectSettings {
+function briefSettingsFromInput(input: CreateProjectInput | UpdateProjectInput): ProjectSettingsInput {
+  return {
+    ...(input.platform === undefined ? {} : { platform: input.platform }),
+    ...(input.style === undefined ? {} : { style: input.style }),
+    ...(input.tone === undefined ? {} : { tone: input.tone }),
+    ...(input.audience === undefined ? {} : { audience: input.audience }),
+    ...(input.language === undefined ? {} : { language: input.language }),
+    ...(input.targetDurationSec === undefined ? {} : { targetDurationSec: input.targetDurationSec }),
+    ...(input.aspectRatio === undefined ? {} : { aspectRatio: input.aspectRatio }),
+    ...(input.wordsPerMinute === undefined ? {} : { wordsPerMinute: input.wordsPerMinute }),
+    ...(input.sceneDurationSec === undefined ? {} : { sceneDurationSec: input.sceneDurationSec }),
+    ...(input.visualStyle === undefined ? {} : { visualStyle: input.visualStyle }),
+    ...(input.subtitles === undefined ? {} : { subtitles: input.subtitles }),
+    ...(input.music === undefined ? {} : { music: input.music }),
+    ...(input.userSet === undefined ? {} : { userSet: input.userSet }),
+  };
+}
+
+function mergeSettings(current: ProjectSettings, update: ProjectSettingsInput): ProjectSettings {
   return {
     ...current,
     ...update,
+    subtitles: {
+      ...current.subtitles,
+      ...update.subtitles,
+    },
+    music: {
+      ...current.music,
+      ...update.music,
+    },
     stageExecutors: {
       ...current.stageExecutors,
       ...update.stageExecutors,
@@ -46,21 +86,53 @@ export function createProjectService(db: AppDatabase, config: AppConfig, logger:
   async function createProject(input: CreateProjectInput): Promise<Project> {
     const now = new Date().toISOString();
     const id = randomUUID();
+    const inputSettings: ProjectSettingsInput = {
+      ...briefSettingsFromInput(input),
+      ...input.settings,
+    };
+    const explicitBriefFields = Object.keys(inputSettings).filter((field) => BRIEF_SETTING_FIELDS.has(field));
+    const nestedBriefFields = [
+      ...Object.keys(inputSettings.subtitles ?? {}).map((field) => `subtitles.${field}`),
+      ...Object.keys(inputSettings.music ?? {}).map((field) => `music.${field}`),
+    ];
+    const userSet = [...new Set([
+      ...(inputSettings.userSet ?? []),
+      ...(input.title === undefined ? [] : ["title"]),
+      ...explicitBriefFields,
+      ...nestedBriefFields,
+    ])];
+    const resolved = recommendBrief({
+      topic: input.topic,
+      title: input.title,
+      description: input.description ?? "",
+      mode: input.mode ?? "ASSISTED",
+      settings: { ...inputSettings, userSet },
+    });
     const settings: ProjectSettings = {
-      language: input.settings.language ?? "vi",
-      targetDurationSec: input.settings.targetDurationSec ?? 120,
-      researchMode: input.settings.researchMode,
-      aspectRatio: input.settings.aspectRatio ?? "16:9",
-      stageExecutors: input.settings.stageExecutors ?? {},
-      llm: input.settings.llm,
-      autoRender: input.settings.autoRender ?? false,
+      language: resolved.values.settings.language,
+      targetDurationSec: resolved.values.settings.targetDurationSec,
+      aspectRatio: resolved.values.settings.aspectRatio,
+      platform: resolved.values.settings.platform,
+      style: resolved.values.settings.style,
+      tone: resolved.values.settings.tone,
+      audience: resolved.values.settings.audience,
+      wordsPerMinute: resolved.values.settings.wordsPerMinute,
+      sceneDurationSec: resolved.values.settings.sceneDurationSec,
+      visualStyle: resolved.values.settings.visualStyle,
+      subtitles: resolved.values.settings.subtitles,
+      music: resolved.values.settings.music,
+      userSet,
+      researchMode: inputSettings.researchMode,
+      stageExecutors: inputSettings.stageExecutors ?? {},
+      llm: inputSettings.llm,
+      autoRender: inputSettings.autoRender ?? false,
     };
     const project: Project = {
       id,
-      title: input.title,
-      description: input.description,
+      title: resolved.values.title,
+      description: input.description ?? "",
       topic: input.topic,
-      mode: input.mode,
+      mode: input.mode ?? "ASSISTED",
       settings,
       status: "DRAFT",
       stage: "TOPIC",
@@ -89,11 +161,60 @@ export function createProjectService(db: AppDatabase, config: AppConfig, logger:
     const updates: Partial<ProjectRow> = {
       updatedAt: new Date().toISOString(),
     };
-    if (input.title !== undefined) updates.title = input.title;
     if (input.description !== undefined) updates.description = input.description;
-    if (input.topic !== undefined) updates.topic = input.topic;
     if (input.mode !== undefined) updates.mode = input.mode;
-    if (input.settings !== undefined) updates.settings = mergeSettings(current.settings, input.settings);
+    const settingsInput: ProjectSettingsInput = {
+      ...briefSettingsFromInput(input),
+      ...input.settings,
+    };
+    const hasSettingsUpdate = Object.keys(settingsInput).length > 0;
+    const settings = hasSettingsUpdate ? mergeSettings(current.settings, settingsInput) : current.settings;
+
+    const explicitBriefFields = Object.keys(settingsInput).filter((field) => BRIEF_SETTING_FIELDS.has(field));
+    const nestedBriefFields = [
+      ...Object.keys(settingsInput.subtitles ?? {}).map((field) => `subtitles.${field}`),
+      ...Object.keys(settingsInput.music ?? {}).map((field) => `music.${field}`),
+    ];
+    const resetFields = new Set(input.resetToRecommended ?? []);
+    const userSet = [...new Set([
+      ...current.settings.userSet,
+      ...(input.title === undefined ? [] : ["title"]),
+      ...explicitBriefFields,
+      ...nestedBriefFields,
+      ...(settingsInput.userSet ?? []),
+    ])].filter((field) => !resetFields.has(field));
+    const shouldRecompute = input.topic !== undefined
+      || input.description !== undefined
+      || explicitBriefFields.length > 0
+      || nestedBriefFields.length > 0
+      || input.title !== undefined
+      || resetFields.size > 0;
+
+    if (shouldRecompute) {
+      const resolved = recommendBrief({
+        topic: input.topic ?? current.topic,
+        description: input.description ?? current.description,
+        title: userSet.includes("title") ? (input.title ?? current.title) : undefined,
+        mode: input.mode ?? current.mode,
+        settings: { ...settings, userSet },
+      });
+      updates.title = resolved.values.title;
+      updates.topic = input.topic ?? current.topic;
+      updates.settings = {
+        ...settings,
+        ...resolved.values.settings,
+        researchMode: settings.researchMode,
+        stageExecutors: settings.stageExecutors,
+        llm: settings.llm,
+        autoRender: settings.autoRender,
+        userSet,
+      };
+    } else if (input.title !== undefined) {
+      updates.title = input.title;
+    }
+
+    if (input.topic !== undefined) updates.topic = input.topic;
+    if (hasSettingsUpdate && !shouldRecompute) updates.settings = settings;
 
     await db.update(projects).set(updates).where(eq(projects.id, id)).run();
     return getProject(id);

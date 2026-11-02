@@ -68,18 +68,22 @@ export function ProjectFormFields({
   onChange,
   advanced,
   onToggleAdvanced,
+  advancedOnly = false,
 }: {
   draft: ProjectDraft;
   errors: Record<string, string>;
   onChange: (field: keyof ProjectDraft, value: string | boolean) => void;
   advanced: boolean;
   onToggleAdvanced: () => void;
+  advancedOnly?: boolean;
 }) {
   const providers = useQuery({ queryKey: ["llm-providers"], queryFn: getLlmProviders });
   const availableProviders = providers.data ?? [];
   const selectedProvider = availableProviders.find((provider) => provider.id === draft.llmProvider);
   return (
     <>
+      {!advancedOnly && (
+        <>
       <label className="form-field">
         <span>Title <b aria-hidden="true">*</b></span>
         <input
@@ -128,32 +132,8 @@ export function ProjectFormFields({
           {draft.mode === "MANUAL" && "Run each pipeline stage manually when you are ready."}
         </small>
       </label>
-      <div className="form-grid">
-        <label className="form-field">
-          <span>Language</span>
-          <input value={draft.language} maxLength={20} onChange={(event) => onChange("language", event.target.value)} />
-        </label>
-        <label className="form-field">
-          <span>Target duration (seconds)</span>
-          <input
-            type="number"
-            min={30}
-            max={1800}
-            value={draft.targetDurationSec}
-            aria-invalid={Boolean(errors["settings.targetDurationSec"])}
-            onChange={(event) => onChange("targetDurationSec", event.target.value)}
-          />
-          {errors["settings.targetDurationSec"] && <small className="field-error">{errors["settings.targetDurationSec"]}</small>}
-        </label>
-        <label className="form-field">
-          <span>Aspect ratio</span>
-          <select value={draft.aspectRatio} onChange={(event) => onChange("aspectRatio", event.target.value)}>
-            <option value="16:9">16:9</option>
-            <option value="9:16">9:16</option>
-            <option value="1:1">1:1</option>
-          </select>
-        </label>
-      </div>
+        </>
+      )}
       <button className="text-button advanced-toggle" type="button" aria-expanded={advanced} onClick={onToggleAdvanced}>
         {advanced ? "− Hide advanced settings" : "+ Advanced settings"}
       </button>

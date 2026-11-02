@@ -8,6 +8,54 @@ import {
 } from "../enums.js";
 import { LlmSelectionSchema } from "./llm.js";
 
+export const VideoBriefSettingsSchema = z.object({
+  language: z.string().default("vi"),
+  targetDurationSec: z.number().int().min(30).max(1800).default(120),
+  aspectRatio: AspectRatioSchema.default("16:9"),
+  platform: z.enum(["youtube", "youtube_shorts", "tiktok", "facebook_reels", "custom"]).default("youtube"),
+  style: z.enum(["storytelling", "documentary", "explainer", "news", "listicle"]).default("storytelling"),
+  tone: z.enum(["neutral", "dramatic", "inspiring", "humorous", "serious"]).default("dramatic"),
+  audience: z.enum(["general", "kids", "students", "professionals"]).default("general"),
+  wordsPerMinute: z.number().int().min(100).max(220).default(150),
+  sceneDurationSec: z.number().int().min(2).max(20).default(7),
+  visualStyle: z.enum(["photo", "illustration", "mixed"]).default("mixed"),
+  subtitles: z.object({
+    enabled: z.boolean().default(true),
+    maxCharsPerLine: z.number().int().positive().default(42),
+  }).default({ enabled: true, maxCharsPerLine: 42 }),
+  music: z.object({
+    enabled: z.boolean().default(true),
+    volume: z.number().min(0).max(1).default(0.15),
+  }).default({ enabled: true, volume: 0.15 }),
+  userSet: z.array(z.string()).default([]),
+});
+
+export const VideoBriefSettingsInputSchema = z.object({
+  platform: z.enum(["youtube", "youtube_shorts", "tiktok", "facebook_reels", "custom"]).optional(),
+  style: z.enum(["storytelling", "documentary", "explainer", "news", "listicle"]).optional(),
+  tone: z.enum(["neutral", "dramatic", "inspiring", "humorous", "serious"]).optional(),
+  audience: z.enum(["general", "kids", "students", "professionals"]).optional(),
+  wordsPerMinute: z.number().int().min(100).max(220).optional(),
+  sceneDurationSec: z.number().int().min(2).max(20).optional(),
+  visualStyle: z.enum(["photo", "illustration", "mixed"]).optional(),
+  subtitles: z.object({
+    enabled: z.boolean().optional(),
+    maxCharsPerLine: z.number().int().positive().optional(),
+  }).strict().optional(),
+  music: z.object({
+    enabled: z.boolean().optional(),
+    volume: z.number().min(0).max(1).optional(),
+  }).strict().optional(),
+  userSet: z.array(z.string()).optional(),
+}).strict();
+
+const DirectBriefInputFields = {
+  ...VideoBriefSettingsInputSchema.shape,
+  language: z.string().optional(),
+  targetDurationSec: z.number().int().min(30).max(1800).optional(),
+  aspectRatio: AspectRatioSchema.optional(),
+};
+
 export const ProjectSettingsSchema = z.object({
   language: z.string().default("vi"),
   targetDurationSec: z.number().int().min(30).max(1800).default(120),
@@ -26,6 +74,17 @@ export const ProjectSettingsSchema = z.object({
     sceneplan: LlmSelectionSchema.optional(),
   }).optional(),
   autoRender: z.boolean().default(false),
+}).extend({
+  platform: VideoBriefSettingsSchema.shape.platform,
+  style: VideoBriefSettingsSchema.shape.style,
+  tone: VideoBriefSettingsSchema.shape.tone,
+  audience: VideoBriefSettingsSchema.shape.audience,
+  wordsPerMinute: VideoBriefSettingsSchema.shape.wordsPerMinute,
+  sceneDurationSec: VideoBriefSettingsSchema.shape.sceneDurationSec,
+  visualStyle: VideoBriefSettingsSchema.shape.visualStyle,
+  subtitles: VideoBriefSettingsSchema.shape.subtitles,
+  music: VideoBriefSettingsSchema.shape.music,
+  userSet: VideoBriefSettingsSchema.shape.userSet,
 });
 export type ProjectSettings = z.infer<typeof ProjectSettingsSchema>;
 
@@ -47,6 +106,7 @@ export const ProjectSettingsInputSchema = z.object({
     sceneplan: LlmSelectionSchema.optional(),
   }).optional(),
   autoRender: z.boolean().optional(),
+  ...VideoBriefSettingsInputSchema.shape,
 }).strict();
 export type ProjectSettingsInput = z.infer<typeof ProjectSettingsInputSchema>;
 
@@ -69,13 +129,37 @@ export const ProjectSchema = z.object({
 export type Project = z.infer<typeof ProjectSchema>;
 
 export const CreateProjectInputSchema = z.object({
-  title: z.string().trim().min(1).max(200),
+  title: z.string().trim().min(1).max(200).optional(),
   topic: z.string().trim().min(1).max(2000),
-  description: z.string().max(2000).optional().default(""),
-  mode: AutonomyModeSchema.default("ASSISTED"),
-  settings: ProjectSettingsInputSchema.optional().default({}),
+  description: z.string().max(2000).optional(),
+  mode: AutonomyModeSchema.optional(),
+  settings: ProjectSettingsInputSchema.optional(),
+  ...DirectBriefInputFields,
 }).strict();
 export type CreateProjectInput = z.infer<typeof CreateProjectInputSchema>;
+
+export const RecommendationSchema = z.object({
+  value: z.unknown(),
+  reason: z.string(),
+  source: z.enum(["user", "recommended"]),
+}).strict();
+export const RecommendationsSchema = z.record(z.string(), RecommendationSchema);
+export const RecommendBriefResponseSchema = z.object({
+  values: z.object({
+    title: z.string(),
+    mode: AutonomyModeSchema,
+    settings: VideoBriefSettingsSchema,
+  }),
+  recommendations: RecommendationsSchema,
+  warnings: z.array(z.string()),
+}).strict();
+export type RecommendBriefResponse = z.infer<typeof RecommendBriefResponseSchema>;
+
+export const CreateProjectResponseSchema = ProjectSchema.extend({
+  recommendations: RecommendationsSchema,
+  warnings: z.array(z.string()),
+});
+export type CreateProjectResponse = z.infer<typeof CreateProjectResponseSchema>;
 
 export const UpdateProjectInputSchema = z.object({
   title: z.string().trim().min(1).max(200).optional(),
@@ -83,6 +167,8 @@ export const UpdateProjectInputSchema = z.object({
   topic: z.string().trim().min(1).max(2000).optional(),
   mode: AutonomyModeSchema.optional(),
   settings: ProjectSettingsInputSchema.optional(),
+  ...DirectBriefInputFields,
+  resetToRecommended: z.array(z.string()).optional(),
 }).strict().refine((value) => Object.keys(value).length > 0, {
   message: "At least one field must be provided",
 });

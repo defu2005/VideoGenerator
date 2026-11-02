@@ -1,4 +1,12 @@
-import type { ProjectListResponse, Project, ResearchNotes, Script } from "@vg/shared";
+import type {
+  CreateProjectInput,
+  CreateProjectResponse,
+  ProjectListResponse,
+  Project,
+  RecommendBriefResponse,
+  ResearchNotes,
+  Script,
+} from "@vg/shared";
 
 const SERVER_DOWN_GUIDANCE = "Start it with `npm run dev`.";
 
@@ -31,6 +39,20 @@ export class VideoAgentApiClient {
 
   getProject(projectId: string): Promise<Project> {
     return this.request(`/api/projects/${encodeURIComponent(projectId)}`);
+  }
+
+  createProject(input: CreateProjectInput): Promise<CreateProjectResponse> {
+    return this.request("/api/projects", {
+      method: "POST",
+      body: JSON.stringify(input),
+    });
+  }
+
+  recommendBrief(input: CreateProjectInput): Promise<RecommendBriefResponse> {
+    return this.request("/api/recommendations", {
+      method: "POST",
+      body: JSON.stringify(input),
+    });
   }
 
   getScript(projectId: string): Promise<{

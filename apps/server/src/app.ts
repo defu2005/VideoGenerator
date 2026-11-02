@@ -13,6 +13,7 @@ import { registerProjectRoutes } from "./api/projects.js";
 import { registerPipelineRoutes } from "./api/pipeline.js";
 import { registerLlmRoutes } from "./api/llm.js";
 import { registerScriptRoutes } from "./api/script.js";
+import { registerRecommendationRoutes } from "./api/recommendations.js";
 import { PipelineEventBus } from "./jobs/eventBus.js";
 import { JobRepository } from "./jobs/jobRepository.js";
 import { JobWorker } from "./jobs/worker.js";
@@ -61,6 +62,7 @@ export function buildApp({ config }: { config: AppConfig }) {
   server.register(cors, { origin: config.CORS_ORIGIN });
   registerHealthRoutes(server, database.sqlite);
   registerProjectRoutes(server, projectService);
+  registerRecommendationRoutes(server);
   registerDashboardRoutes(server, projectService);
   registerPipelineRoutes(server, projectService, jobRepository, orchestrator, events);
   registerLlmRoutes(server, llmProviders, database.sqlite);

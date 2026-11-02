@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import { Route, Routes } from "react-router-dom";
 import { STAGE_ORDER, type PipelineState, type Project } from "@vg/shared";
 import { ProjectDetailPage } from "./ProjectDetailPage";
+import { EditProjectDialog } from "./EditProjectDialog";
 import { jsonResponse, renderWithProviders } from "../../test/testUtils";
 
 const project: Project = {
@@ -11,7 +12,23 @@ const project: Project = {
   topic: "Life under the sea",
   description: "A short video",
   mode: "ASSISTED",
-  settings: { language: "en", targetDurationSec: 120, aspectRatio: "16:9", stageExecutors: {}, autoRender: false },
+  settings: {
+    language: "en",
+    targetDurationSec: 120,
+    aspectRatio: "16:9",
+    platform: "youtube",
+    style: "storytelling",
+    tone: "dramatic",
+    audience: "general",
+    wordsPerMinute: 150,
+    sceneDurationSec: 7,
+    visualStyle: "mixed",
+    subtitles: { enabled: true, maxCharsPerLine: 42 },
+    music: { enabled: true, volume: 0.15 },
+    userSet: [],
+    stageExecutors: {},
+    autoRender: false,
+  },
   status: "REVIEW",
   stage: "VISUAL_REVIEW",
   thumbnailPath: null,
@@ -58,6 +75,24 @@ describe("ProjectDetailPage", () => {
     stubProjectFetch(project);
     renderDetail(`/projects/${project.id}/unknown`);
     await waitFor(() => expect(screen.getByTestId("current-location")).toHaveTextContent(`/projects/${project.id}/overview`));
+  });
+
+  describe("EditProjectDialog", () => {
+    it("submits edited brief values so the server marks them user-set", async () => {
+      const fetchMock = vi.fn(async (input: RequestInfo | URL, _init?: RequestInit) =>
+        String(input) === "/api/llm/providers" ? jsonResponse([]) : jsonResponse(project));
+      vi.stubGlobal("fetch", fetchMock);
+      renderWithProviders(<EditProjectDialog project={project} open onClose={vi.fn()} />);
+      fireEvent.change(await screen.findByLabelText("Platform"), { target: { value: "tiktok" } });
+      fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+
+      await waitFor(() => expect(fetchMock).toHaveBeenCalledWith(
+        `/api/projects/${project.id}`,
+        expect.objectContaining({ method: "PATCH" }),
+      ));
+      const request = fetchMock.mock.calls.find(([input]) => String(input).endsWith(project.id))?.[1] as RequestInit;
+      expect(JSON.parse(String(request.body))).toMatchObject({ settings: { platform: "tiktok" } });
+    });
   });
 
   it("renders project data for the overview tab", async () => {
