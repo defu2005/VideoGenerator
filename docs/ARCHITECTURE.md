@@ -79,19 +79,27 @@ Mỗi project có `mode`, và mỗi stage có thể override `executor`.
 |---|---|---|
 | 0 — Code | **scene plan (tách scene, thời lượng)**, ranking ảnh, dedupe (perceptual hash), kích thước, aspect, watermark theo domain, tách câu subtitle, timeline, FFmpeg, ducking, xếp hạng nhạc theo mood/BPM/duration | Free |
 | 1 — API rẻ | Image search API (Wikimedia, Openverse, Pexels…), music API, TTS | Thấp |
-| 2 — LLM text | **1 call duy nhất**: research + script + visual query mỗi đoạn + music mood | 1 call/video, cache theo input hash |
-| 3 — LLM vision | Hiểu nội dung ảnh | **Tắt mặc định.** Chỉ khi user bấm trên 1 candidate |
+| 2 — LLM text | research, script, visual queries, music mood; ở chế độ cao hơn: review/sửa script, xếp hạng ảnh theo ngữ nghĩa (text metadata) | Theo **chế độ ngân sách** (bên dưới), cache theo input hash |
+| 3 — LLM vision | Hiểu nội dung ảnh | **Tắt mặc định.** Chỉ ở QUALITY/CUSTOM khi user bật, hoặc user bấm trên 1 candidate; luôn báo chi phí trước |
 
-Mọi LLM call ghi `usage` (tokens, cost ước tính) vào job để UI hiển thị.
+Mọi LLM call ghi `usage` (tokens/requests, cost ước tính) vào job để UI hiển thị.
+
+### Chế độ ngân sách token (Budget mode) — user chọn theo project
+| Chế độ | Ý tưởng | LLM calls ước tính / video (Generate All) |
+|---|---|---|
+| `ECO` | Rẻ nhất: research + script + queries + mood gộp 1 call; chuẩn hóa bằng code thay vì gọi sửa | ~1 |
+| `BALANCED` (mặc định) | Research và script tách riêng để script chất lượng hơn; cho phép 1 lần repair; gợi ý thêm query thay thế khi search ảnh trả ít kết quả | ~2–4 |
+| `QUALITY` | Thêm bước tự review & sửa script (critique → revise), xếp hạng lại ảnh theo ngữ nghĩa từ metadata, gợi ý nhạc chi tiết hơn; vision chỉ khi bật riêng | ~4–8 (+ vision nếu bật) |
+| `CUSTOM` | Bật/tắt từng tính năng LLM | tùy cấu hình |
 
 ### Quy tắc LLM (bắt buộc cho mọi task)
-1. **Việc tự động hóa được bằng code thì viết code**, không gọi LLM: tách câu/scene, tính thời lượng, xếp hạng, lọc trùng, format, subtitle, timeline, render, validate, đổi tên, dịch định dạng.
-2. **Việc cần "mắt" mà tốn token** (đánh giá ảnh, chọn nhạc theo cảm nhận) → giao cho user ở review gate, không dùng LLM vision.
-3. **Ngân sách mặc định: 1 LLM call/video** (Generate All). Mỗi call phải trả về mọi thứ các stage sau cần (research notes, script, visual queries, alt queries, music mood/energy). Stage sau đọc lại kết quả đó, không gọi lại LLM.
-4. LLM call thêm chỉ khi **user bấm** (Regenerate script, Search lại với query mới do AI gợi ý…) và UI hiển thị token trước/sau.
-5. Cache theo hash input; chạy lại không đổi input = 0 token. Repair JSON tối đa 1 lần.
-6. Mỗi spec phải có mục "LLM calls" liệt kê từng call và lý do; reviewer từ chối thiết kế thêm call cho việc deterministic.
-7. Có đường 0 token cho mọi stage text: user tự viết, hoặc dùng Claude Desktop qua MCP.
+1. **Ở mọi chế độ, việc code làm tốt tương đương thì viết code**, không gọi LLM: tách câu/scene, tính thời lượng, lọc trùng, format, subtitle, timeline, render, validate, chuẩn hóa output.
+2. LLM chỉ dùng ở chỗ **tăng chất lượng thật** (viết, biên tập, hiểu ngữ nghĩa). Mỗi tính năng LLM khai báo **bật ở chế độ nào** và **số call**.
+3. Trước khi chạy, UI hiển thị **ước tính số call/token** theo chế độ đang chọn; không bao giờ vượt chế độ đã chọn một cách âm thầm.
+4. LLM vision luôn opt-in, báo chi phí trước; việc cần "mắt" vẫn có đường giao cho user ở review gate.
+5. Cache theo hash input; chạy lại không đổi input = 0 token. Pre-flight theo giới hạn provider.
+6. Mỗi spec có mục "LLM calls" theo từng chế độ; reviewer từ chối thiết kế gọi LLM cho việc deterministic.
+7. Luôn có đường 0 token cho stage text: user tự viết, hoặc Claude Desktop / Copilot Chat qua MCP.
 
 ## 5. Pipeline & state machine
 
@@ -193,6 +201,7 @@ Lỗi luôn có dạng: `{ "error": { "code": "PROJECT_NOT_FOUND", "message": ".
 | TASK-004B | MCP server cho Claude Desktop + provider claude-cli (dùng subscription) | 004 | 2 |
 | TASK-004D | ~~GitHub Models~~ (đã bị GitHub khai tử 30/7/2026) + GitHub Copilot (copilot-cli, MCP với Copilot Chat) + giới hạn token theo provider (pre-flight) + đếm số call/tháng (không áp trần) | 004B | 2 |
 | TASK-004C | Tham số video (topic bắt buộc, còn lại tùy chọn) + khuyến nghị tự động bằng luật, 0 LLM call; quick create | 004 | 2 |
+| TASK-004E | Chế độ ngân sách token ECO/BALANCED/QUALITY/CUSTOM + ước tính số call trước khi chạy + review & sửa script (QUALITY) | 004C | 2 |
 | TASK-005 | Scene planning **bằng code, 0 LLM call** (tách scene từ script, thời lượng theo số từ, query/mood lấy từ output của script call) + Scene Board UI + invalidation | 004 | 3 |
 | TASK-006 | Image provider interface + Wikimedia/Openverse/Pexels + candidate store + ranking + dedupe | 005 | 4 |
 | TASK-007 | Visual Review UI: candidates, metadata panel, approve/reject/replace/search again/custom URL/upload/Approve All | 006 | 4 |
