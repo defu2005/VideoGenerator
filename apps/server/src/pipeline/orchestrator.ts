@@ -108,7 +108,7 @@ export class PipelineOrchestrator {
   completeByUser(
     projectId: string,
     stage: PipelineStage,
-    options: { skip?: PipelineStage[] } = {},
+    options: { skip?: PipelineStage[]; invalidate?: boolean } = {},
   ): PipelineState {
     this.repository.atomic(() => {
       this.requireProject(projectId);
@@ -136,7 +136,7 @@ export class PipelineOrchestrator {
         jobId: null,
         error: null,
       });
-      markStaleFrom(this.repository, projectId, stage);
+      if (options.invalidate !== false) markStaleFrom(this.repository, projectId, stage);
       if (this.repository.getRunMode(projectId) === "ALL") {
         this.repository.updateProject(projectId, { stage });
         this.continueAll(projectId, position);

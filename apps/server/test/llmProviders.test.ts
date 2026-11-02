@@ -173,4 +173,34 @@ describe("LLM registry", () => {
     }));
     expect(globalModel.list().find((provider) => provider.id === "ollama")?.configured).toBe(true);
   });
+
+  it("lists the enabled Claude CLI provider with its binary availability", () => {
+    const disabled = new LlmProviderRegistry(parseConfig({
+      LLM_ENABLE_MOCK: "false",
+      CLAUDE_CLI_ENABLED: "false",
+    }));
+    expect(disabled.list().some((provider) => provider.id === "claude-cli")).toBe(false);
+
+    const missing = new LlmProviderRegistry(parseConfig({
+      LLM_ENABLE_MOCK: "false",
+      CLAUDE_CLI_ENABLED: "true",
+      CLAUDE_CLI_PATH: "video-agent-claude-command-not-installed",
+    }));
+    expect(missing.list()).toContainEqual({
+      id: "claude-cli",
+      label: "Claude (subscription via Claude Code)",
+      configured: false,
+      defaultModel: null,
+      hint: "Install Claude Code CLI and run `claude` once to log in",
+    });
+    const installed = new LlmProviderRegistry(parseConfig({
+      LLM_ENABLE_MOCK: "false",
+      CLAUDE_CLI_ENABLED: "true",
+      CLAUDE_CLI_PATH: process.execPath,
+      CLAUDE_CLI_MODEL: "sonnet",
+    }));
+    expect(installed.list().find((provider) => provider.id === "claude-cli"))
+      .toMatchObject({ configured: true, defaultModel: "sonnet" });
+    expect(installed.resolve({ provider: "claude-cli" }, undefined, "script").model).toBe("sonnet");
+  });
 });

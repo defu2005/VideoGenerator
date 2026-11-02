@@ -41,6 +41,7 @@ export function ScriptTab({ project }: { project: Project }) {
   const [draftKey, setDraftKey] = useState(0);
   const [dirty, setDirty] = useState(false);
   const [actionError, setActionError] = useState("");
+  const [copyStatus, setCopyStatus] = useState("");
   const dirtyRef = useRef(dirty);
   dirtyRef.current = dirty;
 
@@ -76,6 +77,8 @@ export function ScriptTab({ project }: { project: Project }) {
   const scriptRecord = stages.find((stage) => stage.stage === "SCRIPT");
   const researchRecord = stages.find((stage) => stage.stage === "RESEARCH");
   const waitingForScript = [researchRecord, scriptRecord].find((stage) => stage?.state === "WAITING_USER");
+  const showClaudeHint = project.settings.stageExecutors.script === "USER" || waitingForScript !== undefined;
+  const claudePrompt = `Viết script cho project "${project.title}" (id ${project.id}) bằng Video Agent`;
   const scriptPosition = STAGE_ORDER.indexOf("SCRIPT");
   const earlierIncomplete = stages.find((stage) =>
     STAGE_ORDER.indexOf(stage.stage) < scriptPosition && stage.state !== "DONE" && stage.state !== "SKIPPED");
@@ -103,10 +106,32 @@ export function ScriptTab({ project }: { project: Project }) {
       throw new Error(error instanceof Error ? error.message : "Unable to save script");
     }
   };
+  const copyClaudePrompt = async () => {
+    try {
+      await navigator.clipboard.writeText(claudePrompt);
+      setCopyStatus("Copied");
+    } catch (error) {
+      setCopyStatus(error instanceof Error ? `Copy failed: ${error.message}` : "Copy failed");
+    }
+  };
 
   return (
     <div className="script-workspace">
       <ResearchPanel research={data.research} />
+      {showClaudeHint && (
+        <section className="panel claude-desktop-hint">
+          <div>
+            <p className="eyebrow">WRITE WITH CLAUDE DESKTOP</p>
+            <p>Use your Claude Desktop subscription to draft this project without an API key.</p>
+            <code>{claudePrompt}</code>
+          </div>
+          <div className="claude-desktop-actions">
+            <button className="button button-secondary" type="button" onClick={() => void copyClaudePrompt()}>Copy</button>
+            <a href="/docs/CLAUDE_DESKTOP.md" target="_blank" rel="noreferrer">Setup instructions</a>
+            {copyStatus && <small role="status">{copyStatus}</small>}
+          </div>
+        </section>
+      )}
       {actionError && <p className="request-error" role="alert">{actionError}</p>}
       {!data.script && !editing && (
         <section className="panel script-empty-state">

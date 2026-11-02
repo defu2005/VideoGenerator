@@ -1,11 +1,24 @@
-import { ScriptDataSchema, ScriptSchema, type Project, type ResearchNotes, type Script, type ScriptData } from "@vg/shared";
+import {
+  ResearchNotesSchema,
+  ScriptDataSchema,
+  ScriptSchema,
+  type Project,
+  type ResearchNotes,
+  type Script,
+  type ScriptData,
+} from "@vg/shared";
 import type Database from "better-sqlite3";
 import type { AppConfig } from "../lib/config.js";
 import { AppError } from "../lib/errors.js";
 import type { JobRepository } from "../jobs/jobRepository.js";
 import { markStaleFrom } from "../pipeline/invalidation.js";
 import type { PipelineOrchestrator } from "../pipeline/orchestrator.js";
-import { computeSectionDurations, researchInputHash, scriptContentHash, scriptInputHash } from "../stages/script/scriptUtils.js";
+import {
+  computeSectionDurations,
+  researchInputHash,
+  scriptContentHash,
+  scriptInputHash,
+} from "../stages/script/scriptUtils.js";
 
 type ScriptRow = {
   data: string;
@@ -114,6 +127,31 @@ export class ScriptService {
       } else if (changed) {
         markStaleFrom(this.repository, projectId, "SCRIPT");
       }
+      return this.get(projectId);
+    });
+  }
+
+  saveResearch(projectId: string, input: unknown): ScriptData {
+    const research = ResearchNotesSchema.parse(input);
+    return this.repository.atomic(() => {
+      const project = this.repository.getProject(projectId);
+      if (!project) throw new AppError(404, "PROJECT_NOT_FOUND", "Project not found");
+      if (this.repository.getActiveJob(projectId)) {
+        throw new AppError(409, "INVALID_PIPELINE_STATE", "A job is already active for this project.");
+      }
+
+      const previous = this.sqlite.prepare("SELECT data FROM research_notes WHERE project_id = ?")
+        .get(projectId) as { data: string } | undefined;
+      const changed = !previous || JSON.stringify(ResearchNotesSchema.parse(JSON.parse(previous.data) as unknown)) !== JSON.stringify(research);
+      this.sqlite.prepare(
+        "INSERT INTO research_notes (project_id, input_hash, provider, model, cached, created_at, data) VALUES (?, ?, 'user', 'user', false, ?, ?) ON CONFLICT(project_id) DO UPDATE SET input_hash = excluded.input_hash, provider = excluded.provider, model = excluded.model, cached = false, created_at = excluded.created_at, data = excluded.data",
+      ).run(
+        projectId,
+        researchInputHash(project),
+        new Date().toISOString(),
+        JSON.stringify(research),
+      );
+      this.orchestrator.completeByUser(projectId, "RESEARCH", { invalidate: changed });
       return this.get(projectId);
     });
   }

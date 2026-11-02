@@ -40,6 +40,9 @@ const ConfigSchema = z.object({
   LLM_RESEARCH_MODE: z.enum(["merged", "separate", "off"]).default("merged"),
   LLM_SCRIPT_PROVIDER: z.string().optional(),
   LLM_SCRIPT_MODEL: z.string().optional(),
+  CLAUDE_CLI_ENABLED: z.stringbool().default(false),
+  CLAUDE_CLI_PATH: z.string().min(1).default("claude"),
+  CLAUDE_CLI_MODEL: z.string().optional(),
   ANTHROPIC_API_KEY: z.string().optional(),
   ANTHROPIC_MODEL: z.string().default("claude-haiku-5-5"),
   GEMINI_API_KEY: z.string().optional(),
@@ -85,6 +88,9 @@ export type AppConfig = {
   LLM_RESEARCH_MODE: "merged" | "separate" | "off";
   LLM_SCRIPT_PROVIDER?: string;
   LLM_SCRIPT_MODEL?: string;
+  CLAUDE_CLI_ENABLED: boolean;
+  CLAUDE_CLI_PATH: string;
+  CLAUDE_CLI_MODEL?: string;
   ANTHROPIC_API_KEY?: string;
   ANTHROPIC_MODEL: string;
   GEMINI_API_KEY?: string;

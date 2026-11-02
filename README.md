@@ -33,6 +33,12 @@ LLM requests time out after `LLM_TIMEOUT_MS` (120 seconds by default) and are ca
 
 `LLM_RESEARCH_MODE` defaults to `merged`, which creates research notes and the script in one provider call per Generate All run. Use `separate` for one research call and one script call, or `off` to skip research and generate a script from the topic. A project can override this in its Advanced settings.
 
+## Claude Desktop and Claude Code
+
+Build the MCP server with `npm run build`, then configure Claude Desktop as described in [docs/CLAUDE_DESKTOP.md](./docs/CLAUDE_DESKTOP.md). It connects through the Video Agent REST API and can read projects or save research/scripts; it has no direct database, file, shell, or approval-gate access.
+
+To use your Claude subscription for automatic text stages on this personal local installation, install Claude Code CLI, log in once, set `CLAUDE_CLI_ENABLED=true`, and select `claude-cli` with `LLM_DEFAULT_PROVIDER`. Set `CLAUDE_CLI_PATH` if the executable is not on `PATH`; `CLAUDE_CLI_MODEL` is optional. This provider runs in a temporary empty directory and costs zero API-key usage, but uses your Claude subscription. Check Anthropic's terms before offering this feature to other users.
+
 ## Development
 
 Create migrations only with `drizzle-kit generate`. Never hand-edit a migration, and never edit a migration after it has been applied to a database. If a local development database was migrated by an older version of a migration file and startup reports a migration error, delete `data/app.db` and restart; do not change the migration to accommodate that database.

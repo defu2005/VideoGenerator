@@ -238,7 +238,14 @@ button:disabled { cursor: not-allowed; opacity: .58; }
 .recent-error-list time { color: #929bad; text-align: right; }
 
 .script-workspace { display: grid; gap: 16px; }
-.research-panel, .script-editor, .script-empty-state, .script-usage { padding: 20px; }
+.research-panel, .script-editor, .script-empty-state, .script-usage, .claude-desktop-hint { padding: 20px; }
+.claude-desktop-hint { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+.claude-desktop-hint > div:first-child { display: grid; gap: 8px; }
+.claude-desktop-hint p:not(.eyebrow) { margin: 0; color: #788398; font-size: 12px; }
+.claude-desktop-hint code { color: #45536b; font-size: 11px; white-space: normal; }
+.claude-desktop-actions { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.claude-desktop-actions a { color: #435fc9; font-size: 11px; font-weight: 650; }
+.claude-desktop-actions small { flex-basis: 100%; color: #758096; font-size: 10px; text-align: right; }
 .research-panel summary { display: flex; align-items: center; justify-content: space-between; gap: 16px; cursor: pointer; list-style: none; }
 .research-panel summary::-webkit-details-marker { display: none; }
 .research-panel summary > span { display: grid; gap: 5px; }

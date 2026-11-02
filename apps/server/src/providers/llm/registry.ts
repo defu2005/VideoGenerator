@@ -1,13 +1,14 @@
 import type { LlmProviderInfo, LlmSelection } from "@vg/shared";
 import type { AppConfig } from "../../lib/config.js";
 import { AnthropicProvider } from "./anthropic.js";
+import { ClaudeCliProvider, resolveClaudeCliPath } from "./claudeCli.js";
 import { GeminiProvider } from "./gemini.js";
 import { MockLlmProvider } from "./mock.js";
 import { OpenAiCompatibleProvider } from "./openaiCompatible.js";
 import { LlmError, type LlmProvider } from "./types.js";
 
 export class LlmProviderRegistry {
-  private readonly providers = new Map<string, LlmProvider>();
+  private readonly providers = new Map<string, LlmProvider & { configured?: boolean; hint?: string }>();
 
   constructor(private readonly config: AppConfig) {
     const timeoutMs = Math.min(config.LLM_TIMEOUT_MS, Math.max(1, config.STAGE_TIMEOUT_MS - 1));
@@ -26,6 +27,14 @@ export class LlmProviderRegistry {
     if (config.CUSTOM_LLM_BASE_URL) {
       this.addCompatible("custom", "Custom OpenAI-compatible", config.CUSTOM_LLM_BASE_URL, config.CUSTOM_LLM_API_KEY, config.CUSTOM_LLM_MODEL);
     }
+    if (config.CLAUDE_CLI_ENABLED) {
+      this.providers.set("claude-cli", new ClaudeCliProvider(
+        resolveClaudeCliPath(config.CLAUDE_CLI_PATH),
+        config.DATA_DIR,
+        Math.min(config.LLM_TIMEOUT_MS, Math.max(1, config.STAGE_TIMEOUT_MS - 1)),
+        config.CLAUDE_CLI_MODEL ?? null,
+      ));
+    }
     if (config.LLM_ENABLE_MOCK) this.providers.set("mock", new MockLlmProvider());
   }
 
@@ -34,15 +43,19 @@ export class LlmProviderRegistry {
   }
 
   list(): LlmProviderInfo[] {
-    return [...this.providers.values()].map((provider) => ({
-      id: provider.id as LlmProviderInfo["id"],
-      label: provider.label,
-      configured: provider.id !== "ollama" || Boolean(provider.defaultModel ?? this.config.LLM_DEFAULT_MODEL),
-      defaultModel: provider.defaultModel,
-      ...(provider.id === "ollama" && !provider.defaultModel && !this.config.LLM_DEFAULT_MODEL
-        ? { hint: "Set OLLAMA_MODEL" }
-        : {}),
-    }));
+    return [...this.providers.values()].map((provider) => {
+      const configured = provider.id === "claude-cli"
+        ? provider.configured === true
+        : provider.id !== "ollama" || Boolean(provider.defaultModel ?? this.config.LLM_DEFAULT_MODEL);
+      return {
+        id: provider.id as LlmProviderInfo["id"],
+        label: provider.label,
+        configured,
+        defaultModel: provider.defaultModel,
+        ...(provider.id === "claude-cli" && !configured && provider.hint ? { hint: provider.hint } : {}),
+        ...(provider.id === "ollama" && !configured ? { hint: "Set OLLAMA_MODEL" } : {}),
+      };
+    });
   }
 
   resolve(
@@ -59,20 +72,26 @@ export class LlmProviderRegistry {
       ?? stageSelection
       ?? this.config.LLM_DEFAULT_PROVIDER;
     const provider = providerId ? this.providers.get(providerId) : undefined;
+    if (providerId === "claude-cli" && !this.config.CLAUDE_CLI_ENABLED) {
+      throw createNotConfiguredError("Claude Code CLI is disabled. Set CLAUDE_CLI_ENABLED=true to enable it.");
+    }
     if (!provider) {
       throw createNotConfiguredError(providerId
         ? `LLM provider "${providerId}" is not configured. Set its API key or base URL in the server environment.`
         : "No LLM provider is selected. Choose an AI provider in project settings or set LLM_DEFAULT_PROVIDER.");
+    }
+    if (provider.id === "claude-cli" && !provider.configured) {
+      throw createNotConfiguredError("Install Claude Code CLI and run `claude` once to log in.");
     }
     const model = projectStageSelection?.model
       ?? projectDefaultSelection?.model
       ?? stageModel
       ?? this.config.LLM_DEFAULT_MODEL
       ?? provider.defaultModel;
-    if (!model) {
+    if (!model && provider.id !== "claude-cli") {
       throw createNotConfiguredError(`No model is configured for ${provider.label}. Set the model in project settings or configure ${provider.id.toUpperCase()}_MODEL.`);
     }
-    return { provider, model };
+    return { provider, model: model ?? "" };
   }
 
   private addCompatible(

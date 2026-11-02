@@ -10,6 +10,7 @@ export const LlmProviderIdSchema = z.enum([
   "groq",
   "custom",
   "mock",
+  "claude-cli",
 ]);
 export type LlmProviderId = z.infer<typeof LlmProviderIdSchema>;
 

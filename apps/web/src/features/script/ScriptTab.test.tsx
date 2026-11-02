@@ -165,4 +165,21 @@ describe("ScriptTab", () => {
     expect(screen.getByText("Research: 0 tokens (cached)")).toBeTruthy();
     expect(screen.getByText("Script: 0 tokens (merged call)")).toBeTruthy();
   });
+
+  it("shows Claude Desktop guidance for a USER executor and copies the ready-to-paste prompt", async () => {
+    const userProject = {
+      ...project,
+      settings: { ...project.settings, stageExecutors: { script: "USER" } },
+    } as Project;
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, "clipboard", { value: { writeText }, configurable: true });
+    installFetch({ script: null, research: null, origin: null, version: 0, stale: false });
+    renderWithProviders(<ScriptTab project={userProject} />);
+    expect(await screen.findByText("WRITE WITH CLAUDE DESKTOP")).toBeTruthy();
+    expect(screen.getByRole("link", { name: "Setup instructions" }).getAttribute("href")).toBe("/docs/CLAUDE_DESKTOP.md");
+    fireEvent.click(screen.getByRole("button", { name: "Copy" }));
+    await waitFor(() => expect(writeText).toHaveBeenCalledWith(
+      `Viết script cho project "Test project" (id ${projectId}) bằng Video Agent`,
+    ));
+  });
 });
