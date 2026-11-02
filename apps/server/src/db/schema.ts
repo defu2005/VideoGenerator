@@ -36,7 +36,13 @@ export const jobs = sqliteTable("jobs", {
   attempt: integer("attempt").notNull().default(1),
   maxAttempts: integer("max_attempts").notNull().default(3),
   error: text("error", { mode: "json" }).$type<{ code: string; message: string; retryable: boolean } | null>(),
-  usage: text("usage", { mode: "json" }).$type<{ llmCalls: number; inputTokens: number; outputTokens: number; costUsd: number } | null>(),
+  usage: text("usage", { mode: "json" }).$type<{
+    llmCalls: number;
+    inputTokens: number;
+    outputTokens: number;
+    costUsd: number;
+    features?: Record<string, number>;
+  } | null>(),
   createdAt: text("created_at").notNull(),
   startedAt: text("started_at"),
   finishedAt: text("finished_at"),
@@ -82,6 +88,7 @@ export const scripts = sqliteTable("scripts", {
   model: text("model"),
   updatedAt: text("updated_at").notNull(),
   mergedCall: integer("merged_call", { mode: "boolean" }).notNull().default(false),
+  reviewNotes: text("review_notes", { mode: "json" }).$type<string[] | null>(),
 });
 
 export const llmCache = sqliteTable("llm_cache", {

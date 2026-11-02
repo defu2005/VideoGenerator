@@ -87,10 +87,12 @@ Mọi LLM call ghi `usage` (tokens/requests, cost ước tính) vào job để U
 ### Chế độ ngân sách token (Budget mode) — user chọn theo project
 | Chế độ | Ý tưởng | LLM calls ước tính / video (Generate All) |
 |---|---|---|
-| `ECO` | Rẻ nhất: research + script + queries + mood gộp 1 call; chuẩn hóa bằng code thay vì gọi sửa | ~1 |
-| `BALANCED` (mặc định) | Research và script tách riêng để script chất lượng hơn; cho phép 1 lần repair; gợi ý thêm query thay thế khi search ảnh trả ít kết quả | ~2–4 |
-| `QUALITY` | Thêm bước tự review & sửa script (critique → revise), xếp hạng lại ảnh theo ngữ nghĩa từ metadata, gợi ý nhạc chi tiết hơn; vision chỉ khi bật riêng | ~4–8 (+ vision nếu bật) |
-| `CUSTOM` | Bật/tắt từng tính năng LLM | tùy cấu hình |
+| `ECO` | Rẻ nhất: research + script gộp 1 call; chuẩn hóa bằng code, không gọi sửa | 1 (tối đa 1) |
+| `BALANCED` (mặc định) | Research và script tách riêng; cho phép 1 lần repair mỗi call | 2 (tối đa 4) |
+| `QUALITY` | Research và script tách riêng, thêm 1 call review & sửa script; cho phép 1 lần repair mỗi call | 3 (tối đa 6) |
+| `CUSTOM` | Dùng cấu hình BALANCED rồi áp dụng các feature override; ước tính theo cấu hình | tùy cấu hình |
+
+Các feature hỗ trợ ảnh, nhạc và vision được lưu trong cấu hình ngân sách để các task tương ứng sử dụng. Chúng không làm tăng call count hiện tại; vision luôn tắt trừ khi user chủ động bật trong CUSTOM.
 
 ### Quy tắc LLM (bắt buộc cho mọi task)
 1. **Ở mọi chế độ, việc code làm tốt tương đương thì viết code**, không gọi LLM: tách câu/scene, tính thời lượng, lọc trùng, format, subtitle, timeline, render, validate, chuẩn hóa output.

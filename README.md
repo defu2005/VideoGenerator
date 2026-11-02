@@ -47,7 +47,7 @@ To use GitHub Copilot for automatic text stages on your personal installation, i
 
 ## Development
 
-Create migrations only with `drizzle-kit generate`. Never hand-edit a migration, and never edit a migration after it has been applied to a database. If a local development database was migrated by an older version of a migration file and startup reports a migration error, delete `data/app.db` and restart; do not change the migration to accommodate that database.
+Create migrations only with `npx drizzle-kit generate --name <name>` from `apps/server`. Never hand-write or edit a migration, and never edit a migration after it has been applied to a database. Every journal entry must have its matching SQL migration and snapshot, with strictly increasing timestamps; the server migration-hygiene test enforces this. If a local development database was migrated by an older version of a migration file and startup reports a migration error, delete `data/app.db` and restart; do not change the migration to accommodate that database.
 
 ## Build, type-check, and test
 

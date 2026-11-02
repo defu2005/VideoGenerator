@@ -5,6 +5,7 @@ import {
   SaveScriptInputSchema,
   ScriptDataSchema,
   ScriptSchema,
+  storyModeForProject,
 } from "@vg/shared";
 import { z } from "zod";
 import type { FastifyInstance } from "fastify";
@@ -77,7 +78,7 @@ export function registerScriptRoutes(
     const { id, stage } = PromptParamsSchema.parse(request.params);
     const project = await requireProject(projects, id);
     const data = stage === "SCRIPT" ? service.get(id) : undefined;
-    const researchMode = project.settings.researchMode ?? config.LLM_RESEARCH_MODE;
+    const researchMode = storyModeForProject(project);
     const research = researchMode !== "off" ? data?.research?.data : undefined;
     const prompt = stage === "STORY"
       ? mergedStoryPrompt(project, config.SPEECH_WORDS_PER_MINUTE)

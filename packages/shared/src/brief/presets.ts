@@ -71,6 +71,7 @@ export const WORDS_PER_MINUTE_BY_LANGUAGE: Record<string, number> = {
 };
 
 export const DEFAULT_BRIEF_VALUES = {
+  budget: { mode: "BALANCED" },
   platform: "youtube",
   style: "storytelling",
   tone: "dramatic",
@@ -87,6 +88,7 @@ export const DEFAULT_BRIEF_VALUES = {
 
 export type PlatformPreset = typeof PLATFORM_PRESETS[keyof typeof PLATFORM_PRESETS];
 export type BriefSettings = Pick<ProjectSettings,
+  | "budget"
   | "platform"
   | "style"
   | "tone"

@@ -8,12 +8,13 @@ import type { LlmProviderRegistry } from "../../providers/llm/registry.js";
 import { generateStructured } from "../../providers/llm/structured.js";
 import { LlmError } from "../../providers/llm/types.js";
 import { preflight } from "../../providers/llm/preflight.js";
+import { resolveBudget, storyModeForProject } from "@vg/shared";
 import { checkScriptDuration, computeSectionDurations, maxOutputTokensForDuration, scriptTotalDuration, researchInputHash } from "../script/scriptUtils.js";
 import { researchPrompt } from "./prompt.js";
 import { mergedStoryPrompt } from "../script/mergedStoryPrompt.js";
 import { z } from "zod";
 
-type ExistingScript = { data: string; version: number };
+type ExistingScript = { data: string; version: number; input_hash: string; review_notes: string | null };
 
 export class ResearchExecutor implements StageExecutor {
   readonly stage = "RESEARCH" as const;
@@ -30,7 +31,9 @@ export class ResearchExecutor implements StageExecutor {
   async run(context: StageContext) {
     context.reportProgress(10, "Building research prompt");
     const project = context.project;
-    const mode = project.settings.researchMode ?? this.config.LLM_RESEARCH_MODE;
+    const mode = storyModeForProject(project);
+    const repairAttempts = resolveBudget(project).repairAttempts;
+    let usageFeature = "research";
     let spentUsage: { llmCalls: number; inputTokens: number; outputTokens: number; tokensUnknown?: boolean } | undefined;
     let usageRecorded = false;
     let selected: ReturnType<LlmProviderRegistry["resolve"]> | undefined;
@@ -41,6 +44,7 @@ export class ResearchExecutor implements StageExecutor {
       selected = this.registry.resolve(project.settings.llm?.research, project.settings.llm?.default, "research");
       const inputHash = researchInputHash(project);
       let effectiveMode = mode;
+      usageFeature = mode === "merged" ? "story" : "research";
       let promptInput = mode === "merged"
         ? mergedStoryPrompt(project, this.config.SPEECH_WORDS_PER_MINUTE)
         : researchPrompt(project);
@@ -57,6 +61,7 @@ export class ResearchExecutor implements StageExecutor {
       if (check.decision === "switch-to-separate") {
         limitMessage = check.message;
         effectiveMode = "separate";
+        usageFeature = "research";
         promptInput = researchPrompt(project);
         check = preflight({
           provider: selected.provider,
@@ -80,6 +85,7 @@ export class ResearchExecutor implements StageExecutor {
         system,
         prompt,
         maxOutputTokens: check.maxOutputTokens,
+        repairAttempts,
         signal: context.signal,
         cache: this.cache,
         cacheKeyExtra: inputHash,
@@ -99,6 +105,7 @@ export class ResearchExecutor implements StageExecutor {
           schemaVersion: "2",
         });
       spentUsage = generated.usage;
+      usageFeature = effectiveMode === "merged" ? "story" : "research";
       context.reportProgress(80, "Validating research notes");
       const costUsd = estimateLlmCost(this.config, generated.provider, generated.model, generated.usage);
       const research = effectiveMode === "merged"
@@ -118,21 +125,24 @@ export class ResearchExecutor implements StageExecutor {
       if (effectiveMode === "merged") {
         const merged = MergedStorySchema.parse(generated.value);
         const script = computeSectionDurations(merged.script, this.config.SPEECH_WORDS_PER_MINUTE);
-        const existing = this.sqlite.prepare("SELECT data, version FROM scripts WHERE project_id = ?")
+        const existing = this.sqlite.prepare("SELECT data, version, input_hash, review_notes FROM scripts WHERE project_id = ?")
           .get(project.id) as ExistingScript | undefined;
         const scriptHash = researchInputHash(project);
         const scriptData = JSON.stringify(script);
-        this.sqlite.prepare(
-          "INSERT INTO scripts (project_id, data, origin, edited, input_hash, version, provider, model, updated_at, merged_call) VALUES (?, ?, 'AGENT', false, ?, ?, ?, ?, ?, true) ON CONFLICT(project_id) DO UPDATE SET data = excluded.data, origin = 'AGENT', edited = false, input_hash = excluded.input_hash, version = excluded.version, provider = excluded.provider, model = excluded.model, updated_at = excluded.updated_at, merged_call = true",
-        ).run(
-          project.id,
-          scriptData,
-          scriptHash,
-          (existing?.version ?? 0) + (existing?.data === scriptData ? 0 : 1),
-          generated.provider,
-          generated.model,
-          new Date().toISOString(),
-        );
+        if (!(resolveBudget(project).scriptReview && existing?.review_notes && existing.input_hash === scriptHash)) {
+          this.sqlite.prepare(
+            "INSERT INTO scripts (project_id, data, origin, edited, input_hash, version, provider, model, updated_at, merged_call) VALUES (?, ?, 'AGENT', false, ?, ?, ?, ?, ?, true) ON CONFLICT(project_id) DO UPDATE SET review_notes = CASE WHEN ? AND scripts.data = excluded.data AND scripts.input_hash = excluded.input_hash THEN scripts.review_notes ELSE NULL END, data = excluded.data, origin = 'AGENT', edited = false, input_hash = excluded.input_hash, version = excluded.version, provider = excluded.provider, model = excluded.model, updated_at = excluded.updated_at, merged_call = true",
+          ).run(
+            project.id,
+            scriptData,
+            scriptHash,
+            (existing?.version ?? 0) + (existing?.data === scriptData ? 0 : 1),
+            generated.provider,
+            generated.model,
+            new Date().toISOString(),
+            resolveBudget(project).scriptReview ? 1 : 0,
+          );
+        }
       }
       context.recordUsage({
         llmCalls: generated.usage.llmCalls,
@@ -142,6 +152,7 @@ export class ResearchExecutor implements StageExecutor {
         provider: generated.provider,
         model: generated.model,
         ...(generated.usage.tokensUnknown ? { tokensUnknown: true } : {}),
+        features: { [usageFeature]: generated.usage.llmCalls },
       });
       usageRecorded = true;
       context.reportProgress(100, effectiveMode === "merged" ? "Research and script saved" : "Research notes saved");
@@ -153,7 +164,7 @@ export class ResearchExecutor implements StageExecutor {
             : effectiveMode === "merged" ? "Research and script saved from one call" : "Research notes saved",
       };
     } catch (error) {
-      if (!usageRecorded) recordFailureUsage(error, context, spentUsage, selected?.provider.id, selected?.model);
+      if (!usageRecorded) recordFailureUsage(error, context, spentUsage, selected?.provider.id, selected?.model, usageFeature);
       throw asStageError(error);
     }
   }
@@ -165,6 +176,7 @@ function recordFailureUsage(
   spentUsage?: { llmCalls: number; inputTokens: number; outputTokens: number; tokensUnknown?: boolean },
   provider?: string,
   model?: string,
+  feature = "research",
 ): void {
   const usage = error instanceof LlmError ? error.usage ?? spentUsage : spentUsage;
   if (!usage) return;
@@ -174,6 +186,7 @@ function recordFailureUsage(
     ...(provider ? { provider } : {}),
     ...(model ? { model } : {}),
     ...(usage.tokensUnknown ? { tokensUnknown: true } : {}),
+    features: { [feature]: usage.llmCalls },
   });
 }
 

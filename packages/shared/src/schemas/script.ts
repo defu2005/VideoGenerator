@@ -120,6 +120,7 @@ export const StoredScriptSchema = z.object({
   version: z.number().int().positive(),
   provider: z.string().nullable(),
   model: z.string().nullable(),
+  reviewNotes: z.array(z.string()).max(8).nullable(),
   updatedAt: z.string().datetime({ offset: true }),
 }).strict();
 

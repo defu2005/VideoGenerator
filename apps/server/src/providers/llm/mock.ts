@@ -24,9 +24,11 @@ export class MockLlmProvider implements LlmProvider {
 
   async generate(req: LlmRequest, signal: AbortSignal) {
     if (signal.aborted) throw new DOMException("Aborted", "AbortError");
-    const targetSeconds = Number(req.messages[0]?.content.match(/Target duration:\s*(\d+)/i)?.[1] ?? 120);
+    const prompt = req.messages[0]?.content ?? "";
+    const targetSeconds = Number(prompt.match(/Target duration:\s*(\d+)/i)?.[1] ?? 180);
     const wordsPerMinute = Number(req.messages[0]?.content.match(/Speaking pace:\s*(\d+)/i)?.[1] ?? 150);
-    const targetWordCount = Math.max(20, Math.round(targetSeconds * wordsPerMinute / 60) - 12);
+    const fixedNarrationWords = 18;
+    const targetWordCount = Math.max(20, Math.round(targetSeconds * wordsPerMinute / 60) - fixedNarrationWords);
     const narration = Array.from({ length: targetWordCount }, (_, index) => `sample${index + 1}`).join(" ");
     const scriptFixture = {
       title: "A Carefully Told Story",
@@ -47,8 +49,14 @@ export class MockLlmProvider implements LlmProvider {
     const merged = /merged story/i.test(req.system)
       ? { research: researchFixture, script: scriptFixture }
       : /script/i.test(req.system) ? scriptFixture : researchFixture;
+    const result = /script editor/i.test(req.system)
+      ? {
+        revisedScript: { ...scriptFixture, title: "A Carefully Reviewed Story" },
+        notes: ["Tightened the opening for clarity."],
+      }
+      : merged;
     return {
-      text: JSON.stringify(merged),
+      text: JSON.stringify(result),
       usage: { inputTokens: 10, outputTokens: 20 },
       model: req.model,
       provider: this.id,

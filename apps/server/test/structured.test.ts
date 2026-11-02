@@ -48,7 +48,9 @@ describe("generateStructured", () => {
     const first = await generateStructured({
       provider, model: "mock-v1", system: "system", prompt: "prompt", schema,
       schemaName: "Example", schemaVersion: "1", maxOutputTokens: 100, signal: controller(), cache,
+      repairAttempts: 1,
     });
+
     expect(first.value.answer).toBe("repaired");
     expect(first.usage.llmCalls).toBe(2);
     const second = await generateStructured({
@@ -57,6 +59,22 @@ describe("generateStructured", () => {
     });
     expect(second.cached).toBe(true);
     expect(second.usage).toEqual({ llmCalls: 0, inputTokens: 0, outputTokens: 0 });
+    db.close();
+  });
+
+  it("does not make a repair call when the budget allows zero attempts", async () => {
+    const { db, cache } = cacheDb();
+    const provider = providerFrom(["not json", "{\"answer\":\"unused\"}"]);
+    await expect(generateStructured({
+      provider, model: "mock-v1", system: "system", prompt: "prompt", schema,
+      schemaName: "Example", schemaVersion: "1", maxOutputTokens: 100, signal: controller(), cache,
+      repairAttempts: 0,
+    })).rejects.toMatchObject({
+      code: "LLM_INVALID_OUTPUT",
+      message: expect.stringContaining("Switch to BALANCED"),
+      usage: { llmCalls: 1 },
+    });
+    expect(provider.generate).toHaveBeenCalledTimes(1);
     db.close();
   });
 

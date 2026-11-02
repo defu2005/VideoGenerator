@@ -1,4 +1,4 @@
-import { ResearchNotesSchema, ScriptSchema } from "@vg/shared";
+import { ResearchNotesSchema, resolveBudget, ScriptSchema, storyModeForProject, type Script } from "@vg/shared";
 import type Database from "better-sqlite3";
 import { z } from "zod";
 import type { AppConfig } from "../../lib/config.js";
@@ -10,7 +10,8 @@ import { generateStructured } from "../../providers/llm/structured.js";
 import { LlmError } from "../../providers/llm/types.js";
 import { preflight } from "../../providers/llm/preflight.js";
 import { scriptPrompt } from "./prompt.js";
-import { checkScriptDuration, computeSectionDurations, maxOutputTokensForDuration, researchInputHash, scriptInputHash, scriptTotalDuration } from "./scriptUtils.js";
+import { checkScriptDuration, computeSectionDurations, maxOutputTokensForDuration, researchInputHash, scriptContentHash, scriptInputHash } from "./scriptUtils.js";
+import { scriptReviewPrompt } from "./reviewPrompt.js";
 
 type ResearchRow = { input_hash: string; data: string; provider: string; model: string };
 type ExistingScript = {
@@ -22,6 +23,7 @@ type ExistingScript = {
   provider: string | null;
   model: string | null;
   merged_call: number;
+  review_notes: string | null;
 };
 
 export class ScriptExecutor implements StageExecutor {
@@ -45,10 +47,11 @@ export class ScriptExecutor implements StageExecutor {
       .get(project.id) as ExistingScript | undefined;
     const runMode = (this.sqlite.prepare("SELECT run_mode FROM projects WHERE id = ?")
       .get(project.id) as { run_mode: string | null } | undefined)?.run_mode;
-    const researchMode = project.settings.researchMode ?? this.config.LLM_RESEARCH_MODE;
+    const budget = resolveBudget(project);
+    const researchMode = storyModeForProject(project);
     const applicableResearch = researchMode === "off" ? undefined : researchRow;
     const mergedHash = researchInputHash(project);
-    if (
+    const mergedSource = Boolean(
       runMode === "ALL"
       && researchMode === "merged"
       && researchRow?.input_hash === mergedHash
@@ -56,9 +59,10 @@ export class ScriptExecutor implements StageExecutor {
       && existing.input_hash === researchRow.input_hash
       && existing.origin === "AGENT"
       && !existing.edited
-    ) {
+    );
+    if (mergedSource && (!budget.scriptReview || existing?.review_notes !== null)) {
       try {
-        const parsed = ScriptSchema.parse(JSON.parse(existing.data) as unknown);
+        const parsed = ScriptSchema.parse(JSON.parse(existing!.data) as unknown);
         const durationCheck = checkScriptDuration(parsed, project.settings.targetDurationSec, this.config.SPEECH_WORDS_PER_MINUTE);
         if (durationCheck.reject) {
           throw new LlmError("The merged script no longer matches the target duration.", "LLM_INVALID_OUTPUT", false);
@@ -80,83 +84,180 @@ export class ScriptExecutor implements StageExecutor {
       }
     }
 
-    let spentUsage: { llmCalls: number; inputTokens: number; outputTokens: number; tokensUnknown?: boolean } | undefined;
+    const spentUsage = { llmCalls: 0, inputTokens: 0, outputTokens: 0, tokensUnknown: false };
+    const features: Record<string, number> = {};
+    let spentCost = 0;
     let usageRecorded = false;
+    let activeFeature = "script";
     let selected: ReturnType<LlmProviderRegistry["resolve"]> | undefined;
     try {
-      selected = this.registry.resolve(project.settings.llm?.script, project.settings.llm?.default, "script");
       const research = applicableResearch
         ? ResearchNotesSchema.parse(JSON.parse(applicableResearch.data) as unknown)
         : undefined;
-      const inputHash = scriptInputHash(project, applicableResearch?.input_hash);
-      const initialPrompt = scriptPrompt(project, research, this.config.SPEECH_WORDS_PER_MINUTE);
-      const check = preflight({
-        provider: selected.provider,
-        mode: "off",
-        project,
-        wordsPerMinute: this.config.SPEECH_WORDS_PER_MINUTE,
-        maxOutputTokens: maxOutputTokensForDuration(
-          project.settings.targetDurationSec,
-          this.config.SPEECH_WORDS_PER_MINUTE,
-        ),
-        input: initialPrompt,
-        ...(research ? {
-          research,
-          rebuildInput: (trimmedResearch) => scriptPrompt(project, trimmedResearch, this.config.SPEECH_WORDS_PER_MINUTE),
-        } : {}),
-      });
-      if (check.decision === "reject") throw check.error;
-      const { system, prompt } = check.input;
-      const validatedSchema = ScriptSchema.superRefine((script, ctx) => {
-        const { reject } = checkScriptDuration(script, project.settings.targetDurationSec, this.config.SPEECH_WORDS_PER_MINUTE);
-        if (reject) ctx.addIssue({ code: z.ZodIssueCode.custom, message: reject });
-      });
-      context.reportProgress(20, "Calling script provider");
-      const generated = await generateStructured({
-        provider: selected.provider,
-        model: selected.model,
-        system,
-        prompt,
-        schema: validatedSchema,
-        schemaName: "Script",
-        schemaVersion: "2",
-        maxOutputTokens: check.maxOutputTokens,
-        signal: context.signal,
-        cache: this.cache,
-        cacheKeyExtra: inputHash,
-        logger: context.logger,
-      });
-      spentUsage = generated.usage;
-      context.reportProgress(80, "Validating script");
-      const data = computeSectionDurations(generated.value, this.config.SPEECH_WORDS_PER_MINUTE);
-      const costUsd = estimateLlmCost(this.config, generated.provider, generated.model, generated.usage);
-      const serializedData = JSON.stringify(data);
-      const version = (existing?.version ?? 0) + (existing?.data === serializedData ? 0 : 1);
+      let script: Script;
+      let mergedCall = false;
+      let provider: string;
+      let model: string;
+      if (mergedSource) {
+        script = ScriptSchema.parse(JSON.parse(existing!.data) as unknown);
+        const durationCheck = checkScriptDuration(script, project.settings.targetDurationSec, this.config.SPEECH_WORDS_PER_MINUTE);
+        if (durationCheck.reject) {
+          throw new LlmError("The merged script no longer matches the target duration.", "LLM_INVALID_OUTPUT", false);
+        }
+        mergedCall = true;
+        provider = existing!.provider ?? researchRow?.provider ?? "unknown";
+        model = existing!.model ?? researchRow?.model ?? "unknown";
+      } else {
+        selected = this.registry.resolve(project.settings.llm?.script, project.settings.llm?.default, "script");
+        const inputHash = scriptInputHash(project, applicableResearch?.input_hash);
+        const initialPrompt = scriptPrompt(project, research, this.config.SPEECH_WORDS_PER_MINUTE);
+        const check = preflight({
+          provider: selected.provider,
+          mode: "off",
+          project,
+          wordsPerMinute: this.config.SPEECH_WORDS_PER_MINUTE,
+          maxOutputTokens: maxOutputTokensForDuration(
+            project.settings.targetDurationSec,
+            this.config.SPEECH_WORDS_PER_MINUTE,
+          ),
+          input: initialPrompt,
+          ...(research ? {
+            research,
+            rebuildInput: (trimmedResearch) => scriptPrompt(project, trimmedResearch, this.config.SPEECH_WORDS_PER_MINUTE),
+          } : {}),
+        });
+        if (check.decision === "reject") throw check.error;
+        const { system, prompt } = check.input;
+        const validatedSchema = ScriptSchema.superRefine((value, ctx) => {
+          const { reject } = checkScriptDuration(value, project.settings.targetDurationSec, this.config.SPEECH_WORDS_PER_MINUTE);
+          if (reject) ctx.addIssue({ code: z.ZodIssueCode.custom, message: reject });
+        });
+        context.reportProgress(20, "Calling script provider");
+        const generated = await generateStructured({
+          provider: selected.provider,
+          model: selected.model,
+          system,
+          prompt,
+          schema: validatedSchema,
+          schemaName: "Script",
+          schemaVersion: "3",
+          maxOutputTokens: check.maxOutputTokens,
+          repairAttempts: budget.repairAttempts,
+          signal: context.signal,
+          cache: this.cache,
+          cacheKeyExtra: inputHash,
+          logger: context.logger,
+        });
+        addUsage(spentUsage, features, "script", generated.usage);
+        spentCost += estimateLlmCost(this.config, generated.provider, generated.model, generated.usage);
+        script = generated.value;
+        provider = generated.provider;
+        model = generated.model;
+      }
+
+      const baseData = computeSectionDurations(script, this.config.SPEECH_WORDS_PER_MINUTE);
+      let finalData = baseData;
+      let reviewNotes: string[] | null = null;
+      let reviewed = false;
+      let reviewSkippedCode: string | null = null;
+      const baseVersion = (existing?.version ?? 0) + (existing?.data === JSON.stringify(baseData) ? 0 : 1);
+      let version = baseVersion;
+      if (budget.scriptReview) {
+        selected ??= this.registry.resolve(project.settings.llm?.script, project.settings.llm?.default, "script");
+        const reviewPrompt = scriptReviewPrompt(project, research, baseData, this.config.SPEECH_WORDS_PER_MINUTE);
+        const reviewSchema = z.object({
+          revisedScript: ScriptSchema,
+          notes: z.array(z.string()).max(8),
+        }).strict().superRefine(({ revisedScript }, ctx) => {
+          const expectedIds = baseData.sections.map((section) => section.id);
+          const actualIds = revisedScript.sections.map((section) => section.id);
+          if (JSON.stringify(actualIds) !== JSON.stringify(expectedIds)) {
+            ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["revisedScript", "sections"], message: "Review must preserve section ids and order." });
+          }
+          const { reject } = checkScriptDuration(revisedScript, project.settings.targetDurationSec, this.config.SPEECH_WORDS_PER_MINUTE);
+          if (reject) ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["revisedScript"], message: reject });
+        });
+        const reviewHash = `${scriptInputHash(project, applicableResearch?.input_hash)}:${scriptContentHash(baseData)}:${JSON.stringify(research ?? null)}`;
+        context.reportProgress(70, "Reviewing and revising script");
+        activeFeature = "review";
+        try {
+          const reviewedResult = await generateStructured({
+            provider: selected.provider,
+            model: selected.model,
+            ...reviewPrompt,
+            schema: reviewSchema,
+            schemaName: "ScriptReview",
+            schemaVersion: "1",
+            maxOutputTokens: maxOutputTokensForDuration(
+              project.settings.targetDurationSec,
+              this.config.SPEECH_WORDS_PER_MINUTE,
+            ),
+            repairAttempts: budget.repairAttempts,
+            signal: context.signal,
+            cache: this.cache,
+            cacheKeyExtra: reviewHash,
+            logger: context.logger,
+          });
+          addUsage(spentUsage, features, "review", reviewedResult.usage);
+          spentCost += estimateLlmCost(this.config, reviewedResult.provider, reviewedResult.model, reviewedResult.usage);
+          finalData = computeSectionDurations(reviewedResult.value.revisedScript, this.config.SPEECH_WORDS_PER_MINUTE);
+          reviewNotes = reviewedResult.value.notes;
+          reviewed = true;
+          provider = reviewedResult.provider;
+          model = reviewedResult.model;
+          if (JSON.stringify(finalData) !== JSON.stringify(baseData)) version += 1;
+        } catch (error) {
+          const code = error instanceof LlmError
+            ? error.code
+            : error instanceof z.ZodError
+              ? "LLM_INVALID_OUTPUT"
+              : "LLM_UNAVAILABLE";
+          reviewSkippedCode = code;
+          if (error instanceof LlmError && error.usage) {
+            addUsage(spentUsage, features, "review", error.usage);
+            spentCost += estimateLlmCost(this.config, selected.provider.id, selected.model, error.usage);
+          }
+          finalData = baseData;
+          reviewNotes = null;
+          context.reportProgress(75, `AI review skipped (${code}): kept the original script`);
+        }
+      }
+
+      context.reportProgress(85, "Saving script");
+      const serializedData = JSON.stringify(finalData);
+      if (existing?.data === serializedData) version = existing.version;
+      const inputHash = mergedCall && researchRow
+        ? researchRow.input_hash
+        : scriptInputHash(project, applicableResearch?.input_hash);
       this.sqlite.prepare(
-        "INSERT INTO scripts (project_id, data, origin, edited, input_hash, version, provider, model, updated_at, merged_call) VALUES (?, ?, 'AGENT', false, ?, ?, ?, ?, ?, false) ON CONFLICT(project_id) DO UPDATE SET data = excluded.data, origin = 'AGENT', edited = false, input_hash = excluded.input_hash, version = excluded.version, provider = excluded.provider, model = excluded.model, updated_at = excluded.updated_at, merged_call = false",
+        "INSERT INTO scripts (project_id, data, origin, edited, input_hash, version, provider, model, updated_at, merged_call, review_notes) VALUES (?, ?, 'AGENT', false, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(project_id) DO UPDATE SET data = excluded.data, origin = 'AGENT', edited = false, input_hash = excluded.input_hash, version = excluded.version, provider = excluded.provider, model = excluded.model, updated_at = excluded.updated_at, merged_call = excluded.merged_call, review_notes = excluded.review_notes",
       ).run(
         project.id,
         serializedData,
         inputHash,
         version,
-        generated.provider,
-        generated.model,
+        provider,
+        model,
         new Date().toISOString(),
+        mergedCall ? 1 : 0,
+        reviewNotes === null ? null : JSON.stringify(reviewNotes),
       );
       context.recordUsage({
-        llmCalls: generated.usage.llmCalls,
-        inputTokens: generated.usage.inputTokens,
-        outputTokens: generated.usage.outputTokens,
-        costUsd,
-        provider: generated.provider,
-        model: generated.model,
-        ...(generated.usage.tokensUnknown ? { tokensUnknown: true } : {}),
+        ...spentUsage,
+        costUsd: spentCost,
+        ...(provider ? { provider } : {}),
+        ...(model ? { model } : {}),
+        ...(spentUsage.tokensUnknown ? { tokensUnknown: true } : {}),
+        features,
       });
       usageRecorded = true;
-      context.reportProgress(100, "Script saved");
-      return { message: generated.cached ? "Script loaded from cache" : "Script saved" };
+      const message = reviewSkippedCode
+        ? `AI review skipped (${reviewSkippedCode}): kept the original script`
+        : reviewed ? "Script reviewed and saved" : mergedCall ? "Script from merged call (0 tokens)" : "Script saved";
+      context.reportProgress(100, message);
+      return { message };
     } catch (error) {
-      if (!usageRecorded) recordFailureUsage(error, context, spentUsage, selected?.provider.id, selected?.model);
+      if (!usageRecorded) recordFailureUsage(error, context, spentUsage, features, activeFeature, spentCost, selected?.provider.id, selected?.model);
       throw asStageError(error);
     }
   }
@@ -165,19 +266,45 @@ export class ScriptExecutor implements StageExecutor {
 function recordFailureUsage(
   error: unknown,
   context: StageContext,
-  spentUsage?: { llmCalls: number; inputTokens: number; outputTokens: number; tokensUnknown?: boolean },
+  spentUsage: { llmCalls: number; inputTokens: number; outputTokens: number; tokensUnknown: boolean },
+  features: Record<string, number>,
+  activeFeature: string,
+  spentCost: number,
   provider?: string,
   model?: string,
 ): void {
-  const usage = error instanceof LlmError ? error.usage ?? spentUsage : spentUsage;
-  if (!usage) return;
+  const errorUsage = error instanceof LlmError ? error.usage : undefined;
+  const combined = {
+    llmCalls: spentUsage.llmCalls + (errorUsage?.llmCalls ?? 0),
+    inputTokens: spentUsage.inputTokens + (errorUsage?.inputTokens ?? 0),
+    outputTokens: spentUsage.outputTokens + (errorUsage?.outputTokens ?? 0),
+    tokensUnknown: spentUsage.tokensUnknown || errorUsage?.tokensUnknown === true,
+  };
+  if (errorUsage && errorUsage.llmCalls > 0) {
+    features[activeFeature] = (features[activeFeature] ?? 0) + errorUsage.llmCalls;
+  }
+  if (combined.llmCalls === 0 && combined.inputTokens === 0 && combined.outputTokens === 0) return;
   context.recordUsage({
-    ...usage,
-    costUsd: 0,
+    ...combined,
+    costUsd: spentCost,
     ...(provider ? { provider } : {}),
     ...(model ? { model } : {}),
-    ...(usage.tokensUnknown ? { tokensUnknown: true } : {}),
+    ...(combined.tokensUnknown ? { tokensUnknown: true } : {}),
+    features,
   });
+}
+
+function addUsage(
+  total: { llmCalls: number; inputTokens: number; outputTokens: number; tokensUnknown: boolean },
+  features: Record<string, number>,
+  feature: string,
+  usage: { llmCalls: number; inputTokens: number; outputTokens: number; tokensUnknown?: boolean },
+): void {
+  total.llmCalls += usage.llmCalls;
+  total.inputTokens += usage.inputTokens;
+  total.outputTokens += usage.outputTokens;
+  total.tokensUnknown ||= usage.tokensUnknown === true;
+  features[feature] = (features[feature] ?? 0) + usage.llmCalls;
 }
 
 function asStageError(error: unknown): Error {

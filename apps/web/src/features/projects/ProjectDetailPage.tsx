@@ -62,7 +62,7 @@ function ProjectOverview({ project }: { project: Project }) {
           <div><dt>Updated</dt><dd>{formatUpdated(project.updatedAt)}</dd></div>
         </dl>
       </section>
-      <PipelinePanel projectId={project.id} />
+      <PipelinePanel projectId={project.id} project={project} />
     </div>
   );
 }

@@ -1,4 +1,4 @@
-import { GATES, STAGE_ORDER } from "@vg/shared";
+import { estimateBudget, GATES, STAGE_ORDER, type Project } from "@vg/shared";
 import { useState } from "react";
 import { ApiRequestError } from "../../services/apiClient";
 import { usePipeline } from "../../hooks/usePipeline";
@@ -6,7 +6,7 @@ import { ErrorState } from "../../components/ErrorState";
 import { Spinner } from "../../components/Spinner";
 import { StageRow } from "./StageRow";
 
-export function PipelinePanel({ projectId }: { projectId: string }) {
+export function PipelinePanel({ projectId, project }: { projectId: string; project?: Project }) {
   const pipeline = usePipeline(projectId);
   const [actionError, setActionError] = useState("");
 
@@ -20,6 +20,20 @@ export function PipelinePanel({ projectId }: { projectId: string }) {
   const waitingAtGate = state.stages.some((stage) => stage.state === "WAITING_USER");
   const busy = active || pipeline.isMutating;
   const stages = STAGE_ORDER.map((stage) => state.stages.find((record) => record.stage === stage)).filter((record) => record !== undefined);
+  const estimate = project ? estimateBudget(
+    project,
+    [
+      project.settings.llm?.research?.provider,
+      project.settings.llm?.script?.provider,
+      project.settings.llm?.default?.provider,
+    ].filter((provider): provider is string => provider !== undefined),
+    state.stages,
+  ) : undefined;
+  const estimateCalls = estimate
+    ? estimate.total.min === estimate.total.max
+      ? String(estimate.total.min)
+      : `${estimate.total.min}–${estimate.total.max}`
+    : undefined;
   const perform = async (action: Parameters<typeof pipeline.action>[0]) => {
     setActionError("");
     try {
@@ -45,6 +59,14 @@ export function PipelinePanel({ projectId }: { projectId: string }) {
           {active && <button className="button button-danger-outline" type="button" disabled={pipeline.isMutating} onClick={() => void perform({ type: "cancel" })}>Cancel</button>}
         </div>
       </div>
+      {estimate && (
+        <p className="pipeline-budget-estimate" role="status">
+          {estimate.total.min === 0 && estimate.total.max === 0
+            ? "Ước tính: 0 lượt gọi AI (đã có kết quả, dùng cache)"
+            : <>Ước tính: ~{estimateCalls} lượt gọi AI ({estimate.mode})
+              {estimate.tokens ? ` · ~${estimate.tokens.input + estimate.tokens.output} tokens` : ""}</>}
+        </p>
+      )}
       {waitingAtGate && <p className="pipeline-mode-hint">Approve the review gate to continue</p>}
       <p className="pipeline-mode-hint">{state.mode}: {state.mode === "MANUAL" ? "run each stage when you are ready" : state.mode === "AUTO" ? "the agent continues through review gates automatically" : "the agent pauses at review gates"}.</p>
       {actionError && <p className="request-error" role="alert">{actionError}</p>}

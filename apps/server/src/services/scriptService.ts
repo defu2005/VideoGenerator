@@ -2,6 +2,7 @@ import {
   ResearchNotesSchema,
   ScriptDataSchema,
   ScriptSchema,
+  storyModeForProject,
   type Project,
   type ResearchNotes,
   type Script,
@@ -28,6 +29,7 @@ type ScriptRow = {
   version: number;
   provider: string | null;
   model: string | null;
+  review_notes: string | null;
   updated_at: string;
   merged_call: number;
 };
@@ -61,6 +63,7 @@ export class ScriptService {
       version: scriptRow.version,
       provider: scriptRow.provider,
       model: scriptRow.model,
+      reviewNotes: scriptRow.review_notes === null ? null : JSON.parse(scriptRow.review_notes) as string[],
       updatedAt: scriptRow.updated_at,
     } : null;
     const research = researchRow ? {
@@ -70,7 +73,7 @@ export class ScriptService {
       cached: Boolean(researchRow.cached),
       createdAt: researchRow.created_at,
     } : null;
-    const researchMode = project.settings.researchMode ?? this.config.LLM_RESEARCH_MODE;
+    const researchMode = storyModeForProject(project);
     const currentResearchHash = researchMode !== "off" ? researchRow?.input_hash : undefined;
     const currentInputHash = researchMode === "merged" && scriptRow?.merged_call
       && researchRow?.input_hash === researchInputHash(project)
@@ -103,12 +106,12 @@ export class ScriptService {
       const edited = origin === "AGENT" ? true : Boolean(existing?.edited);
       const research = this.sqlite.prepare("SELECT input_hash FROM research_notes WHERE project_id = ?")
         .get(projectId) as { input_hash: string } | undefined;
-      const researchMode = project.settings.researchMode ?? this.config.LLM_RESEARCH_MODE;
+      const researchMode = storyModeForProject(project);
       const currentResearchHash = researchMode !== "off" ? research?.input_hash : undefined;
       const inputHash = scriptInputHash(project, currentResearchHash);
       const updatedAt = new Date().toISOString();
       this.sqlite.prepare(
-        "INSERT INTO scripts (project_id, data, origin, edited, input_hash, version, provider, model, updated_at, merged_call) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, false) ON CONFLICT(project_id) DO UPDATE SET data = excluded.data, origin = excluded.origin, edited = excluded.edited, input_hash = excluded.input_hash, version = excluded.version, provider = excluded.provider, model = excluded.model, updated_at = excluded.updated_at, merged_call = false",
+        "INSERT INTO scripts (project_id, data, origin, edited, input_hash, version, provider, model, updated_at, merged_call, review_notes) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, false, NULL) ON CONFLICT(project_id) DO UPDATE SET data = excluded.data, origin = excluded.origin, edited = excluded.edited, input_hash = excluded.input_hash, version = excluded.version, provider = excluded.provider, model = excluded.model, updated_at = excluded.updated_at, merged_call = false, review_notes = NULL",
       ).run(
         projectId,
         JSON.stringify(normalized),

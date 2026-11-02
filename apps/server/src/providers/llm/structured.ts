@@ -13,6 +13,7 @@ export async function generateStructured<T>(input: {
   schemaName: string;
   schemaVersion: string;
   maxOutputTokens: number;
+  repairAttempts?: 0 | 1 | 2;
   signal: AbortSignal;
   cache?: LlmCache;
   cacheKeyExtra?: string;
@@ -89,7 +90,9 @@ export async function generateStructured<T>(input: {
 
   let rawText = response.text;
   let validation = validateOutput(input.schema, rawText);
-  if (!validation.success) {
+  const repairAttempts = input.repairAttempts ?? 1;
+  let repairs = 0;
+  while (!validation.success && repairs < repairAttempts) {
     try {
       response = await input.provider.generate({
         model: input.model,
@@ -106,6 +109,7 @@ export async function generateStructured<T>(input: {
       throw withUsage(error, { ...usage(), llmCalls: calls + attemptedCalls(error) }, input.provider.id === "copilot-cli");
     }
     calls += 1;
+    repairs += 1;
     totalInputTokens += response.usage.inputTokens;
     totalOutputTokens += response.usage.outputTokens;
     tokensUnknown ||= response.usage.tokensUnknown === true;
@@ -127,7 +131,10 @@ export async function generateStructured<T>(input: {
       schema: input.schemaName,
       issues: validation.success ? [] : validation.issues.slice(0, 15),
     }, "LLM output failed structured validation");
-    throw new LlmError("The LLM response did not match the required output format.", "LLM_INVALID_OUTPUT", false, undefined, usage());
+    const message = repairAttempts === 0
+      ? "The LLM response did not match the required output format. Switch to BALANCED to allow one repair attempt."
+      : "The LLM response did not match the required output format.";
+    throw new LlmError(message, "LLM_INVALID_OUTPUT", false, undefined, usage());
   }
 
   input.cache?.put(key, input.provider.id, input.model, rawText);

@@ -22,6 +22,12 @@ function briefValue(settings: BriefSettings, path: string): string | number | bo
   if (path === "subtitles.maxCharsPerLine") return settings.subtitles.maxCharsPerLine;
   if (path === "music.enabled") return settings.music.enabled;
   if (path === "music.volume") return settings.music.volume;
+  if (path === "budget.mode") return settings.budget.mode;
+  if (path.startsWith("budget.features.")) {
+    const key = path.slice("budget.features.".length) as keyof NonNullable<BriefSettings["budget"]["features"]>;
+    const value = settings.budget.features?.[key];
+    return typeof value === "string" || typeof value === "number" || typeof value === "boolean" ? value : undefined;
+  }
   const value = settings[path as keyof BriefSettings];
   return typeof value === "string" || typeof value === "number" || typeof value === "boolean" ? value : undefined;
 }
@@ -31,6 +37,16 @@ function setBriefValue(settings: BriefSettings, path: string, value: string | nu
   if (path === "subtitles.maxCharsPerLine") return { ...settings, subtitles: { ...settings.subtitles, maxCharsPerLine: Number(value) } };
   if (path === "music.enabled") return { ...settings, music: { ...settings.music, enabled: Boolean(value) } };
   if (path === "music.volume") return { ...settings, music: { ...settings.music, volume: Number(value) } };
+  if (path === "budget.mode") {
+    return { ...settings, budget: { ...settings.budget, mode: value as BriefSettings["budget"]["mode"] } };
+  }
+  if (path.startsWith("budget.features.")) {
+    const key = path.slice("budget.features.".length) as keyof NonNullable<BriefSettings["budget"]["features"]>;
+    return {
+      ...settings,
+      budget: { ...settings.budget, features: { ...settings.budget.features, [key]: value } },
+    };
+  }
   return { ...settings, [path]: value } as BriefSettings;
 }
 
@@ -104,7 +120,13 @@ export function CreateProjectDialog({ open, onClose }: { open: boolean; onClose:
 
   function resetBrief(path: string) {
     const userSet = briefUserSet.filter((item) => item !== path);
-    const resolved = recommendBrief({ topic: draft.topic, settings: { ...brief, userSet } }).values.settings;
+    let settings = { ...brief, userSet };
+    if (path.startsWith("budget.features.")) {
+      const features = { ...settings.budget.features };
+      delete features[path.slice("budget.features.".length) as keyof NonNullable<BriefSettings["budget"]["features"]>];
+      settings = { ...settings, budget: { ...settings.budget, features } };
+    }
+    const resolved = recommendBrief({ topic: draft.topic, settings }).values.settings;
     setBriefUserSet(userSet);
     setBrief(resolved);
   }
@@ -127,6 +149,16 @@ export function CreateProjectDialog({ open, onClose }: { open: boolean; onClose:
           settings.subtitles = { ...(settings.subtitles as object | undefined), [path.slice("subtitles.".length)]: value };
         } else if (path.startsWith("music.")) {
           settings.music = { ...(settings.music as object | undefined), [path.slice("music.".length)]: value };
+        } else if (path === "budget.mode") {
+          settings.budget = { ...(settings.budget as object | undefined), mode: value };
+        } else if (path.startsWith("budget.features.")) {
+          settings.budget = {
+            ...(settings.budget as object | undefined),
+            features: {
+              ...((settings.budget as { features?: object } | undefined)?.features),
+              [path.slice("budget.features.".length)]: value,
+            },
+          };
         } else {
           settings[path] = value;
         }

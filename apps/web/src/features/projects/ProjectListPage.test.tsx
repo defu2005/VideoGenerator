@@ -13,6 +13,7 @@ const project: Project = {
   description: "A short video",
   mode: "ASSISTED",
   settings: {
+    budget: { mode: "BALANCED" },
     language: "en",
     targetDurationSec: 120,
     aspectRatio: "16:9",
@@ -138,5 +139,24 @@ describe("CreateProjectDialog", () => {
     fireEvent.click(screen.getByRole("button", { name: "Reset Platform to recommendation" }));
     expect(screen.getByLabelText("Platform")).toHaveValue("youtube");
     expect(screen.getAllByText("Gợi ý").length).toBeGreaterThan(0);
+  });
+
+  it("previews budget modes live and exposes the CUSTOM feature toggles", () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse([])));
+    renderWithProviders(<CreateProjectDialog open onClose={vi.fn()} />);
+    fireEvent.click(screen.getByRole("button", { name: /Customize/ }));
+    const mode = screen.getByLabelText("Chế độ AI / Budget mode");
+    expect(mode).toHaveValue("BALANCED");
+    expect(screen.getByText("Ước tính: ~2–4 lượt gọi AI (BALANCED)")).toBeInTheDocument();
+
+    fireEvent.change(mode, { target: { value: "ECO" } });
+    expect(screen.getByText("Ước tính: ~1 lượt gọi AI (ECO)")).toBeInTheDocument();
+    fireEvent.change(mode, { target: { value: "CUSTOM" } });
+    const review = screen.getByRole("checkbox", { name: "scriptReview" });
+    expect(review).not.toBeChecked();
+    fireEvent.click(review);
+    expect(review).toBeChecked();
+    expect(screen.getByText("Ước tính: ~3–6 lượt gọi AI (CUSTOM)")).toBeInTheDocument();
+    expect(screen.getAllByText(/available in a later step/)).toHaveLength(4);
   });
 });

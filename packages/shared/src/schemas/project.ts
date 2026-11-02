@@ -7,8 +7,13 @@ import {
   StageExecutorSchema,
 } from "../enums.js";
 import { LlmSelectionSchema } from "./llm.js";
+import {
+  BudgetSettingsInputSchema,
+  BudgetSettingsSchema,
+} from "../budget/modes.js";
 
 export const VideoBriefSettingsSchema = z.object({
+  budget: BudgetSettingsSchema.default({ mode: "BALANCED" }),
   language: z.string().default("vi"),
   targetDurationSec: z.number().int().min(30).max(1800).default(120),
   aspectRatio: AspectRatioSchema.default("16:9"),
@@ -31,6 +36,7 @@ export const VideoBriefSettingsSchema = z.object({
 });
 
 export const VideoBriefSettingsInputSchema = z.object({
+  budget: BudgetSettingsInputSchema.optional(),
   platform: z.enum(["youtube", "youtube_shorts", "tiktok", "facebook_reels", "custom"]).optional(),
   style: z.enum(["storytelling", "documentary", "explainer", "news", "listicle"]).optional(),
   tone: z.enum(["neutral", "dramatic", "inspiring", "humorous", "serious"]).optional(),
@@ -75,6 +81,7 @@ export const ProjectSettingsSchema = z.object({
   }).optional(),
   autoRender: z.boolean().default(false),
 }).extend({
+  budget: VideoBriefSettingsSchema.shape.budget,
   platform: VideoBriefSettingsSchema.shape.platform,
   style: VideoBriefSettingsSchema.shape.style,
   tone: VideoBriefSettingsSchema.shape.tone,

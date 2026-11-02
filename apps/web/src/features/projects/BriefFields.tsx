@@ -1,4 +1,4 @@
-import { recommendBrief, type BriefSettings } from "@vg/shared";
+import { estimateBudget, recommendBrief, resolveBudget, type BriefSettings, type BudgetFeatures } from "@vg/shared";
 import type { ReactNode } from "react";
 
 type BriefField = keyof Omit<BriefSettings, "subtitles" | "music" | "userSet">;
@@ -15,9 +15,14 @@ export function BriefFields({
   onReset: (path: string) => void;
 }) {
   const result = recommendBrief({ topic, settings });
+  const budgetFeatures = resolveBudget(settings.budget);
+  const budgetEstimate = estimateBudget({ topic, settings });
 
   function field(path: string, label: string, control: ReactNode) {
-    const recommendation = result.recommendations[path];
+    const recommendation = result.recommendations[path] ?? {
+      source: "user" as const,
+      reason: "Custom budget feature",
+    };
     return (
       <label className="form-field brief-field" key={path}>
         <span>
@@ -48,8 +53,67 @@ export function BriefFields({
   }
 
   const resolved = result.values.settings;
+  const customFeature = <K extends keyof BudgetFeatures>(key: K, value: BudgetFeatures[K]) => {
+    const path = `budget.features.${key}`;
+    const labels: Partial<Record<keyof BudgetFeatures, string>> = {
+      altQueryAssist: "Alternative query assist (available in a later step)",
+      semanticImageRerank: "Semantic image rerank (available in a later step)",
+      visionCheck: "Vision check (available in a later step)",
+      musicAssist: "Music assist (available in a later step)",
+    };
+    const label = labels[key] ?? key;
+    if (typeof value === "boolean") {
+      return field(path, label, (
+        <input
+          aria-label={key}
+          type="checkbox"
+          checked={value}
+          onChange={(event) => onChange(path, event.target.checked)}
+        />
+      ));
+    }
+    return field(path, label, (
+      <select aria-label={key} value={String(value)} onChange={(event) => onChange(
+        path,
+        key === "repairAttempts" ? Number(event.target.value) : event.target.value,
+      )}>
+        {(key === "storyMode" ? ["merged", "separate"] : ["0", "1", "2"]).map((choice) => (
+          <option key={choice} value={choice}>{choice}</option>
+        ))}
+      </select>
+    ));
+  };
   return (
     <div className="brief-fields">
+      {field("budget.mode", "Chế độ AI / Budget mode", (
+        <select
+          aria-label="Chế độ AI / Budget mode"
+          value={resolved.budget.mode}
+          onChange={(event) => onChange("budget.mode", event.target.value)}
+        >
+          <option value="ECO">ECO — Rẻ nhất (~1 lượt gọi AI/video)</option>
+          <option value="BALANCED">BALANCED — Cân bằng chất lượng/chi phí (~2–3 lượt)</option>
+          <option value="QUALITY">QUALITY — Chất lượng cao: AI tự review &amp; sửa script (~3–5 lượt)</option>
+          <option value="CUSTOM">CUSTOM</option>
+        </select>
+      ))}
+      <small className="field-hint">
+        Ước tính: ~{budgetEstimate.total.min === budgetEstimate.total.max
+          ? budgetEstimate.total.min
+          : `${budgetEstimate.total.min}–${budgetEstimate.total.max}`} lượt gọi AI ({budgetEstimate.mode})
+      </small>
+      {resolved.budget.mode === "CUSTOM" && (
+        <fieldset className="budget-custom-fields">
+          <legend>Custom AI features</legend>
+          {customFeature("storyMode", budgetFeatures.storyMode)}
+          {customFeature("repairAttempts", budgetFeatures.repairAttempts)}
+          {customFeature("scriptReview", budgetFeatures.scriptReview)}
+          {customFeature("altQueryAssist", budgetFeatures.altQueryAssist)}
+          {customFeature("semanticImageRerank", budgetFeatures.semanticImageRerank)}
+          {customFeature("visionCheck", budgetFeatures.visionCheck)}
+          {customFeature("musicAssist", budgetFeatures.musicAssist)}
+        </fieldset>
+      )}
       {select("platform", "Platform", ["youtube", "youtube_shorts", "tiktok", "facebook_reels", "custom"])}
       {select("style", "Style", ["storytelling", "documentary", "explainer", "news", "listicle"])}
       {select("tone", "Tone", ["neutral", "dramatic", "inspiring", "humorous", "serious"])}

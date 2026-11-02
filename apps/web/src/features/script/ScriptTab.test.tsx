@@ -116,11 +116,54 @@ describe("ScriptTab", () => {
       outro: "",
       music: { mood: "", energy: "medium", keywords: [] },
     };
-    installFetch({ script: { data: script, origin: "AGENT", edited: false, version: 1, provider: "mock", model: "mock-v1", updatedAt: "2026-11-03T00:00:00.000Z" }, research: null, origin: "AGENT", version: 1, stale: false });
+    installFetch({ script: { data: script, origin: "AGENT", edited: false, version: 1, provider: "mock", model: "mock-v1", reviewNotes: null, updatedAt: "2026-11-03T00:00:00.000Z" }, research: null, origin: "AGENT", version: 1, stale: false });
     renderWithProviders(<ScriptTab project={project} />);
     const regenerate = await screen.findByRole("button", { name: "Regenerate script" });
     await waitFor(() => expect(regenerate).toBeDisabled());
     expect(screen.getByText("Complete RESEARCH before generating the script.")).toBeTruthy();
+  });
+
+  it("shows QUALITY review notes and the revised-by-review badge", async () => {
+    const script: Script = {
+      title: "Reviewed",
+      hook: "",
+      sections: [{
+        id: "one",
+        heading: "One",
+        narration: "",
+        visualQueries: { primary: "", alternatives: [] },
+        visualNotes: "",
+        musicMood: "",
+        energy: "medium",
+        estDurationSec: 0,
+      }],
+      outro: "",
+      music: { mood: "", energy: "medium", keywords: [] },
+    };
+    const qualityProject = {
+      ...project,
+      settings: { ...project.settings, budget: { mode: "QUALITY" as const } },
+    } as Project;
+    installFetch({
+      script: {
+        data: script,
+        origin: "AGENT",
+        edited: false,
+        version: 2,
+        provider: "mock",
+        model: "mock-v1",
+        reviewNotes: ["Clarified the opening."],
+        updatedAt: "2026-11-03T00:00:00.000Z",
+      },
+      research: null,
+      origin: "AGENT",
+      version: 2,
+      stale: false,
+    });
+    renderWithProviders(<ScriptTab project={qualityProject} />);
+    expect(await screen.findByText("Revised by AI review")).toBeInTheDocument();
+    fireEvent.click(screen.getByText("AI review notes (1)"));
+    expect(screen.getByText("Clarified the opening.")).toBeInTheDocument();
   });
 
   it("shows calls and token totals, including cached zero-token stages", async () => {

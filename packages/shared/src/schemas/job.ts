@@ -18,6 +18,7 @@ export const JobUsageSchema = z.object({
   provider: z.string().optional(),
   model: z.string().optional(),
   tokensUnknown: z.boolean().optional(),
+  features: z.record(z.string(), z.number().int().nonnegative()).optional(),
 });
 export type JobUsage = z.infer<typeof JobUsageSchema>;
 

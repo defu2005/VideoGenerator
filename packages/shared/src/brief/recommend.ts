@@ -1,4 +1,5 @@
 import type { AutonomyMode, ProjectSettings } from "../index.js";
+import type { BudgetSettingsInput } from "../budget/modes.js";
 import {
   DEFAULT_BRIEF_VALUES,
   PLATFORM_PRESETS,
@@ -26,9 +27,10 @@ export type RecommendBriefInput = {
   title?: string;
   description?: string;
   mode?: AutonomyMode;
-  settings?: Omit<Partial<ProjectSettings>, "subtitles" | "music"> & {
+  settings?: Omit<Partial<ProjectSettings>, "subtitles" | "music" | "budget"> & {
     subtitles?: Partial<ProjectSettings["subtitles"]>;
     music?: Partial<ProjectSettings["music"]>;
+    budget?: BudgetSettingsInput;
   };
 };
 
@@ -79,6 +81,7 @@ export function recommendBrief(input: RecommendBriefInput): RecommendBriefResult
     title: input.title?.trim() || topicTitle(input.topic),
     mode: input.mode ?? "ASSISTED" as const,
     settings: {
+      budget: { mode: "BALANCED" },
       platform: DEFAULT_BRIEF_VALUES.platform,
       style: DEFAULT_BRIEF_VALUES.style,
       tone: DEFAULT_BRIEF_VALUES.tone,
@@ -156,9 +159,19 @@ export function recommendBrief(input: RecommendBriefInput): RecommendBriefResult
   const musicVolume = resolve("music.volume", provided.music?.volume, style === "news" ? 0.08 : 0.15,
     style === "news" ? "Lower background volume for news" : "Default background music volume");
   const title = resolve("title", input.title, topicTitle(input.topic), "Derived from the topic");
+  const budgetMode = resolve(
+    "budget.mode",
+    provided.budget?.mode,
+    "BALANCED" as const,
+    "Default balance of cost and quality",
+  );
 
   values.title = title;
   values.settings = {
+    budget: {
+      mode: budgetMode,
+      ...(provided.budget?.features ? { features: provided.budget.features } : {}),
+    },
     platform,
     style,
     tone,

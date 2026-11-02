@@ -88,6 +88,11 @@ export function EditProjectDialog({
       if (path === "subtitles.maxCharsPerLine") return { ...current, subtitles: { ...current.subtitles, maxCharsPerLine: Number(value) } };
       if (path === "music.enabled") return { ...current, music: { ...current.music, enabled: Boolean(value) } };
       if (path === "music.volume") return { ...current, music: { ...current.music, volume: Number(value) } };
+      if (path === "budget.mode") return { ...current, budget: { ...current.budget, mode: value as ProjectSettings["budget"]["mode"] } };
+      if (path.startsWith("budget.features.")) {
+        const key = path.slice("budget.features.".length) as keyof NonNullable<ProjectSettings["budget"]["features"]>;
+        return { ...current, budget: { ...current.budget, features: { ...current.budget.features, [key]: value } } };
+      }
       return { ...current, [path]: value } as ProjectSettings;
     });
     setBriefUserSet((current) => [...new Set([...current, path])]);
@@ -103,6 +108,13 @@ export function EditProjectDialog({
       if (path === "subtitles.maxCharsPerLine") return { ...current, subtitles: { ...current.subtitles, maxCharsPerLine: resolved.subtitles.maxCharsPerLine } };
       if (path === "music.enabled") return { ...current, music: { ...current.music, enabled: resolved.music.enabled } };
       if (path === "music.volume") return { ...current, music: { ...current.music, volume: resolved.music.volume } };
+      if (path === "budget.mode") return { ...current, budget: { ...current.budget, mode: resolved.budget.mode } };
+      if (path.startsWith("budget.features.")) {
+        const key = path.slice("budget.features.".length) as keyof NonNullable<ProjectSettings["budget"]["features"]>;
+        const features = { ...current.budget.features };
+        delete features[key];
+        return { ...current, budget: { ...current.budget, features } };
+      }
       return { ...current, [path]: resolved[path as keyof typeof resolved] } as ProjectSettings;
     });
     setBriefUserSet(userSet);
@@ -129,6 +141,18 @@ export function EditProjectDialog({
         settings.music = { ...(settings.music as object | undefined), enabled: briefSettings.music.enabled };
       } else if (path === "music.volume") {
         settings.music = { ...(settings.music as object | undefined), volume: briefSettings.music.volume };
+      } else if (path === "budget.mode") {
+        settings.budget = { ...(settings.budget as object | undefined), mode: briefSettings.budget.mode };
+      } else if (path.startsWith("budget.features.")) {
+        settings.budget = {
+          ...(settings.budget as object | undefined),
+          features: {
+            ...((settings.budget as { features?: object } | undefined)?.features),
+            [path.slice("budget.features.".length)]: briefSettings.budget.features?.[
+              path.slice("budget.features.".length) as keyof NonNullable<ProjectSettings["budget"]["features"]>
+            ],
+          },
+        };
       } else {
         settings[path] = briefSettings[path as keyof ProjectSettings];
       }

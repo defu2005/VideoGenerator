@@ -78,6 +78,49 @@ afterEach(() => {
 });
 
 describe("PipelinePanel", () => {
+  it("explains when there are no AI calls left to estimate", async () => {
+    const pipeline = makePipeline();
+    pipeline.stages = pipeline.stages.map((stage) => ({ ...stage, state: "DONE" }));
+    const project: Project = {
+      id: projectId,
+      title: "Test project",
+      description: "",
+      topic: "Test topic",
+      mode: "ASSISTED",
+      settings: {
+        budget: { mode: "QUALITY" },
+        language: "en",
+        targetDurationSec: 120,
+        aspectRatio: "16:9",
+        platform: "youtube",
+        style: "storytelling",
+        tone: "dramatic",
+        audience: "general",
+        wordsPerMinute: 150,
+        sceneDurationSec: 7,
+        visualStyle: "mixed",
+        subtitles: { enabled: true, maxCharsPerLine: 42 },
+        music: { enabled: true, volume: 0.15 },
+        userSet: [],
+        stageExecutors: {},
+        autoRender: false,
+      },
+      status: "COMPLETED",
+      stage: "DONE",
+      thumbnailPath: null,
+      durationSec: null,
+      version: 1,
+      createdAt: now,
+      updatedAt: now,
+      archivedAt: null,
+    };
+    vi.stubGlobal("fetch", vi.fn(async () => jsonResponse(pipeline)));
+    vi.stubGlobal("EventSource", MockEventSource);
+
+    renderWithProviders(<PipelinePanel projectId={projectId} project={project} />);
+    expect(await screen.findByText("Ước tính: 0 lượt gọi AI (đã có kết quả, dùng cache)")).toBeInTheDocument();
+  });
+
   it("renders stage states and sends approval to the matching endpoint", async () => {
     const pipeline = makePipeline();
     pipeline.stages[0] = { ...pipeline.stages[0], state: "RUNNING", progress: 40, message: "Working" };
@@ -156,6 +199,7 @@ describe("PipelinePanel", () => {
         topic: "Test topic",
         mode: "ASSISTED",
         settings: {
+          budget: { mode: "BALANCED" },
           language: "en",
           targetDurationSec: 120,
           aspectRatio: "16:9",

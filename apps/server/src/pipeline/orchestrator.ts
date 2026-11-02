@@ -11,6 +11,7 @@ import {
   type ProjectStatus,
   type StageRecord,
   type StageState,
+  storyModeForProject,
 } from "@vg/shared";
 import type { FastifyBaseLogger } from "fastify";
 import type { AppConfig } from "../lib/config.js";
@@ -20,6 +21,17 @@ import { markStaleFrom } from "./invalidation.js";
 
 export type ApprovalCheck = (project: Project, gate: PipelineStage) => { allowed: true } | { allowed: false; message: string };
 type Clock = () => Date;
+
+function mergeFeatureUsage(
+  previous: Record<string, number> | undefined,
+  next: Record<string, number> | undefined,
+): Record<string, number> {
+  const merged: Record<string, number> = { ...previous };
+  for (const [feature, calls] of Object.entries(next ?? {})) {
+    merged[feature] = (merged[feature] ?? 0) + calls;
+  }
+  return merged;
+}
 
 export function deriveProjectStatus(input: {
   activeJob: Pick<Job, "stage"> | null;
@@ -78,7 +90,7 @@ export class PipelineOrchestrator {
       if (position < 0) this.invalid(`${stage} is not a runnable pipeline stage.`);
       if (isGate(stage)) this.invalid(`Review stage ${stage} must be approved, not run.`);
       const project = this.requireProject(projectId);
-      const researchMode = project.settings.researchMode ?? this.config.LLM_RESEARCH_MODE;
+      const researchMode = storyModeForProject(project);
       if (stage === "RESEARCH" && researchMode === "off" && project.settings.stageExecutors.script !== "USER") {
         this.skipResearch(projectId, "Skipped (research mode is off)");
         this.repository.setRunMode(projectId, null);
@@ -270,6 +282,9 @@ export class PipelineOrchestrator {
           ...(usage.provider ?? previous.provider ? { provider: usage.provider ?? previous.provider } : {}),
           ...(usage.model ?? previous.model ? { model: usage.model ?? previous.model } : {}),
           ...(usage.tokensUnknown || previous.tokensUnknown ? { tokensUnknown: true } : {}),
+          ...((usage.features || previous.features) ? {
+            features: mergeFeatureUsage(previous.features, usage.features),
+          } : {}),
         },
       });
     });
@@ -447,7 +462,7 @@ export class PipelineOrchestrator {
       this.waitForUser(projectId, next);
       return;
     }
-    if (next === "RESEARCH" && (project.settings.researchMode ?? this.config.LLM_RESEARCH_MODE) === "off") {
+    if (next === "RESEARCH" && storyModeForProject(project) === "off") {
       this.skipResearch(projectId, "Skipped (research mode is off)");
       this.repository.updateProject(projectId, { stage: "RESEARCH" });
       this.continueAll(projectId, STAGE_ORDER.indexOf("RESEARCH"));

@@ -24,6 +24,7 @@ import { createProjectDir, removeProjectDir } from "../storage/paths.js";
 
 const toProject = (row: ProjectRow): Project => ProjectSchema.parse(row);
 const BRIEF_SETTING_FIELDS = new Set([
+  "budget",
   "platform",
   "style",
   "tone",
@@ -48,6 +49,7 @@ function briefSettingsFromInput(input: CreateProjectInput | UpdateProjectInput):
     ...(input.wordsPerMinute === undefined ? {} : { wordsPerMinute: input.wordsPerMinute }),
     ...(input.sceneDurationSec === undefined ? {} : { sceneDurationSec: input.sceneDurationSec }),
     ...(input.visualStyle === undefined ? {} : { visualStyle: input.visualStyle }),
+    ...(input.budget === undefined ? {} : { budget: input.budget }),
     ...(input.subtitles === undefined ? {} : { subtitles: input.subtitles }),
     ...(input.music === undefined ? {} : { music: input.music }),
     ...(input.userSet === undefined ? {} : { userSet: input.userSet }),
@@ -65,6 +67,14 @@ function mergeSettings(current: ProjectSettings, update: ProjectSettingsInput): 
     music: {
       ...current.music,
       ...update.music,
+    },
+    budget: {
+      ...current.budget,
+      ...update.budget,
+      features: {
+        ...current.budget.features,
+        ...update.budget?.features,
+      },
     },
     stageExecutors: {
       ...current.stageExecutors,
@@ -94,6 +104,9 @@ export function createProjectService(db: AppDatabase, config: AppConfig, logger:
     const nestedBriefFields = [
       ...Object.keys(inputSettings.subtitles ?? {}).map((field) => `subtitles.${field}`),
       ...Object.keys(inputSettings.music ?? {}).map((field) => `music.${field}`),
+      ...(inputSettings.budget?.mode === undefined ? [] : ["budget.mode"]),
+      ...Object.keys(inputSettings.budget?.features ?? {}).map((field) => `budget.features.${field}`),
+      ...(inputSettings.researchMode === undefined ? [] : ["researchMode"]),
     ];
     const userSet = [...new Set([
       ...(inputSettings.userSet ?? []),
@@ -121,6 +134,7 @@ export function createProjectService(db: AppDatabase, config: AppConfig, logger:
       visualStyle: resolved.values.settings.visualStyle,
       subtitles: resolved.values.settings.subtitles,
       music: resolved.values.settings.music,
+      budget: resolved.values.settings.budget,
       userSet,
       researchMode: inputSettings.researchMode,
       stageExecutors: inputSettings.stageExecutors ?? {},
@@ -174,6 +188,9 @@ export function createProjectService(db: AppDatabase, config: AppConfig, logger:
     const nestedBriefFields = [
       ...Object.keys(settingsInput.subtitles ?? {}).map((field) => `subtitles.${field}`),
       ...Object.keys(settingsInput.music ?? {}).map((field) => `music.${field}`),
+      ...(settingsInput.budget?.mode === undefined ? [] : ["budget.mode"]),
+      ...Object.keys(settingsInput.budget?.features ?? {}).map((field) => `budget.features.${field}`),
+      ...(settingsInput.researchMode === undefined ? [] : ["researchMode"]),
     ];
     const resetFields = new Set(input.resetToRecommended ?? []);
     const userSet = [...new Set([

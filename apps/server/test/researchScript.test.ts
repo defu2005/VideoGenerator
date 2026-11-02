@@ -4,6 +4,7 @@ import { LlmProviderRegistry } from "../src/providers/llm/registry.js";
 import { ScriptSchema } from "@vg/shared";
 import { ResearchExecutor } from "../src/stages/research/researchExecutor.js";
 import { ScriptExecutor } from "../src/stages/script/scriptExecutor.js";
+import { scriptTotalDuration } from "../src/stages/script/scriptUtils.js";
 import { drainUntilGate } from "./pipelineFixtures.js";
 import { StageError, type StageContext } from "../src/pipeline/stageExecutor.js";
 import type { AppConfig } from "../src/lib/config.js";
@@ -43,6 +44,9 @@ function contextFor(harness: ReturnType<typeof createPipelineHarness>, stage: "R
 describe("research and script stages", () => {
   it("uses mock provider, persists structured output, records usage, and caches unchanged research", async () => {
     const harness = makeHarness({ LLM_DEFAULT_PROVIDER: "mock", LLM_ENABLE_MOCK: true });
+    const project = harness.repository.getProject(harness.projectId)!;
+    harness.sqlite.prepare("UPDATE projects SET settings = ? WHERE id = ?")
+      .run(JSON.stringify({ ...project.settings, budget: { mode: "ECO" } }), harness.projectId);
     const registry = new LlmProviderRegistry(harness.config);
     const mock = registry.get("mock")!;
     const generate = vi.spyOn(mock, "generate");
@@ -74,9 +78,9 @@ describe("research and script stages", () => {
     expect(cachedCall.usage[0]).toMatchObject({ llmCalls: 0, inputTokens: 0, outputTokens: 0 });
     expect(generate).toHaveBeenCalledTimes(2);
 
-    const project = harness.repository.getProject(harness.projectId)!;
+    const changedProject = harness.repository.getProject(harness.projectId)!;
     harness.sqlite.prepare("UPDATE projects SET settings = ? WHERE id = ?")
-      .run(JSON.stringify({ ...project.settings, style: "news" }), harness.projectId);
+      .run(JSON.stringify({ ...changedProject.settings, style: "news" }), harness.projectId);
     const changedStyleCall = contextFor(harness, "RESEARCH");
     await researchExecutor.run(changedStyleCall.context);
     expect(changedStyleCall.usage[0]).toMatchObject({ llmCalls: 1 });
@@ -129,6 +133,7 @@ describe("research and script stages", () => {
     harness.sqlite.prepare("UPDATE projects SET settings = ? WHERE id = ?")
       .run(JSON.stringify({
         ...initialProject.settings,
+        budget: { mode: "ECO" },
         style: "documentary",
         tone: "serious",
         audience: "students",
@@ -165,38 +170,208 @@ describe("research and script stages", () => {
   });
 
   it.each([
-    ["merged", 1],
-    ["separate", 2],
-    ["off", 1],
-  ] as const)("uses %s mode with %i provider calls for Generate All", async (mode, expectedCalls) => {
+    ["ECO", 1],
+    ["BALANCED", 2],
+    ["QUALITY", 3],
+  ] as const)("uses %s mode with %i provider calls through SCRIPT and caches its rerun", async (mode, expectedCalls) => {
     const harness = makeHarness({
       LLM_DEFAULT_PROVIDER: "mock",
       LLM_ENABLE_MOCK: true,
-      LLM_RESEARCH_MODE: mode,
       FAKE_STAGE_DELAY_MS: 0,
     });
+    const initialProject = harness.repository.getProject(harness.projectId)!;
+    harness.sqlite.prepare("UPDATE projects SET settings = ? WHERE id = ?")
+      .run(JSON.stringify({
+        ...initialProject.settings,
+        budget: { mode },
+      }), harness.projectId);
     const registry = new LlmProviderRegistry(harness.config);
     const provider = registry.get("mock")!;
     const generate = vi.spyOn(provider, "generate");
     harness.executors.set("RESEARCH", new ResearchExecutor(harness.sqlite, registry, harness.config));
     harness.executors.set("SCRIPT", new ScriptExecutor(harness.sqlite, registry, harness.config));
-    if (mode === "off") {
-      harness.sqlite.prepare(
-        "INSERT INTO research_notes (project_id, input_hash, provider, model, cached, created_at, data) VALUES (?, ?, ?, ?, false, ?, ?)",
-      ).run(harness.projectId, "old-research", "mock", "mock-v1", new Date().toISOString(), "{}");
-    }
-
     harness.orchestrator.runAll(harness.projectId);
     await drainUntilGate(harness);
 
     const state = harness.orchestrator.getPipeline(harness.projectId);
     const researchState = state.stages.find((stage) => stage.stage === "RESEARCH")?.state;
-    expect(researchState).toBe(mode === "off" ? "SKIPPED" : "DONE");
+    expect(researchState).toBe("DONE");
     expect(state.stages.find((stage) => stage.stage === "SCRIPT")?.state).toBe("DONE");
     expect(generate).toHaveBeenCalledTimes(expectedCalls);
-    if (mode === "off") {
-      expect(generate.mock.calls[0][0].messages[0]?.content).toContain("No research notes are available");
-    }
+    const jobs = harness.repository.listJobs(harness.projectId, 20);
+    const researchJob = jobs.find((job) => job.stage === "RESEARCH");
+    const scriptJob = jobs.find((job) => job.stage === "SCRIPT");
+    expect(researchJob?.usage?.features).toEqual({ [mode === "ECO" ? "story" : "research"]: 1 });
+    expect(scriptJob?.usage?.features).toEqual(
+      mode === "ECO" ? undefined : mode === "QUALITY" ? { script: 1, review: 1 } : { script: 1 },
+    );
+
+    await new ResearchExecutor(harness.sqlite, registry, harness.config).run(contextFor(harness, "RESEARCH").context);
+    await new ScriptExecutor(harness.sqlite, registry, harness.config).run(contextFor(harness, "SCRIPT").context);
+    expect(generate).toHaveBeenCalledTimes(expectedCalls);
+  });
+
+  it("stores the QUALITY revised script, review notes, version, and usage features", async () => {
+    const harness = makeHarness({
+      LLM_DEFAULT_PROVIDER: "mock",
+      LLM_ENABLE_MOCK: true,
+      FAKE_STAGE_DELAY_MS: 0,
+    });
+    const project = harness.repository.getProject(harness.projectId)!;
+    harness.sqlite.prepare("UPDATE projects SET settings = ? WHERE id = ?")
+      .run(JSON.stringify({ ...project.settings, budget: { mode: "QUALITY" } }), harness.projectId);
+    const registry = new LlmProviderRegistry(harness.config);
+    const provider = registry.get("mock")!;
+    const generate = vi.spyOn(provider, "generate");
+    harness.executors.set("RESEARCH", new ResearchExecutor(harness.sqlite, registry, harness.config));
+    harness.executors.set("SCRIPT", new ScriptExecutor(harness.sqlite, registry, harness.config));
+    harness.orchestrator.runAll(harness.projectId);
+    await drainUntilGate(harness);
+
+    const saved = harness.sqlite.prepare("SELECT data, review_notes, version FROM scripts WHERE project_id = ?")
+      .get(harness.projectId) as { data: string; review_notes: string; version: number };
+    expect(JSON.parse(saved.data)).toMatchObject({ title: "A Carefully Reviewed Story" });
+    expect(JSON.parse(saved.review_notes)).toEqual(["Tightened the opening for clarity."]);
+    expect(saved.version).toBe(2);
+    expect(generate).toHaveBeenCalledTimes(3);
+    const scriptJob = harness.repository.listJobs(harness.projectId, 20).find((job) => job.stage === "SCRIPT");
+    expect(scriptJob?.usage).toMatchObject({
+      llmCalls: 2,
+      features: { script: 1, review: 1 },
+    });
+  });
+
+  it("keeps the original script and succeeds when QUALITY review fails after repairs", async () => {
+    const harness = makeHarness({
+      LLM_DEFAULT_PROVIDER: "mock",
+      LLM_ENABLE_MOCK: true,
+      FAKE_STAGE_DELAY_MS: 0,
+    });
+    const project = harness.repository.getProject(harness.projectId)!;
+    harness.sqlite.prepare("UPDATE projects SET settings = ? WHERE id = ?")
+      .run(JSON.stringify({
+        ...project.settings,
+        targetDurationSec: 60,
+        budget: { mode: "QUALITY" },
+      }), harness.projectId);
+    const registry = new LlmProviderRegistry(harness.config);
+    const provider = registry.get("mock")!;
+    const originalGenerate = provider.generate.bind(provider);
+    const generate = vi.spyOn(provider, "generate").mockImplementation(async (request, signal) => {
+      const response = await originalGenerate(request, signal);
+      if (/script editor/i.test(request.system)) {
+        const output = JSON.parse(response.text) as {
+          revisedScript: { sections: { narration: string }[] };
+        };
+        output.revisedScript.sections[0].narration = "brief";
+        response.text = JSON.stringify(output);
+      }
+      return response;
+    });
+    harness.executors.set("RESEARCH", new ResearchExecutor(harness.sqlite, registry, harness.config));
+    harness.executors.set("SCRIPT", new ScriptExecutor(harness.sqlite, registry, harness.config));
+    harness.orchestrator.runAll(harness.projectId);
+    await drainUntilGate(harness);
+
+    const state = harness.orchestrator.getPipeline(harness.projectId);
+    expect(state.stages.find((stage) => stage.stage === "SCRIPT")).toMatchObject({
+      state: "DONE",
+      message: expect.stringContaining("AI review skipped"),
+    });
+    const saved = harness.sqlite.prepare("SELECT data, review_notes FROM scripts WHERE project_id = ?")
+      .get(harness.projectId) as { data: string; review_notes: string | null };
+    expect(JSON.parse(saved.data)).toMatchObject({ title: "A Carefully Told Story" });
+    expect(saved.review_notes).toBeNull();
+    expect(generate).toHaveBeenCalledTimes(4);
+    const scriptJob = harness.repository.listJobs(harness.projectId, 20).find((job) => job.stage === "SCRIPT");
+    expect(scriptJob?.usage).toMatchObject({
+      llmCalls: 3,
+      features: { script: 1, review: 2 },
+    });
+  });
+
+  it.each([60, 180])("generates and reviews QUALITY narration within 10%% of %i seconds with mock", async (duration) => {
+    const harness = makeHarness({
+      LLM_DEFAULT_PROVIDER: "mock",
+      LLM_ENABLE_MOCK: true,
+      FAKE_STAGE_DELAY_MS: 0,
+    });
+    const project = harness.repository.getProject(harness.projectId)!;
+    harness.sqlite.prepare("UPDATE projects SET settings = ? WHERE id = ?")
+      .run(JSON.stringify({
+        ...project.settings,
+        targetDurationSec: duration,
+        budget: { mode: "QUALITY" },
+      }), harness.projectId);
+    const registry = new LlmProviderRegistry(harness.config);
+    harness.executors.set("RESEARCH", new ResearchExecutor(harness.sqlite, registry, harness.config));
+    harness.executors.set("SCRIPT", new ScriptExecutor(harness.sqlite, registry, harness.config));
+    harness.orchestrator.runAll(harness.projectId);
+    await drainUntilGate(harness);
+
+    expect(harness.orchestrator.getPipeline(harness.projectId).stages.find((stage) => stage.stage === "SCRIPT")?.state)
+      .toBe("DONE");
+    const saved = harness.sqlite.prepare("SELECT data, review_notes FROM scripts WHERE project_id = ?")
+      .get(harness.projectId) as { data: string; review_notes: string | null };
+    expect(saved.review_notes).not.toBeNull();
+    const script = ScriptSchema.parse(JSON.parse(saved.data) as unknown);
+    const actualDuration = scriptTotalDuration(script, harness.config.SPEECH_WORDS_PER_MINUTE);
+    expect(actualDuration).toBeGreaterThanOrEqual(duration * 0.9);
+    expect(actualDuration).toBeLessThanOrEqual(duration * 1.1);
+  });
+
+  it("supports CUSTOM merged generation plus review in exactly two calls", async () => {
+    const harness = makeHarness({
+      LLM_DEFAULT_PROVIDER: "mock",
+      LLM_ENABLE_MOCK: true,
+      FAKE_STAGE_DELAY_MS: 0,
+    });
+    const project = harness.repository.getProject(harness.projectId)!;
+    harness.sqlite.prepare("UPDATE projects SET settings = ? WHERE id = ?")
+      .run(JSON.stringify({
+        ...project.settings,
+        budget: { mode: "CUSTOM", features: { storyMode: "merged", scriptReview: true } },
+      }), harness.projectId);
+    const registry = new LlmProviderRegistry(harness.config);
+    const provider = registry.get("mock")!;
+    const generate = vi.spyOn(provider, "generate");
+    harness.executors.set("RESEARCH", new ResearchExecutor(harness.sqlite, registry, harness.config));
+    harness.executors.set("SCRIPT", new ScriptExecutor(harness.sqlite, registry, harness.config));
+    harness.orchestrator.runAll(harness.projectId);
+    await drainUntilGate(harness);
+
+    expect(generate).toHaveBeenCalledTimes(2);
+    const script = harness.sqlite.prepare("SELECT review_notes, version FROM scripts WHERE project_id = ?")
+      .get(harness.projectId) as { review_notes: string; version: number };
+    expect(JSON.parse(script.review_notes)).toEqual(["Tightened the opening for clarity."]);
+    expect(script.version).toBe(2);
+  });
+
+  it("honors user-set researchMode off for old projects", async () => {
+    const harness = makeHarness({
+      LLM_DEFAULT_PROVIDER: "mock",
+      LLM_ENABLE_MOCK: true,
+      FAKE_STAGE_DELAY_MS: 0,
+    });
+    const project = harness.repository.getProject(harness.projectId)!;
+    harness.sqlite.prepare("UPDATE projects SET settings = ? WHERE id = ?")
+      .run(JSON.stringify({
+        ...project.settings,
+        researchMode: "off",
+        userSet: ["researchMode"],
+      }), harness.projectId);
+    const registry = new LlmProviderRegistry(harness.config);
+    const provider = registry.get("mock")!;
+    const generate = vi.spyOn(provider, "generate");
+    harness.executors.set("RESEARCH", new ResearchExecutor(harness.sqlite, registry, harness.config));
+    harness.executors.set("SCRIPT", new ScriptExecutor(harness.sqlite, registry, harness.config));
+    harness.orchestrator.runAll(harness.projectId);
+    await drainUntilGate(harness);
+
+    expect(harness.orchestrator.getPipeline(harness.projectId).stages.find((stage) => stage.stage === "RESEARCH")?.state)
+      .toBe("SKIPPED");
+    expect(generate).toHaveBeenCalledTimes(1);
+    expect(generate.mock.calls[0][0].messages[0]?.content).toContain("No research notes are available");
   });
 
   it("uses the project research-mode override and reads legacy visual ideas", async () => {
@@ -208,7 +383,7 @@ describe("research and script stages", () => {
     });
     const project = harness.repository.getProject(harness.projectId)!;
     harness.sqlite.prepare("UPDATE projects SET settings = ? WHERE id = ?")
-      .run(JSON.stringify({ ...project.settings, researchMode: "merged" }), harness.projectId);
+      .run(JSON.stringify({ ...project.settings, researchMode: "merged", userSet: ["researchMode"] }), harness.projectId);
     const registry = new LlmProviderRegistry(harness.config);
     const provider = registry.get("mock")!;
     const generate = vi.spyOn(provider, "generate");
@@ -296,6 +471,9 @@ describe("research and script stages", () => {
 
   it("makes one provider call and zero calls on a cached merged rerun through SCRIPT", async () => {
     const harness = makeHarness({ LLM_DEFAULT_PROVIDER: "mock", LLM_ENABLE_MOCK: true });
+    const project = harness.repository.getProject(harness.projectId)!;
+    harness.sqlite.prepare("UPDATE projects SET settings = ? WHERE id = ?")
+      .run(JSON.stringify({ ...project.settings, budget: { mode: "ECO" } }), harness.projectId);
     const registry = new LlmProviderRegistry(harness.config);
     const provider = registry.get("mock")!;
     const generate = vi.spyOn(provider, "generate");
@@ -351,7 +529,7 @@ describe("research and script stages", () => {
           ...project.settings,
           language: "vi",
           targetDurationSec: duration,
-          researchMode: "merged",
+          budget: { mode: "ECO" },
         }),
         harness.projectId,
       );

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { STAGE_ORDER, type Job, type Project, type Script } from "@vg/shared";
+import { resolveBudget, STAGE_ORDER, type Job, type Project, type Script } from "@vg/shared";
 import { usePipeline } from "../../hooks/usePipeline";
 import { useScript } from "../../hooks/useScript";
 import { getProjectJobs } from "../../services/pipelineApi";
@@ -87,6 +87,7 @@ export function ScriptTab({ project }: { project: Project }) {
   const scriptJobs = jobsQuery.data?.filter((job) => job.stage === "RESEARCH" || job.stage === "SCRIPT") ?? [];
   const lastResearchJob = scriptJobs.find((job) => job.stage === "RESEARCH");
   const lastScriptJob = scriptJobs.find((job) => job.stage === "SCRIPT");
+  const scriptReviewEnabled = resolveBudget(project).scriptReview;
 
   const run = async (stage?: "RESEARCH" | "SCRIPT") => {
     setActionError("");
@@ -161,6 +162,17 @@ export function ScriptTab({ project }: { project: Project }) {
       )}
       {(data.script || editing) && (
         <>
+          {scriptReviewEnabled && data.script?.reviewNotes !== null && data.script?.reviewNotes !== undefined && (
+            <section className="panel script-review-notes">
+              <span className="script-review-badge">Revised by AI review</span>
+              <details>
+                <summary>AI review notes ({data.script.reviewNotes.length})</summary>
+                {data.script.reviewNotes.length > 0
+                  ? <ul>{data.script.reviewNotes.map((note, index) => <li key={`${index}-${note}`}>{note}</li>)}</ul>
+                  : <p>No review notes.</p>}
+              </details>
+            </section>
+          )}
           <div className="script-actions">
             <button className="button button-secondary" type="button" disabled={active || pipeline.isMutating || project.settings.stageExecutors.script === "USER"} onClick={() => void run("RESEARCH")}>Generate research</button>
             <button className="button button-primary" type="button" disabled={!canGenerateScript || project.settings.stageExecutors.script === "USER"} onClick={() => void run("SCRIPT")}>

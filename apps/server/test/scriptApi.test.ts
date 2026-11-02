@@ -133,7 +133,7 @@ describe("script API", () => {
   });
 
   it("returns shared prompt content and JSON schemas for the exact executor prompts", async () => {
-    const project = await createProject();
+    const project = await createProject({ budget: { mode: "ECO" } });
     await app.inject({
       method: "PUT",
       url: `/api/projects/${project.id}/research`,

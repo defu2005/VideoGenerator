@@ -81,6 +81,7 @@ describe("project API", () => {
     expect(created).toMatchObject({
       title: "Lịch sử trận đấu AlphaGo và Lee Sedol năm 2016",
       settings: {
+        budget: { mode: "BALANCED" },
         language: "vi",
         platform: "youtube",
         aspectRatio: "16:9",
@@ -175,6 +176,7 @@ describe("project API", () => {
       topic: "Sample topic",
       mode: "ASSISTED",
       settings: {
+        budget: { mode: "BALANCED" },
         language: "en",
         targetDurationSec: 180,
         aspectRatio: "16:9",
@@ -189,6 +191,20 @@ describe("project API", () => {
       archivedAt: null,
     });
     expect(received.createdAt).toBe(received.updatedAt);
+  });
+
+  it("keeps explicitly user-set researchMode as a legacy story-mode override", async () => {
+    const created = await createProject({
+      topic: "A topic",
+      settings: { budget: { mode: "BALANCED" }, researchMode: "merged" },
+    });
+    expect(created.settings.userSet).toContain("researchMode");
+    const estimate = await app.inject({ method: "GET", url: `/api/projects/${created.id}/budget-estimate` });
+    expect(estimate.json()).toMatchObject({
+      mode: "BALANCED",
+      features: { storyMode: "separate" },
+      total: { min: 1, max: 2 },
+    });
   });
 
   it("removes the database row when project directory creation fails", async () => {

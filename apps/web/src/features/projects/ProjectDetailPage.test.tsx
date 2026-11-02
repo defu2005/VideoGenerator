@@ -13,6 +13,7 @@ const project: Project = {
   description: "A short video",
   mode: "ASSISTED",
   settings: {
+    budget: { mode: "BALANCED" },
     language: "en",
     targetDurationSec: 120,
     aspectRatio: "16:9",
@@ -102,6 +103,7 @@ describe("ProjectDetailPage", () => {
     expect(await screen.findByText("WAITING USER")).toBeInTheDocument();
     expect(screen.getAllByText("VISUAL REVIEW")).toHaveLength(2);
     expect(screen.getByRole("heading", { name: "Production stages" })).toBeInTheDocument();
+    expect(await screen.findByText("Ước tính: ~2–4 lượt gọi AI (BALANCED)")).toBeInTheDocument();
   });
 
   it("shows a back link when the API returns 404", async () => {
