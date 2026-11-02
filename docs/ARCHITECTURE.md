@@ -204,7 +204,7 @@ Lỗi luôn có dạng: `{ "error": { "code": "PROJECT_NOT_FOUND", "message": ".
 | TASK-004D | ~~GitHub Models~~ (đã bị GitHub khai tử 30/7/2026) + GitHub Copilot (copilot-cli, MCP với Copilot Chat) + giới hạn token theo provider (pre-flight) + đếm số call/tháng (không áp trần) | 004B | 2 |
 | TASK-004C | Tham số video (topic bắt buộc, còn lại tùy chọn) + khuyến nghị tự động bằng luật, 0 LLM call; quick create | 004 | 2 |
 | TASK-004E | Chế độ ngân sách token ECO/BALANCED/QUALITY/CUSTOM + ước tính số call trước khi chạy + review & sửa script (QUALITY) | 004C | 2 |
-| TASK-005 | Scene planning **bằng code, 0 LLM call** (tách scene từ script, thời lượng theo số từ, query/mood lấy từ output của script call) + Scene Board UI + invalidation | 004 | 3 |
+| TASK-005 | Scene plan bằng code (tách câu, gom theo thời lượng scene, chia query/mood) + Scene Board (sửa/tách/gộp/sắp xếp); QUALITY +1 call gợi ý query theo scene | 004E | 3 |
 | TASK-006 | Image provider interface + Wikimedia/Openverse/Pexels + candidate store + ranking + dedupe | 005 | 4 |
 | TASK-007 | Visual Review UI: candidates, metadata panel, approve/reject/replace/search again/custom URL/upload/Approve All | 006 | 4 |
 | TASK-008 | TTS provider + Voice stage + Voice UI | 005 | 5 |
