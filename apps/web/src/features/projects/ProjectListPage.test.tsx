@@ -103,7 +103,8 @@ describe("CreateProjectDialog", () => {
   });
 
   it("posts validated fields and navigates to the new project's overview", async () => {
-    const fetchMock = vi.fn().mockResolvedValue(jsonResponse(project, 201));
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, _init?: RequestInit) =>
+      String(input) === "/api/llm/providers" ? jsonResponse([]) : jsonResponse(project, 201));
     vi.stubGlobal("fetch", fetchMock);
     renderWithProviders(<CreateProjectDialog open onClose={vi.fn()} />);
     fireEvent.change(screen.getByLabelText(/Title/), { target: { value: "Ocean documentary" } });
@@ -114,7 +115,8 @@ describe("CreateProjectDialog", () => {
       "/api/projects",
       expect.objectContaining({ method: "POST" }),
     ));
-    const request = fetchMock.mock.calls[0][1] as RequestInit;
+    const requestCall = fetchMock.mock.calls.find(([input]) => String(input) === "/api/projects");
+    const request = requestCall?.[1] as RequestInit;
     expect(JSON.parse(String(request.body))).toMatchObject({
       title: "Ocean documentary",
       topic: "Life under the sea",

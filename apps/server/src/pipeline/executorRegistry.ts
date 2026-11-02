@@ -7,11 +7,14 @@ export type ExecutorOptions = {
   failures?: Partial<Record<PipelineStage, FakeFailure>>;
 };
 
-export function createExecutorRegistry(options: ExecutorOptions): Map<PipelineStage, StageExecutor> {
+export function createExecutorRegistry(
+  options: ExecutorOptions,
+  overrides: Partial<Record<PipelineStage, StageExecutor>> = {},
+): Map<PipelineStage, StageExecutor> {
   const registry = new Map<PipelineStage, StageExecutor>();
   for (const stage of STAGE_ORDER) {
     if (GATES.includes(stage)) continue;
-    registry.set(stage, new FakeExecutor(stage, options.delayMs, options.failures?.[stage]));
+    registry.set(stage, overrides[stage] ?? new FakeExecutor(stage, options.delayMs, options.failures?.[stage]));
   }
   return registry;
 }

@@ -77,6 +77,21 @@ export class PipelineOrchestrator {
       const position = STAGE_ORDER.indexOf(stage);
       if (position < 0) this.invalid(`${stage} is not a runnable pipeline stage.`);
       if (isGate(stage)) this.invalid(`Review stage ${stage} must be approved, not run.`);
+      const project = this.requireProject(projectId);
+      const researchMode = project.settings.researchMode ?? this.config.LLM_RESEARCH_MODE;
+      if (stage === "RESEARCH" && researchMode === "off" && project.settings.stageExecutors.script !== "USER") {
+        this.skipResearch(projectId, "Skipped (research mode is off)");
+        this.repository.setRunMode(projectId, null);
+        this.updateProjectStatus(projectId, "RESEARCH");
+        return;
+      }
+      if (stage === "SCRIPT" && researchMode === "off") {
+        this.skipResearch(projectId, "Skipped (research mode is off)");
+      }
+      if ((stage === "RESEARCH" || stage === "SCRIPT") && project.settings.stageExecutors.script === "USER") {
+        this.waitForUser(projectId, stage);
+        return;
+      }
       const stages = this.repository.getStages(projectId);
       const incomplete = stages.find((item, index) => index < position && item.state !== "DONE" && item.state !== "SKIPPED");
       if (incomplete) this.invalid(`Complete ${incomplete.stage} before running ${stage}.`);
@@ -86,6 +101,49 @@ export class PipelineOrchestrator {
       this.repository.setRunMode(projectId, "SINGLE");
       this.enqueue(projectId, stage);
       this.updateProjectStatus(projectId, stage);
+    });
+    return this.requirePipeline(projectId);
+  }
+
+  completeByUser(
+    projectId: string,
+    stage: PipelineStage,
+    options: { skip?: PipelineStage[] } = {},
+  ): PipelineState {
+    this.repository.atomic(() => {
+      this.requireProject(projectId);
+      this.assertNoActiveJob(projectId);
+      this.repository.ensureStages(projectId);
+      const position = STAGE_ORDER.indexOf(stage);
+      if (position < 0 || isGate(stage)) this.invalid(`${stage} cannot be completed by user input.`);
+      for (const skippedStage of options.skip ?? []) {
+        const skipIndex = STAGE_ORDER.indexOf(skippedStage);
+        if (skipIndex < 0 || skipIndex >= position) this.invalid(`${skippedStage} must be an earlier pipeline stage to skip.`);
+        if (this.repository.getStage(projectId, skippedStage).state !== "DONE") {
+          this.repository.updateStage(projectId, skippedStage, {
+            state: "SKIPPED",
+            progress: 100,
+            message: "Skipped by user",
+            jobId: null,
+            error: null,
+          });
+        }
+      }
+      this.repository.updateStage(projectId, stage, {
+        state: "DONE",
+        progress: 100,
+        message: "Provided by user",
+        jobId: null,
+        error: null,
+      });
+      markStaleFrom(this.repository, projectId, stage);
+      if (this.repository.getRunMode(projectId) === "ALL") {
+        this.repository.updateProject(projectId, { stage });
+        this.continueAll(projectId, position);
+      } else {
+        this.repository.setRunMode(projectId, null);
+        this.updateProjectStatus(projectId, stage);
+      }
     });
     return this.requirePipeline(projectId);
   }
@@ -350,14 +408,49 @@ export class PipelineOrchestrator {
   }
 
   private continueAll(projectId: string, afterIndex: number): void {
-    const stages = this.repository.getStages(projectId);
+    let stages = this.repository.getStages(projectId);
     const next = STAGE_ORDER.find((stage, index) => index > afterIndex && !["DONE", "SKIPPED"].includes(stages[index]?.state ?? "PENDING"));
     if (!next) {
       this.repository.updateProject(projectId, { stage: "DONE", status: "COMPLETED", runMode: null });
       return;
     }
+    const project = this.requireProject(projectId);
+    if ((next === "RESEARCH" || next === "SCRIPT") && project.settings.stageExecutors.script === "USER") {
+      const script = this.repository.getScriptOrigin(projectId);
+      const userScriptExists = script !== undefined && (script.origin === "USER" || script.edited);
+      if (next === "RESEARCH" && userScriptExists) {
+        this.repository.updateStage(projectId, "RESEARCH", {
+          state: "SKIPPED",
+          progress: 100,
+          message: "Skipped for user-provided script",
+          jobId: null,
+          error: null,
+        });
+        this.continueAll(projectId, STAGE_ORDER.indexOf("RESEARCH"));
+        return;
+      }
+      if (next === "SCRIPT" && userScriptExists) {
+        this.repository.updateStage(projectId, "SCRIPT", {
+          state: "DONE",
+          progress: 100,
+          message: "Provided by user",
+          jobId: null,
+          error: null,
+        });
+        this.repository.updateProject(projectId, { stage: "SCRIPT" });
+        this.continueAll(projectId, STAGE_ORDER.indexOf("SCRIPT"));
+        return;
+      }
+      this.waitForUser(projectId, next);
+      return;
+    }
+    if (next === "RESEARCH" && (project.settings.researchMode ?? this.config.LLM_RESEARCH_MODE) === "off") {
+      this.skipResearch(projectId, "Skipped (research mode is off)");
+      this.repository.updateProject(projectId, { stage: "RESEARCH" });
+      this.continueAll(projectId, STAGE_ORDER.indexOf("RESEARCH"));
+      return;
+    }
     if (isGate(next)) {
-      const project = this.requireProject(projectId);
       const autoApprove = project.mode === "AUTO"
         && (next !== "FINAL_APPROVAL" || project.settings.autoRender);
       if (autoApprove) {
@@ -384,6 +477,27 @@ export class PipelineOrchestrator {
     }
     this.enqueue(projectId, next);
     this.updateProjectStatus(projectId, next);
+  }
+
+  private waitForUser(projectId: string, stage: PipelineStage): void {
+    this.repository.updateStage(projectId, stage, {
+      state: "WAITING_USER",
+      progress: 0,
+      message: "Write or paste your script in the Script tab",
+      jobId: null,
+      error: null,
+    });
+    this.repository.updateProject(projectId, { stage, status: "REVIEW" });
+  }
+
+  private skipResearch(projectId: string, message: string): void {
+    this.repository.updateStage(projectId, "RESEARCH", {
+      state: "SKIPPED",
+      progress: 100,
+      message,
+      jobId: null,
+      error: null,
+    });
   }
 
   private updateProjectStatus(projectId: string, projectStage: PipelineStage): void {

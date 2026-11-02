@@ -15,6 +15,20 @@
       "when": 1793641556675,
       "tag": "0001_heavy_moonstone",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1793644257242,
+      "tag": "0002_llm_script",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "6",
+      "when": 1793645905866,
+      "tag": "0003_known_namorita",
+      "breakpoints": true
     }
   ]
 }

@@ -2,6 +2,7 @@ import { useEffect } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { PipelineEvent, PipelineStage, PipelineState } from "@vg/shared";
 import { projectKeys } from "./useProjects";
+import { scriptKeys } from "./useScript";
 import {
   approvePipelineGate,
   cancelPipeline,
@@ -63,6 +64,10 @@ export function usePipeline(projectId: string) {
     const onEvent = (message: MessageEvent<string>) => {
       const event = JSON.parse(message.data) as PipelineEvent;
       if (event.type === "stage.updated") {
+        if ((event.data.stage === "RESEARCH" || event.data.stage === "SCRIPT") && event.data.state === "DONE") {
+          void queryClient.invalidateQueries({ queryKey: scriptKeys.detail(projectId) });
+          void queryClient.invalidateQueries({ queryKey: ["project-jobs", projectId] });
+        }
         queryClient.setQueryData<PipelineState>(pipelineKeys.detail(projectId), (current) => {
           if (!current) return current;
           const record = event.data;

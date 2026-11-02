@@ -1,0 +1,1 @@
+ALTER TABLE `scripts` ADD `merged_call` integer DEFAULT false NOT NULL;

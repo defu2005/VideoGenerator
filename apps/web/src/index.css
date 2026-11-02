@@ -237,6 +237,50 @@ button:disabled { cursor: not-allowed; opacity: .58; }
 .recent-error-list p { margin: 0; color: #b64752; }
 .recent-error-list time { color: #929bad; text-align: right; }
 
+.script-workspace { display: grid; gap: 16px; }
+.research-panel, .script-editor, .script-empty-state, .script-usage { padding: 20px; }
+.research-panel summary { display: flex; align-items: center; justify-content: space-between; gap: 16px; cursor: pointer; list-style: none; }
+.research-panel summary::-webkit-details-marker { display: none; }
+.research-panel summary > span { display: grid; gap: 5px; }
+.research-panel summary strong { color: #344057; font-size: 13px; }
+.research-panel summary > small { color: #8993a4; font-size: 10px; text-align: right; }
+.research-content { margin-top: 16px; color: #59667d; font-size: 12px; line-height: 1.65; }
+.research-content h3 { margin: 16px 0 7px; color: #344057; font-size: 12px; }
+.research-content ul { display: grid; gap: 7px; padding-left: 19px; }
+.research-facts { list-style: none; padding-left: 0 !important; }
+.research-facts li { display: flex; align-items: flex-start; gap: 9px; }
+.confidence-badge { flex: 0 0 auto; border-radius: 12px; padding: 2px 7px; font-size: 9px; font-weight: 700; text-transform: uppercase; }
+.confidence-high { background: #e6f7ef; color: #23845a; }
+.confidence-medium { background: #fff5df; color: #a76e0c; }
+.confidence-low { background: #fff0f0; color: #c3434e; }
+.research-facts small { color: #8a94a8; }
+.script-empty-state { display: grid; justify-items: start; gap: 10px; }
+.script-empty-state h2, .script-editor h2 { margin: 0; color: #263248; font-size: 17px; }
+.script-empty-state p:not(.eyebrow) { max-width: 650px; margin: 0; color: #788398; font-size: 12px; line-height: 1.6; }
+.script-empty-actions, .script-actions, .script-editor-heading, .script-sections-heading, .script-save-actions, .script-section-actions { display: flex; align-items: center; gap: 10px; }
+.script-empty-actions { margin-top: 7px; }
+.script-actions { flex-wrap: wrap; }
+.script-actions small, .stale-note { color: #9a6c1a; font-size: 11px; }
+.script-editor { display: grid; gap: 14px; }
+.script-editor-heading { justify-content: space-between; align-items: flex-start; }
+.script-editor-heading > div:first-child { display: grid; gap: 5px; }
+.script-metrics { display: grid; justify-items: end; gap: 4px; color: #758096; font-size: 11px; }
+.script-metrics strong { color: #344057; font-size: 12px; }
+.script-editor .form-field { display: grid; gap: 6px; color: #56637b; font-size: 11px; font-weight: 650; }
+.script-editor input, .script-editor textarea { width: 100%; border: 1px solid #e0e4ed; border-radius: 7px; padding: 9px 10px; color: #344057; font-size: 12px; font-weight: 400; resize: vertical; }
+.script-sections-heading { justify-content: space-between; }
+.script-sections-heading h3 { margin: 0; font-size: 14px; }
+.script-section { display: grid; gap: 12px; min-width: 0; margin: 0; border: 1px solid #eaedf3; border-radius: 8px; padding: 14px; }
+.script-section legend { padding: 0 6px; color: #45536b; font-size: 11px; font-weight: 700; }
+.script-section-actions { justify-content: flex-end; flex-wrap: wrap; }
+.script-section-actions small { margin-right: auto; color: #8a94a8; font-size: 10px; }
+.script-remove { color: #bc4652; }
+.script-save-actions { justify-content: space-between; flex-wrap: wrap; border-top: 1px solid #eef0f4; padding-top: 12px; }
+.script-save-actions small { color: #8a94a8; font-size: 10px; }
+.script-usage { display: flex; flex-wrap: wrap; gap: 10px 20px; color: #758096; font-size: 11px; }
+.script-usage .eyebrow { flex-basis: 100%; }
+.stale-note { color: #bc4652; }
+
 @media (max-width: 1100px) {
   .page-content { padding-right: 26px; padding-left: 26px; }
   .sidebar { width: 210px; }
@@ -296,6 +340,10 @@ button:disabled { cursor: not-allowed; opacity: .58; }
   .detail-actions .button { flex: 1; }
   .tab-bar a { padding-right: 10px; padding-left: 10px; }
   .pipeline-panel-heading { align-items: flex-start; flex-direction: column; }
+  .research-panel summary { align-items: flex-start; flex-direction: column; }
+  .research-panel summary > small { text-align: left; }
+  .script-editor-heading { flex-direction: column; }
+  .script-metrics { justify-items: start; }
 }
 @media (max-width: 420px) {
   .connection-indicator { font-size: 0; }

@@ -30,6 +30,10 @@ function mergeSettings(current: ProjectSettings, update: Partial<ProjectSettings
       ...current.stageExecutors,
       ...update.stageExecutors,
     },
+    llm: {
+      ...current.llm,
+      ...update.llm,
+    },
   };
 }
 
@@ -45,8 +49,10 @@ export function createProjectService(db: AppDatabase, config: AppConfig, logger:
     const settings: ProjectSettings = {
       language: input.settings.language ?? "vi",
       targetDurationSec: input.settings.targetDurationSec ?? 120,
+      researchMode: input.settings.researchMode,
       aspectRatio: input.settings.aspectRatio ?? "16:9",
       stageExecutors: input.settings.stageExecutors ?? {},
+      llm: input.settings.llm,
       autoRender: input.settings.autoRender ?? false,
     };
     const project: Project = {

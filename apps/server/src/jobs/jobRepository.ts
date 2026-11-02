@@ -122,6 +122,12 @@ export class JobRepository {
     return null;
   }
 
+  getScriptOrigin(projectId: string): { origin: "AGENT" | "USER"; edited: boolean } | undefined {
+    const row = this.sqlite.prepare("SELECT origin, edited FROM scripts WHERE project_id = ?")
+      .get(projectId) as { origin: "AGENT" | "USER"; edited: number } | undefined;
+    return row ? { origin: row.origin, edited: Boolean(row.edited) } : undefined;
+  }
+
   setRunMode(projectId: string, runMode: "ALL" | "SINGLE" | null): void {
     this.sqlite.prepare("UPDATE projects SET run_mode = ?, updated_at = ? WHERE id = ?")
       .run(runMode, this.now().toISOString(), projectId);

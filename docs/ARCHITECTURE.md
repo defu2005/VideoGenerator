@@ -77,12 +77,21 @@ Mỗi project có `mode`, và mỗi stage có thể override `executor`.
 
 | Tier | Ví dụ | Chi phí |
 |---|---|---|
-| 0 — Code | ranking ảnh, dedupe (perceptual hash), kích thước, aspect, watermark theo domain, tách câu subtitle, timeline, FFmpeg, ducking | Free |
+| 0 — Code | **scene plan (tách scene, thời lượng)**, ranking ảnh, dedupe (perceptual hash), kích thước, aspect, watermark theo domain, tách câu subtitle, timeline, FFmpeg, ducking, xếp hạng nhạc theo mood/BPM/duration | Free |
 | 1 — API rẻ | Image search API (Wikimedia, Openverse, Pexels…), music API, TTS | Thấp |
-| 2 — LLM text | Research+outline, script, scene plan + visual queries + music mood | ~3 call/video, batch, cache theo input hash |
+| 2 — LLM text | **1 call duy nhất**: research + script + visual query mỗi đoạn + music mood | 1 call/video, cache theo input hash |
 | 3 — LLM vision | Hiểu nội dung ảnh | **Tắt mặc định.** Chỉ khi user bấm trên 1 candidate |
 
 Mọi LLM call ghi `usage` (tokens, cost ước tính) vào job để UI hiển thị.
+
+### Quy tắc LLM (bắt buộc cho mọi task)
+1. **Việc tự động hóa được bằng code thì viết code**, không gọi LLM: tách câu/scene, tính thời lượng, xếp hạng, lọc trùng, format, subtitle, timeline, render, validate, đổi tên, dịch định dạng.
+2. **Việc cần "mắt" mà tốn token** (đánh giá ảnh, chọn nhạc theo cảm nhận) → giao cho user ở review gate, không dùng LLM vision.
+3. **Ngân sách mặc định: 1 LLM call/video** (Generate All). Mỗi call phải trả về mọi thứ các stage sau cần (research notes, script, visual queries, alt queries, music mood/energy). Stage sau đọc lại kết quả đó, không gọi lại LLM.
+4. LLM call thêm chỉ khi **user bấm** (Regenerate script, Search lại với query mới do AI gợi ý…) và UI hiển thị token trước/sau.
+5. Cache theo hash input; chạy lại không đổi input = 0 token. Repair JSON tối đa 1 lần.
+6. Mỗi spec phải có mục "LLM calls" liệt kê từng call và lý do; reviewer từ chối thiết kế thêm call cho việc deterministic.
+7. Có đường 0 token cho mọi stage text: user tự viết, hoặc dùng Claude Desktop qua MCP.
 
 ## 5. Pipeline & state machine
 
@@ -145,7 +154,7 @@ topic ─► script ─► scenes ─┬─► visualQueries ─► candidates �
 
 | Loại | MVP | Sau |
 |---|---|---|
-| LLM | Đa provider: Anthropic, Gemini, OpenAI-compatible (OpenAI, Ollama, OpenRouter, DeepSeek, Groq, custom); chọn theo project/stage; cache theo hash; user có thể tự viết script (0 token) | thêm provider khác |
+| LLM | Đa provider: Anthropic, Gemini, OpenAI-compatible (OpenAI, Ollama, OpenRouter, DeepSeek, Groq, custom); chọn theo project/stage; mặc định gộp research + script + visual queries + music mood trong 1 call, cache theo input hash; có thể chọn separate/off; user có thể tự viết script (0 token) | thêm provider khác |
 | Image search | Wikimedia Commons, Openverse (license metadata tốt, free); Pexels (API key) | web image search (Brave/SerpAPI), AI image gen |
 | TTS | 1 adapter giá rẻ, hỗ trợ tiếng Việt | local TTS |
 | Music | Thư viện local (`data/music/` + metadata JSON), Jamendo API | thêm nguồn |
@@ -180,8 +189,9 @@ Lỗi luôn có dạng: `{ "error": { "code": "PROJECT_NOT_FOUND", "message": ".
 | TASK-001 | Monorepo scaffold, shared enums/schemas, SQLite, Project CRUD API + dashboard stats, tests | — | 1 |
 | TASK-002 | Web shell: Dashboard, Project list (search/filter/sort), create/rename/duplicate/archive/delete | 001 | 1 |
 | TASK-003 | Job queue + worker + SSE + pipeline state machine + gates + modes (dùng stage giả để test) | 001 | 2 |
-| TASK-004 | LLM provider + Research/Script stage + Script editor UI | 003 | 2 |
-| TASK-005 | Scene planning (+ visual queries + music mood, 1 call) + Scene Board UI + invalidation | 004 | 3 |
+| TASK-004 | LLM đa provider + Research/Script (gộp 1 call) + Script editor UI | 003 | 2 |
+| TASK-004B | MCP server cho Claude Desktop + provider claude-cli (dùng subscription) | 004 | 2 |
+| TASK-005 | Scene planning **bằng code, 0 LLM call** (tách scene từ script, thời lượng theo số từ, query/mood lấy từ output của script call) + Scene Board UI + invalidation | 004 | 3 |
 | TASK-006 | Image provider interface + Wikimedia/Openverse/Pexels + candidate store + ranking + dedupe | 005 | 4 |
 | TASK-007 | Visual Review UI: candidates, metadata panel, approve/reject/replace/search again/custom URL/upload/Approve All | 006 | 4 |
 | TASK-008 | TTS provider + Voice stage + Voice UI | 005 | 5 |

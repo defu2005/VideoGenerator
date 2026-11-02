@@ -12,10 +12,14 @@ function draftFromProject(project: Project): ProjectDraft {
     mode: project.mode,
     language: project.settings.language,
     targetDurationSec: String(project.settings.targetDurationSec),
+    researchMode: project.settings.researchMode ?? "",
     aspectRatio: project.settings.aspectRatio,
     visualsExecutor: project.settings.stageExecutors.visuals ?? "",
     voiceExecutor: project.settings.stageExecutors.voice ?? "",
     musicExecutor: project.settings.stageExecutors.music ?? "",
+    scriptExecutor: project.settings.stageExecutors.script ?? "",
+    llmProvider: project.settings.llm?.default?.provider ?? "",
+    llmModel: project.settings.llm?.default?.model ?? "",
     autoRender: project.settings.autoRender,
   };
 }
@@ -84,12 +88,16 @@ export function EditProjectDialog({
       const oldValue = key === "targetDurationSec" ? project.settings[key] : project.settings[key];
       if (value !== oldValue) settings[key] = value;
     }
+    if (draft.researchMode !== (project.settings.researchMode ?? "")) {
+      settings.researchMode = draft.researchMode || undefined;
+    }
     const stageExecutors: Record<string, string> = {};
     const clearErrors: Record<string, string> = {};
     for (const [draftKey, executorKey] of [
       ["visualsExecutor", "visuals"],
       ["voiceExecutor", "voice"],
       ["musicExecutor", "music"],
+      ["scriptExecutor", "script"],
     ] as const) {
       const value = draft[draftKey] || undefined;
       const currentValue = project.settings.stageExecutors[executorKey];
@@ -106,6 +114,15 @@ export function EditProjectDialog({
     }
     if (Object.keys(stageExecutors).length) {
       settings.stageExecutors = stageExecutors;
+    }
+    if (draft.llmProvider !== (project.settings.llm?.default?.provider ?? "")
+      || draft.llmModel !== (project.settings.llm?.default?.model ?? "")) {
+      settings.llm = {
+        default: {
+          provider: draft.llmProvider || project.settings.llm?.default?.provider || "",
+          ...(draft.llmModel.trim() ? { model: draft.llmModel.trim() } : {}),
+        },
+      };
     }
     if (Object.keys(settings).length) patch.settings = settings;
 

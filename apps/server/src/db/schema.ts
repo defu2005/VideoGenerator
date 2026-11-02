@@ -60,3 +60,34 @@ export const projectStages = sqliteTable("project_stages", {
   primaryKey({ columns: [table.projectId, table.stage] }),
   index("project_stages_state_idx").on(table.projectId, table.state),
 ]);
+
+export const researchNotes = sqliteTable("research_notes", {
+  projectId: text("project_id").primaryKey().references(() => projects.id, { onDelete: "cascade" }),
+  inputHash: text("input_hash").notNull(),
+  provider: text("provider").notNull(),
+  model: text("model").notNull(),
+  cached: integer("cached", { mode: "boolean" }).notNull().default(false),
+  createdAt: text("created_at").notNull(),
+  data: text("data", { mode: "json" }).notNull(),
+});
+
+export const scripts = sqliteTable("scripts", {
+  projectId: text("project_id").primaryKey().references(() => projects.id, { onDelete: "cascade" }),
+  data: text("data", { mode: "json" }).notNull(),
+  origin: text("origin").notNull(),
+  edited: integer("edited", { mode: "boolean" }).notNull().default(false),
+  inputHash: text("input_hash").notNull(),
+  version: integer("version").notNull().default(1),
+  provider: text("provider"),
+  model: text("model"),
+  updatedAt: text("updated_at").notNull(),
+  mergedCall: integer("merged_call", { mode: "boolean" }).notNull().default(false),
+});
+
+export const llmCache = sqliteTable("llm_cache", {
+  key: text("key").primaryKey(),
+  provider: text("provider").notNull(),
+  model: text("model").notNull(),
+  responseText: text("response_text").notNull(),
+  createdAt: text("created_at").notNull(),
+});

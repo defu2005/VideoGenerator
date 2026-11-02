@@ -6,16 +6,25 @@ import {
   ProjectStatusSchema,
   StageExecutorSchema,
 } from "../enums.js";
+import { LlmSelectionSchema } from "./llm.js";
 
 export const ProjectSettingsSchema = z.object({
   language: z.string().default("vi"),
   targetDurationSec: z.number().int().min(30).max(1800).default(120),
+  researchMode: z.enum(["merged", "separate", "off"]).optional(),
   aspectRatio: AspectRatioSchema.default("16:9"),
   stageExecutors: z.object({
+    script: StageExecutorSchema.optional(),
     visuals: StageExecutorSchema.optional(),
     voice: StageExecutorSchema.optional(),
     music: StageExecutorSchema.optional(),
   }).default({}),
+  llm: z.object({
+    default: LlmSelectionSchema.optional(),
+    research: LlmSelectionSchema.optional(),
+    script: LlmSelectionSchema.optional(),
+    sceneplan: LlmSelectionSchema.optional(),
+  }).optional(),
   autoRender: z.boolean().default(false),
 });
 export type ProjectSettings = z.infer<typeof ProjectSettingsSchema>;
@@ -23,11 +32,19 @@ export type ProjectSettings = z.infer<typeof ProjectSettingsSchema>;
 export const ProjectSettingsInputSchema = z.object({
   language: z.string().optional(),
   targetDurationSec: z.number().int().min(30).max(1800).optional(),
+  researchMode: z.enum(["merged", "separate", "off"]).optional(),
   aspectRatio: AspectRatioSchema.optional(),
   stageExecutors: z.object({
+    script: StageExecutorSchema.optional(),
     visuals: StageExecutorSchema.optional(),
     voice: StageExecutorSchema.optional(),
     music: StageExecutorSchema.optional(),
+  }).optional(),
+  llm: z.object({
+    default: LlmSelectionSchema.optional(),
+    research: LlmSelectionSchema.optional(),
+    script: LlmSelectionSchema.optional(),
+    sceneplan: LlmSelectionSchema.optional(),
   }).optional(),
   autoRender: z.boolean().optional(),
 }).strict();

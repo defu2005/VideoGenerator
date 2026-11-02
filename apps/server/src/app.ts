@@ -11,11 +11,17 @@ import { registerDashboardRoutes } from "./api/dashboard.js";
 import { registerHealthRoutes } from "./api/health.js";
 import { registerProjectRoutes } from "./api/projects.js";
 import { registerPipelineRoutes } from "./api/pipeline.js";
+import { registerLlmRoutes } from "./api/llm.js";
+import { registerScriptRoutes } from "./api/script.js";
 import { PipelineEventBus } from "./jobs/eventBus.js";
 import { JobRepository } from "./jobs/jobRepository.js";
 import { JobWorker } from "./jobs/worker.js";
 import { createExecutorRegistry } from "./pipeline/executorRegistry.js";
 import { PipelineOrchestrator } from "./pipeline/orchestrator.js";
+import { LlmProviderRegistry } from "./providers/llm/registry.js";
+import { ResearchExecutor } from "./stages/research/researchExecutor.js";
+import { ScriptExecutor } from "./stages/script/scriptExecutor.js";
+import { ScriptService } from "./services/scriptService.js";
 
 export function buildApp({ config }: { config: AppConfig }) {
   const server = Fastify({
@@ -26,15 +32,28 @@ export function buildApp({ config }: { config: AppConfig }) {
   server.setSerializerCompiler(serializerCompiler);
 
   const database = openDatabase(config.DATABASE_PATH);
-  migrateDatabase(database.db);
+  try {
+    migrateDatabase(database.db, server.log, database.sqlite);
+  } catch (error) {
+    database.sqlite.close();
+    throw error;
+  }
   const projectService = createProjectService(database.db, config, server.log);
   const events = new PipelineEventBus();
   const jobRepository = new JobRepository(database.sqlite, events);
   const orchestrator = new PipelineOrchestrator(jobRepository, config, server.log);
+  const llmProviders = new LlmProviderRegistry(config);
+  const scriptService = new ScriptService(database.sqlite, jobRepository, orchestrator, config);
   const worker = new JobWorker(
     jobRepository,
     orchestrator,
-    createExecutorRegistry({ delayMs: config.FAKE_STAGE_DELAY_MS }),
+    createExecutorRegistry(
+      { delayMs: config.FAKE_STAGE_DELAY_MS },
+      {
+        RESEARCH: new ResearchExecutor(database.sqlite, llmProviders, config),
+        SCRIPT: new ScriptExecutor(database.sqlite, llmProviders, config),
+      },
+    ),
     config,
     server.log,
   );
@@ -44,6 +63,8 @@ export function buildApp({ config }: { config: AppConfig }) {
   registerProjectRoutes(server, projectService);
   registerDashboardRoutes(server, projectService);
   registerPipelineRoutes(server, projectService, jobRepository, orchestrator, events);
+  registerLlmRoutes(server, llmProviders);
+  registerScriptRoutes(server, scriptService);
 
   server.addHook("onReady", async () => worker.start());
   server.addHook("onClose", async () => {

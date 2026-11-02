@@ -1,4 +1,6 @@
 import { AUTONOMY_MODES, type AutonomyMode, type ProjectSettingsInput } from "@vg/shared";
+import { useQuery } from "@tanstack/react-query";
+import { getLlmProviders } from "../../services/llmApi";
 
 export type ProjectDraft = {
   title: string;
@@ -7,10 +9,14 @@ export type ProjectDraft = {
   mode: AutonomyMode;
   language: string;
   targetDurationSec: string;
+  researchMode: "" | "merged" | "separate" | "off";
   aspectRatio: "16:9" | "9:16" | "1:1";
   visualsExecutor: "" | "AGENT" | "USER";
   voiceExecutor: "" | "AGENT" | "USER";
   musicExecutor: "" | "AGENT" | "USER";
+  scriptExecutor: "" | "AGENT" | "USER";
+  llmProvider: string;
+  llmModel: string;
   autoRender: boolean;
 };
 
@@ -21,23 +27,37 @@ export const DEFAULT_PROJECT_DRAFT: ProjectDraft = {
   mode: "ASSISTED",
   language: "vi",
   targetDurationSec: "120",
+  researchMode: "",
   aspectRatio: "16:9",
   visualsExecutor: "",
   voiceExecutor: "",
   musicExecutor: "",
+  scriptExecutor: "",
+  llmProvider: "",
+  llmModel: "",
   autoRender: false,
 };
 
 export function settingsFromDraft(draft: ProjectDraft): ProjectSettingsInput {
   const stageExecutors: ProjectSettingsInput["stageExecutors"] = {};
+  if (draft.scriptExecutor) stageExecutors.script = draft.scriptExecutor;
   if (draft.visualsExecutor) stageExecutors.visuals = draft.visualsExecutor;
   if (draft.voiceExecutor) stageExecutors.voice = draft.voiceExecutor;
   if (draft.musicExecutor) stageExecutors.music = draft.musicExecutor;
   return {
     language: draft.language,
     targetDurationSec: Number(draft.targetDurationSec),
+    ...(draft.researchMode ? { researchMode: draft.researchMode } : {}),
     aspectRatio: draft.aspectRatio,
     stageExecutors,
+    ...(draft.llmProvider ? {
+      llm: {
+        default: {
+          provider: draft.llmProvider,
+          ...(draft.llmModel.trim() ? { model: draft.llmModel.trim() } : {}),
+        },
+      },
+    } : {}),
     autoRender: draft.autoRender,
   };
 }
@@ -55,6 +75,8 @@ export function ProjectFormFields({
   advanced: boolean;
   onToggleAdvanced: () => void;
 }) {
+  const providers = useQuery({ queryKey: ["llm-providers"], queryFn: getLlmProviders });
+  const availableProviders = providers.data ?? [];
   return (
     <>
       <label className="form-field">
@@ -150,6 +172,54 @@ export function ProjectFormFields({
               )}
             </label>
           ))}
+          <label className="form-field">
+            <span>Script executor</span>
+            <select value={draft.scriptExecutor} onChange={(event) => onChange("scriptExecutor", event.target.value)}>
+              <option value="">Mode default</option>
+              <option value="AGENT">Agent</option>
+              <option value="USER">User</option>
+            </select>
+          </label>
+          <label className="form-field">
+            <span>Research and script calls</span>
+            <select value={draft.researchMode} onChange={(event) => onChange("researchMode", event.target.value)}>
+              <option value="">Environment default</option>
+              <option value="merged">Merged (one call)</option>
+              <option value="separate">Separate (two calls)</option>
+              <option value="off">Research off</option>
+            </select>
+          </label>
+          <label className="form-field">
+            <span>AI provider</span>
+            <select value={draft.llmProvider} onChange={(event) => onChange("llmProvider", event.target.value)}>
+              <option value="">Environment default</option>
+              {draft.llmProvider && !availableProviders.some((provider) => provider.id === draft.llmProvider) && (
+                <option value={draft.llmProvider}>{draft.llmProvider} (not currently configured)</option>
+              )}
+              {availableProviders.map((provider) => (
+                <option key={provider.id} value={provider.id}>
+                  {provider.label}{provider.configured ? "" : ` (${provider.hint ?? "not configured"})`}
+                </option>
+              ))}
+            </select>
+            {availableProviders.find((provider) => provider.id === draft.llmProvider && !provider.configured)?.hint && (
+              <small className="field-hint">
+                {availableProviders.find((provider) => provider.id === draft.llmProvider && !provider.configured)?.hint}
+              </small>
+            )}
+            {!providers.isPending && !providers.isError && availableProviders.length === 0 && (
+              <small className="field-hint">No provider is configured. Set an LLM API key or base URL in the server environment.</small>
+            )}
+            {providers.isError && <small className="field-error">Unable to load configured LLM providers.</small>}
+          </label>
+          <label className="form-field">
+            <span>Model (optional)</span>
+            <input
+              value={draft.llmModel}
+              placeholder="Use provider default"
+              onChange={(event) => onChange("llmModel", event.target.value)}
+            />
+          </label>
           <label className="checkbox-field">
             <input type="checkbox" checked={draft.autoRender} onChange={(event) => onChange("autoRender", event.target.checked)} />
             Automatically render after final approval
