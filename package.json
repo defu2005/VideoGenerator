@@ -7,10 +7,12 @@
     "apps/*"
   ],
   "scripts": {
-    "dev": "npm run build -w @vg/shared && npm run dev -w @vg/server",
+    "dev": "npm run build -w @vg/shared && concurrently \"npm run dev -w @vg/server\" \"npm run dev -w @vg/web\"",
     "build": "npm run build --workspaces --if-present",
     "typecheck": "npm run build -w @vg/shared && npm run typecheck --workspaces --if-present",
     "test": "npm run build -w @vg/shared && npm run test --workspaces --if-present"
+  },
+  "devDependencies": {
+    "concurrently": "^9.2.1"
   }
 }
-

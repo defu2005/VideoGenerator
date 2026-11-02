@@ -1,6 +1,6 @@
 # AI Video Agent
 
-The initial repository foundation for the AI Video Agent MVP. It contains the shared TypeScript domain package and the Fastify project-management API backed by SQLite.
+The AI Video Agent MVP monorepo. It contains the shared TypeScript domain package, a Fastify project-management API backed by SQLite, and the React control panel.
 
 ## Requirements
 
@@ -21,7 +21,9 @@ Copy `.env.example` to `.env` to override the defaults. The server defaults to `
 npm run dev
 ```
 
-The server applies committed Drizzle migrations automatically at startup. Check it at `http://127.0.0.1:3001/api/health`.
+The server applies committed Drizzle migrations automatically at startup. The control panel is available at `http://localhost:5173`, and the API health check is at `http://127.0.0.1:3001/api/health`.
+
+The web development server proxies `/api` requests to `http://127.0.0.1:3001` by default. Set `VITE_API_PROXY_TARGET` to override the proxy target.
 
 ## Build, type-check, and test
 

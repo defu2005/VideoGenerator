@@ -1,0 +1,125 @@
+import { fireEvent, screen, waitFor } from "@testing-library/react";
+import { describe, expect, it, vi } from "vitest";
+import type { Project } from "@vg/shared";
+import { ProjectListPage } from "./ProjectListPage";
+import { CreateProjectDialog } from "./CreateProjectDialog";
+import { jsonResponse, renderWithProviders } from "../../test/testUtils";
+
+const createdAt = "2026-11-02T10:00:00.000Z";
+const project: Project = {
+  id: "44444444-4444-4444-8444-444444444444",
+  title: "Ocean documentary",
+  topic: "Life under the sea",
+  description: "A short video",
+  mode: "ASSISTED",
+  settings: {
+    language: "en",
+    targetDurationSec: 120,
+    aspectRatio: "16:9",
+    stageExecutors: {},
+    autoRender: false,
+  },
+  status: "DRAFT",
+  stage: "TOPIC",
+  thumbnailPath: null,
+  durationSec: null,
+  version: 1,
+  createdAt,
+  updatedAt: createdAt,
+  archivedAt: null,
+};
+
+function listResponse(items: Project[]) {
+  return { items, total: items.length, page: 1, pageSize: 12 };
+}
+
+describe("ProjectListPage", () => {
+  it("renders projects and writes the debounced search into the URL", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse(listResponse([project])));
+    vi.stubGlobal("fetch", fetchMock);
+    renderWithProviders(<ProjectListPage />, ["/projects"]);
+
+    expect(await screen.findByRole("heading", { name: "Ocean documentary" })).toBeInTheDocument();
+    fireEvent.change(screen.getByRole("textbox", { name: "Search projects" }), { target: { value: "ocean" } });
+    await waitFor(() => expect(screen.getByTestId("current-location")).toHaveTextContent("/projects?q=ocean"), { timeout: 1500 });
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith(expect.stringContaining("q=ocean"), expect.anything()));
+  });
+
+  it("shows the empty state when no project matches", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse(listResponse([]))));
+    renderWithProviders(<ProjectListPage />, ["/projects"]);
+    expect(await screen.findByRole("heading", { name: "No projects yet" })).toBeInTheDocument();
+  });
+
+  it("retries after an API error", async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(jsonResponse({ error: { code: "INTERNAL_ERROR", message: "Temporary failure" } }, 500))
+      .mockResolvedValueOnce(jsonResponse(listResponse([project])));
+    vi.stubGlobal("fetch", fetchMock);
+    renderWithProviders(<ProjectListPage />, ["/projects"]);
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("Temporary failure");
+    fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+    expect(await screen.findByRole("heading", { name: "Ocean documentary" })).toBeInTheDocument();
+  });
+
+  it("confirms project deletion and displays a 409 API message", async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(jsonResponse(listResponse([project])))
+      .mockResolvedValueOnce(jsonResponse({ error: { code: "PROJECT_BUSY", message: "Project is currently running" } }, 409));
+    vi.stubGlobal("fetch", fetchMock);
+    renderWithProviders(<ProjectListPage />, ["/projects"]);
+
+    await screen.findByRole("heading", { name: "Ocean documentary" });
+    fireEvent.click(screen.getByText("•••"));
+    fireEvent.click(screen.getByRole("button", { name: "Delete" }));
+    fireEvent.click(screen.getByRole("button", { name: "Delete project" }));
+
+    expect(await screen.findByText("Project is currently running")).toBeInTheDocument();
+    expect(fetchMock).toHaveBeenLastCalledWith(
+      expect.stringContaining(`/projects/${project.id}`),
+      expect.objectContaining({ method: "DELETE" }),
+    );
+  });
+});
+
+describe("CreateProjectDialog", () => {
+  it("opens as a modal, focuses the title, and closes on Escape cancellation", () => {
+    const onClose = vi.fn();
+    renderWithProviders(<CreateProjectDialog open onClose={onClose} />);
+
+    const dialog = screen.getByRole("dialog");
+    expect(dialog).toHaveAttribute("open");
+    expect(screen.getByLabelText(/Title/)).toHaveFocus();
+    fireEvent(dialog, new Event("cancel", { cancelable: true }));
+    expect(onClose).toHaveBeenCalledOnce();
+  });
+
+  it("blocks an empty title using the shared schema", async () => {
+    renderWithProviders(<CreateProjectDialog open onClose={vi.fn()} />);
+    fireEvent.change(screen.getByLabelText(/Topic/), { target: { value: "Ocean life" } });
+    fireEvent.click(screen.getByRole("button", { name: "Create project" }));
+    expect(await screen.findByText("Too small: expected string to have >=1 characters")).toBeInTheDocument();
+  });
+
+  it("posts validated fields and navigates to the new project's overview", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse(project, 201));
+    vi.stubGlobal("fetch", fetchMock);
+    renderWithProviders(<CreateProjectDialog open onClose={vi.fn()} />);
+    fireEvent.change(screen.getByLabelText(/Title/), { target: { value: "Ocean documentary" } });
+    fireEvent.change(screen.getByLabelText(/Topic/), { target: { value: "Life under the sea" } });
+    fireEvent.click(screen.getByRole("button", { name: "Create project" }));
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith(
+      "/api/projects",
+      expect.objectContaining({ method: "POST" }),
+    ));
+    const request = fetchMock.mock.calls[0][1] as RequestInit;
+    expect(JSON.parse(String(request.body))).toMatchObject({
+      title: "Ocean documentary",
+      topic: "Life under the sea",
+      mode: "ASSISTED",
+    });
+    await waitFor(() => expect(screen.getByTestId("current-location")).toHaveTextContent(`/projects/${project.id}/overview`));
+  });
+});
