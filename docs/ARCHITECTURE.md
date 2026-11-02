@@ -145,7 +145,7 @@ topic ─► script ─► scenes ─┬─► visualQueries ─► candidates �
 
 | Loại | MVP | Sau |
 |---|---|---|
-| LLM | 1 adapter, model qua env, JSON output có schema | thêm provider khác |
+| LLM | Đa provider: Anthropic, Gemini, OpenAI-compatible (OpenAI, Ollama, OpenRouter, DeepSeek, Groq, custom); chọn theo project/stage; cache theo hash; user có thể tự viết script (0 token) | thêm provider khác |
 | Image search | Wikimedia Commons, Openverse (license metadata tốt, free); Pexels (API key) | web image search (Brave/SerpAPI), AI image gen |
 | TTS | 1 adapter giá rẻ, hỗ trợ tiếng Việt | local TTS |
 | Music | Thư viện local (`data/music/` + metadata JSON), Jamendo API | thêm nguồn |
