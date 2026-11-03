@@ -157,6 +157,10 @@ topic ─► script ─► scenes ─┬─► visualQueries ─► candidates �
 
 **VisualStatus** (trên selection): `DISCOVERED` (agent vừa gán, chưa vào gate) → `REVIEW_REQUIRED` → `APPROVED` / `REJECTED`; `REPLACED` (user chọn candidate khác), `CUSTOM` (URL/upload của user), `AI_GENERATED`.
 
+**Scene visual status** (suy ra, hiển thị trên Scene Board/Visual Review): `NO_VISUAL` → `SEARCHING` → `REVIEW_REQUIRED` → `APPROVED` → `READY_FOR_RENDER` (ảnh đã tải về local, kiểm tra đọc được, đúng kích thước).
+
+**Nguyên tắc ảnh:** AI đề xuất (mô tả hình + query) → tool tìm nhiều candidate → code lọc/rank → user duyệt/chọn → render chỉ dùng ảnh đã chọn. Đổi ảnh chỉ cập nhật selection, không chạy lại script/voice/music/scene khác. LLM không bao giờ tự đoán URL ảnh. Chế độ `AUTO` vẫn chọn ảnh rank cao nhất nhưng dừng ở `FINAL_APPROVAL`.
+
 ### Quy tắc license (không hard-block ở MVP)
 - Chỉ báo cáo dữ liệu tìm được, kèm `evidence`. Không bao giờ ghi "không có bản quyền" nếu không có dữ liệu.
 - UI badge: `CC0`/`PUBLIC_DOMAIN` → xanh; `CC_BY*` → "Attribution required"; `UNKNOWN` → "⚠️ Unknown — user review"; `ALL_RIGHTS_RESERVED` → cảnh báo đỏ. Không tự loại ảnh.
@@ -209,7 +213,8 @@ Lỗi luôn có dạng: `{ "error": { "code": "PROJECT_NOT_FOUND", "message": ".
 | TASK-004F | Định tuyến model LLM theo từng tác vụ (app + dự án, fallback) + nâng mức dùng LLM của BALANCED/QUALITY + usage theo từng call | 006 | 2 |
 | TASK-005 | Scene plan bằng code (tách câu, gom theo thời lượng scene, chia query/mood) + Scene Board (sửa/tách/gộp/sắp xếp); QUALITY +1 call gợi ý query theo scene | 004E | 3 |
 | TASK-006 | Image provider interface + Wikimedia/Openverse/Pexels + candidate store + ranking + dedupe | 005 | 4 |
-| TASK-007 | Visual Review UI: candidates, metadata panel, approve/reject/replace/search again/custom URL/upload/Approve All | 006 | 4 |
+| TASK-007 | Visual Review UI: lưới candidate (top 8, xem thêm), panel metadata đầy đủ (nguồn, URL, tác giả, license, attribution, kích thước, tỉ lệ, file, watermark, điểm), approve/reject/replace/remove, sửa query + search again, custom URL, upload, Approve All; tải preview + ảnh được chọn về local (kiểm tra tải được/không hỏng/kích thước thật); scene visual status | 006 | 4 |
+| TASK-007B | Thêm nguồn ảnh: Pixabay, Unsplash (API key, tuân thủ quy định attribution/hotlink), web image search (Brave Search API, license `UNKNOWN`); phát hiện watermark nâng cao; Generate Image (sau) | 007 | 4 |
 | TASK-008 | TTS provider + Voice stage + Voice UI | 005 | 5 |
 | TASK-009 | Subtitle generation (từ voice duration, chia câu) | 008 | 5 |
 | TASK-010 | Music provider + search + ranking + Music Review UI | 005 | 6 |

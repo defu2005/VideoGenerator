@@ -31,7 +31,7 @@
 | `research` | Nghiên cứu | RESEARCH | also used for the merged research+script call |
 | `script` | Viết kịch bản | SCRIPT | |
 | `scriptReview` | Biên tập kịch bản | SCRIPT | |
-| `sceneQueries` | Từ khóa hình ảnh theo scene | SCENE_PLAN | |
+| `sceneQueries` | Mô tả hình + từ khóa theo scene | SCENE_PLAN | output per scene: `visualDescription` (English, 1 sentence, concrete: who/what/where/era) + 3–4 queries; enabled in BALANCED, so every scene gets its own English description. Store `visualDescription` on the scene (JSON/column via drizzle-kit), editable in SceneEditor; image ranking uses it for keyword terms |
 | `visualAltQueries` | Gợi ý từ khóa khi thiếu ảnh | VISUAL_SEARCH | |
 | `visualRerank` | Xếp hạng ảnh theo ngữ nghĩa | VISUAL_SEARCH | |
 | `visionCheck` | Kiểm tra ảnh bằng vision | VISUAL_REVIEW | catalog entry only; used by a later task |
