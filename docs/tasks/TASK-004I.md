@@ -1,6 +1,6 @@
 # TASK-004I — Xem token tiêu thụ theo video và theo quá trình
 
-> Trạng thái: **ghi chú / chưa giao**. Yêu cầu của user (2026-11-03): "thêm tính năng xem token tiêu thụ theo video và quá trình".
+> Trạng thái: **đã giao cho Copilot (2026-11-03)**. Yêu cầu của user (2026-11-03): "thêm tính năng xem token tiêu thụ theo video và quá trình".
 
 ## GOAL
 Cho user thấy mỗi video (project) đã tốn bao nhiêu token / lượt gọi LLM, chia theo:
@@ -41,6 +41,7 @@ Và một trang tổng toàn app (theo ngày / tháng, theo provider).
   - So với **ước tính trước khi chạy** (`/budget-estimate` của TASK-004E): "ước tính ~N lượt, thực tế M lượt".
 - **Danh sách project / dashboard:** cột hoặc badge tổng token mỗi video.
 - **Trang "Mô hình AI"** (hoặc trang "Mức dùng" mới): tổng theo ngày / tháng, theo provider/model, top video tốn nhiều nhất.
+- Chi phí hiện cả USD và **VND** (user hỏi "bao nhiêu vnd"): tỷ giá từ env `USD_VND_RATE` (mặc định 26000, khai báo trong `config.ts` + `.env.example`), ghi rõ "ước tính". Provider dùng subscription hiện "0 ₫ (gói subscription)".
 - Responsive 375 / 768 / 1280 px. Số lớn định dạng `12.3K`.
 - Cập nhật trực tiếp qua SSE khi job đang chạy (đã có event job).
 
@@ -52,7 +53,7 @@ Và một trang tổng toàn app (theo ngày / tháng, theo provider).
 
 ## ACCEPTANCE CRITERIA
 1. Typecheck, build, test, drizzle-kit (không thay đổi, hoặc migration sinh đúng), audit 0.
-2. Unit test cộng dồn: cached, tokensUnknown, fallback, job lỗi, job cũ không có `calls`, nhiều attempt.
+2. Unit test cộng dồn (server) + test web cho tab Token và định dạng số / VND: cached, tokensUnknown, fallback, job lỗi, job cũ không có `calls`, nhiều attempt.
 3. Live (architect): chạy 1 project BALANCED với claude-cli → số liệu tab Token khớp tổng `usage.calls` trong DB; stage visuals hiện riêng rerank.
 
 ## REPORT BACK
