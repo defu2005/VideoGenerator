@@ -15,9 +15,9 @@ const project = (mode: "ECO" | "BALANCED" | "QUALITY" | "CUSTOM") => ({
 
 describe("budget modes", () => {
   it.each([
-    ["ECO", { storyMode: "merged", repairAttempts: 0, scriptReview: false, altQueryAssist: false, semanticImageRerank: false, visionCheck: false, musicAssist: false }],
-    ["BALANCED", { storyMode: "separate", repairAttempts: 1, scriptReview: false, altQueryAssist: true, semanticImageRerank: false, visionCheck: false, musicAssist: false }],
-    ["QUALITY", { storyMode: "separate", repairAttempts: 1, scriptReview: true, altQueryAssist: true, semanticImageRerank: true, visionCheck: false, musicAssist: true }],
+    ["ECO", { storyMode: "merged", repairAttempts: 0, scriptReview: false, altQueryAssist: false, sceneQueryAssist: false, semanticImageRerank: false, visionCheck: false, musicAssist: false }],
+    ["BALANCED", { storyMode: "separate", repairAttempts: 1, scriptReview: false, altQueryAssist: true, sceneQueryAssist: false, semanticImageRerank: false, visionCheck: false, musicAssist: false }],
+    ["QUALITY", { storyMode: "separate", repairAttempts: 1, scriptReview: true, altQueryAssist: true, sceneQueryAssist: true, semanticImageRerank: true, visionCheck: false, musicAssist: true }],
   ] as const)("resolves the %s feature preset", (mode, expected) => {
     expect(resolveBudget(mode)).toEqual(expected);
   });
@@ -33,7 +33,7 @@ describe("budget modes", () => {
   it.each([
     ["ECO", 1, 1],
     ["BALANCED", 2, 4],
-    ["QUALITY", 3, 6],
+    ["QUALITY", 3, 7],
   ] as const)("estimates %s LLM call bounds", (mode, min, max) => {
     expect(estimateBudget(project(mode), "mock").total).toEqual({ min, max });
     expect(estimateBudget(project(mode), "mock").tokens).toBeDefined();
@@ -54,6 +54,7 @@ describe("budget modes", () => {
     const done = [
       { stage: "RESEARCH", state: "DONE" },
       { stage: "SCRIPT", state: "DONE" },
+      { stage: "SCENE_PLAN", state: "DONE" },
     ];
     expect(estimateBudget(project("QUALITY"), "mock", done).total).toEqual({ min: 0, max: 0 });
     expect(estimateBudget(project("QUALITY"), "copilot-cli").tokens).toBeUndefined();

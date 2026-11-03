@@ -6,6 +6,7 @@ import type {
   RecommendBriefResponse,
   ResearchNotes,
   Script,
+  ScenePlanSummary,
 } from "@vg/shared";
 
 const SERVER_DOWN_GUIDANCE = "Start it with `npm run dev`.";
@@ -63,6 +64,10 @@ export class VideoAgentApiClient {
     stale: boolean;
   }> {
     return this.request(`/api/projects/${encodeURIComponent(projectId)}/script`);
+  }
+
+  getScenes(projectId: string): Promise<ScenePlanSummary> {
+    return this.request(`/api/projects/${encodeURIComponent(projectId)}/scenes`);
   }
 
   getPrompt(projectId: string, stage: "RESEARCH" | "SCRIPT" | "STORY"): Promise<{

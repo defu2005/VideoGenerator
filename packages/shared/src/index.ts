@@ -10,3 +10,6 @@ export * from "./schemas/job.js";
 export * from "./schemas/llm.js";
 export * from "./schemas/project.js";
 export * from "./schemas/script.js";
+export * from "./schemas/scene.js";
+export * from "./scenes/sentences.js";
+export * from "./scenes/planScenes.js";

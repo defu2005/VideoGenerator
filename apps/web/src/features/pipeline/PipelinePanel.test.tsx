@@ -275,8 +275,17 @@ describe("PipelinePanel", () => {
 
     vi.useFakeTimers();
     source.emit("error");
-    await act(async () => { await vi.advanceTimersByTimeAsync(3_000); });
+    await act(async () => { await vi.advanceTimersByTimeAsync(500); });
+    const afterSseRefetch = fetchMock.mock.calls.length;
+    await act(async () => { await vi.advanceTimersByTimeAsync(2_499); });
+    expect(fetchMock.mock.calls.length).toBe(afterSseRefetch);
+    await act(async () => { await vi.advanceTimersByTimeAsync(1); });
     expect(fetchMock.mock.calls.length).toBeGreaterThan(2);
+    const afterFirstPoll = fetchMock.mock.calls.length;
+    await act(async () => { await vi.advanceTimersByTimeAsync(5_999); });
+    expect(fetchMock.mock.calls.length).toBe(afterFirstPoll);
+    await act(async () => { await vi.advanceTimersByTimeAsync(1); });
+    expect(fetchMock.mock.calls.length).toBeGreaterThan(afterFirstPoll);
   });
 
   it("closes every EventSource on repeated unmounts", async () => {

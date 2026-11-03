@@ -4,10 +4,11 @@ import { AppLayout } from "./components/layout/AppLayout";
 import { DashboardPage } from "./features/dashboard/DashboardPage";
 import { ProjectDetailPage } from "./features/projects/ProjectDetailPage";
 import { ProjectListPage } from "./features/projects/ProjectListPage";
+import { queryRetryDelay, shouldRetryQuery } from "./services/queryRetry";
 
 const queryClient = new QueryClient({
   defaultOptions: {
-    queries: { staleTime: 15_000, retry: 1 },
+    queries: { staleTime: 15_000, retry: shouldRetryQuery, retryDelay: queryRetryDelay },
   },
 });
 

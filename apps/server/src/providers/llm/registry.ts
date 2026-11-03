@@ -77,12 +77,14 @@ export class LlmProviderRegistry {
   resolve(
     projectStageSelection: LlmSelection | undefined,
     projectDefaultSelection: LlmSelection | undefined,
-    stage: "research" | "script",
+    stage: "research" | "script" | "sceneplan",
   ): { provider: LlmProvider; model: string } {
     const stageSelection = stage === "research"
       ? this.config.LLM_RESEARCH_PROVIDER
-      : this.config.LLM_SCRIPT_PROVIDER;
-    const stageModel = stage === "research" ? this.config.LLM_RESEARCH_MODEL : this.config.LLM_SCRIPT_MODEL;
+      : stage === "script" ? this.config.LLM_SCRIPT_PROVIDER : undefined;
+    const stageModel = stage === "research"
+      ? this.config.LLM_RESEARCH_MODEL
+      : stage === "script" ? this.config.LLM_SCRIPT_MODEL : undefined;
     const providerId = projectStageSelection?.provider
       ?? projectDefaultSelection?.provider
       ?? stageSelection

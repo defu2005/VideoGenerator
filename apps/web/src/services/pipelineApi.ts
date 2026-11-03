@@ -5,10 +5,10 @@ export function getPipeline(projectId: string): Promise<PipelineState> {
   return apiRequest<PipelineState>(`/projects/${projectId}/pipeline`);
 }
 
-export function runPipeline(projectId: string, stage?: PipelineStage): Promise<PipelineState> {
+export function runPipeline(projectId: string, stage?: PipelineStage, confirmOverwrite = false): Promise<PipelineState> {
   return apiRequest<PipelineState>(`/projects/${projectId}/pipeline/run`, {
     method: "POST",
-    body: JSON.stringify(stage ? { stage } : {}),
+    body: JSON.stringify({ ...(stage ? { stage } : {}), ...(confirmOverwrite ? { confirmOverwrite: true } : {}) }),
   });
 }
 

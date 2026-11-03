@@ -55,6 +55,7 @@ describe("Video Agent MCP tools", () => {
       "get_pipeline",
       "get_project",
       "get_research",
+      "get_scenes",
       "get_script",
       "get_writing_brief",
       "list_projects",
@@ -69,6 +70,53 @@ describe("Video Agent MCP tools", () => {
       "write_script",
       "write_story",
     ]);
+  });
+
+  it("reads a compact storyboard through get_scenes", async () => {
+    const fetchImpl = vi.fn(async () => jsonResponse({
+      scenes: [{
+        id: "22222222-2222-4222-8222-222222222222",
+        projectId,
+        order: 0,
+        kind: "section",
+        sectionId: "intro",
+        label: "Introduction",
+        narration: "A compact scene narration.",
+        visualNotes: "",
+        visualQueries: { primary: "city skyline", alternatives: [] },
+        musicMood: "",
+        energy: "medium",
+        estDurationSec: 8,
+        durationOverrideSec: null,
+        startSec: 0,
+        transitionNote: "",
+        origin: "AGENT",
+        edited: false,
+        inputHash: "hash",
+        createdAt: "2026-11-03T00:00:00.000Z",
+        updatedAt: "2026-11-03T00:00:00.000Z",
+      }],
+      totalSec: 8,
+      targetSec: 120,
+      stale: false,
+    })) as typeof fetch;
+    const client = await connect(fetchImpl);
+    const result = await client.callTool({ name: "get_scenes", arguments: { projectId } });
+    expect(JSON.parse(resultText(result))).toEqual({
+      totalSec: 8,
+      targetSec: 120,
+      stale: false,
+      scenes: [{
+        order: 0,
+        timecode: "00:00",
+        label: "Introduction",
+        narrationExcerpt: "A compact scene narration.",
+        primaryQuery: "city skyline",
+      }],
+    });
+    expect(fetchImpl).toHaveBeenCalledWith(`http://127.0.0.1:3001/api/projects/${projectId}/scenes`, {
+      headers: { Accept: "application/json" },
+    });
   });
 
   it("creates projects and previews briefs through the REST API without LLM tools", async () => {

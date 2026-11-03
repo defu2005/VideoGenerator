@@ -133,6 +133,23 @@ export function registerVideoAgentTools(
   server.tool("get_script", "Read the current script and its origin/version metadata.", projectIdShape, ({ projectId }) =>
     invoke(async () => (await api.getScript(projectId)).script));
 
+  server.tool("get_scenes", "Read the compact storyboard and timing for a project's planned scenes.", projectIdShape, ({ projectId }) =>
+    invoke(async () => {
+      const { scenes, totalSec, targetSec, stale } = await api.getScenes(projectId);
+      return {
+        totalSec,
+        targetSec,
+        stale,
+        scenes: scenes.map((scene) => ({
+          order: scene.order,
+          timecode: `${String(Math.floor(scene.startSec / 60)).padStart(2, "0")}:${String(Math.floor(scene.startSec % 60)).padStart(2, "0")}`,
+          label: scene.label,
+          narrationExcerpt: scene.narration.trim().slice(0, 180),
+          primaryQuery: scene.visualQueries.primary,
+        })),
+      };
+    }));
+
   server.tool("save_script", "Validate and save a script through the Video Agent API.", {
     ...projectIdShape,
     script: z.unknown(),

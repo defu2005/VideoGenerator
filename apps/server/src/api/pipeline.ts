@@ -4,13 +4,18 @@ import type { FastifyInstance } from "fastify";
 import type { PipelineEventBus } from "../jobs/eventBus.js";
 import type { JobRepository } from "../jobs/jobRepository.js";
 import type { PipelineOrchestrator } from "../pipeline/orchestrator.js";
+import { AppError } from "../lib/errors.js";
 import { requireProject } from "../services/projectService.js";
 import type { ProjectService } from "../services/projectService.js";
+import type { SceneService } from "../services/sceneService.js";
 
 const ParamsSchema = z.object({ id: z.string().uuid() }).strict();
 const StageParamsSchema = z.object({ id: z.string().uuid(), stage: PipelineStageSchema }).strict();
 const GateParamsSchema = z.object({ id: z.string().uuid(), gate: PipelineStageSchema }).strict();
-const RunBodySchema = z.object({ stage: PipelineStageSchema.optional() }).strict();
+const RunBodySchema = z.object({
+  stage: PipelineStageSchema.optional(),
+  confirmOverwrite: z.boolean().optional(),
+}).strict();
 const JobsQuerySchema = z.object({
   limit: z.coerce.number().int().positive().max(100).default(20),
 }).strict();
@@ -24,6 +29,7 @@ export function registerPipelineRoutes(
   repository: JobRepository,
   orchestrator: PipelineOrchestrator,
   events: PipelineEventBus,
+  scenes: SceneService,
 ): void {
   app.get("/api/projects/:id/pipeline", {
     schema: { params: ParamsSchema, response: { 200: PipelineStateSchema, 404: ApiErrorSchema } },
@@ -41,7 +47,16 @@ export function registerPipelineRoutes(
     },
   }, async (request, reply) => {
     const { id } = ParamsSchema.parse(request.params);
-    const { stage } = RunBodySchema.parse(request.body);
+    const { stage, confirmOverwrite } = RunBodySchema.parse(request.body);
+    if ((stage === "SCENE_PLAN" || stage === undefined)
+      && scenes.hasEditedScenes(id)
+      && confirmOverwrite !== true) {
+      throw new AppError(
+        409,
+        "SCENES_EDITED",
+        "This scene plan contains user edits. Confirm overwrite before regenerating it.",
+      );
+    }
     const pipeline = stage === undefined ? orchestrator.runAll(id) : orchestrator.runStage(id, stage);
     return reply.code(202).send(pipeline);
   });

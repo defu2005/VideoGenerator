@@ -8,6 +8,7 @@ export const BudgetFeaturesSchema = z.object({
   repairAttempts: z.union([z.literal(0), z.literal(1), z.literal(2)]),
   scriptReview: z.boolean(),
   altQueryAssist: z.boolean(),
+  sceneQueryAssist: z.boolean(),
   semanticImageRerank: z.boolean(),
   visionCheck: z.boolean(),
   musicAssist: z.boolean(),
@@ -32,6 +33,7 @@ const PRESETS: Record<Exclude<BudgetMode, "CUSTOM">, BudgetFeatures> = {
     repairAttempts: 0,
     scriptReview: false,
     altQueryAssist: false,
+    sceneQueryAssist: false,
     semanticImageRerank: false,
     visionCheck: false,
     musicAssist: false,
@@ -41,6 +43,7 @@ const PRESETS: Record<Exclude<BudgetMode, "CUSTOM">, BudgetFeatures> = {
     repairAttempts: 1,
     scriptReview: false,
     altQueryAssist: true,
+    sceneQueryAssist: false,
     semanticImageRerank: false,
     visionCheck: false,
     musicAssist: false,
@@ -50,6 +53,7 @@ const PRESETS: Record<Exclude<BudgetMode, "CUSTOM">, BudgetFeatures> = {
     repairAttempts: 1,
     scriptReview: true,
     altQueryAssist: true,
+    sceneQueryAssist: true,
     semanticImageRerank: true,
     visionCheck: false,
     musicAssist: true,
@@ -93,7 +97,7 @@ export function storyModeForProject(project: {
 }
 
 export type BudgetEstimateStage = {
-  stage: "RESEARCH" | "SCRIPT";
+  stage: "RESEARCH" | "SCRIPT" | "SCENE_PLAN";
   calls: { min: number; max: number };
   reason: string;
 };
@@ -110,7 +114,7 @@ export const BudgetEstimateSchema = z.object({
   mode: BudgetModeSchema,
   features: BudgetFeaturesSchema,
   perStage: z.array(z.object({
-    stage: z.enum(["RESEARCH", "SCRIPT"]),
+    stage: z.enum(["RESEARCH", "SCRIPT", "SCENE_PLAN"]),
     calls: z.object({ min: z.number().int().nonnegative(), max: z.number().int().nonnegative() }).strict(),
     reason: z.string(),
   }).strict()),
@@ -140,7 +144,7 @@ export function estimateBudget(
   const features = resolveBudget(budget);
   const mode = budget.mode ?? "BALANCED";
   const storyMode = storyModeForProject(project);
-  const stateFor = (stage: "RESEARCH" | "SCRIPT") =>
+  const stateFor = (stage: "RESEARCH" | "SCRIPT" | "SCENE_PLAN") =>
     stages.find((record) => record.stage === stage)?.state;
   const researchDone = stateFor("RESEARCH") === "DONE";
   const scriptDone = stateFor("SCRIPT") === "DONE";
@@ -172,6 +176,18 @@ export function estimateBudget(
       : features.scriptReview
         ? scriptBaseCalls ? "Script generation plus one review-and-revise call." : "One review-and-revise call."
         : scriptBaseCalls ? "Script is generated from the research notes." : "The merged RESEARCH call already produced the script.",
+  });
+
+  const scenePlanDone = stateFor("SCENE_PLAN") === "DONE";
+  const sceneAssistMax = !scenePlanDone && features.sceneQueryAssist ? 1 : 0;
+  perStage.push({
+    stage: "SCENE_PLAN",
+    calls: { min: 0, max: sceneAssistMax },
+    reason: scenePlanDone
+      ? "Scene plan is already complete and unchanged."
+      : sceneAssistMax
+        ? "One batched query-assistance call is used only when a unit has multiple scenes."
+        : "Scene planning is deterministic and uses no LLM calls.",
   });
 
   const total = perStage.reduce((result, item) => ({
@@ -208,8 +224,10 @@ function estimateBudgetTokens(
   const researchOutput = 900;
   const researchCalls = stages.find((stage) => stage.stage === "RESEARCH")?.calls.max ?? 0;
   const scriptCalls = stages.find((stage) => stage.stage === "SCRIPT")?.calls.max ?? 0;
+  const scenePlanCalls = stages.find((stage) => stage.stage === "SCENE_PLAN")?.calls.max ?? 0;
   const output = researchCalls * (storyMode === "merged" ? scriptOutput + researchOutput : researchOutput)
-    + scriptCalls * scriptOutput;
+    + scriptCalls * scriptOutput
+    + scenePlanCalls * 500;
   return { input: calls * perCallInput, output };
 }
 

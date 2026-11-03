@@ -57,6 +57,7 @@ export function BriefFields({
     const path = `budget.features.${key}`;
     const labels: Partial<Record<keyof BudgetFeatures, string>> = {
       altQueryAssist: "Alternative query assist (available in a later step)",
+      sceneQueryAssist: "Scene query assist (QUALITY/custom)",
       semanticImageRerank: "Semantic image rerank (available in a later step)",
       visionCheck: "Vision check (available in a later step)",
       musicAssist: "Music assist (available in a later step)",
@@ -109,6 +110,7 @@ export function BriefFields({
           {customFeature("repairAttempts", budgetFeatures.repairAttempts)}
           {customFeature("scriptReview", budgetFeatures.scriptReview)}
           {customFeature("altQueryAssist", budgetFeatures.altQueryAssist)}
+          {customFeature("sceneQueryAssist", budgetFeatures.sceneQueryAssist)}
           {customFeature("semanticImageRerank", budgetFeatures.semanticImageRerank)}
           {customFeature("visionCheck", budgetFeatures.visionCheck)}
           {customFeature("musicAssist", budgetFeatures.musicAssist)}

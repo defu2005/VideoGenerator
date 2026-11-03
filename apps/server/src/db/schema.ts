@@ -1,4 +1,4 @@
-import { integer, index, primaryKey, sqliteTable, text } from "drizzle-orm/sqlite-core";
+import { integer, index, primaryKey, real, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
 import type { ProjectSettings } from "@vg/shared";
 
 export const projects = sqliteTable("projects", {
@@ -90,6 +90,32 @@ export const scripts = sqliteTable("scripts", {
   mergedCall: integer("merged_call", { mode: "boolean" }).notNull().default(false),
   reviewNotes: text("review_notes", { mode: "json" }).$type<string[] | null>(),
 });
+
+export const scenes = sqliteTable("scenes", {
+  id: text("id").primaryKey(),
+  projectId: text("project_id").notNull().references(() => projects.id, { onDelete: "cascade" }),
+  order: integer("order").notNull(),
+  kind: text("kind").notNull(),
+  sectionId: text("section_id"),
+  label: text("label").notNull(),
+  narration: text("narration").notNull(),
+  visualNotes: text("visual_notes").notNull(),
+  visualQueries: text("visual_queries", { mode: "json" }).$type<{ primary: string; alternatives: string[] }>().notNull(),
+  musicMood: text("music_mood").notNull(),
+  energy: text("energy").notNull(),
+  estDurationSec: real("est_duration_sec").notNull(),
+  durationOverrideSec: real("duration_override_sec"),
+  startSec: real("start_sec").notNull(),
+  transitionNote: text("transition_note").notNull(),
+  origin: text("origin").notNull(),
+  edited: integer("edited", { mode: "boolean" }).notNull().default(false),
+  inputHash: text("input_hash").notNull(),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+}, (table) => [
+  uniqueIndex("scenes_project_order_uq").on(table.projectId, table.order),
+  index("scenes_project_idx").on(table.projectId),
+]);
 
 export const llmCache = sqliteTable("llm_cache", {
   key: text("key").primaryKey(),

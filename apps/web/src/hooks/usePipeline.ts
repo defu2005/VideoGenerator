@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { PipelineEvent, PipelineStage, PipelineState } from "@vg/shared";
 import { projectKeys } from "./useProjects";
 import { scriptKeys } from "./useScript";
+import { pipelinePollingDelay } from "./pipelinePolling";
 import {
   approvePipelineGate,
   cancelPipeline,
@@ -16,7 +17,7 @@ export const pipelineKeys = {
 };
 
 type PipelineAction =
-  | { type: "run"; stage?: PipelineStage }
+  | { type: "run"; stage?: PipelineStage; confirmOverwrite?: boolean }
   | { type: "approve"; stage: PipelineStage }
   | { type: "cancel" }
   | { type: "retry"; stage: PipelineStage };
@@ -36,11 +37,13 @@ export function usePipeline(projectId: string) {
   useEffect(() => {
     if (!projectId || typeof EventSource === "undefined") return undefined;
     const source = new EventSource(`/api/projects/${projectId}/events`);
-    let polling: ReturnType<typeof setInterval> | undefined;
+    let polling: ReturnType<typeof setTimeout> | undefined;
+    let pollingAttempt = 0;
     let refetchTimeout: ReturnType<typeof setTimeout> | undefined;
     const stopPolling = () => {
-      if (polling) clearInterval(polling);
+      if (polling !== undefined) clearTimeout(polling);
       polling = undefined;
+      pollingAttempt = 0;
     };
     const scheduleRefetch = () => {
       if (refetchTimeout) clearTimeout(refetchTimeout);
@@ -51,9 +54,15 @@ export function usePipeline(projectId: string) {
     };
     const startPolling = () => {
       if (polling) return;
-      polling = setInterval(() => {
-        void queryClient.invalidateQueries({ queryKey: pipelineKeys.detail(projectId) });
-      }, 3_000);
+      const poll = () => {
+        polling = setTimeout(() => {
+          polling = undefined;
+          pollingAttempt += 1;
+          void queryClient.invalidateQueries({ queryKey: pipelineKeys.detail(projectId) });
+          poll();
+        }, pipelinePollingDelay(pollingAttempt));
+      };
+      poll();
     };
     const onSnapshot = (message: MessageEvent<string>) => {
       const event = JSON.parse(message.data) as { data?: unknown };
@@ -64,6 +73,9 @@ export function usePipeline(projectId: string) {
     const onEvent = (message: MessageEvent<string>) => {
       const event = JSON.parse(message.data) as PipelineEvent;
       if (event.type === "stage.updated") {
+        if (event.data.stage === "SCENE_PLAN") {
+          void queryClient.invalidateQueries({ queryKey: ["scenes", projectId] });
+        }
         if ((event.data.stage === "RESEARCH" || event.data.stage === "SCRIPT") && event.data.state === "DONE") {
           void queryClient.invalidateQueries({ queryKey: scriptKeys.detail(projectId) });
           void queryClient.invalidateQueries({ queryKey: ["project-jobs", projectId] });
@@ -120,7 +132,7 @@ export function usePipeline(projectId: string) {
   const mutation = useMutation({
     mutationFn: (action: PipelineAction) => {
       switch (action.type) {
-        case "run": return runPipeline(projectId, action.stage);
+        case "run": return runPipeline(projectId, action.stage, action.confirmOverwrite);
         case "approve": return approvePipelineGate(projectId, action.stage);
         case "cancel": return cancelPipeline(projectId);
         case "retry": return retryPipelineStage(projectId, action.stage);

@@ -24,6 +24,9 @@ import { LlmProviderRegistry } from "./providers/llm/registry.js";
 import { ResearchExecutor } from "./stages/research/researchExecutor.js";
 import { ScriptExecutor } from "./stages/script/scriptExecutor.js";
 import { ScriptService } from "./services/scriptService.js";
+import { SceneService } from "./services/sceneService.js";
+import { registerSceneRoutes } from "./api/scenes.js";
+import { ScenePlanExecutor } from "./stages/scenes/scenePlanExecutor.js";
 
 export function buildApp({ config }: { config: AppConfig }) {
   const server = Fastify({
@@ -46,6 +49,7 @@ export function buildApp({ config }: { config: AppConfig }) {
   const orchestrator = new PipelineOrchestrator(jobRepository, config, server.log);
   const llmProviders = new LlmProviderRegistry(config);
   const scriptService = new ScriptService(database.sqlite, jobRepository, orchestrator, config);
+  const sceneService = new SceneService(database.sqlite, jobRepository);
   const worker = new JobWorker(
     jobRepository,
     orchestrator,
@@ -54,6 +58,7 @@ export function buildApp({ config }: { config: AppConfig }) {
       {
         RESEARCH: new ResearchExecutor(database.sqlite, llmProviders, config),
         SCRIPT: new ScriptExecutor(database.sqlite, llmProviders, config),
+        SCENE_PLAN: new ScenePlanExecutor(database.sqlite, llmProviders, config),
       },
     ),
     config,
@@ -66,9 +71,10 @@ export function buildApp({ config }: { config: AppConfig }) {
   registerRecommendationRoutes(server);
   registerBudgetRoutes(server, projectService, jobRepository, config);
   registerDashboardRoutes(server, projectService);
-  registerPipelineRoutes(server, projectService, jobRepository, orchestrator, events);
+  registerPipelineRoutes(server, projectService, jobRepository, orchestrator, events, sceneService);
   registerLlmRoutes(server, llmProviders, database.sqlite);
   registerScriptRoutes(server, scriptService, projectService, config);
+  registerSceneRoutes(server, sceneService);
 
   server.addHook("onReady", async () => worker.start());
   server.addHook("onClose", async () => {

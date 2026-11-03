@@ -23,16 +23,18 @@ export function registerBudgetRoutes(
     const { id } = ParamsSchema.parse(request.params);
     const project = await requireProject(projects, id);
     const stageStates = repository.getStages(id);
-    const providers = ["research", "script"].map((stage) => {
+    const providers = ["research", "script", "sceneplan"].map((stage) => {
       const selected = stage === "research"
         ? project.settings.llm?.research?.provider
           ?? project.settings.llm?.default?.provider
           ?? config.LLM_RESEARCH_PROVIDER
           ?? config.LLM_DEFAULT_PROVIDER
-        : project.settings.llm?.script?.provider
+        : stage === "script"
+          ? project.settings.llm?.script?.provider
           ?? project.settings.llm?.default?.provider
           ?? config.LLM_SCRIPT_PROVIDER
-          ?? config.LLM_DEFAULT_PROVIDER;
+          ?? config.LLM_DEFAULT_PROVIDER
+          : project.settings.llm?.sceneplan?.provider ?? project.settings.llm?.default?.provider ?? config.LLM_DEFAULT_PROVIDER;
       return selected;
     }).filter((provider): provider is string => provider !== undefined);
     return estimateBudget(project, providers, stageStates);

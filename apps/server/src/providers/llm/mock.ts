@@ -25,6 +25,24 @@ export class MockLlmProvider implements LlmProvider {
   async generate(req: LlmRequest, signal: AbortSignal) {
     if (signal.aborted) throw new DOMException("Aborted", "AbortError");
     const prompt = req.messages[0]?.content ?? "";
+    if (/image-search query editor/i.test(req.system)) {
+      const input = JSON.parse(prompt.slice(prompt.indexOf("{"))) as {
+        scenes: Array<{ index: number; label: string; currentPrimary: string }>;
+      };
+      return {
+        text: JSON.stringify({
+          scenes: input.scenes.map(({ index, label, currentPrimary }) => ({
+            index,
+            primary: `${label} ${currentPrimary || "visual"}`,
+            alternatives: [],
+          })),
+        }),
+        usage: { inputTokens: 10, outputTokens: 20 },
+        model: req.model,
+        provider: this.id,
+        finishReason: "stop" as const,
+      };
+    }
     const targetSeconds = Number(prompt.match(/Target duration:\s*(\d+)/i)?.[1] ?? 180);
     const wordsPerMinute = Number(req.messages[0]?.content.match(/Speaking pace:\s*(\d+)/i)?.[1] ?? 150);
     const fixedNarrationWords = 18;
