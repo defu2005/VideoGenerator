@@ -216,6 +216,7 @@ Lỗi luôn có dạng: `{ "error": { "code": "PROJECT_NOT_FOUND", "message": ".
 | TASK-006 | Image provider interface + Wikimedia/Openverse/Pexels + candidate store + ranking + dedupe | 005 | 4 |
 | TASK-007 | Visual Review UI: lưới candidate (top 8, xem thêm), panel metadata đầy đủ (nguồn, URL, tác giả, license, attribution, kích thước, tỉ lệ, file, watermark, điểm), approve/reject/replace/remove, sửa query + search again, custom URL, upload, Approve All; tải preview + ảnh được chọn về local (kiểm tra tải được/không hỏng/kích thước thật); scene visual status | 006 | 4 |
 | TASK-004H | Provider `antigravity-cli` (Antigravity CLI `agy`, tài khoản Google: Gemini 3.8, Claude Sonnet/Opus 4.6, GPT-OSS) — text + vision, `--mode plan`, `--json-schema`; thay cho gemini-cli đã bị Google ngừng | 004F | 2 |
+| TASK-004I | Xem token tiêu thụ theo video và theo quá trình (stage / tác vụ / model / từng lần chạy) + tổng toàn app; tổng hợp từ `jobs.usage.calls`, 0 LLM call | 004F | 2 |
 | TASK-004G | Chế độ MAX: vision cho provider (copilot-cli `--attachment`, claude-cli Read, API multimodal), kiểm tra ảnh bằng vision + vòng tìm lại, `NEEDS_ATTENTION`, hợp đồng kiểm tra render | 004F, 007 | 4 |
 | TASK-007B | Thêm nguồn ảnh: Pixabay, Unsplash (API key, tuân thủ quy định attribution/hotlink), web image search (Brave Search API, license `UNKNOWN`); phát hiện watermark nâng cao; Generate Image (sau) | 007 | 4 |
 | TASK-008 | TTS provider + Voice stage + Voice UI | 005 | 5 |
