@@ -87,10 +87,12 @@ Mọi LLM call ghi `usage` (tokens/requests, cost ước tính) vào job để U
 ### Chế độ ngân sách token (Budget mode) — user chọn theo project
 | Chế độ | Ý tưởng | LLM calls ước tính / video (Generate All) |
 |---|---|---|
-| `ECO` | Rẻ nhất: research + script gộp 1 call; chuẩn hóa bằng code, không gọi sửa | 1 (tối đa 1) |
-| `BALANCED` (mặc định) | Research và script tách riêng; cho phép 1 lần repair mỗi call | 2 (tối đa 4) |
-| `QUALITY` | Research và script tách riêng, thêm 1 call review & sửa script; cho phép 1 lần repair mỗi call | 3 (tối đa 6) |
+| `ECO` | Rẻ nhất: research + script gộp 1 call; chuẩn hóa bằng code, không gọi sửa, không trợ giúp ảnh/nhạc | 1 (tối đa 1) |
+| `BALANCED` (mặc định, ưu tiên chất lượng — TASK-004F) | Research sâu vừa + script tách riêng; review script 1 lượt; AI hỗ trợ từ khóa scene, xếp hạng ảnh, mood nhạc, metadata; repair 1 lần; headroom output 1.5× | ≈5 (tối đa ≈9) |
+| `QUALITY` | Research sâu; review + polish script 2 lượt; mọi trợ giúp AI; repair 2 lần; headroom 2×; vision vẫn opt-in | ≈7 (tối đa ≈14) |
 | `CUSTOM` | Dùng cấu hình BALANCED rồi áp dụng các feature override; ước tính theo cấu hình | tùy cấu hình |
+
+**Định tuyến model theo tác vụ (TASK-004F):** mỗi tác vụ LLM (`research`, `script`, `scriptReview`, `sceneQueries`, `visualAltQueries`, `visualRerank`, `visionCheck`, `musicAssist`, `metadata`) có route riêng `{provider, model, maxOutputTokens?, fallback?}`. Thứ tự ưu tiên: dự án theo tác vụ → dự án mặc định → app theo tác vụ → app mặc định → ENV. Usage ghi từng call (task/provider/model).
 
 Các feature hỗ trợ ảnh, nhạc và vision được lưu trong cấu hình ngân sách để các task tương ứng sử dụng. Chúng không làm tăng call count hiện tại; vision luôn tắt trừ khi user chủ động bật trong CUSTOM.
 
@@ -204,6 +206,7 @@ Lỗi luôn có dạng: `{ "error": { "code": "PROJECT_NOT_FOUND", "message": ".
 | TASK-004D | ~~GitHub Models~~ (đã bị GitHub khai tử 30/7/2026) + GitHub Copilot (copilot-cli, MCP với Copilot Chat) + giới hạn token theo provider (pre-flight) + đếm số call/tháng (không áp trần) | 004B | 2 |
 | TASK-004C | Tham số video (topic bắt buộc, còn lại tùy chọn) + khuyến nghị tự động bằng luật, 0 LLM call; quick create | 004 | 2 |
 | TASK-004E | Chế độ ngân sách token ECO/BALANCED/QUALITY/CUSTOM + ước tính số call trước khi chạy + review & sửa script (QUALITY) | 004C | 2 |
+| TASK-004F | Định tuyến model LLM theo từng tác vụ (app + dự án, fallback) + nâng mức dùng LLM của BALANCED/QUALITY + usage theo từng call | 006 | 2 |
 | TASK-005 | Scene plan bằng code (tách câu, gom theo thời lượng scene, chia query/mood) + Scene Board (sửa/tách/gộp/sắp xếp); QUALITY +1 call gợi ý query theo scene | 004E | 3 |
 | TASK-006 | Image provider interface + Wikimedia/Openverse/Pexels + candidate store + ranking + dedupe | 005 | 4 |
 | TASK-007 | Visual Review UI: candidates, metadata panel, approve/reject/replace/search again/custom URL/upload/Approve All | 006 | 4 |
