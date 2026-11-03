@@ -603,3 +603,59 @@ describe("AGY_STATIC_MODELS", () => {
     expect(AGY_STATIC_MODELS).toContain("gpt-oss-120b-medium");
   });
 });
+
+// ---------------------------------------------------------------------------
+// Model tries tools instead of answering
+// ---------------------------------------------------------------------------
+describe("Antigravity CLI tool-only replies", () => {
+  // Fake agy: the first `toolOnlyTurns` runs reply with a blocked tool and no text.
+  const toolThenAnswer = (toolOnlyTurns: number) => `
+const fs = require("node:fs");
+const counter = ${JSON.stringify(join(root, "count"))};
+process.stdin.on("data", () => {});
+process.stdin.on("end", () => {
+  const n = fs.existsSync(counter) ? Number(fs.readFileSync(counter, "utf8")) : 0;
+  fs.writeFileSync(counter, String(n + 1));
+  const prompt = (process.argv.find(a => a.startsWith("--print=")) ?? "").slice(8);
+  fs.writeFileSync(counter + "." + n, prompt);
+  const denied = n < ${toolOnlyTurns};
+  process.stdout.write(JSON.stringify({
+    status: "SUCCESS",
+    response: denied ? "" : "final answer",
+    usage: { input_tokens: 1, output_tokens: 1 },
+    denied_actions: denied ? [{ action: "command", display_name: "RunCommand" }] : [],
+  }));
+});
+`;
+  let counter: string;
+  beforeEach(() => { counter = join(root, "count"); });
+
+  it("tells the model up front not to use tools and disables slash commands", async () => {
+    let args: string[] = [];
+    const spawnFn = makeFakeSpawn(toolThenAnswer(0))!;
+    const cli = provider({ spawnProcess: (c, a, o) => { args = a; return spawnFn(c, a, o); } });
+    await cli.generate(request("q"), new AbortController().signal);
+    const prompt = args.find((a) => a.startsWith("--print="))!;
+    expect(prompt).toMatch(/^--print=Answer directly/);
+    expect(prompt).toContain("Do not use any tools");
+    expect(args).toContain("--disable-slash-commands");
+  });
+
+  it("retries once with a stronger reminder when the model only tried tools", async () => {
+    const cli = provider({ spawnProcess: makeFakeSpawn(toolThenAnswer(1)) });
+    const response = await cli.generate(request("q"), new AbortController().signal);
+    expect(response.text).toBe("final answer");
+    const { readFileSync } = await import("node:fs");
+    expect(readFileSync(counter, "utf8")).toBe("2");
+    expect(readFileSync(`${counter}.0`, "utf8")).not.toContain("previous attempt tried to use a tool");
+    expect(readFileSync(`${counter}.1`, "utf8")).toContain("previous attempt tried to use a tool");
+  });
+
+  it("gives up after the retry and reports the tool error", async () => {
+    const cli = provider({ spawnProcess: makeFakeSpawn(toolThenAnswer(5)) });
+    await expect(cli.generate(request("q"), new AbortController().signal))
+      .rejects.toMatchObject({ code: "LLM_INVALID_OUTPUT", message: "Model cố dùng công cụ thay vì trả lời" });
+    const { readFileSync } = await import("node:fs");
+    expect(readFileSync(counter, "utf8")).toBe("2");
+  });
+});

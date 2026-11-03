@@ -1,7 +1,7 @@
 import { spawn, type ChildProcessWithoutNullStreams, type SpawnOptions } from "node:child_process";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import type { LlmRequest } from "./types.js";
+import type { LlmRequest, LlmResponse } from "./types.js";
 import {
   CliProviderBase,
   resolveCliPath,
@@ -18,6 +18,17 @@ export const AGY_STATIC_MODELS = [
   "claude-opus-4-6-thinking",
   "gpt-oss-120b-medium",
 ];
+
+// agy is a coding agent: left alone it tries to run commands or search instead of answering.
+// Plan mode blocks every tool, so a tool-only turn ends with an empty reply.
+const NO_TOOLS_RULE =
+  "Answer directly in this reply, using only your own knowledge and the text below. " +
+  "Do not use any tools: no commands, no file reads or writes, no web search or browsing. " +
+  "Every tool call is blocked here and would lose your answer.";
+const NO_TOOLS_RETRY =
+  "Your previous attempt tried to use a tool, which is blocked. " +
+  "Reply now with the final answer only. If you lack live data, answer from what you already know.";
+export const AGY_TOOL_DENIED_MESSAGE = "Model cố dùng công cụ thay vì trả lời";
 
 // Module-level cache for model list (10 min TTL)
 let modelCache: { expiresAt: number; models: string[] } | undefined;
@@ -89,6 +100,7 @@ export class AntgravityCliProvider extends CliProviderBase {
           "--output-format", "json",
           "--mode", "plan",
           "--print-timeout", `${timeoutSec}s`,
+          "--disable-slash-commands",
           ...(request.model ? ["--model", request.model] : []),
           ...(effort ? ["--effort", effort] : []),
         ];
@@ -109,6 +121,16 @@ export class AntgravityCliProvider extends CliProviderBase {
     });
     this.binaryPathValue = binaryPath;
     this.effortValue = effort;
+  }
+
+  /** If the model only tried (blocked) tools, ask once more with a stronger reminder. */
+  override async generate(request: LlmRequest, signal: AbortSignal): Promise<LlmResponse> {
+    try {
+      return await super.generate(request, signal);
+    } catch (error) {
+      if (!(error instanceof LlmError) || error.message !== AGY_TOOL_DENIED_MESSAGE || signal.aborted) throw error;
+      return super.generate({ ...request, system: `${request.system}\n\n${NO_TOOLS_RETRY}` }, signal);
+    }
   }
 
   async listModels(
@@ -159,10 +181,12 @@ export class AntgravityCliProvider extends CliProviderBase {
 
 function formatAgyFullPrompt(request: LlmRequest): string {
   return [
+    NO_TOOLS_RULE,
     `System instructions:\n${request.system}`,
     ...request.messages.map(({ role, content }) =>
       `${role === "assistant" ? "Assistant" : "User"}:\n${content}`,
     ),
+    `Reminder: ${NO_TOOLS_RULE}`,
   ].join("\n\n");
 }
 
@@ -225,7 +249,7 @@ export function classifyAgyFailure(message: string): LlmError {
   const normalized = message.toLowerCase();
   // denied_actions signal from parseAgyResponse
   if (message === "denied_actions") {
-    return new LlmError("Model cố dùng công cụ thay vì trả lời", "LLM_INVALID_OUTPUT", false);
+    return new LlmError(AGY_TOOL_DENIED_MESSAGE, "LLM_INVALID_OUTPUT", false);
   }
   // Empty message → invalid output
   if (!message) {
