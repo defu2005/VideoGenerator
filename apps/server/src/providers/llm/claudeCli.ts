@@ -1,3 +1,5 @@
+import { existsSync, readFileSync } from "node:fs";
+import { basename, delimiter, dirname, isAbsolute, join, resolve } from "node:path";
 import type { LlmRequest } from "./types.js";
 import {
   CliProviderBase,
@@ -52,7 +54,27 @@ export class ClaudeCliProvider extends CliProviderBase {
 }
 
 export function resolveClaudeCliPath(binary: string, env: NodeJS.ProcessEnv = process.env): string | null {
-  return resolveCliPath(binary, env);
+  const direct = resolveCliPath(binary, env);
+  if (direct) return direct;
+  // npm on Windows installs `claude.cmd`/`claude.ps1` wrappers; the real native binary lives in the
+  // package (its `bin` field, e.g. bin/claude.exe). Resolve it so no shell is needed.
+  if (process.platform !== "win32") return null;
+  const hasPath = isAbsolute(binary) || binary.includes("/") || binary.includes("\\");
+  const searchPath = env.PATH ?? env.Path ?? "";
+  const directories = hasPath ? [dirname(resolve(binary))] : searchPath.split(delimiter).filter(Boolean);
+  const name = hasPath ? basename(binary).replace(/\.(?:cmd|ps1)$/i, "") : binary;
+  for (const directory of directories) {
+    if (!existsSync(join(directory, `${name}.cmd`)) && !existsSync(join(directory, `${name}.ps1`))) continue;
+    const packageDir = join(directory, "node_modules", "@anthropic-ai", "claude-code");
+    try {
+      const pkg = JSON.parse(readFileSync(join(packageDir, "package.json"), "utf8")) as { bin?: string | Record<string, string> };
+      const entry = typeof pkg.bin === "string" ? pkg.bin : pkg.bin?.[name] ?? pkg.bin?.claude;
+      if (entry && /\.exe$/i.test(entry) && existsSync(join(packageDir, entry))) return resolve(packageDir, entry);
+    } catch {
+      continue;
+    }
+  }
+  return null;
 }
 
 function formatClaudePrompt(request: LlmRequest): string {
