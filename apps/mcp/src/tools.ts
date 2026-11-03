@@ -109,6 +109,9 @@ export function registerVideoAgentTools(
   server.tool("get_llm_routes", "Read the resolved provider and model route for each LLM task in a project.", projectIdShape, ({ projectId }) =>
     invoke(() => api.getLlmRoutes(projectId)));
 
+  server.tool("get_project_usage", "Read token, call, cost, provider, model, stage, task, and run usage for one project.", projectIdShape, ({ projectId }) =>
+    invoke(() => api.getProjectUsage(projectId)));
+
   server.tool("get_writing_brief", "Get the exact stage prompt and JSON schema for writing research, a script, or a merged story.", {
     ...projectIdShape,
     stage: z.enum(["RESEARCH", "SCRIPT", "STORY"]),

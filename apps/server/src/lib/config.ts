@@ -85,6 +85,7 @@ const ConfigSchema = z.object({
   CUSTOM_LLM_API_KEY: z.string().optional(),
   CUSTOM_LLM_MODEL: z.string().optional(),
   LLM_PRICES_JSON: z.string().optional(),
+  USD_VND_RATE: z.coerce.number().positive().default(26000),
   SPEECH_WORDS_PER_MINUTE: z.coerce.number().positive().default(150),
   JOB_MAX_ATTEMPTS: z.coerce.number().int().positive().max(20).default(3),
   JOB_RETRY_BASE_MS: z.coerce.number().int().nonnegative().default(2_000),
@@ -160,6 +161,7 @@ export type AppConfig = {
   CUSTOM_LLM_API_KEY?: string;
   CUSTOM_LLM_MODEL?: string;
   LLM_PRICES_JSON?: string;
+  USD_VND_RATE: number;
   SPEECH_WORDS_PER_MINUTE: number;
   JOB_MAX_ATTEMPTS: number;
   JOB_RETRY_BASE_MS: number;

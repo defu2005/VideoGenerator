@@ -17,6 +17,7 @@ import { CreateProjectDialog } from "./CreateProjectDialog";
 import { EditProjectDialog } from "./EditProjectDialog";
 import { ProjectCard } from "./ProjectCard";
 import { ProjectFilters } from "./ProjectFilters";
+import { useUsage } from "../../hooks/useUsage";
 
 const DEFAULT_PAGE_SIZE = 12;
 
@@ -57,6 +58,7 @@ export function ProjectListPage() {
   const [deleteError, setDeleteError] = useState("");
   const [actionError, setActionError] = useState("");
   const projects = useProjects(query);
+  const projectUsage = useUsage({ groupBy: "project" });
   const duplicate = useDuplicateProject();
   const archive = useSetProjectArchived();
   const remove = useDeleteProject();
@@ -168,6 +170,7 @@ export function ProjectListPage() {
           />
         </div>
         {actionError && <p className="request-error action-error" role="alert">{actionError}</p>}
+        {projectUsage.isError && <p className="request-error action-error" role="alert">Không thể tải tổng token: {projectUsage.error instanceof Error ? projectUsage.error.message : "lỗi không xác định"}</p>}
         {projects.isPending ? (
           <Spinner label="Loading projects" />
         ) : projects.isError ? (
@@ -185,6 +188,7 @@ export function ProjectListPage() {
                 <ProjectCard
                   key={project.id}
                   project={project}
+                  usage={projectUsage.data?.byGroup?.find((entry) => entry.key === project.id)}
                   onEdit={() => setEditing(project)}
                   onDuplicate={() => void duplicateProject(project)}
                   onArchive={() => void archiveProject(project)}

@@ -16,6 +16,8 @@ describe("server configuration", () => {
 
   it("defaults the research mode to the merged single-call flow", () => {
     expect(parseConfig({}).LLM_RESEARCH_MODE).toBe("merged");
+    expect(parseConfig({}).USD_VND_RATE).toBe(26000);
+    expect(parseConfig({ USD_VND_RATE: "25000" }).USD_VND_RATE).toBe(25000);
   });
 
   it("parses optional token limits and Copilot CLI configuration", () => {

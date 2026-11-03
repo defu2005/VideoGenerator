@@ -1,6 +1,8 @@
 import type { Project } from "@vg/shared";
 import { Link } from "react-router-dom";
 import { StatusBadge } from "../../components/StatusBadge";
+import type { UsageTotals } from "@vg/shared";
+import { formatTokens } from "../usage/usageFormatting";
 
 function formatUpdated(value: string): string {
   return new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" }).format(new Date(value));
@@ -12,8 +14,10 @@ export function ProjectCard({
   onDuplicate,
   onArchive,
   onDelete,
+  usage,
 }: {
   project: Project;
+  usage?: UsageTotals;
   onEdit: () => void;
   onDuplicate: () => void;
   onArchive: () => void;
@@ -33,6 +37,7 @@ export function ProjectCard({
           <span><b>Mode</b> {project.mode}</span>
           <time dateTime={project.updatedAt}>Updated {formatUpdated(project.updatedAt)}</time>
         </div>
+        <p className="project-usage-badge">{formatTokens((usage?.inputTokens ?? 0) + (usage?.outputTokens ?? 0), usage?.tokensUnknown)} token tiêu thụ · {usage?.llmCalls ?? 0} lượt gọi</p>
       </div>
       <details className="project-actions">
         <summary aria-label={`Actions for ${project.title}`}>•••</summary>

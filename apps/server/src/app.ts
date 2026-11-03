@@ -31,6 +31,8 @@ import { VisualService } from "./services/visualService.js";
 import { VisualSearchExecutor } from "./stages/visuals/visualSearchExecutor.js";
 import { registerVisualRoutes } from "./api/visuals.js";
 import { MAX_IMAGE_BYTES } from "./services/imageStore.js";
+import { UsageService } from "./services/usageService.js";
+import { registerUsageRoutes } from "./api/usage.js";
 
 export function buildApp({ config }: { config: AppConfig }) {
   const server = Fastify({
@@ -54,6 +56,7 @@ export function buildApp({ config }: { config: AppConfig }) {
   const projectService = createProjectService(database.db, config, server.log);
   const events = new PipelineEventBus();
   const jobRepository = new JobRepository(database.sqlite, events);
+  const usageService = new UsageService(database.sqlite, config.USD_VND_RATE);
   const visualService = new VisualService(database.sqlite, jobRepository, config, server.log);
   const orchestrator = new PipelineOrchestrator(
     jobRepository,
@@ -89,6 +92,7 @@ export function buildApp({ config }: { config: AppConfig }) {
   registerRecommendationRoutes(server);
   registerBudgetRoutes(server, projectService, jobRepository, config, llmProviders);
   registerDashboardRoutes(server, projectService);
+  registerUsageRoutes(server, usageService, projectService);
   registerPipelineRoutes(server, projectService, jobRepository, orchestrator, events, sceneService);
   registerLlmRoutes(server, llmProviders, database.sqlite, projectService);
   registerScriptRoutes(server, scriptService, projectService, config);

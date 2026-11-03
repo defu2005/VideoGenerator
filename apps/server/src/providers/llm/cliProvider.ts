@@ -237,7 +237,9 @@ export function parseJsonCliResponse(output: string): ParsedCliResponse | undefi
     if (typeof value.result !== "string") return undefined;
     const usage = record(value.usage);
     const modelUsage = Object.values(record(value.modelUsage)).find(isRecord);
-    const inputTokens = numeric(usage.input_tokens) ?? numeric(modelUsage?.inputTokens) ?? 0;
+    // Claude CLI reports cached prompt tokens separately; without them "input" is only the last 1-2 tokens.
+    const cachedInput = (numeric(usage.cache_creation_input_tokens) ?? 0) + (numeric(usage.cache_read_input_tokens) ?? 0);
+    const inputTokens = (numeric(usage.input_tokens) ?? numeric(modelUsage?.inputTokens) ?? 0) + cachedInput;
     const outputTokens = numeric(usage.output_tokens) ?? numeric(modelUsage?.outputTokens) ?? 0;
     return {
       result: value.result,

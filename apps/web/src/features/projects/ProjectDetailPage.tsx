@@ -12,8 +12,9 @@ import { PipelinePanel } from "../pipeline/PipelinePanel";
 import { ScriptTab } from "../script/ScriptTab";
 import { SceneBoard } from "../scenes/SceneBoard";
 import { VisualReview } from "../visuals/VisualReview";
+import { ProjectUsagePanel } from "../usage/ProjectUsagePanel";
 
-const TABS = ["overview", "script", "scenes", "visuals", "voice", "music", "timeline", "render"] as const;
+const TABS = ["overview", "script", "scenes", "visuals", "voice", "music", "timeline", "render", "usage"] as const;
 
 function formatUpdated(value: string): string {
   return new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" }).format(new Date(value));
@@ -140,12 +141,14 @@ export function ProjectDetailPage() {
       <nav className="tab-bar" aria-label="Project sections">
         {TABS.map((value) => (
           <NavLink key={value} to={`/projects/${project.id}/${value}`} className={({ isActive }) => isActive ? "active" : ""}>
-            {value[0].toUpperCase()}{value.slice(1)}
+        {value === "usage" ? "Token" : `${value[0].toUpperCase()}${value.slice(1)}`}
           </NavLink>
         ))}
       </nav>
       {tab === "overview"
         ? <ProjectOverview project={project} />
+        : tab === "usage"
+          ? <ProjectUsagePanel projectId={project.id} />
         : tab === "script"
           ? <ScriptTab project={project} />
           : tab === "scenes"

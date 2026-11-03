@@ -44,9 +44,33 @@ function listResponse(items: Project[]) {
   return { items, total: items.length, page: 1, pageSize: 12 };
 }
 
+function usageResponse() {
+  const totals = {
+    llmCalls: 0,
+    inputTokens: 0,
+    outputTokens: 0,
+    cachedCalls: 0,
+    fallbackCalls: 0,
+    failedCalls: 0,
+    premiumRequests: 0,
+    tokensUnknown: false,
+    costUsd: 0,
+  };
+  return jsonResponse({
+    from: null,
+    to: null,
+    groupBy: "project",
+    usdVndRate: 26000,
+    totals,
+    byGroup: [],
+    topProjects: [],
+  });
+}
+
 describe("ProjectListPage", () => {
   it("renders projects and writes the debounced search into the URL", async () => {
-    const fetchMock = vi.fn().mockResolvedValue(jsonResponse(listResponse([project])));
+    const fetchMock = vi.fn((input: RequestInfo | URL) =>
+      String(input).includes("/usage") ? Promise.resolve(usageResponse()) : Promise.resolve(jsonResponse(listResponse([project]))));
     vi.stubGlobal("fetch", fetchMock);
     renderWithProviders(<ProjectListPage />, ["/projects"]);
 
@@ -57,15 +81,21 @@ describe("ProjectListPage", () => {
   });
 
   it("shows the empty state when no project matches", async () => {
-    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse(listResponse([]))));
+    vi.stubGlobal("fetch", vi.fn((input: RequestInfo | URL) =>
+      String(input).includes("/usage") ? Promise.resolve(usageResponse()) : Promise.resolve(jsonResponse(listResponse([])))));
     renderWithProviders(<ProjectListPage />, ["/projects"]);
     expect(await screen.findByRole("heading", { name: "No projects yet" })).toBeInTheDocument();
   });
 
   it("retries after an API error", async () => {
-    const fetchMock = vi.fn()
-      .mockResolvedValueOnce(jsonResponse({ error: { code: "INTERNAL_ERROR", message: "Temporary failure" } }, 500))
-      .mockResolvedValueOnce(jsonResponse(listResponse([project])));
+    let listRequests = 0;
+    const fetchMock = vi.fn((input: RequestInfo | URL) => {
+      if (String(input).includes("/usage")) return Promise.resolve(usageResponse());
+      listRequests += 1;
+      return Promise.resolve(listRequests === 1
+        ? jsonResponse({ error: { code: "INTERNAL_ERROR", message: "Temporary failure" } }, 500)
+        : jsonResponse(listResponse([project])));
+    });
     vi.stubGlobal("fetch", fetchMock);
     renderWithProviders(<ProjectListPage />, ["/projects"]);
 
@@ -75,9 +105,13 @@ describe("ProjectListPage", () => {
   });
 
   it("confirms project deletion and displays a 409 API message", async () => {
-    const fetchMock = vi.fn()
-      .mockResolvedValueOnce(jsonResponse(listResponse([project])))
-      .mockResolvedValueOnce(jsonResponse({ error: { code: "PROJECT_BUSY", message: "Project is currently running" } }, 409));
+    const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      if (String(input).includes("/usage")) return Promise.resolve(usageResponse());
+      if (init?.method === "DELETE") {
+        return Promise.resolve(jsonResponse({ error: { code: "PROJECT_BUSY", message: "Project is currently running" } }, 409));
+      }
+      return Promise.resolve(jsonResponse(listResponse([project])));
+    });
     vi.stubGlobal("fetch", fetchMock);
     renderWithProviders(<ProjectListPage />, ["/projects"]);
 
@@ -87,7 +121,7 @@ describe("ProjectListPage", () => {
     fireEvent.click(screen.getByRole("button", { name: "Delete project" }));
 
     expect(await screen.findByText("Project is currently running")).toBeInTheDocument();
-    expect(fetchMock).toHaveBeenLastCalledWith(
+    expect(fetchMock).toHaveBeenCalledWith(
       expect.stringContaining(`/projects/${project.id}`),
       expect.objectContaining({ method: "DELETE" }),
     );

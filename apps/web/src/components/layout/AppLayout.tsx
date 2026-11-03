@@ -13,6 +13,7 @@ export function AppLayout() {
           <NavLink to="/" end>Dashboard</NavLink>
           <NavLink to="/projects">Projects</NavLink>
           <NavLink to="/settings/ai">Mô hình AI</NavLink>
+          <NavLink to="/usage">Mức dùng</NavLink>
         </nav>
         <div className="sidebar-footer">Control Panel <span>v0.1</span></div>
       </aside>

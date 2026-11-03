@@ -11,6 +11,7 @@ import type {
   SceneVisuals,
   LlmRoute,
   LlmTaskId,
+  ProjectUsage,
 } from "@vg/shared";
 
 const SERVER_DOWN_GUIDANCE = "Start it with `npm run dev`.";
@@ -44,6 +45,10 @@ export class VideoAgentApiClient {
 
   getProject(projectId: string): Promise<Project> {
     return this.request(`/api/projects/${encodeURIComponent(projectId)}`);
+  }
+
+  getProjectUsage(projectId: string): Promise<ProjectUsage> {
+    return this.request(`/api/projects/${encodeURIComponent(projectId)}/usage`);
   }
 
   createProject(input: CreateProjectInput): Promise<CreateProjectResponse> {

@@ -106,6 +106,104 @@ describe("ProjectDetailPage", () => {
     expect(await screen.findByText("Ước tính: ~5–9 lượt gọi AI (BALANCED)")).toBeInTheDocument();
   });
 
+  it("renders token totals, stage-specific tasks, runs, and the budget comparison", async () => {
+    const emptyTotals = {
+      llmCalls: 1,
+      inputTokens: 12345,
+      outputTokens: 321,
+      cachedCalls: 1,
+      fallbackCalls: 1,
+      failedCalls: 0,
+      premiumRequests: 0,
+      tokensUnknown: false,
+      costUsd: 0.01,
+    };
+    const usage = {
+      projectId: project.id,
+      usdVndRate: 26000,
+      totals: emptyTotals,
+      byStage: [{ key: "VISUAL_SEARCH", label: "VISUAL SEARCH", ...emptyTotals }],
+      byTask: [{ key: "visualRerank", label: "visualRerank", ...emptyTotals }],
+      byModel: [{ key: "claude-cli/sonnet", label: "claude-cli · sonnet", ...emptyTotals }],
+      runs: [{
+        jobId: "66666666-6666-4666-8666-666666666666",
+        stage: "VISUAL_SEARCH",
+        scope: "scene-1",
+        attempt: 2,
+        status: "FAILED",
+        startedAt: "2026-11-02T10:00:00.000Z",
+        finishedAt: "2026-11-02T10:00:02.500Z",
+        durationMs: 2500,
+        tokens: { input: 12345, output: 321, unknown: false },
+        totals: emptyTotals,
+        calls: [{
+          task: "visualRerank",
+          provider: "claude-cli",
+          model: "sonnet",
+          inputTokens: 12345,
+          outputTokens: 321,
+          premiumRequests: 0,
+          callCount: 1,
+          cached: false,
+          fallback: true,
+          ok: false,
+          tokensUnknown: false,
+          costUsd: 0.01,
+        }],
+      }],
+    };
+    const pipeline: PipelineState = {
+      projectId: project.id,
+      mode: project.mode,
+      runMode: null,
+      currentStage: project.stage,
+      status: project.status,
+      stages: STAGE_ORDER.map((stage) => ({
+        stage,
+        state: "PENDING",
+        progress: 0,
+        message: null,
+        jobId: null,
+        updatedAt: project.updatedAt,
+        error: null,
+      })),
+      activeJob: null,
+    };
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.endsWith("/pipeline")) return jsonResponse(pipeline);
+      if (url.endsWith("/usage")) return jsonResponse(usage);
+      if (url.endsWith("/budget-estimate")) return jsonResponse({
+        mode: "BALANCED",
+        features: {
+          storyMode: "separate",
+          repairAttempts: 1,
+          scriptReview: true,
+          scriptReviewPasses: 1,
+          researchDepth: "standard",
+          altQueryAssist: true,
+          sceneQueryAssist: true,
+          semanticImageRerank: true,
+          visionCheck: false,
+          musicAssist: true,
+          metadata: true,
+          outputHeadroom: 1.5,
+        },
+        perStage: [],
+        total: { min: 2, max: 5 },
+      });
+      return jsonResponse(project);
+    }));
+    renderDetail(`/projects/${project.id}/usage`);
+    expect(await screen.findByRole("link", { name: "Token" })).toHaveAttribute("href", `/projects/${project.id}/usage`);
+    expect((await screen.findAllByText("12.3K")).length).toBeGreaterThan(0);
+    expect(await screen.findByText("Đã dùng 1 lượt; các bước chưa chạy ước tính thêm ~2–5 lượt.")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /VISUAL SEARCH/ }));
+    expect(await screen.findByText(/visualRerank: 1 lượt/)).toBeInTheDocument();
+    expect(screen.getByText(/claude-cli\/sonnet/)).toBeInTheDocument();
+    expect(screen.getByText(/FAILED/)).toBeInTheDocument();
+  });
+
   it("shows a back link when the API returns 404", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse({
       error: { code: "PROJECT_NOT_FOUND", message: "Project not found" },

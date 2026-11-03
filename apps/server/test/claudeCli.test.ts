@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { spawn, type ChildProcessWithoutNullStreams, type SpawnOptions } from "node:child_process";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { CLAUDE_CLI_FLAGS, ClaudeCliProvider } from "../src/providers/llm/claudeCli.js";
+import { parseJsonCliResponse } from "../src/providers/llm/cliProvider.js";
 import type { LlmRequest } from "../src/providers/llm/types.js";
 
 let root: string;
@@ -165,5 +166,15 @@ process.stdin.on("end", () => {
     controller.abort();
     await expect(cli.generate(request(), controller.signal)).rejects.toMatchObject({ code: "LLM_TIMEOUT" });
     expect(spawnProcess).not.toHaveBeenCalled();
+  });
+});
+
+describe("Claude CLI token usage", () => {
+  it("counts cached prompt tokens as input", () => {
+    const parsed = parseJsonCliResponse(JSON.stringify({
+      result: "ok",
+      usage: { input_tokens: 2, cache_creation_input_tokens: 1500, cache_read_input_tokens: 9000, output_tokens: 40 },
+    }));
+    expect(parsed?.usage).toEqual({ inputTokens: 10502, outputTokens: 40 });
   });
 });

@@ -56,6 +56,7 @@ describe("Video Agent MCP tools", () => {
       "get_llm_routes",
       "get_pipeline",
       "get_project",
+      "get_project_usage",
       "get_research",
       "get_scene_visuals",
       "get_scenes",
@@ -94,6 +95,18 @@ describe("Video Agent MCP tools", () => {
     });
     expect(fetchImpl).toHaveBeenCalledWith(
       `http://127.0.0.1:3001/api/projects/${projectId}/llm-routes`,
+      { headers: { Accept: "application/json" } },
+    );
+  });
+
+  it("reads per-project token usage from the usage API", async () => {
+    const usage = { projectId, totals: { llmCalls: 2, inputTokens: 10, outputTokens: 5 } };
+    const fetchImpl = vi.fn(async () => jsonResponse(usage)) as typeof fetch;
+    const client = await connect(fetchImpl);
+    const result = await client.callTool({ name: "get_project_usage", arguments: { projectId } });
+    expect(JSON.parse(resultText(result))).toEqual(usage);
+    expect(fetchImpl).toHaveBeenCalledWith(
+      `http://127.0.0.1:3001/api/projects/${projectId}/usage`,
       { headers: { Accept: "application/json" } },
     );
   });
