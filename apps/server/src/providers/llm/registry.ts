@@ -9,6 +9,7 @@ import { GeminiProvider } from "./gemini.js";
 import { MockLlmProvider } from "./mock.js";
 import { OpenAiCompatibleProvider } from "./openaiCompatible.js";
 import { LlmError, type LlmProvider } from "./types.js";
+import { fetchAnthropicModels, fetchGeminiModels, readCopilotAccountModels } from "./modelLists.js";
 
 // Active Claude models, newest first within each family. Deprecated ones are left out.
 const CLAUDE_MODELS = [
@@ -22,7 +23,10 @@ export class LlmProviderRegistry {
   private readonly providers = new Map<string, LlmProvider & { configured?: boolean; hint?: string }>();
   private readonly modelCache = new Map<string, { expiresAt: number; models: string[] }>();
 
-  constructor(private readonly config: AppConfig) {
+  constructor(
+    private readonly config: AppConfig,
+    private readonly options: { copilotHome?: string } = {},
+  ) {
     const timeoutMs = Math.min(config.LLM_TIMEOUT_MS, Math.max(1, config.STAGE_TIMEOUT_MS - 1));
     if (config.ANTHROPIC_API_KEY) {
       this.addProvider(new AnthropicProvider(config.ANTHROPIC_API_KEY, config.ANTHROPIC_MODEL || null, timeoutMs));
@@ -79,7 +83,9 @@ export class LlmProviderRegistry {
   }
 
   async suggestModels(id: string, fetchImpl: typeof fetch = fetch): Promise<string[]> {
+    if (!LlmProviderIdSchema.safeParse(id).success) return [];
     const provider = this.providers.get(id);
+    // Shown when the live list is unavailable (provider not configured, offline, CLI without a list command).
     const staticModels: Record<string, string[]> = {
       anthropic: CLAUDE_MODELS,
       gemini: ["gemini-2.5-pro", "gemini-2.5-flash"],
@@ -90,51 +96,80 @@ export class LlmProviderRegistry {
       groq: ["llama-3.3-70b-versatile", "openai/gpt-oss-120b"],
       custom: [],
       mock: ["mock"],
-      "claude-cli": CLAUDE_MODELS,
-      "copilot-cli": ["gpt-6-luna"],
+      // Claude Code has no list command; it takes the same model ids plus short aliases.
+      "claude-cli": [...CLAUDE_MODELS, "fable", "opus", "sonnet", "haiku"],
+      "copilot-cli": ["auto"],
       "antigravity-cli": AGY_STATIC_MODELS,
     };
-    if (!LlmProviderIdSchema.safeParse(id).success) return [];
+    const liveModels = provider ? await this.liveModels(id, fetchImpl) : [];
+    return [...new Set([
+      ...(provider?.defaultModel ? [provider.defaultModel] : []),
+      ...(provider && this.config.LLM_DEFAULT_MODEL ? [this.config.LLM_DEFAULT_MODEL] : []),
+      ...liveModels,
+      ...(staticModels[id] ?? []),
+    ])];
+  }
+
+  /** Asks the provider itself which models it offers. Cached for 10 minutes; [] when it cannot say. */
+  private async liveModels(id: string, fetchImpl: typeof fetch): Promise<string[]> {
+    const cached = this.modelCache.get(id);
+    if (cached && cached.expiresAt > Date.now()) return cached.models;
+    let models: string[] = [];
+    try {
+      models = await this.fetchLiveModels(id, fetchImpl);
+    } catch {
+      models = [];
+    }
+    if (models.length === 0) return cached?.models ?? [];
+    this.modelCache.set(id, { expiresAt: Date.now() + 10 * 60_000, models });
+    return models;
+  }
+
+  private async fetchLiveModels(id: string, fetchImpl: typeof fetch): Promise<string[]> {
+    if (id === "anthropic" && this.config.ANTHROPIC_API_KEY) {
+      return fetchAnthropicModels(this.config.ANTHROPIC_API_KEY, fetchImpl);
+    }
+    if (id === "claude-cli" && this.config.ANTHROPIC_API_KEY) {
+      return fetchAnthropicModels(this.config.ANTHROPIC_API_KEY, fetchImpl);
+    }
+    if (id === "gemini" && this.config.GEMINI_API_KEY) {
+      return fetchGeminiModels(this.config.GEMINI_API_KEY, fetchImpl);
+    }
+    if (id === "copilot-cli") {
+      const models = await readCopilotAccountModels(this.options.copilotHome);
+      return models.length > 0 ? ["auto", ...models] : [];
+    }
+    if (id === "antigravity-cli") {
+      const provider = this.providers.get(id);
+      return provider instanceof AntgravityCliProvider ? provider.listModels() : [];
+    }
     const baseUrl = id === "openai" ? this.config.OPENAI_BASE_URL
       : id === "ollama" ? this.config.OLLAMA_BASE_URL
         : id === "openrouter" ? "https://openrouter.ai/api/v1"
           : id === "deepseek" ? "https://api.deepseek.com/v1"
             : id === "groq" ? "https://api.groq.com/openai/v1"
-          : id === "custom" ? this.config.CUSTOM_LLM_BASE_URL
-            : undefined;
-    const cached = this.modelCache.get(id);
-    let remoteModels: string[] = [];
-    if (provider && baseUrl && (!cached || cached.expiresAt <= Date.now())) {
-      const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 5_000);
-      try {
-        const key = id === "openai" ? this.config.OPENAI_API_KEY
-          : id === "openrouter" ? this.config.OPENROUTER_API_KEY
+              : id === "custom" ? this.config.CUSTOM_LLM_BASE_URL
+                : undefined;
+    if (!baseUrl) return [];
+    const key = id === "openai" ? this.config.OPENAI_API_KEY
+      : id === "openrouter" ? this.config.OPENROUTER_API_KEY
+        : id === "deepseek" ? this.config.DEEPSEEK_API_KEY
+          : id === "groq" ? this.config.GROQ_API_KEY
             : id === "custom" ? this.config.CUSTOM_LLM_API_KEY
               : undefined;
-        const response = await fetchImpl(new URL("models", `${baseUrl.replace(/\/+$/, "")}/`), {
-          signal: controller.signal,
-          headers: key ? { Authorization: `Bearer ${key}` } : undefined,
-        });
-        if (response.ok) {
-          const payload = await response.json() as { data?: { id?: unknown }[] };
-          remoteModels = (payload.data ?? []).flatMap((item) => typeof item.id === "string" ? [item.id] : []);
-          this.modelCache.set(id, { expiresAt: Date.now() + 10 * 60_000, models: remoteModels });
-        }
-      } catch {
-        remoteModels = cached?.models ?? [];
-      } finally {
-        clearTimeout(timeout);
-      }
-    } else {
-      remoteModels = cached?.models ?? [];
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 5_000);
+    try {
+      const response = await fetchImpl(new URL("models", `${baseUrl.replace(/\/+$/, "")}/`), {
+        signal: controller.signal,
+        headers: key ? { Authorization: `Bearer ${key}` } : undefined,
+      });
+      if (!response.ok) return [];
+      const payload = await response.json() as { data?: { id?: unknown }[] };
+      return (payload.data ?? []).flatMap((item) => typeof item.id === "string" ? [item.id] : []);
+    } finally {
+      clearTimeout(timeout);
     }
-    return [...new Set([
-      ...(provider?.defaultModel ? [provider.defaultModel] : []),
-      ...(provider && this.config.LLM_DEFAULT_MODEL ? [this.config.LLM_DEFAULT_MODEL] : []),
-      ...(staticModels[id] ?? []),
-      ...remoteModels,
-    ])];
   }
 
   list(monthCalls?: ReadonlyMap<string, number>): LlmProviderInfo[] {

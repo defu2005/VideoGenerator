@@ -38,21 +38,31 @@ function ModelField({ provider, value, onChange, label }: {
     queryFn: () => getProviderModels(provider!),
     enabled: Boolean(provider),
   });
-  const listId = `models-${label.replace(/[^a-z0-9]+/gi, "-")}`;
+  // A <select> always shows the whole list (a <datalist> hides entries that don't match the typed text).
+  const list = models.data ?? [];
+  const inList = list.includes(value);
+  const emptyLabel = models.isLoading ? "Đang tải danh sách model…"
+    : value && !inList ? "Model tự gõ (ô bên dưới)"
+      : `Mặc định của nhà cung cấp${list.length ? ` · ${list.length} model` : ""}`;
   return (
-    <>
+    <span className="model-field">
+      <select
+        aria-label={`${label}: chọn từ danh sách`}
+        value={inList ? value : ""}
+        disabled={!provider}
+        onChange={(event) => onChange(event.target.value)}
+      >
+        <option value="">{emptyLabel}</option>
+        {list.map((model) => <option key={model} value={model}>{model}</option>)}
+      </select>
       <input
         aria-label={label}
-        list={listId}
         value={value}
-        placeholder="Tên model (gõ hoặc chọn)"
+        placeholder="hoặc gõ tên model khác"
         onChange={(event) => onChange(event.target.value)}
       />
-      <datalist id={listId}>
-        {(models.data ?? []).map((model) => <option key={model} value={model} />)}
-      </datalist>
-      {models.isError && <small className="field-hint">Không tải được gợi ý — hãy gõ tên model gói của bạn hỗ trợ.</small>}
-    </>
+      {models.isError && <small className="field-hint">Không tải được danh sách — hãy gõ tên model gói của bạn hỗ trợ.</small>}
+    </span>
   );
 }
 

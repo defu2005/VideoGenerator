@@ -538,7 +538,8 @@ button:disabled { cursor: not-allowed; opacity: .58; }
 .ai-inherited { color: #929bac; font-size: 11px; }
 .ai-task-fields { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 1.3fr) minmax(0, 0.8fr) minmax(0, 1.3fr); gap: 0 12px; }
 .ai-task-fields .form-field { min-width: 0; margin-bottom: 10px; }
-.ai-task-fields .form-field input + datalist + .field-hint { margin-top: 2px; }
+.model-field { display: grid; gap: 5px; min-width: 0; }
+.ai-task-fields .form-field .model-field select + input { margin-top: 0; }
 .ai-task-fields .form-field select + input { margin-top: 6px; }
 @media (max-width: 1024px) {
   .ai-task-fields { grid-template-columns: repeat(2, minmax(0, 1fr)); }
