@@ -90,6 +90,7 @@ Mọi LLM call ghi `usage` (tokens/requests, cost ước tính) vào job để U
 | `ECO` | Rẻ nhất: research + script gộp 1 call; chuẩn hóa bằng code, không gọi sửa, không trợ giúp ảnh/nhạc | 1 (tối đa 1) |
 | `BALANCED` (mặc định, ưu tiên chất lượng — TASK-004F) | Research sâu vừa + script tách riêng; review script 1 lượt; AI hỗ trợ từ khóa scene, xếp hạng ảnh, mood nhạc, metadata; repair 1 lần; headroom output 1.5× | ≈5 (tối đa ≈9) |
 | `QUALITY` | Research sâu; review + polish script 2 lượt; mọi trợ giúp AI; repair 2 lần; headroom 2×; vision vẫn opt-in | ≈7 (tối đa ≈14) |
+| `MAX` (TASK-004G) | Không tiết kiệm token: mọi tính năng ở mức cao nhất + fact-check script, tìm ảnh rộng hơn, **AI vision kiểm tra top 5 ảnh mỗi scene** (tự tìm lại tối đa 2 vòng nếu < 7/10), kiểm tra đồng nhất giữa các scene, **kiểm tra video sau render** (ffprobe + vision trên frame giữa mỗi scene). Scene không đạt luôn bị gắn `NEEDS_ATTENTION`, không bao giờ bị bỏ qua âm thầm | ≈10 text + vision theo số scene (hiển thị trước khi chạy, không áp trần) |
 | `CUSTOM` | Dùng cấu hình BALANCED rồi áp dụng các feature override; ước tính theo cấu hình | tùy cấu hình |
 
 **Định tuyến model theo tác vụ (TASK-004F):** mỗi tác vụ LLM (`research`, `script`, `scriptReview`, `sceneQueries`, `visualAltQueries`, `visualRerank`, `visionCheck`, `musicAssist`, `metadata`) có route riêng `{provider, model, maxOutputTokens?, fallback?}`. Thứ tự ưu tiên: dự án theo tác vụ → dự án mặc định → app theo tác vụ → app mặc định → ENV. Usage ghi từng call (task/provider/model).
@@ -214,12 +215,13 @@ Lỗi luôn có dạng: `{ "error": { "code": "PROJECT_NOT_FOUND", "message": ".
 | TASK-005 | Scene plan bằng code (tách câu, gom theo thời lượng scene, chia query/mood) + Scene Board (sửa/tách/gộp/sắp xếp); QUALITY +1 call gợi ý query theo scene | 004E | 3 |
 | TASK-006 | Image provider interface + Wikimedia/Openverse/Pexels + candidate store + ranking + dedupe | 005 | 4 |
 | TASK-007 | Visual Review UI: lưới candidate (top 8, xem thêm), panel metadata đầy đủ (nguồn, URL, tác giả, license, attribution, kích thước, tỉ lệ, file, watermark, điểm), approve/reject/replace/remove, sửa query + search again, custom URL, upload, Approve All; tải preview + ảnh được chọn về local (kiểm tra tải được/không hỏng/kích thước thật); scene visual status | 006 | 4 |
+| TASK-004G | Chế độ MAX: vision cho provider (copilot-cli `--attachment`, claude-cli Read, API multimodal), kiểm tra ảnh bằng vision + vòng tìm lại, `NEEDS_ATTENTION`, hợp đồng kiểm tra render | 004F, 007 | 4 |
 | TASK-007B | Thêm nguồn ảnh: Pixabay, Unsplash (API key, tuân thủ quy định attribution/hotlink), web image search (Brave Search API, license `UNKNOWN`); phát hiện watermark nâng cao; Generate Image (sau) | 007 | 4 |
 | TASK-008 | TTS provider + Voice stage + Voice UI | 005 | 5 |
 | TASK-009 | Subtitle generation (từ voice duration, chia câu) | 008 | 5 |
 | TASK-010 | Music provider + search + ranking + Music Review UI | 005 | 6 |
 | TASK-011 | Timeline builder + Timeline view cơ bản | 007, 009, 010 | 7 |
-| TASK-012 | FFmpeg render (Ken Burns, concat, ducking, subtitle, credits) + progress UI | 011 | 8 |
+| TASK-012 | FFmpeg render (Ken Burns, concat, ducking, subtitle, credits) + progress UI + kiểm tra render (ffprobe, frame đen/đứng, sync phụ đề; MAX: vision trên frame mỗi scene, theo hợp đồng TASK-004G §6) | 011 | 8 |
 | TASK-013 | Versioning + history, export/download | 012 | 9 |
 
 ```
