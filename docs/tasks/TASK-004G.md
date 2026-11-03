@@ -16,6 +16,7 @@ Being honest about limits: no system can *guarantee* fit. MAX guarantees that ev
 - TASK-007 gives local download of previews and selected images, plus the review UI.
 - **Vision-capable transports** (verified 2026-11-03):
   - `copilot-cli` 1.0.105: `--attachment <path>` attaches an image file to the prompt.
+  - `gemini-cli` 0.66.0 (TASK-004H): `@<path>` file references + `--include-directories <dir>`, read-only `--approval-mode plan`.
   - `claude-cli`: allow read access to one temp dir (`--add-dir <dir> --allowedTools Read`) and reference the image path in the prompt.
   - `anthropic` / `gemini` / `openai`-compatible APIs: multimodal message content. The current adapters send text only and must be extended.
   - `mock`: deterministic fake scores for tests.
@@ -48,6 +49,7 @@ Estimate: ≈ 10 text calls + vision calls. Vision calls = scenes × ⌈5 images
 ### 2. Vision capability
 - `LlmProvider.capabilities = { vision: boolean, maxImagesPerCall: number }`:
   - copilot-cli: true, 5
+  - gemini-cli: true, 10
   - claude-cli: true, 5
   - anthropic: true, 10
   - gemini: true, 10
