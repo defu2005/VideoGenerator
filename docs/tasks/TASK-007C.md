@@ -13,9 +13,12 @@ Phần 2 (sau): **AI tạo ảnh** khi không tìm được ảnh thật.
   - Kết quả với "AlphaGo vs Lee Sedol, Seoul 2016": 147 s, trả JSON `{imageUrl, sourcePage, author, license, width, height, why}`.
   - Nó tự loại ảnh của hãng tin (Getty/AP) vì có bản quyền, và nói rõ ảnh nào **không** phải ảnh trận đấu.
   - Ảnh tìm được lấy qua Commons API, nhưng **nó chưa tải thử** ⇒ app phải tự kiểm tra.
-- **agy (`--mode plan`) không làm được:**
-  - Model cố chạy lệnh shell để tải web, lệnh bị chặn, `response` rỗng (`denied_actions: RunCommand`), 22 s.
-  - Không dùng `--dangerously-skip-permissions` trong app ⇒ `webSearch: false` cho antigravity-cli cho đến khi có cách an toàn.
+- **agy với `--mode plan` không làm được:** model cố chạy lệnh shell, bị chặn, `response` rỗng.
+- **agy toàn quyền làm được** (thử thật 2026-11-03, theo yêu cầu của product owner):
+  - Lệnh: `agy -p "<prompt>" --dangerously-skip-permissions --sandbox --output-format json --print-timeout 400s`, chạy trong thư mục tạm.
+  - Query "BLACKPINK performing on stage during Born Pink world tour": 213 s, `status: SUCCESS`, ~186k token.
+  - `response` là JSON đúng schema, 4 ảnh Commons đúng chủ đề (CC BY 2.0 / CC BY 4.0). 3 link tải được ngay, 1 link Wikimedia trả 429 (giới hạn tần suất), không phải link hỏng.
+  - Nó tự viết và chạy `calc_urls.ps1` trong thư mục tạm để tính đường dẫn upload.wikimedia.org ⇒ thật sự chạy lệnh trên máy.
 - **LLM chỉ trả link, không trả ảnh.** Claude không tạo ảnh. Ảnh thật luôn do app tải về từ URL.
 
 ## REQUIREMENTS
@@ -24,9 +27,10 @@ Phần 2 (sau): **AI tạo ảnh** khi không tìm được ảnh thật.
 - Thêm `webSearch: boolean` vào capability provider:
   - claude-cli: `true`, bật bằng `--allowedTools WebSearch WebFetch`. Chỉ bật cho task này; các task khác giữ không có tool.
   - anthropic API: `true` qua server tool `web_search`.
+  - antigravity-cli: `true` **chỉ khi** user bật "Cho phép Antigravity toàn quyền khi tìm ảnh" (setting `visualWebSearch.allowAgyFullAccess`, mặc định **tắt**, env `AGY_WEB_SEARCH_FULL_ACCESS=true` cũng bật). Khi bật, chỉ cuộc gọi task `visualWebSearch` dùng `--dangerously-skip-permissions --sandbox`; mọi task khác vẫn `--mode plan`. UI ghi rõ: "Antigravity sẽ tự chạy lệnh trên máy trong thư mục tạm khi tìm ảnh."
   - Các provider khác: `false`.
 - Task routing mới **`visualWebSearch`**. Mặc định: claude-cli / claude-sonnet-5-5, tier "nên dùng model mạnh", timeout 300 s.
-- Cuộc gọi chạy trong thư mục tạm, không phải trong repo.
+- Cuộc gọi chạy trong một thư mục tạm mới cho mỗi lần gọi (xoá sau khi xong), không phải trong repo; không `--add-dir` thư mục nào khác; env tối giản (không truyền key/API token của app).
 
 ### 2. Luồng
 1. Scene card có nút **"Nhờ AI tìm"**. Ở QUALITY/MAX, pipeline tự gọi khi scene có điểm candidate tốt nhất dưới ngưỡng hoặc không có candidate. Tối đa N scene mỗi video, có trong budget estimate.
@@ -49,7 +53,7 @@ Phần 2 (sau): **AI tạo ảnh** khi không tìm được ảnh thật.
 ## DO NOT
 - Không tin URL/license LLM trả về khi chưa tải và kiểm tra.
 - Không bật tool web cho các task LLM khác.
-- Không dùng `--dangerously-skip-permissions` trong app.
+- Chỉ dùng `--dangerously-skip-permissions` (luôn kèm `--sandbox`) cho agy ở task `visualWebSearch`, khi setting toàn quyền đang bật. Có test chứng minh task khác và trạng thái tắt vẫn dùng `--mode plan`.
 - Không thêm dependency. Test không gọi mạng hoặc CLI thật (dùng fixture từ lần chạy thật ở trên).
 
 ## ACCEPTANCE CRITERIA
