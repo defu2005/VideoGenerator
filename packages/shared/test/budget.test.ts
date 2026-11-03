@@ -32,8 +32,8 @@ describe("budget modes", () => {
 
   it.each([
     ["ECO", 1, 1],
-    ["BALANCED", 2, 4],
-    ["QUALITY", 3, 7],
+    ["BALANCED", 2, 5],
+    ["QUALITY", 4, 9],
   ] as const)("estimates %s LLM call bounds", (mode, min, max) => {
     expect(estimateBudget(project(mode), "mock").total).toEqual({ min, max });
     expect(estimateBudget(project(mode), "mock").tokens).toBeDefined();
@@ -42,12 +42,12 @@ describe("budget modes", () => {
   it("estimates merged CUSTOM review and a user-set legacy research-off mode", () => {
     const custom = project("CUSTOM");
     custom.settings.budget.features = { storyMode: "merged", scriptReview: true };
-    expect(estimateBudget(custom).total).toEqual({ min: 2, max: 4 });
+    expect(estimateBudget(custom).total).toEqual({ min: 2, max: 5 });
 
     const off = project("BALANCED");
     off.settings.researchMode = "off";
     off.settings.userSet = ["researchMode"];
-    expect(estimateBudget(off).total).toEqual({ min: 1, max: 2 });
+    expect(estimateBudget(off).total).toEqual({ min: 1, max: 3 });
   });
 
   it("reports zero for completed stages and hides token estimates for CLI requests", () => {
@@ -55,9 +55,19 @@ describe("budget modes", () => {
       { stage: "RESEARCH", state: "DONE" },
       { stage: "SCRIPT", state: "DONE" },
       { stage: "SCENE_PLAN", state: "DONE" },
+      { stage: "VISUAL_SEARCH", state: "DONE" },
     ];
     expect(estimateBudget(project("QUALITY"), "mock", done).total).toEqual({ min: 0, max: 0 });
     expect(estimateBudget(project("QUALITY"), "copilot-cli").tokens).toBeUndefined();
+  });
+
+  it("estimates visual search LLM bounds from budget features", () => {
+    expect(estimateBudget(project("ECO")).perStage.find((item) => item.stage === "VISUAL_SEARCH")?.calls)
+      .toEqual({ min: 0, max: 0 });
+    expect(estimateBudget(project("BALANCED")).perStage.find((item) => item.stage === "VISUAL_SEARCH")?.calls)
+      .toEqual({ min: 0, max: 1 });
+    expect(estimateBudget(project("QUALITY")).perStage.find((item) => item.stage === "VISUAL_SEARCH")?.calls)
+      .toEqual({ min: 1, max: 2 });
   });
 
   it("recommends BALANCED with the specified reason", () => {

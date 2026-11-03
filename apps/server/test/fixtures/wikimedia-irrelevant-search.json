@@ -1,0 +1,25 @@
+{
+  "query": {
+    "pages": {
+      "202": {
+        "pageid": 202,
+        "title": "File:Dinosaur Adventure.jpg",
+        "imageinfo": [{
+          "url": "https://upload.wikimedia.org/wikipedia/commons/a/a0/Dinosaur_Adventure.jpg",
+          "thumburl": "https://upload.wikimedia.org/wikipedia/commons/thumb/a/a0/Dinosaur_Adventure.jpg/640px-Dinosaur_Adventure.jpg",
+          "width": 1920,
+          "height": 1080,
+          "mime": "image/jpeg",
+          "descriptionurl": "https://commons.wikimedia.org/wiki/File:Dinosaur_Adventure.jpg",
+          "extmetadata": {
+            "LicenseShortName": { "value": "CC BY 4.0" },
+            "LicenseUrl": { "value": "https://creativecommons.org/licenses/by/4.0/" },
+            "Artist": { "value": "A Photographer" },
+            "AttributionRequired": { "value": "true" },
+            "ImageDescription": { "value": "A dinosaur exhibit" }
+          }
+        }]
+      }
+    }
+  }
+}

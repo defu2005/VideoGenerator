@@ -1,0 +1,25 @@
+{
+  "query": {
+    "pages": {
+      "101": {
+        "pageid": 101,
+        "title": "File:Mountain.jpg",
+        "imageinfo": [{
+          "url": "https://upload.wikimedia.org/wikipedia/commons/a/a0/Mountain.jpg",
+          "thumburl": "https://upload.wikimedia.org/wikipedia/commons/thumb/a/a0/Mountain.jpg/640px-Mountain.jpg",
+          "width": 1920,
+          "height": 1080,
+          "mime": "image/jpeg",
+          "descriptionurl": "https://commons.wikimedia.org/wiki/File:Mountain.jpg",
+          "extmetadata": {
+            "LicenseShortName": { "value": "CC BY 4.0" },
+            "LicenseUrl": { "value": "https://creativecommons.org/licenses/by/4.0/" },
+            "Artist": { "value": "<a href=\"https://example.test/artist\">Jane Doe</a>" },
+            "AttributionRequired": { "value": "true" },
+            "ImageDescription": { "value": "Mountain landscape" }
+          }
+        }]
+      }
+    }
+  }
+}

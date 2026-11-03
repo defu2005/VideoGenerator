@@ -27,6 +27,9 @@ import { ScriptService } from "./services/scriptService.js";
 import { SceneService } from "./services/sceneService.js";
 import { registerSceneRoutes } from "./api/scenes.js";
 import { ScenePlanExecutor } from "./stages/scenes/scenePlanExecutor.js";
+import { VisualService } from "./services/visualService.js";
+import { VisualSearchExecutor } from "./stages/visuals/visualSearchExecutor.js";
+import { registerVisualRoutes } from "./api/visuals.js";
 
 export function buildApp({ config }: { config: AppConfig }) {
   const server = Fastify({
@@ -50,6 +53,7 @@ export function buildApp({ config }: { config: AppConfig }) {
   const llmProviders = new LlmProviderRegistry(config);
   const scriptService = new ScriptService(database.sqlite, jobRepository, orchestrator, config);
   const sceneService = new SceneService(database.sqlite, jobRepository);
+  const visualService = new VisualService(database.sqlite, jobRepository, config, server.log);
   const worker = new JobWorker(
     jobRepository,
     orchestrator,
@@ -59,6 +63,7 @@ export function buildApp({ config }: { config: AppConfig }) {
         RESEARCH: new ResearchExecutor(database.sqlite, llmProviders, config),
         SCRIPT: new ScriptExecutor(database.sqlite, llmProviders, config),
         SCENE_PLAN: new ScenePlanExecutor(database.sqlite, llmProviders, config),
+        VISUAL_SEARCH: new VisualSearchExecutor(visualService, llmProviders),
       },
     ),
     config,
@@ -75,6 +80,7 @@ export function buildApp({ config }: { config: AppConfig }) {
   registerLlmRoutes(server, llmProviders, database.sqlite);
   registerScriptRoutes(server, scriptService, projectService, config);
   registerSceneRoutes(server, sceneService);
+  registerVisualRoutes(server, visualService, jobRepository);
 
   server.addHook("onReady", async () => worker.start());
   server.addHook("onClose", async () => {

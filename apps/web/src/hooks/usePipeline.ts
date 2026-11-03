@@ -73,6 +73,9 @@ export function usePipeline(projectId: string) {
     const onEvent = (message: MessageEvent<string>) => {
       const event = JSON.parse(message.data) as PipelineEvent;
       if (event.type === "stage.updated") {
+        if (event.data.stage === "VISUAL_SEARCH") {
+          void queryClient.invalidateQueries({ queryKey: ["visuals", projectId] });
+        }
         if (event.data.stage === "SCENE_PLAN") {
           void queryClient.invalidateQueries({ queryKey: ["scenes", projectId] });
         }

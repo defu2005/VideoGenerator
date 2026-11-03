@@ -1,0 +1,31 @@
+{
+  "results": [{
+    "id": "ov-1",
+    "title": "River sunrise",
+    "url": "https://images.example.test/river.jpg",
+    "thumbnail": "https://images.example.test/river-small.jpg",
+    "width": 1600,
+    "height": 900,
+    "filetype": "jpg",
+    "license": "by-sa",
+    "license_version": "4.0",
+    "license_url": "https://creativecommons.org/licenses/by-sa/4.0/",
+    "creator": "A Photographer",
+    "creator_url": "https://creator.example.test/",
+    "foreign_landing_url": "https://source.example.test/river",
+    "attribution": "Photo by A Photographer",
+    "source": "flickr",
+    "provider": "Flickr",
+    "tags": [{ "name": "river" }],
+    "mature": false
+  }, {
+    "id": "ov-mature",
+    "url": "https://images.example.test/mature.jpg",
+    "thumbnail": "https://images.example.test/mature-small.jpg",
+    "width": 1200,
+    "height": 800,
+    "filetype": "jpg",
+    "license": "cc0",
+    "mature": true
+  }]
+}

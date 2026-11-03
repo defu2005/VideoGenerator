@@ -1,6 +1,14 @@
 import { fireEvent, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { STAGE_ORDER, type PipelineState, type Project, type Scene, type ScenePlanSummary } from "@vg/shared";
+import {
+  STAGE_ORDER,
+  type PipelineState,
+  type Project,
+  type ProjectVisuals,
+  type Scene,
+  type ScenePlanSummary,
+  type VisualCandidate,
+} from "@vg/shared";
 import { renderWithProviders, jsonResponse } from "../../test/testUtils";
 import { SceneBoard } from "./SceneBoard";
 
@@ -89,6 +97,18 @@ const scenes: Scene[] = [
 ];
 
 const summary: ScenePlanSummary = { scenes, totalSec: 8, targetSec: 120, stale: true };
+const emptyVisuals: ProjectVisuals = {
+  scenes: scenes.map((scene) => ({
+    sceneId: scene.id,
+    order: scene.order,
+    selection: null,
+    selectedCandidate: null,
+    candidateCount: 0,
+    needsUser: true,
+    lowRelevance: false,
+  })),
+  summary: { withImage: 0, needsUser: scenes.length, lowRelevance: 0, licenseCounts: {} },
+};
 const pipeline: PipelineState = {
   projectId,
   mode: "ASSISTED",
@@ -107,13 +127,14 @@ const pipeline: PipelineState = {
   activeJob: null,
 };
 
-function setup() {
+function setup(visuals: ProjectVisuals = emptyVisuals) {
   const calls: { url: string; init?: RequestInit }[] = [];
   vi.stubGlobal("EventSource", undefined);
   vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input);
     calls.push({ url, init });
     if (url.endsWith("/pipeline")) return jsonResponse(pipeline);
+    if (url.endsWith("/visuals")) return jsonResponse(visuals);
     if (url.endsWith("/scenes")) return jsonResponse(summary);
     if (url.includes("/pipeline/run")) return jsonResponse(pipeline);
     return jsonResponse(summary);
@@ -129,9 +150,63 @@ describe("SceneBoard", () => {
     setup();
     expect(await screen.findByText("The script changed after this scene plan was created. Regenerate to sync the storyboard.")).toBeInTheDocument();
     expect(screen.getByText("00:00–00:04")).toBeInTheDocument();
-    expect(screen.getAllByText("Ảnh sẽ có ở bước Visual")).toHaveLength(2);
+    expect(screen.getAllByText("Cần chọn ảnh")).toHaveLength(2);
     expect(screen.getByText("sunrise city")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Move scene 1 right" })).toBeEnabled();
+  });
+
+  it("shows a selected thumbnail, attribution badge and broken-image placeholder", async () => {
+    const candidate: VisualCandidate = {
+      id: "33333333-3333-4333-8333-333333333333",
+      projectId,
+      sceneId: scenes[0].id,
+      origin: "SEARCH",
+      provider: "mock",
+      providerItemId: "river",
+      query: "sunrise city",
+      title: "Sunrise over a city",
+      description: "",
+      tags: [],
+      previewUrl: "https://images.example.test/river.jpg",
+      imageUrl: "https://images.example.test/river-full.jpg",
+      sourceUrl: "https://images.example.test/source",
+      sourceSite: "Mock",
+      width: 1600,
+      height: 900,
+      aspectRatio: 16 / 9,
+      fileType: "jpg",
+      watermark: "NONE",
+      relevanceScore: 0.9,
+      scoreBreakdown: {},
+      license: {
+        kind: "CC_BY",
+        name: "CC BY 4.0",
+        url: null,
+        author: "A Photographer",
+        authorUrl: null,
+        attributionRequired: true,
+        attributionText: "By A Photographer",
+        evidence: "api",
+      },
+      rank: 0,
+      discardedAt: null,
+      createdAt: "2026-11-03T00:00:00.000Z",
+    };
+    const visuals: ProjectVisuals = {
+      scenes: [
+        { sceneId: scenes[0].id, order: 0, selection: null, selectedCandidate: candidate, candidateCount: 1, needsUser: false, lowRelevance: true },
+        ...emptyVisuals.scenes.slice(1),
+      ],
+      summary: { withImage: 1, needsUser: 1, lowRelevance: 1, licenseCounts: { CC_BY: 1 } },
+    };
+    setup(visuals);
+    const image = await screen.findByRole("img", { name: "Sunrise over a city" });
+    expect(image).toHaveAttribute("loading", "lazy");
+    expect(image).toHaveAttribute("referrerpolicy", "no-referrer");
+    expect(screen.getByText("Attribution required")).toBeInTheDocument();
+    expect(screen.getByText("Ít liên quan — nên chọn lại")).toBeInTheDocument();
+    fireEvent.error(image);
+    expect(await screen.findByText("mock · Ảnh không tải được")).toBeInTheDocument();
   });
 
   it("uses accessible move controls and saves scene editor payloads", async () => {

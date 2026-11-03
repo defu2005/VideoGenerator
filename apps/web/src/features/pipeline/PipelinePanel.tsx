@@ -61,10 +61,13 @@ export function PipelinePanel({ projectId, project }: { projectId: string; proje
       </div>
       {estimate && (
         <p className="pipeline-budget-estimate" role="status">
-          {estimate.total.min === 0 && estimate.total.max === 0
+          <span>{estimate.total.min === 0 && estimate.total.max === 0
             ? "Ước tính: 0 lượt gọi AI (đã có kết quả, dùng cache)"
             : <>Ước tính: ~{estimateCalls} lượt gọi AI ({estimate.mode})
-              {estimate.tokens ? ` · ~${estimate.tokens.input + estimate.tokens.output} tokens` : ""}</>}
+              {estimate.tokens ? ` · ~${estimate.tokens.input + estimate.tokens.output} tokens` : ""}</>}</span>
+          <span>{estimate.perStage.find((item) => item.stage === "VISUAL_SEARCH")?.calls.max
+            ? ` · Visual Search: up to ${estimate.perStage.find((item) => item.stage === "VISUAL_SEARCH")?.calls.max} LLM calls`
+            : " · Visual Search: 0 LLM calls"}</span>
         </p>
       )}
       {waitingAtGate && <p className="pipeline-mode-hint">Approve the review gate to continue</p>}

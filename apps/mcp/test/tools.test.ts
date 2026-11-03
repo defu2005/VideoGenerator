@@ -55,6 +55,7 @@ describe("Video Agent MCP tools", () => {
       "get_pipeline",
       "get_project",
       "get_research",
+      "get_scene_visuals",
       "get_scenes",
       "get_script",
       "get_writing_brief",
@@ -70,6 +71,62 @@ describe("Video Agent MCP tools", () => {
       "write_script",
       "write_story",
     ]);
+  });
+
+  it("reads a compact visual selection and top-five candidate list", async () => {
+    const sceneId = "22222222-2222-4222-8222-222222222222";
+    const fetchImpl = vi.fn(async () => jsonResponse({
+      selection: { candidateId: "33333333-3333-4333-8333-333333333333", status: "REPLACED" },
+      candidates: [{
+        id: "33333333-3333-4333-8333-333333333333",
+        projectId,
+        sceneId,
+        origin: "SEARCH",
+        provider: "wikimedia",
+        providerItemId: "file-1",
+        query: "river",
+        title: "River",
+        description: "",
+        tags: [],
+        previewUrl: "https://images.test/river-thumb.jpg",
+        imageUrl: "https://images.test/river.jpg",
+        sourceUrl: "https://commons.wikimedia.org/wiki/File:River.jpg",
+        sourceSite: "Wikimedia Commons",
+        width: 1200,
+        height: 800,
+        aspectRatio: 1.5,
+        fileType: "jpg",
+        watermark: "NONE",
+        relevanceScore: 0.8,
+        scoreBreakdown: {},
+        license: {
+          kind: "CC0",
+          name: "CC0",
+          url: null,
+          author: null,
+          authorUrl: null,
+          attributionRequired: false,
+          attributionText: "",
+          evidence: "api",
+        },
+        rank: 0,
+        discardedAt: null,
+        createdAt: "2026-11-03T00:00:00.000Z",
+      }],
+    })) as typeof fetch;
+    const client = await connect(fetchImpl);
+    const result = await client.callTool({ name: "get_scene_visuals", arguments: { projectId, sceneId } });
+    expect(JSON.parse(resultText(result))).toEqual([{
+      sceneId,
+      selection: { candidateId: "33333333-3333-4333-8333-333333333333", status: "REPLACED" },
+      candidates: [{
+        title: "River",
+        provider: "wikimedia",
+        size: "1200x800",
+        license: "CC0",
+        sourceUrl: "https://commons.wikimedia.org/wiki/File:River.jpg",
+      }],
+    }]);
   });
 
   it("reads a compact storyboard through get_scenes", async () => {

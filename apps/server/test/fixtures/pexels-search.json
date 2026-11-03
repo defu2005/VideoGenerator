@@ -1,0 +1,15 @@
+{
+  "photos": [{
+    "id": 9001,
+    "url": "https://www.pexels.com/photo/river-9001/",
+    "alt": "River at dawn",
+    "photographer": "Alex",
+    "photographer_url": "https://www.pexels.com/@alex",
+    "width": 2400,
+    "height": 1600,
+    "src": {
+      "medium": "https://images.pexels.com/photos/9001/medium.jpeg",
+      "large": "https://images.pexels.com/photos/9001/large.jpeg"
+    }
+  }]
+}

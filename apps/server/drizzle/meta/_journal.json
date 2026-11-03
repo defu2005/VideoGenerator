@@ -43,6 +43,13 @@
       "when": 1793657210022,
       "tag": "0005_scenes",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "6",
+      "when": 1793669359729,
+      "tag": "0006_visuals",
+      "breakpoints": true
     }
   ]
 }

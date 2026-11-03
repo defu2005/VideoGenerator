@@ -7,6 +7,8 @@ import type {
   ResearchNotes,
   Script,
   ScenePlanSummary,
+  ProjectVisuals,
+  SceneVisuals,
 } from "@vg/shared";
 
 const SERVER_DOWN_GUIDANCE = "Start it with `npm run dev`.";
@@ -68,6 +70,14 @@ export class VideoAgentApiClient {
 
   getScenes(projectId: string): Promise<ScenePlanSummary> {
     return this.request(`/api/projects/${encodeURIComponent(projectId)}/scenes`);
+  }
+
+  getProjectVisuals(projectId: string): Promise<ProjectVisuals> {
+    return this.request(`/api/projects/${encodeURIComponent(projectId)}/visuals`);
+  }
+
+  getSceneVisuals(projectId: string, sceneId: string): Promise<SceneVisuals> {
+    return this.request(`/api/projects/${encodeURIComponent(projectId)}/scenes/${encodeURIComponent(sceneId)}/visuals`);
   }
 
   getPrompt(projectId: string, stage: "RESEARCH" | "SCRIPT" | "STORY"): Promise<{

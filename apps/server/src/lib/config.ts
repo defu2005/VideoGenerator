@@ -71,6 +71,24 @@ const ConfigSchema = z.object({
   JOB_MAX_ATTEMPTS: z.coerce.number().int().positive().max(20).default(3),
   JOB_RETRY_BASE_MS: z.coerce.number().int().nonnegative().default(2_000),
   FAKE_STAGE_DELAY_MS: z.coerce.number().int().nonnegative().default(300),
+  IMAGE_PROVIDERS: z.string().default("wikimedia,openverse,pexels"),
+  IMAGE_SEARCH_USER_AGENT: z.string().min(1).default("VideoAgent/0.1 (local)"),
+  IMAGE_SEARCH_TIMEOUT_MS: z.coerce.number().int().positive().default(15_000),
+  IMAGE_SEARCH_CACHE_TTL_HOURS: z.coerce.number().int().positive().default(168),
+  IMAGE_SEARCH_PER_MINUTE_WIKIMEDIA: z.coerce.number().int().positive().default(60),
+  IMAGE_SEARCH_PER_MINUTE_OPENVERSE: z.coerce.number().int().positive().default(20),
+  IMAGE_SEARCH_PER_MINUTE_PEXELS: z.coerce.number().int().positive().default(180),
+  OPENVERSE_CLIENT_ID: z.string().trim().min(1).optional(),
+  OPENVERSE_CLIENT_SECRET: z.string().trim().min(1).optional(),
+  PEXELS_API_KEY: z.string().optional(),
+}).superRefine((values, context) => {
+  if (Boolean(values.OPENVERSE_CLIENT_ID) !== Boolean(values.OPENVERSE_CLIENT_SECRET)) {
+    context.addIssue({
+      code: "custom",
+      path: ["OPENVERSE_CLIENT_ID"],
+      message: "OPENVERSE_CLIENT_ID and OPENVERSE_CLIENT_SECRET must be set together",
+    });
+  }
 });
 
 export type AppConfig = {
@@ -123,6 +141,16 @@ export type AppConfig = {
   JOB_MAX_ATTEMPTS: number;
   JOB_RETRY_BASE_MS: number;
   FAKE_STAGE_DELAY_MS: number;
+  IMAGE_PROVIDERS: string;
+  IMAGE_SEARCH_USER_AGENT: string;
+  IMAGE_SEARCH_TIMEOUT_MS: number;
+  IMAGE_SEARCH_CACHE_TTL_HOURS: number;
+  IMAGE_SEARCH_PER_MINUTE_WIKIMEDIA: number;
+  IMAGE_SEARCH_PER_MINUTE_OPENVERSE: number;
+  IMAGE_SEARCH_PER_MINUTE_PEXELS: number;
+  OPENVERSE_CLIENT_ID?: string;
+  OPENVERSE_CLIENT_SECRET?: string;
+  PEXELS_API_KEY?: string;
 };
 
 const providerLimitPrefixes: Partial<Record<LlmProviderId, string>> = {
@@ -156,6 +184,9 @@ export function parseConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     : resolve(workspaceRoot, values.DATA_DIR);
   return {
     ...values,
+    IMAGE_SEARCH_PER_MINUTE_OPENVERSE: env.IMAGE_SEARCH_PER_MINUTE_OPENVERSE
+      ? values.IMAGE_SEARCH_PER_MINUTE_OPENVERSE
+      : values.OPENVERSE_CLIENT_ID ? 100 : values.IMAGE_SEARCH_PER_MINUTE_OPENVERSE,
     LLM_PROVIDER_LIMITS: providerLimits,
     DATA_DIR: dataDirectory,
     LLM_ENABLE_MOCK: values.LLM_ENABLE_MOCK ?? !isProduction,

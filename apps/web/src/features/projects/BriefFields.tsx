@@ -56,9 +56,9 @@ export function BriefFields({
   const customFeature = <K extends keyof BudgetFeatures>(key: K, value: BudgetFeatures[K]) => {
     const path = `budget.features.${key}`;
     const labels: Partial<Record<keyof BudgetFeatures, string>> = {
-      altQueryAssist: "Alternative query assist (available in a later step)",
+      altQueryAssist: "Alternative visual query assistance (BALANCED/QUALITY/CUSTOM)",
       sceneQueryAssist: "Scene query assist (QUALITY/custom)",
-      semanticImageRerank: "Semantic image rerank (available in a later step)",
+      semanticImageRerank: "Semantic image rerank (QUALITY/CUSTOM)",
       visionCheck: "Vision check (available in a later step)",
       musicAssist: "Music assist (available in a later step)",
     };
@@ -93,8 +93,8 @@ export function BriefFields({
           onChange={(event) => onChange("budget.mode", event.target.value)}
         >
           <option value="ECO">ECO — Rẻ nhất (~1 lượt gọi AI/video)</option>
-          <option value="BALANCED">BALANCED — Cân bằng chất lượng/chi phí (~2–3 lượt)</option>
-          <option value="QUALITY">QUALITY — Chất lượng cao: AI tự review &amp; sửa script (~3–5 lượt)</option>
+          <option value="BALANCED">BALANCED — Cân bằng chất lượng/chi phí (~2–5 lượt)</option>
+          <option value="QUALITY">QUALITY — Chất lượng cao: AI tự review &amp; sửa script (~4–9 lượt)</option>
           <option value="CUSTOM">CUSTOM</option>
         </select>
       ))}
@@ -102,6 +102,11 @@ export function BriefFields({
         Ước tính: ~{budgetEstimate.total.min === budgetEstimate.total.max
           ? budgetEstimate.total.min
           : `${budgetEstimate.total.min}–${budgetEstimate.total.max}`} lượt gọi AI ({budgetEstimate.mode})
+      </small>
+      <small className="field-hint">
+        Visual Search: {budgetEstimate.perStage.find((item) => item.stage === "VISUAL_SEARCH")?.calls.max
+          ? `up to ${budgetEstimate.perStage.find((item) => item.stage === "VISUAL_SEARCH")?.calls.max} LLM calls`
+          : "0 LLM calls"}
       </small>
       {resolved.budget.mode === "CUSTOM" && (
         <fieldset className="budget-custom-fields">

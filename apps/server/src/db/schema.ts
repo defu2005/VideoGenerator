@@ -117,6 +117,74 @@ export const scenes = sqliteTable("scenes", {
   index("scenes_project_idx").on(table.projectId),
 ]);
 
+export const visualCandidates = sqliteTable("visual_candidates", {
+  id: text("id").primaryKey(),
+  projectId: text("project_id").notNull().references(() => projects.id, { onDelete: "cascade" }),
+  sceneId: text("scene_id").notNull().references(() => scenes.id, { onDelete: "cascade" }),
+  origin: text("origin").notNull(),
+  provider: text("provider").notNull(),
+  providerItemId: text("provider_item_id").notNull(),
+  sourceProvider: text("source_provider"),
+  query: text("query").notNull(),
+  title: text("title").notNull(),
+  description: text("description").notNull(),
+  tags: text("tags", { mode: "json" }).$type<string[]>().notNull().default([]),
+  previewUrl: text("preview_url").notNull(),
+  imageUrl: text("image_url").notNull(),
+  sourceUrl: text("source_url").notNull(),
+  sourceSite: text("source_site").notNull(),
+  width: integer("width").notNull(),
+  height: integer("height").notNull(),
+  aspectRatio: real("aspect_ratio").notNull(),
+  fileType: text("file_type").notNull(),
+  watermark: text("watermark").notNull(),
+  relevanceScore: real("relevance_score").notNull(),
+  scoreBreakdown: text("score_breakdown", { mode: "json" }).notNull(),
+  license: text("license", { mode: "json" }).notNull(),
+  rank: integer("rank").notNull(),
+  discardedAt: text("discarded_at"),
+  createdAt: text("created_at").notNull(),
+  searchHash: text("search_hash").notNull(),
+}, (table) => [
+  index("visual_candidates_scene_rank_idx").on(table.sceneId, table.rank),
+  index("visual_candidates_project_scene_idx").on(table.projectId, table.sceneId),
+  uniqueIndex("visual_candidates_provider_item_uq").on(table.sceneId, table.provider, table.providerItemId),
+]);
+
+export const visualSelections = sqliteTable("visual_selections", {
+  id: text("id").primaryKey(),
+  projectId: text("project_id").notNull().references(() => projects.id, { onDelete: "cascade" }),
+  sceneId: text("scene_id").notNull().references(() => scenes.id, { onDelete: "cascade" }),
+  slot: integer("slot").notNull().default(0),
+  candidateId: text("candidate_id").notNull().references(() => visualCandidates.id, { onDelete: "cascade" }),
+  status: text("status").notNull(),
+  selectedBy: text("selected_by").notNull(),
+  motion: text("motion", { mode: "json" }),
+  reviewedAt: text("reviewed_at"),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+}, (table) => [
+  uniqueIndex("visual_selections_scene_slot_uq").on(table.sceneId, table.slot),
+  index("visual_selections_project_scene_idx").on(table.projectId, table.sceneId),
+]);
+
+export const visualSearchState = sqliteTable("visual_search_state", {
+  sceneId: text("scene_id").primaryKey().references(() => scenes.id, { onDelete: "cascade" }),
+  projectId: text("project_id").notNull().references(() => projects.id, { onDelete: "cascade" }),
+  searchHash: text("search_hash").notNull(),
+  updatedAt: text("updated_at").notNull(),
+}, (table) => [
+  index("visual_search_state_project_idx").on(table.projectId),
+]);
+
+export const imageSearchCache = sqliteTable("image_search_cache", {
+  key: text("key").primaryKey(),
+  provider: text("provider").notNull(),
+  query: text("query").notNull(),
+  response: text("response", { mode: "json" }).notNull(),
+  createdAt: text("created_at").notNull(),
+});
+
 export const llmCache = sqliteTable("llm_cache", {
   key: text("key").primaryKey(),
   provider: text("provider").notNull(),

@@ -147,7 +147,7 @@ describe("CreateProjectDialog", () => {
     fireEvent.click(screen.getByRole("button", { name: /Customize/ }));
     const mode = screen.getByLabelText("Chế độ AI / Budget mode");
     expect(mode).toHaveValue("BALANCED");
-    expect(screen.getByText("Ước tính: ~2–4 lượt gọi AI (BALANCED)")).toBeInTheDocument();
+    expect(screen.getByText("Ước tính: ~2–5 lượt gọi AI (BALANCED)")).toBeInTheDocument();
 
     fireEvent.change(mode, { target: { value: "ECO" } });
     expect(screen.getByText("Ước tính: ~1 lượt gọi AI (ECO)")).toBeInTheDocument();
@@ -156,7 +156,7 @@ describe("CreateProjectDialog", () => {
     expect(review).not.toBeChecked();
     fireEvent.click(review);
     expect(review).toBeChecked();
-    expect(screen.getByText("Ước tính: ~3–6 lượt gọi AI (CUSTOM)")).toBeInTheDocument();
-    expect(screen.getAllByText(/available in a later step/)).toHaveLength(4);
+    expect(screen.getByText("Ước tính: ~3–7 lượt gọi AI (CUSTOM)")).toBeInTheDocument();
+    expect(screen.getAllByText(/available in a later step/)).toHaveLength(2);
   });
 });

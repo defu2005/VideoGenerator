@@ -118,7 +118,7 @@ describe("PipelinePanel", () => {
     vi.stubGlobal("EventSource", MockEventSource);
 
     renderWithProviders(<PipelinePanel projectId={projectId} project={project} />);
-    expect(await screen.findByText("Ước tính: 0 lượt gọi AI (đã có kết quả, dùng cache)")).toBeInTheDocument();
+    expect(await screen.findByText("Ước tính: 0 lượt gọi AI (đã có kết quả, dùng cache)", { exact: true })).toBeInTheDocument();
   });
 
   it("renders stage states and sends approval to the matching endpoint", async () => {

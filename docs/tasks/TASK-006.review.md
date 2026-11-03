@@ -87,3 +87,11 @@ Append `## Fix round 1` to `docs/tasks/TASK-006.report.md` with:
 - the F6 table and numbers
 
 Then create empty `docs/tasks/TASK-006.fix-done`.
+
+## Fix round 1 — verified (architect, 2026-11-03)
+**Accepted.** typecheck, build, 293/293 tests; drizzle-kit no changes; audit 0; no NUL bytes; no new deps.
+Architect live run (real Wikimedia + Openverse, mock LLM, BALANCED, YouTube 7 s, AlphaGo fixture): 11/11 scenes selected, 11 relevant, 0 low relevance, 0 duplicate selections, 10–21 candidates/scene, 27.7 s (requests W 17 / O 9). Unchanged re-run: 0.1 s, 0 requests, 0 LLM. Copilot's TikTok run: 28/28 relevant, 88.7 s, 7 reused selections all flagged. Scene Board shows thumbnails + license badges.
+Notes for later tasks:
+- TASK-007/012: many selections are Wikimedia **SVG** game diagrams — render must use a rasterized PNG (Wikimedia `thumburl` at the target width), never the raw SVG.
+- TASK-007: when the pool is exhausted (long videos, same subject), reused images are flagged — the review UI should highlight them and offer "Search alternative".
+- TASK-004F: per-scene English `visualDescription` will improve query variety (scene 1 "Four Seasons Hotel" still got a Go board).

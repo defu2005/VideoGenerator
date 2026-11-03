@@ -97,7 +97,7 @@ export function storyModeForProject(project: {
 }
 
 export type BudgetEstimateStage = {
-  stage: "RESEARCH" | "SCRIPT" | "SCENE_PLAN";
+  stage: "RESEARCH" | "SCRIPT" | "SCENE_PLAN" | "VISUAL_SEARCH";
   calls: { min: number; max: number };
   reason: string;
 };
@@ -114,7 +114,7 @@ export const BudgetEstimateSchema = z.object({
   mode: BudgetModeSchema,
   features: BudgetFeaturesSchema,
   perStage: z.array(z.object({
-    stage: z.enum(["RESEARCH", "SCRIPT", "SCENE_PLAN"]),
+    stage: z.enum(["RESEARCH", "SCRIPT", "SCENE_PLAN", "VISUAL_SEARCH"]),
     calls: z.object({ min: z.number().int().nonnegative(), max: z.number().int().nonnegative() }).strict(),
     reason: z.string(),
   }).strict()),
@@ -144,7 +144,7 @@ export function estimateBudget(
   const features = resolveBudget(budget);
   const mode = budget.mode ?? "BALANCED";
   const storyMode = storyModeForProject(project);
-  const stateFor = (stage: "RESEARCH" | "SCRIPT" | "SCENE_PLAN") =>
+  const stateFor = (stage: "RESEARCH" | "SCRIPT" | "SCENE_PLAN" | "VISUAL_SEARCH") =>
     stages.find((record) => record.stage === stage)?.state;
   const researchDone = stateFor("RESEARCH") === "DONE";
   const scriptDone = stateFor("SCRIPT") === "DONE";
@@ -160,6 +160,17 @@ export function estimateBudget(
       : researchDone ? "Research is already complete and unchanged."
         : storyMode === "merged" ? "Research and script are generated together."
           : "Research is generated separately.",
+  });
+
+  const visualSearchDone = stateFor("VISUAL_SEARCH") === "DONE";
+  const visualAssistMax = !visualSearchDone && features.altQueryAssist ? 1 : 0;
+  const rerankCalls = !visualSearchDone && features.semanticImageRerank ? 1 : 0;
+  perStage.push({
+    stage: "VISUAL_SEARCH",
+    calls: { min: rerankCalls, max: visualAssistMax + rerankCalls },
+    reason: visualSearchDone
+      ? "Visual search is already complete and unchanged."
+      : "Code ranks images; optional batched query assistance and semantic reranking use the selected budget features.",
   });
 
   const scriptBaseCalls = storyMode === "merged"
@@ -225,9 +236,11 @@ function estimateBudgetTokens(
   const researchCalls = stages.find((stage) => stage.stage === "RESEARCH")?.calls.max ?? 0;
   const scriptCalls = stages.find((stage) => stage.stage === "SCRIPT")?.calls.max ?? 0;
   const scenePlanCalls = stages.find((stage) => stage.stage === "SCENE_PLAN")?.calls.max ?? 0;
+  const visualSearchCalls = stages.find((stage) => stage.stage === "VISUAL_SEARCH")?.calls.max ?? 0;
   const output = researchCalls * (storyMode === "merged" ? scriptOutput + researchOutput : researchOutput)
     + scriptCalls * scriptOutput
-    + scenePlanCalls * 500;
+    + scenePlanCalls * 500
+    + visualSearchCalls * 500;
   return { input: calls * perCallInput, output };
 }
 

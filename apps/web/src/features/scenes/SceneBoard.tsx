@@ -5,12 +5,14 @@ import { ErrorState } from "../../components/ErrorState";
 import { Spinner } from "../../components/Spinner";
 import { usePipeline } from "../../hooks/usePipeline";
 import { useScenes } from "../../hooks/useScenes";
+import { useVisuals } from "../../hooks/useVisuals";
 import { DurationBar } from "./DurationBar";
 import { SceneCard } from "./SceneCard";
 import { SceneEditor } from "./SceneEditor";
 
 export function SceneBoard({ project }: { project: Project }) {
   const scenesQuery = useScenes(project.id);
+  const visualsQuery = useVisuals(project.id);
   const pipeline = usePipeline(project.id);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [confirmOverwrite, setConfirmOverwrite] = useState(false);
@@ -46,6 +48,7 @@ export function SceneBoard({ project }: { project: Project }) {
   if (scenesQuery.isPending || pipeline.isPending) return <Spinner label="Loading scene board" />;
   if (scenesQuery.isError) return <ErrorState message={scenesQuery.error.message} onRetry={() => void scenesQuery.refetch()} />;
   if (pipeline.isError) return <ErrorState message={pipeline.error.message} onRetry={() => void pipeline.refetch()} />;
+  if (visualsQuery.isError) return <ErrorState message={visualsQuery.error.message} onRetry={() => void visualsQuery.refetch()} />;
 
   const summary = scenesQuery.data;
   const selected = summary.scenes.find((scene) => scene.id === selectedId) ?? null;
@@ -114,6 +117,8 @@ export function SceneBoard({ project }: { project: Project }) {
               <SceneCard
                 key={scene.id}
                 scene={scene}
+                visual={visualsQuery.data?.scenes.find((item) => item.sceneId === scene.id)}
+                aspectRatio={project.settings.aspectRatio}
                 count={summary.scenes.length}
                 active={selected?.id === scene.id}
                 onSelect={() => {

@@ -150,6 +150,31 @@ export function registerVideoAgentTools(
       };
     }));
 
+  server.tool("get_scene_visuals", "Read visual selections and the top five image candidates for a project or scene.", {
+    ...projectIdShape,
+    sceneId: z.string().uuid().optional(),
+  }, ({ projectId, sceneId }) => invoke(async () => {
+    const records = sceneId
+      ? [{ sceneId, visuals: await api.getSceneVisuals(projectId, sceneId) }]
+      : await Promise.all((await api.getProjectVisuals(projectId)).scenes.map(async (scene) => ({
+        sceneId: scene.sceneId,
+        visuals: await api.getSceneVisuals(projectId, scene.sceneId),
+      })));
+    return records.map(({ sceneId: id, visuals }) => ({
+      sceneId: id,
+      selection: visuals.selection
+        ? { candidateId: visuals.selection.candidateId, status: visuals.selection.status }
+        : null,
+      candidates: visuals.candidates.slice(0, 5).map((candidate) => ({
+        title: candidate.title,
+        provider: candidate.provider,
+        size: `${candidate.width}x${candidate.height}`,
+        license: candidate.license.kind,
+        sourceUrl: candidate.sourceUrl,
+      })),
+    }));
+  }));
+
   server.tool("save_script", "Validate and save a script through the Video Agent API.", {
     ...projectIdShape,
     script: z.unknown(),

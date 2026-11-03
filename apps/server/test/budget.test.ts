@@ -44,9 +44,10 @@ describe("budget estimate API", () => {
     expect(estimateResponse.statusCode).toBe(200);
     expect(estimateResponse.json()).toMatchObject({
       mode: "QUALITY",
-      total: { min: 3, max: 7 },
+      total: { min: 4, max: 9 },
       perStage: [
         { stage: "RESEARCH", calls: { min: 1, max: 2 } },
+        { stage: "VISUAL_SEARCH", calls: { min: 1, max: 2 } },
         { stage: "SCRIPT", calls: { min: 2, max: 4 } },
         { stage: "SCENE_PLAN", calls: { min: 0, max: 1 } },
       ],
@@ -54,7 +55,7 @@ describe("budget estimate API", () => {
     });
 
     const db = new Database(config.DATABASE_PATH);
-    db.prepare("UPDATE project_stages SET state = 'DONE' WHERE project_id = ? AND stage IN ('RESEARCH', 'SCRIPT', 'SCENE_PLAN')")
+    db.prepare("UPDATE project_stages SET state = 'DONE' WHERE project_id = ? AND stage IN ('RESEARCH', 'SCRIPT', 'SCENE_PLAN', 'VISUAL_SEARCH')")
       .run(project.id);
     db.close();
     const completed = await app.inject({
