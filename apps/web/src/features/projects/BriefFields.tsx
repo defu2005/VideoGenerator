@@ -57,8 +57,9 @@ export function BriefFields({
     const path = `budget.features.${key}`;
     const labels: Partial<Record<keyof BudgetFeatures, string>> = {
       altQueryAssist: "Alternative visual query assistance (BALANCED/QUALITY/CUSTOM)",
-      sceneQueryAssist: "Scene query assist (QUALITY/custom)",
+      sceneQueryAssist: "Scene query assist (BALANCED/QUALITY/CUSTOM)",
       semanticImageRerank: "Semantic image rerank (QUALITY/CUSTOM)",
+      scriptReviewPasses: "Script review passes",
       visionCheck: "Vision check (available in a later step)",
       musicAssist: "Music assist (available in a later step)",
     };
@@ -76,7 +77,7 @@ export function BriefFields({
     return field(path, label, (
       <select aria-label={key} value={String(value)} onChange={(event) => onChange(
         path,
-        key === "repairAttempts" ? Number(event.target.value) : event.target.value,
+        key === "repairAttempts" || key === "scriptReviewPasses" ? Number(event.target.value) : event.target.value,
       )}>
         {(key === "storyMode" ? ["merged", "separate"] : ["0", "1", "2"]).map((choice) => (
           <option key={choice} value={choice}>{choice}</option>
@@ -93,8 +94,8 @@ export function BriefFields({
           onChange={(event) => onChange("budget.mode", event.target.value)}
         >
           <option value="ECO">ECO — Rẻ nhất (~1 lượt gọi AI/video)</option>
-          <option value="BALANCED">BALANCED — Cân bằng chất lượng/chi phí (~2–5 lượt)</option>
-          <option value="QUALITY">QUALITY — Chất lượng cao: AI tự review &amp; sửa script (~4–9 lượt)</option>
+          <option value="BALANCED">BALANCED — Cân bằng chất lượng/chi phí (~5 lượt)</option>
+          <option value="QUALITY">QUALITY — Chất lượng cao: AI tự review &amp; sửa script (~7 lượt)</option>
           <option value="CUSTOM">CUSTOM</option>
         </select>
       ))}
@@ -113,7 +114,7 @@ export function BriefFields({
           <legend>Custom AI features</legend>
           {customFeature("storyMode", budgetFeatures.storyMode)}
           {customFeature("repairAttempts", budgetFeatures.repairAttempts)}
-          {customFeature("scriptReview", budgetFeatures.scriptReview)}
+          {customFeature("scriptReviewPasses", budgetFeatures.scriptReviewPasses)}
           {customFeature("altQueryAssist", budgetFeatures.altQueryAssist)}
           {customFeature("sceneQueryAssist", budgetFeatures.sceneQueryAssist)}
           {customFeature("semanticImageRerank", budgetFeatures.semanticImageRerank)}

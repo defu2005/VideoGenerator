@@ -22,6 +22,7 @@ type SceneRow = {
   label: string;
   narration: string;
   visual_notes: string;
+  visual_description: string;
   visual_queries: string;
   music_mood: string;
   energy: Scene["energy"];
@@ -59,6 +60,7 @@ function fromRow(row: SceneRow): Scene {
     label: row.label,
     narration: row.narration,
     visualNotes: row.visual_notes,
+    visualDescription: row.visual_description,
     visualQueries: {
       primary: storedVisualQueries.primary,
       alternatives: storedVisualQueries.alternatives,
@@ -154,7 +156,7 @@ export class SceneService {
       const secondText = sentences.slice(sentenceIndex + 1).join(" ");
       const secondId = randomUUID();
       const insert = this.sqlite.prepare(
-        "INSERT INTO scenes (id, project_id, \"order\", kind, section_id, label, narration, visual_notes, visual_queries, music_mood, energy, est_duration_sec, duration_override_sec, start_sec, transition_note, origin, edited, input_hash, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, 'USER', 1, ?, ?, ?)",
+        "INSERT INTO scenes (id, project_id, \"order\", kind, section_id, label, narration, visual_notes, visual_description, visual_queries, music_mood, energy, est_duration_sec, duration_override_sec, start_sec, transition_note, origin, edited, input_hash, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, 'USER', 1, ?, ?, ?)",
       );
       const moved = this.list(projectId).filter((item) => item.order > scene.order);
       this.setTemporaryOrder(projectId, this.list(projectId).length);
@@ -170,7 +172,7 @@ export class SceneService {
       });
       insert.run(
         secondId, projectId, scene.order + 1, scene.kind, scene.sectionId, scene.label,
-        secondText, scene.visualNotes, storedVisualQueries(scene), scene.musicMood, scene.energy,
+        secondText, scene.visualNotes, scene.visualDescription, storedVisualQueries(scene), scene.musicMood, scene.energy,
         this.estimate(secondText, project), scene.startSec, scene.transitionNote, scene.inputHash, now, now,
       );
       const updateOrder = this.sqlite.prepare("UPDATE scenes SET \"order\" = ? WHERE id = ? AND project_id = ?");
@@ -257,9 +259,9 @@ export class SceneService {
 
   private saveScene(scene: Scene): void {
     this.sqlite.prepare(
-      "UPDATE scenes SET \"order\" = ?, kind = ?, section_id = ?, label = ?, narration = ?, visual_notes = ?, visual_queries = ?, music_mood = ?, energy = ?, est_duration_sec = ?, duration_override_sec = ?, start_sec = ?, transition_note = ?, origin = ?, edited = ?, input_hash = ?, updated_at = ? WHERE id = ? AND project_id = ?",
+      "UPDATE scenes SET \"order\" = ?, kind = ?, section_id = ?, label = ?, narration = ?, visual_notes = ?, visual_description = ?, visual_queries = ?, music_mood = ?, energy = ?, est_duration_sec = ?, duration_override_sec = ?, start_sec = ?, transition_note = ?, origin = ?, edited = ?, input_hash = ?, updated_at = ? WHERE id = ? AND project_id = ?",
     ).run(
-      scene.order, scene.kind, scene.sectionId, scene.label, scene.narration, scene.visualNotes,
+      scene.order, scene.kind, scene.sectionId, scene.label, scene.narration, scene.visualNotes, scene.visualDescription,
       storedVisualQueries(scene), scene.musicMood, scene.energy, scene.estDurationSec,
       scene.durationOverrideSec, scene.startSec, scene.transitionNote, scene.origin, scene.edited ? 1 : 0,
       scene.inputHash, scene.updatedAt, scene.id, scene.projectId,

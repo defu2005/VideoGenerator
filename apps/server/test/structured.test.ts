@@ -58,7 +58,43 @@ describe("generateStructured", () => {
       schemaName: "Example", schemaVersion: "1", maxOutputTokens: 100, signal: controller(), cache,
     });
     expect(second.cached).toBe(true);
-    expect(second.usage).toEqual({ llmCalls: 0, inputTokens: 0, outputTokens: 0 });
+    expect(second.usage).toEqual({
+      llmCalls: 0,
+      inputTokens: 0,
+      outputTokens: 0,
+      calls: [expect.objectContaining({ task: "unknown", provider: "mock", model: "mock-v1", cached: true, ok: true })],
+    });
+    db.close();
+  });
+
+  it("records the routed task and treats a model change as a cache miss", async () => {
+    const { db, cache } = cacheDb();
+    const provider = providerFrom(["{\"answer\":\"first\"}", "{\"answer\":\"second\"}"]);
+    const request = {
+      provider,
+      system: "system",
+      prompt: "prompt",
+      schema,
+      schemaName: "Example",
+      schemaVersion: "1",
+      maxOutputTokens: 100,
+      signal: controller(),
+      cache,
+      repairAttempts: 0 as const,
+      task: "research" as const,
+    };
+    const first = await generateStructured({ ...request, model: "model-a" });
+    const changedModel = await generateStructured({ ...request, model: "model-b" });
+    const cachedOriginal = await generateStructured({ ...request, model: "model-a" });
+
+    expect(first.usage.calls).toEqual([
+      expect.objectContaining({ task: "research", provider: "mock", model: "model-a", ok: true, cached: false }),
+    ]);
+    expect(changedModel.usage.calls).toEqual([
+      expect.objectContaining({ task: "research", provider: "mock", model: "model-b", ok: true, cached: false }),
+    ]);
+    expect(cachedOriginal.cached).toBe(true);
+    expect(provider.generate).toHaveBeenCalledTimes(2);
     db.close();
   });
 
@@ -68,10 +104,10 @@ describe("generateStructured", () => {
     await expect(generateStructured({
       provider, model: "mock-v1", system: "system", prompt: "prompt", schema,
       schemaName: "Example", schemaVersion: "1", maxOutputTokens: 100, signal: controller(), cache,
-      repairAttempts: 0,
+      repairAttempts: 0, task: "visualRerank",
     })).rejects.toMatchObject({
       code: "LLM_INVALID_OUTPUT",
-      message: expect.stringContaining("Switch to BALANCED"),
+      message: expect.stringContaining("Bỏ qua bước AI, giữ kết quả bằng code"),
       usage: { llmCalls: 1 },
     });
     expect(provider.generate).toHaveBeenCalledTimes(1);

@@ -2,7 +2,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { config as loadDotenv } from "dotenv";
 import { dirname, isAbsolute, join, resolve } from "node:path";
 import { z } from "zod";
-import type { LlmProviderId } from "@vg/shared";
+import { LLM_TASKS, type LlmProviderId, type LlmTaskId, type LlmRoute } from "@vg/shared";
 import type { LlmProviderLimits } from "../providers/llm/types.js";
 
 function findWorkspaceRoot(startDirectory: string): string | undefined {
@@ -42,6 +42,20 @@ const ConfigSchema = z.object({
   LLM_RESEARCH_MODE: z.enum(["merged", "separate", "off"]).default("merged"),
   LLM_SCRIPT_PROVIDER: z.string().optional(),
   LLM_SCRIPT_MODEL: z.string().optional(),
+  LLM_SCRIPT_REVIEW_PROVIDER: z.string().optional(),
+  LLM_SCRIPT_REVIEW_MODEL: z.string().optional(),
+  LLM_SCENE_QUERIES_PROVIDER: z.string().optional(),
+  LLM_SCENE_QUERIES_MODEL: z.string().optional(),
+  LLM_VISUAL_ALT_QUERIES_PROVIDER: z.string().optional(),
+  LLM_VISUAL_ALT_QUERIES_MODEL: z.string().optional(),
+  LLM_VISUAL_RERANK_PROVIDER: z.string().optional(),
+  LLM_VISUAL_RERANK_MODEL: z.string().optional(),
+  LLM_VISION_CHECK_PROVIDER: z.string().optional(),
+  LLM_VISION_CHECK_MODEL: z.string().optional(),
+  LLM_MUSIC_ASSIST_PROVIDER: z.string().optional(),
+  LLM_MUSIC_ASSIST_MODEL: z.string().optional(),
+  LLM_METADATA_PROVIDER: z.string().optional(),
+  LLM_METADATA_MODEL: z.string().optional(),
   CLAUDE_CLI_ENABLED: z.stringbool().default(false),
   CLAUDE_CLI_PATH: z.string().min(1).default("claude"),
   CLAUDE_CLI_MODEL: z.string().optional(),
@@ -112,6 +126,7 @@ export type AppConfig = {
   LLM_RESEARCH_MODE: "merged" | "separate" | "off";
   LLM_SCRIPT_PROVIDER?: string;
   LLM_SCRIPT_MODEL?: string;
+  LLM_TASK_ROUTES: Partial<Record<LlmTaskId, LlmRoute>>;
   CLAUDE_CLI_ENABLED: boolean;
   CLAUDE_CLI_PATH: string;
   CLAUDE_CLI_MODEL?: string;
@@ -188,6 +203,16 @@ export function parseConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
       ? values.IMAGE_SEARCH_PER_MINUTE_OPENVERSE
       : values.OPENVERSE_CLIENT_ID ? 100 : values.IMAGE_SEARCH_PER_MINUTE_OPENVERSE,
     LLM_PROVIDER_LIMITS: providerLimits,
+    LLM_TASK_ROUTES: Object.fromEntries(LLM_TASKS.flatMap(({ id }) => {
+      const envTask = id.replace(/[A-Z]/g, (letter) => `_${letter}`).toUpperCase();
+      const prefix = `LLM_${envTask}`;
+      const provider = env[`${prefix}_PROVIDER`]?.trim()
+        || (id === "research" ? values.LLM_RESEARCH_PROVIDER : id === "script" || id === "scriptReview" ? values.LLM_SCRIPT_PROVIDER : undefined)
+        || (env[`${prefix}_MODEL`]?.trim() ? values.LLM_DEFAULT_PROVIDER : undefined);
+      const model = env[`${prefix}_MODEL`]?.trim()
+        || (id === "research" ? values.LLM_RESEARCH_MODEL : id === "script" || id === "scriptReview" ? values.LLM_SCRIPT_MODEL : undefined);
+      return provider ? [[id, { provider, ...(model ? { model } : {}) }]] : [];
+    })) as Partial<Record<LlmTaskId, LlmRoute>>,
     DATA_DIR: dataDirectory,
     LLM_ENABLE_MOCK: values.LLM_ENABLE_MOCK ?? !isProduction,
     DATABASE_PATH: values.DATABASE_PATH

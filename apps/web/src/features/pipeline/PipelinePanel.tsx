@@ -1,13 +1,20 @@
 import { estimateBudget, GATES, STAGE_ORDER, type Project } from "@vg/shared";
+import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 import { ApiRequestError } from "../../services/apiClient";
 import { usePipeline } from "../../hooks/usePipeline";
 import { ErrorState } from "../../components/ErrorState";
 import { Spinner } from "../../components/Spinner";
 import { StageRow } from "./StageRow";
+import { getProjectLlmRoutes } from "../../services/llmApi";
 
 export function PipelinePanel({ projectId, project }: { projectId: string; project?: Project }) {
   const pipeline = usePipeline(projectId);
+  const routes = useQuery({
+    queryKey: ["project-llm-routes", projectId],
+    queryFn: () => getProjectLlmRoutes(projectId),
+    enabled: Boolean(project),
+  });
   const [actionError, setActionError] = useState("");
 
   if (pipeline.isPending) return <section className="panel pipeline-card"><Spinner label="Loading pipeline" /></section>;
@@ -20,15 +27,7 @@ export function PipelinePanel({ projectId, project }: { projectId: string; proje
   const waitingAtGate = state.stages.some((stage) => stage.state === "WAITING_USER");
   const busy = active || pipeline.isMutating;
   const stages = STAGE_ORDER.map((stage) => state.stages.find((record) => record.stage === stage)).filter((record) => record !== undefined);
-  const estimate = project ? estimateBudget(
-    project,
-    [
-      project.settings.llm?.research?.provider,
-      project.settings.llm?.script?.provider,
-      project.settings.llm?.default?.provider,
-    ].filter((provider): provider is string => provider !== undefined),
-    state.stages,
-  ) : undefined;
+  const estimate = project ? estimateBudget(project, routes.data, state.stages) : undefined;
   const estimateCalls = estimate
     ? estimate.total.min === estimate.total.max
       ? String(estimate.total.min)
@@ -68,8 +67,17 @@ export function PipelinePanel({ projectId, project }: { projectId: string; proje
           <span>{estimate.perStage.find((item) => item.stage === "VISUAL_SEARCH")?.calls.max
             ? ` · Visual Search: up to ${estimate.perStage.find((item) => item.stage === "VISUAL_SEARCH")?.calls.max} LLM calls`
             : " · Visual Search: 0 LLM calls"}</span>
+          {routes.isError && <span> · Unable to load resolved model routes</span>}
         </p>
       )}
+      {estimate?.perStage.flatMap((stage) => stage.tasks ?? [])
+        .filter((task) => task.calls.max > 0)
+        .map((task) => (
+          <p className="pipeline-budget-task" key={task.task}>
+            {task.task}: {task.provider ?? "provider not configured"}{task.model ? ` · ${task.model}` : ""}
+            {" · "}{task.calls.min === task.calls.max ? task.calls.min : `${task.calls.min}–${task.calls.max}`} calls
+          </p>
+        ))}
       {waitingAtGate && <p className="pipeline-mode-hint">Approve the review gate to continue</p>}
       <p className="pipeline-mode-hint">{state.mode}: {state.mode === "MANUAL" ? "run each stage when you are ready" : state.mode === "AUTO" ? "the agent continues through review gates automatically" : "the agent pauses at review gates"}.</p>
       {actionError && <p className="request-error" role="alert">{actionError}</p>}

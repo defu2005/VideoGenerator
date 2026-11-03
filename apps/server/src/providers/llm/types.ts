@@ -1,3 +1,5 @@
+import type { LlmCallUsage } from "@vg/shared";
+
 export type LlmErrorCode =
   | "LLM_AUTH"
   | "LLM_RATE_LIMIT"
@@ -16,6 +18,7 @@ export type LlmProviderLimits = {
 };
 
 export type LlmRequest = {
+  schemaName?: string;
   model: string;
   system: string;
   messages: { role: "user" | "assistant"; content: string }[];
@@ -51,6 +54,7 @@ export class LlmError extends Error {
       inputTokens: number;
       outputTokens: number;
       tokensUnknown?: boolean;
+      calls?: LlmCallUsage[];
     },
   ) {
     super(message);

@@ -22,6 +22,7 @@ export const SceneSchema = z.object({
   label: z.string().min(1),
   narration: z.string(),
   visualNotes: z.string(),
+  visualDescription: z.string().default(""),
   visualQueries: VisualQueriesSchema,
   queryVariant: z.boolean().default(false),
   musicMood: z.string(),
@@ -53,6 +54,7 @@ export const ScenePatchSchema = z.object({
   label: z.string().trim().min(1).max(200).optional(),
   narration: z.string().max(20_000).optional(),
   visualNotes: z.string().max(2_000).optional(),
+  visualDescription: z.string().max(500).optional(),
   visualQueries: VisualQueriesSchema.optional(),
   musicMood: z.string().max(500).optional(),
   energy: SceneEnergySchema.optional(),
@@ -84,6 +86,7 @@ export const MergeScenesSchema = z.object({
 export const SceneQueryAssistSchema = z.object({
   scenes: z.array(z.object({
     index: z.number().int().nonnegative(),
+    visualDescription: z.string().min(1),
     primary: z.string().min(1),
     alternatives: z.array(z.string()).max(3),
   }).strict()),

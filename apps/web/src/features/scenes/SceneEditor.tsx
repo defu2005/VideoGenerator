@@ -79,6 +79,7 @@ export function SceneEditor({
       label: draft.label,
       narration: draft.narration,
       visualNotes: draft.visualNotes,
+      visualDescription: draft.visualDescription,
       visualQueries: draft.visualQueries,
       musicMood: draft.musicMood,
       energy: draft.energy,
@@ -108,6 +109,7 @@ export function SceneEditor({
         <small>{wordCount} words · about {duration.toFixed(1)} sec at {wordsPerMinute} WPM</small>
       </label>
       <label className="form-field"><span>Visual notes</span><textarea rows={2} value={draft.visualNotes} onChange={(event) => update({ visualNotes: event.target.value })} /></label>
+      <label className="form-field"><span>Visual description (English)</span><textarea rows={2} value={draft.visualDescription} onChange={(event) => update({ visualDescription: event.target.value })} /></label>
       <label className="form-field"><span>Primary visual query</span><input value={draft.visualQueries.primary} onChange={(event) => update({ visualQueries: { ...draft.visualQueries, primary: event.target.value } })} /></label>
       <div className="form-field">
         <span>Alternative queries</span>

@@ -52,6 +52,7 @@ describe("Video Agent MCP tools", () => {
     const prompts = await client.listPrompts();
     expect(tools.tools.map((tool) => tool.name).sort()).toEqual([
       "create_project",
+      "get_llm_routes",
       "get_pipeline",
       "get_project",
       "get_research",
@@ -71,6 +72,28 @@ describe("Video Agent MCP tools", () => {
       "write_script",
       "write_story",
     ]);
+  });
+
+  it("reads resolved task routes for a project", async () => {
+    const fetchImpl = vi.fn(async () => jsonResponse({
+      routes: {
+        research: { provider: "mock", model: "research-model", source: "app-task" },
+        script: null,
+      },
+    })) as typeof fetch;
+    const client = await connect(fetchImpl);
+    const result = await client.callTool({ name: "get_llm_routes", arguments: { projectId } });
+
+    expect(JSON.parse(resultText(result))).toEqual({
+      routes: {
+        research: { provider: "mock", model: "research-model", source: "app-task" },
+        script: null,
+      },
+    });
+    expect(fetchImpl).toHaveBeenCalledWith(
+      `http://127.0.0.1:3001/api/projects/${projectId}/llm-routes`,
+      { headers: { Accept: "application/json" } },
+    );
   });
 
   it("reads a compact visual selection and top-five candidate list", async () => {

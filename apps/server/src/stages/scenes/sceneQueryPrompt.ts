@@ -2,9 +2,9 @@ import type { SceneDraft } from "@vg/shared";
 
 export function sceneQueryPrompt(scenes: Array<{ index: number; scene: SceneDraft }>): string {
   return [
-    "Create concise English image-search queries for the supplied video scenes.",
+    "For every supplied video scene, write one concise English visual description (one concrete sentence covering who/what/where/era) and varied English image-search queries.",
     "Keep proper nouns and named entities from the narration. Do not invent facts.",
-    "Return one result for every supplied index. Each primary and alternative must be a search phrase, not a sentence.",
+    "Return one result for every supplied index with visualDescription, primary, and up to 3 alternatives. Each query must be a search phrase, not a sentence.",
     JSON.stringify({
       scenes: scenes.map(({ index, scene }) => ({
         index,

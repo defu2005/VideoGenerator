@@ -6,7 +6,7 @@ import {
   ProjectStatusSchema,
   StageExecutorSchema,
 } from "../enums.js";
-import { LlmSelectionSchema } from "./llm.js";
+import { LlmSettingsInputSchema, LlmSettingsSchema } from "./llm.js";
 import {
   BudgetSettingsInputSchema,
   BudgetSettingsSchema,
@@ -73,12 +73,7 @@ export const ProjectSettingsSchema = z.object({
     voice: StageExecutorSchema.optional(),
     music: StageExecutorSchema.optional(),
   }).default({}),
-  llm: z.object({
-    default: LlmSelectionSchema.optional(),
-    research: LlmSelectionSchema.optional(),
-    script: LlmSelectionSchema.optional(),
-    sceneplan: LlmSelectionSchema.optional(),
-  }).optional(),
+  llm: LlmSettingsSchema.optional(),
   autoRender: z.boolean().default(false),
 }).extend({
   budget: VideoBriefSettingsSchema.shape.budget,
@@ -106,12 +101,7 @@ export const ProjectSettingsInputSchema = z.object({
     voice: StageExecutorSchema.optional(),
     music: StageExecutorSchema.optional(),
   }).optional(),
-  llm: z.object({
-    default: LlmSelectionSchema.optional(),
-    research: LlmSelectionSchema.optional(),
-    script: LlmSelectionSchema.optional(),
-    sceneplan: LlmSelectionSchema.optional(),
-  }).optional(),
+  llm: LlmSettingsInputSchema.optional(),
   autoRender: z.boolean().optional(),
   ...VideoBriefSettingsInputSchema.shape,
 }).strict();

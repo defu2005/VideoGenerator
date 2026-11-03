@@ -13,27 +13,19 @@ import type { AppConfig } from "../../lib/config.js";
 import { StageError, type StageContext, type StageExecutor } from "../../pipeline/stageExecutor.js";
 import { LlmCache } from "../../providers/llm/cache.js";
 import { estimateLlmCost } from "../../providers/llm/pricing.js";
-import { generateStructured } from "../../providers/llm/structured.js";
+import { generateRoutedStructured } from "../../providers/llm/structured.js";
 import type { LlmProviderRegistry } from "../../providers/llm/registry.js";
+import type { ResolvedLlmRoute } from "../../providers/llm/registry.js";
 import { LlmError } from "../../providers/llm/types.js";
 import { estimateTokens } from "../../providers/llm/tokenEstimate.js";
 import { sceneQueryPrompt } from "./sceneQueryPrompt.js";
+import { getAppLlmSettings } from "../../providers/llm/settings.js";
 
 type ScriptRow = { data: string };
 const SYSTEM_PROMPT = "You are an image-search query editor. Return only JSON matching the requested schema.";
 
 function sceneInputHash(script: Script, sceneDurationSec: number, wordsPerMinute: number): string {
   return createHash("sha256").update(JSON.stringify([script, sceneDurationSec, wordsPerMinute])).digest("hex");
-}
-
-function unitsWithMultipleScenes(scenes: SceneDraft[]): Array<{ index: number; scene: SceneDraft }> {
-  const grouped = new Map<string, number[]>();
-  for (const scene of scenes) {
-    const key = `${scene.kind}:${scene.sectionId ?? scene.label}`;
-    grouped.set(key, [...(grouped.get(key) ?? []), scene.order]);
-  }
-  const indices = new Set([...grouped.values()].filter((unit) => unit.length > 1).flat());
-  return scenes.filter((scene) => indices.has(scene.order)).map((scene) => ({ index: scene.order, scene }));
 }
 
 function errorCode(error: unknown): string {
@@ -72,31 +64,27 @@ export class ScenePlanExecutor implements StageExecutor {
       language: settings.language,
     });
     const inputHash = sceneInputHash(script, settings.sceneDurationSec, settings.wordsPerMinute);
-    const splitScenes = unitsWithMultipleScenes(scenes);
+    const splitScenes = scenes.map((scene) => ({ index: scene.order, scene }));
     const totalSec = Math.round(scenes.reduce((sum, scene) => sum + scene.estDurationSec, 0));
     let message = `${scenes.length} scenes · total ~${totalSec}s (target ${settings.targetDurationSec}s) · ~${settings.sceneDurationSec}s/scene`;
 
     context.reportProgress(20, "Planning scenes deterministically");
     const budget = resolveBudget(context.project);
     if (budget.sceneQueryAssist && splitScenes.length > 0) {
-      let selectedProvider = "unknown";
-      let selectedModel = "";
+      let selected: ResolvedLlmRoute | undefined;
       try {
         context.reportProgress(55, "Assisting visual queries");
-        const selected = this.registry.resolve(
-          settings.llm?.sceneplan,
-          settings.llm?.default,
-          "sceneplan",
-        );
-        selectedProvider = selected.provider.id;
-        selectedModel = selected.model;
+        selected = this.registry.resolveTask("sceneQueries", context.project, getAppLlmSettings(this.sqlite));
         const maxOutputTokens = Math.max(256, splitScenes.length * 100);
         const maxInput = selected.provider.limits?.maxInputTokens;
         const prompt = sceneQueryPrompt(splitScenes);
         if (maxInput !== undefined && estimateTokens(`${SYSTEM_PROMPT}\n${prompt}`, true) > maxInput) {
           throw new LlmError("Scene query prompt exceeds the provider input limit.", "LLM_LIMIT_TOO_SMALL", false);
         }
-        const outputLimit = selected.provider.limits?.maxOutputTokens;
+        const outputLimit = Math.min(
+          selected.provider.limits?.maxOutputTokens ?? Number.POSITIVE_INFINITY,
+          selected.maxOutputTokens ?? Number.POSITIVE_INFINITY,
+        );
         if (outputLimit !== undefined && outputLimit < 256) {
           throw new LlmError("Scene query output exceeds the provider output limit.", "LLM_LIMIT_TOO_SMALL", false);
         }
@@ -111,9 +99,10 @@ export class ScenePlanExecutor implements StageExecutor {
             });
           }
         });
-        const generated = await generateStructured({
-          provider: selected.provider,
-          model: selected.model,
+        const generated = await generateRoutedStructured({
+          registry: this.registry,
+          route: selected,
+          task: "sceneQueries",
           system: SYSTEM_PROMPT,
           prompt,
           schema: assistSchema,
@@ -130,6 +119,7 @@ export class ScenePlanExecutor implements StageExecutor {
         for (const { index } of splitScenes) {
           const assist = byIndex.get(index);
           if (!assist) continue;
+          scenes[index].visualDescription = assist.visualDescription;
           scenes[index].visualQueries = {
             primary: assist.primary,
             alternatives: assist.alternatives,
@@ -147,6 +137,7 @@ export class ScenePlanExecutor implements StageExecutor {
           provider: generated.provider,
           model: generated.model,
           features: { sceneQueryAssist: generated.usage.llmCalls },
+          calls: generated.usage.calls,
         });
       } catch (error) {
         if (context.signal.aborted) throw error;
@@ -154,7 +145,7 @@ export class ScenePlanExecutor implements StageExecutor {
         let costUsd = 0;
         if (usage && usage.llmCalls > 0) {
           try {
-            costUsd = estimateLlmCost(this.config, selectedProvider, selectedModel, usage);
+            costUsd = estimateLlmCost(this.config, selected?.provider.id ?? "unknown", selected?.model ?? "", usage);
           } catch (costError) {
             context.logger.error({ err: costError }, "Could not estimate failed scene query assist cost");
           }
@@ -165,9 +156,10 @@ export class ScenePlanExecutor implements StageExecutor {
           outputTokens: usage?.outputTokens ?? 0,
           ...(usage?.tokensUnknown ? { tokensUnknown: true } : {}),
           costUsd,
-          ...(selectedProvider === "unknown" ? {} : { provider: selectedProvider }),
-          ...(selectedModel ? { model: selectedModel } : {}),
+          ...(selected ? { provider: selected.provider.id } : {}),
+          ...(selected?.model ? { model: selected.model } : {}),
           features: { sceneQueryAssist: usage?.llmCalls ?? 0 },
+          ...(usage?.calls ? { calls: usage.calls } : {}),
         });
         const code = errorCode(error);
         context.logger.warn({ err: error, code }, "Scene query assist skipped; using deterministic queries");
@@ -187,7 +179,7 @@ export class ScenePlanExecutor implements StageExecutor {
 
     const now = new Date().toISOString();
     const insert = this.sqlite.prepare(
-      "INSERT INTO scenes (id, project_id, \"order\", kind, section_id, label, narration, visual_notes, visual_queries, music_mood, energy, est_duration_sec, duration_override_sec, start_sec, transition_note, origin, edited, input_hash, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'AGENT', 0, ?, ?, ?)",
+      "INSERT INTO scenes (id, project_id, \"order\", kind, section_id, label, narration, visual_notes, visual_description, visual_queries, music_mood, energy, est_duration_sec, duration_override_sec, start_sec, transition_note, origin, edited, input_hash, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'AGENT', 0, ?, ?, ?)",
     );
     const replace = this.sqlite.transaction(() => {
       this.sqlite.prepare("DELETE FROM scenes WHERE project_id = ?").run(context.project.id);
@@ -200,6 +192,7 @@ export class ScenePlanExecutor implements StageExecutor {
         scene.label,
         scene.narration,
         scene.visualNotes,
+        scene.visualDescription,
         JSON.stringify({ ...scene.visualQueries, queryVariant: scene.queryVariant }),
         scene.musicMood,
         scene.energy,

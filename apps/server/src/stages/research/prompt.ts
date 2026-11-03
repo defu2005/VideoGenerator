@@ -1,6 +1,13 @@
-import type { Project } from "@vg/shared";
+import type { BudgetFeatures, Project } from "@vg/shared";
 
-export function researchPrompt(project: Project): { system: string; prompt: string } {
+const factTargets: Record<BudgetFeatures["researchDepth"], { target: number; max: number }> = {
+  light: { target: 6, max: 8 },
+  standard: { target: 10, max: 12 },
+  deep: { target: 14, max: 16 },
+};
+
+export function researchPrompt(project: Project, depth: BudgetFeatures["researchDepth"] = "standard"): { system: string; prompt: string } {
+  const { target, max } = factTargets[depth];
   return {
     system: [
       "You are a careful research assistant preparing notes for a documentary video.",
@@ -13,7 +20,7 @@ export function researchPrompt(project: Project): { system: string; prompt: stri
       `Description: ${project.description || "(none)"}`,
       `Target language: ${project.settings.language}`,
       `Target video duration: ${project.settings.targetDurationSec} seconds`,
-      "Return 5-12 keyFacts, at most 10 timeline items, 3-8 outline sections, at most 6 angles and 6 cautions.",
+      `Return ${target}-${max} keyFacts, at most 10 timeline items, 3-8 outline sections, at most 6 angles and 6 cautions.`,
       "Use the requested language for all readable content.",
       "Compact JSON shape: summary, keyFacts[{fact,confidence,sourceHint}], timeline[{date,event}], angles, outline[{section,purpose,points}], cautions.",
     ].join("\n"),

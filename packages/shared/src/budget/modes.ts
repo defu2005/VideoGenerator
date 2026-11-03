@@ -7,11 +7,15 @@ export const BudgetFeaturesSchema = z.object({
   storyMode: z.enum(["merged", "separate"]),
   repairAttempts: z.union([z.literal(0), z.literal(1), z.literal(2)]),
   scriptReview: z.boolean(),
+  scriptReviewPasses: z.union([z.literal(0), z.literal(1), z.literal(2)]),
+  researchDepth: z.enum(["light", "standard", "deep"]),
   altQueryAssist: z.boolean(),
   sceneQueryAssist: z.boolean(),
   semanticImageRerank: z.boolean(),
   visionCheck: z.boolean(),
   musicAssist: z.boolean(),
+  metadata: z.boolean(),
+  outputHeadroom: z.union([z.literal(1), z.literal(1.5), z.literal(2)]),
 }).strict();
 export type BudgetFeatures = z.infer<typeof BudgetFeaturesSchema>;
 
@@ -32,31 +36,43 @@ const PRESETS: Record<Exclude<BudgetMode, "CUSTOM">, BudgetFeatures> = {
     storyMode: "merged",
     repairAttempts: 0,
     scriptReview: false,
+    scriptReviewPasses: 0,
+    researchDepth: "light",
     altQueryAssist: false,
     sceneQueryAssist: false,
     semanticImageRerank: false,
     visionCheck: false,
     musicAssist: false,
+    metadata: false,
+    outputHeadroom: 1,
   },
   BALANCED: {
     storyMode: "separate",
     repairAttempts: 1,
-    scriptReview: false,
-    altQueryAssist: true,
-    sceneQueryAssist: false,
-    semanticImageRerank: false,
-    visionCheck: false,
-    musicAssist: false,
-  },
-  QUALITY: {
-    storyMode: "separate",
-    repairAttempts: 1,
     scriptReview: true,
+    scriptReviewPasses: 1,
+    researchDepth: "standard",
     altQueryAssist: true,
     sceneQueryAssist: true,
     semanticImageRerank: true,
     visionCheck: false,
     musicAssist: true,
+    metadata: true,
+    outputHeadroom: 1.5,
+  },
+  QUALITY: {
+    storyMode: "separate",
+    repairAttempts: 2,
+    scriptReview: true,
+    scriptReviewPasses: 2,
+    researchDepth: "deep",
+    altQueryAssist: true,
+    sceneQueryAssist: true,
+    semanticImageRerank: true,
+    visionCheck: false,
+    musicAssist: true,
+    metadata: true,
+    outputHeadroom: 2,
   },
 };
 
@@ -77,10 +93,16 @@ export function resolveBudget(
       : modeOrProject;
   const mode = budget.mode ?? "BALANCED";
   const defaults = mode === "CUSTOM" ? PRESETS.BALANCED : PRESETS[mode];
-  return BudgetFeaturesSchema.parse({
+  const overrides = mode === "CUSTOM" ? budget.features ?? {} : {};
+  const resolved = {
     ...defaults,
-    ...(mode === "CUSTOM" ? budget.features : {}),
-  });
+    ...overrides,
+    ...(overrides.scriptReview !== undefined && overrides.scriptReviewPasses === undefined
+      ? { scriptReviewPasses: overrides.scriptReview ? 1 : 0 }
+      : {}),
+  };
+  resolved.scriptReview = resolved.scriptReviewPasses > 0;
+  return BudgetFeaturesSchema.parse(resolved);
 }
 
 export function storyModeForProject(project: {
@@ -100,6 +122,7 @@ export type BudgetEstimateStage = {
   stage: "RESEARCH" | "SCRIPT" | "SCENE_PLAN" | "VISUAL_SEARCH";
   calls: { min: number; max: number };
   reason: string;
+  tasks?: { task: string; provider?: string; model?: string; calls: { min: number; max: number } }[];
 };
 
 export type BudgetEstimate = {
@@ -108,6 +131,7 @@ export type BudgetEstimate = {
   perStage: BudgetEstimateStage[];
   total: { min: number; max: number };
   tokens?: { input: number; output: number };
+  later?: string[];
 };
 
 export const BudgetEstimateSchema = z.object({
@@ -117,9 +141,16 @@ export const BudgetEstimateSchema = z.object({
     stage: z.enum(["RESEARCH", "SCRIPT", "SCENE_PLAN", "VISUAL_SEARCH"]),
     calls: z.object({ min: z.number().int().nonnegative(), max: z.number().int().nonnegative() }).strict(),
     reason: z.string(),
+    tasks: z.array(z.object({
+      task: z.string(),
+      provider: z.string().optional(),
+      model: z.string().optional(),
+      calls: z.object({ min: z.number().int().nonnegative(), max: z.number().int().nonnegative() }).strict(),
+    }).strict()).optional(),
   }).strict()),
   total: z.object({ min: z.number().int().nonnegative(), max: z.number().int().nonnegative() }).strict(),
   tokens: z.object({ input: z.number().int().nonnegative(), output: z.number().int().nonnegative() }).strict().optional(),
+  later: z.array(z.string()).optional(),
 }).strict();
 
 export type BudgetEstimateInput = {
@@ -137,7 +168,7 @@ export type BudgetEstimateInput = {
 
 export function estimateBudget(
   project: BudgetEstimateInput,
-  provider?: string | readonly string[],
+  provider?: string | readonly string[] | Partial<Record<string, { provider?: string; model?: string } | null>>,
   stages: readonly { stage: string; state: string }[] = [],
 ): BudgetEstimate {
   const budget = project.settings.budget ?? { mode: "BALANCED" as const };
@@ -176,7 +207,7 @@ export function estimateBudget(
   const scriptBaseCalls = storyMode === "merged"
     ? 0
     : scriptDone ? 0 : 1;
-  const reviewCalls = features.scriptReview && !scriptDone ? 1 : 0;
+  const reviewCalls = scriptDone ? 0 : features.scriptReviewPasses;
   const scriptMin = scriptBaseCalls + reviewCalls;
   const repairableCalls = scriptBaseCalls + reviewCalls;
   perStage.push({
@@ -185,19 +216,19 @@ export function estimateBudget(
     reason: scriptDone
       ? "Script is already complete and unchanged."
       : features.scriptReview
-        ? scriptBaseCalls ? "Script generation plus one review-and-revise call." : "One review-and-revise call."
+        ? scriptBaseCalls ? `Script generation plus ${reviewCalls} review-and-revise call(s).` : `${reviewCalls} review-and-revise call(s).`
         : scriptBaseCalls ? "Script is generated from the research notes." : "The merged RESEARCH call already produced the script.",
   });
 
   const scenePlanDone = stateFor("SCENE_PLAN") === "DONE";
-  const sceneAssistMax = !scenePlanDone && features.sceneQueryAssist ? 1 : 0;
+  const sceneAssistCalls = !scenePlanDone && features.sceneQueryAssist ? 1 : 0;
   perStage.push({
     stage: "SCENE_PLAN",
-    calls: { min: 0, max: sceneAssistMax },
+    calls: { min: sceneAssistCalls, max: sceneAssistCalls },
     reason: scenePlanDone
       ? "Scene plan is already complete and unchanged."
-      : sceneAssistMax
-        ? "One batched query-assistance call is used only when a unit has multiple scenes."
+      : sceneAssistCalls
+        ? "One batched query-assistance call generates a description and queries for every planned scene."
         : "Scene planning is deterministic and uses no LLM calls.",
   });
 
@@ -207,11 +238,49 @@ export function estimateBudget(
   }), { min: 0, max: 0 });
 
   const providers = typeof provider === "string" ? [provider] : provider ?? [];
-  const requestsOnly = providers.some((id) => id === "copilot-cli" || id === "claude-cli");
-  const tokens = providers.length > 0 && !requestsOnly
+  const routes = isRouteMap(provider) ? provider : undefined;
+  const providerIds = Array.isArray(provider) ? provider : typeof provider === "string" ? [provider] : Object.values(routes ?? {}).flatMap((route) => route?.provider ? [route.provider] : []);
+  const requestsOnly = providerIds.some((id) => id === "copilot-cli" || id === "claude-cli");
+  const tokens = providerIds.length > 0 && !requestsOnly
     ? estimateBudgetTokens(project, perStage, storyMode)
     : undefined;
-  return { mode, features, perStage, total, ...(tokens ? { tokens } : {}) };
+  const taskCalls: Record<string, { min: number; max: number }> = {
+    research: { min: researchCalls, max: researchCalls * (1 + repairs) },
+    script: { min: scriptBaseCalls, max: scriptBaseCalls * (1 + repairs) },
+    scriptReview: { min: reviewCalls, max: reviewCalls * (1 + repairs) },
+    sceneQueries: { min: sceneAssistCalls, max: sceneAssistCalls },
+    visualAltQueries: { min: 0, max: visualAssistMax },
+    visualRerank: { min: rerankCalls, max: rerankCalls },
+  };
+  for (const stage of perStage) {
+    const taskIds = stage.stage === "RESEARCH" ? ["research"]
+      : stage.stage === "SCRIPT" ? ["script", "scriptReview"]
+        : stage.stage === "SCENE_PLAN" ? ["sceneQueries"]
+          : ["visualAltQueries", "visualRerank"];
+    stage.tasks = taskIds.map((task) => {
+      const route = routes?.[task];
+      return {
+        task,
+        ...(route?.provider ? { provider: route.provider } : {}),
+        ...(route?.model ? { model: route.model } : {}),
+        calls: taskCalls[task] ?? { min: 0, max: 0 },
+      };
+    });
+  }
+  return {
+    mode,
+    features,
+    perStage,
+    total,
+    ...(tokens ? { tokens } : {}),
+    later: ["visionCheck", "musicAssist", "metadata"],
+  };
+}
+
+function isRouteMap(
+  value: string | readonly string[] | Partial<Record<string, { provider?: string; model?: string } | null>> | undefined,
+): value is Partial<Record<string, { provider?: string; model?: string } | null>> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function estimateBudgetTokens(

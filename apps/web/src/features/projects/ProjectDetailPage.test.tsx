@@ -103,7 +103,7 @@ describe("ProjectDetailPage", () => {
     expect(await screen.findByText("WAITING USER")).toBeInTheDocument();
     expect(screen.getAllByText("VISUAL REVIEW")).toHaveLength(2);
     expect(screen.getByRole("heading", { name: "Production stages" })).toBeInTheDocument();
-    expect(await screen.findByText("Ước tính: ~2–5 lượt gọi AI (BALANCED)")).toBeInTheDocument();
+    expect(await screen.findByText("Ước tính: ~5–9 lượt gọi AI (BALANCED)")).toBeInTheDocument();
   });
 
   it("shows a back link when the API returns 404", async () => {

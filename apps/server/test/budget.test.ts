@@ -44,12 +44,12 @@ describe("budget estimate API", () => {
     expect(estimateResponse.statusCode).toBe(200);
     expect(estimateResponse.json()).toMatchObject({
       mode: "QUALITY",
-      total: { min: 4, max: 9 },
+      total: { min: 6, max: 15 },
       perStage: [
-        { stage: "RESEARCH", calls: { min: 1, max: 2 } },
+        { stage: "RESEARCH", calls: { min: 1, max: 3 } },
         { stage: "VISUAL_SEARCH", calls: { min: 1, max: 2 } },
-        { stage: "SCRIPT", calls: { min: 2, max: 4 } },
-        { stage: "SCENE_PLAN", calls: { min: 0, max: 1 } },
+        { stage: "SCRIPT", calls: { min: 3, max: 9 } },
+        { stage: "SCENE_PLAN", calls: { min: 1, max: 1 } },
       ],
       tokens: { input: expect.any(Number), output: expect.any(Number) },
     });

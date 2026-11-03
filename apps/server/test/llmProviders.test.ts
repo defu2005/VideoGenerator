@@ -1,3 +1,4 @@
+import { LlmProviderIdSchema } from "@vg/shared";
 import Database from "better-sqlite3";
 import Fastify from "fastify";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -6,9 +7,10 @@ import { parseConfig } from "../src/lib/config.js";
 import { AnthropicProvider } from "../src/providers/llm/anthropic.js";
 import { GeminiProvider } from "../src/providers/llm/gemini.js";
 import { OpenAiCompatibleProvider } from "../src/providers/llm/openaiCompatible.js";
+import { classifyCopilotFailure } from "../src/providers/llm/copilotCli.js";
 import { LlmProviderRegistry } from "../src/providers/llm/registry.js";
 import { LlmError, type LlmRequest } from "../src/providers/llm/types.js";
-import { registerLlmRoutes } from "../src/api/llm.js";
+import { getProviderMonthCalls, registerLlmRoutes } from "../src/api/llm.js";
 
 const request: LlmRequest = {
   model: "unit-model",
@@ -26,6 +28,12 @@ function jsonResponse(body: unknown, status = 200): Response {
 afterEach(() => vi.unstubAllGlobals());
 
 describe("LLM provider adapters", () => {
+  it("classifies Copilot CLI invalid-model output as a configuration error", () => {
+    const error = classifyCopilotFailure('Error: model "x" is not supported');
+    expect(error.code).toBe("LLM_NOT_CONFIGURED");
+    expect(error.message).toBe("Model không hợp lệ cho Copilot CLI");
+  });
+
   it("maps Anthropic requests and responses", async () => {
     const fetchMock = vi.fn().mockResolvedValue(jsonResponse({
       model: "claude-test",
@@ -138,7 +146,7 @@ describe("LLM provider adapters", () => {
 });
 
 describe("LLM registry", () => {
-  it("lists only configured providers without keys and resolves project, stage, and environment choices", () => {
+  it("lists every provider with configured flags and no secrets, and resolves project, stage, and environment choices", () => {
     const config = parseConfig({
       ANTHROPIC_API_KEY: "anthropic-secret",
       OPENAI_API_KEY: "openai-secret",
@@ -150,7 +158,10 @@ describe("LLM registry", () => {
       LLM_SCRIPT_MODEL: "stage-model",
     });
     const registry = new LlmProviderRegistry(config);
-    expect(registry.list().map((provider) => provider.id)).toEqual(["anthropic", "openai", "ollama"]);
+    const listed = registry.list();
+    expect(listed.map((provider) => provider.id)).toEqual(LlmProviderIdSchema.options);
+    expect(listed.filter((provider) => provider.configured).map((provider) => provider.id)).toEqual(["anthropic", "openai", "ollama"]);
+    expect(listed.find((provider) => provider.id === "gemini")).toMatchObject({ configured: false, hint: expect.stringContaining("GEMINI_API_KEY") });
     expect(JSON.stringify(registry.list())).not.toContain("secret");
     expect(registry.resolve(undefined, undefined, "script")).toMatchObject({ provider: { id: "openai" }, model: "stage-model" });
     expect(registry.resolve({ provider: "anthropic" }, { provider: "openai" }, "script"))
@@ -183,7 +194,7 @@ describe("LLM registry", () => {
       LLM_ENABLE_MOCK: "false",
       CLAUDE_CLI_ENABLED: "false",
     }));
-    expect(disabled.list().some((provider) => provider.id === "claude-cli")).toBe(false);
+    expect(disabled.list().find((provider) => provider.id === "claude-cli")).toMatchObject({ configured: false });
 
     const missing = new LlmProviderRegistry(parseConfig({
       LLM_ENABLE_MOCK: "false",
@@ -275,6 +286,99 @@ describe("LLM registry", () => {
     } finally {
       await app.close();
       sqlite.close();
+    }
+  });
+
+  it("counts failed provider attempts and excludes cached records from per-provider usage", () => {
+    const sqlite = new Database(":memory:");
+    sqlite.exec("CREATE TABLE jobs (created_at TEXT NOT NULL, usage TEXT)");
+    const createdAt = new Date().toISOString();
+    sqlite.prepare("INSERT INTO jobs (created_at, usage) VALUES (?, ?)").run(createdAt, JSON.stringify({
+      llmCalls: 1,
+      inputTokens: 0,
+      outputTokens: 0,
+      costUsd: 0,
+      calls: [
+        { task: "research", provider: "mock", model: "m1", inputTokens: 4, outputTokens: 5, cached: false, fallback: false, ok: true },
+        { task: "research", provider: "openai", model: "m2", inputTokens: 0, outputTokens: 0, cached: false, fallback: false, ok: false },
+        { task: "script", provider: "mock", model: "m1", inputTokens: 0, outputTokens: 0, cached: true, fallback: false, ok: true },
+      ],
+    }));
+
+    expect(getProviderMonthCalls(sqlite)).toEqual(new Map([["mock", 1], ["openai", 1]]));
+    sqlite.close();
+  });
+
+  it("validates app routing settings and serves cached model suggestions via mocked fetch", async () => {
+    const sqlite = new Database(":memory:");
+    sqlite.exec("CREATE TABLE app_settings (key TEXT PRIMARY KEY, value TEXT NOT NULL, updated_at TEXT NOT NULL)");
+    const registry = new LlmProviderRegistry(parseConfig({
+      LLM_ENABLE_MOCK: "true",
+      OPENAI_API_KEY: "openai-secret",
+      OPENAI_BASE_URL: "https://models.test/v1",
+      OPENAI_MODEL: "configured-model",
+    }));
+    const fetchImpl = vi.fn(async () => jsonResponse({ data: [{ id: "remote-model" }] })) as typeof fetch;
+    const app = Fastify().withTypeProvider<ZodTypeProvider>();
+    app.setValidatorCompiler(validatorCompiler);
+    app.setSerializerCompiler(serializerCompiler);
+    app.setErrorHandler((error, _request, reply) => {
+      reply.status(error.statusCode ?? 500).send({
+        error: {
+          code: "INVALID_LLM_PROVIDER",
+          message: error.message,
+          details: {},
+        },
+      });
+    });
+    registerLlmRoutes(app, registry, sqlite, undefined, fetchImpl);
+    try {
+      const saved = await app.inject({
+        method: "PUT",
+        url: "/api/settings/llm-routing",
+        payload: { tasks: { research: { provider: "mock", model: "research-model" } } },
+      });
+      expect(saved.statusCode).toBe(200);
+      expect((await app.inject({ method: "GET", url: "/api/settings/llm-routing" })).json())
+        .toEqual({ tasks: { research: { provider: "mock", model: "research-model" } } });
+
+      const invalid = await app.inject({
+        method: "PUT",
+        url: "/api/settings/llm-routing",
+        payload: { tasks: { research: { provider: "not-supported" } } },
+      });
+      expect(invalid.statusCode).toBe(400);
+
+      const firstModels = await app.inject({ method: "GET", url: "/api/llm/providers/openai/models" });
+      const secondModels = await app.inject({ method: "GET", url: "/api/llm/providers/openai/models" });
+      expect(firstModels.statusCode).toBe(200);
+      expect(firstModels.json().models).toEqual(expect.arrayContaining(["remote-model", "configured-model"]));
+      expect(secondModels.json()).toEqual(firstModels.json());
+      expect(fetchImpl).toHaveBeenCalledTimes(1);
+    } finally {
+      await app.close();
+      sqlite.close();
+    }
+  });
+
+  it("returns static model suggestions when the remote list request times out", async () => {
+    vi.useFakeTimers();
+    try {
+      const registry = new LlmProviderRegistry(parseConfig({
+        LLM_ENABLE_MOCK: "false",
+        OPENAI_API_KEY: "openai-secret",
+        OPENAI_BASE_URL: "https://models.test/v1",
+        OPENAI_MODEL: "configured-model",
+      }));
+      const fetchImpl = vi.fn((_url: string | URL, init?: RequestInit) => new Promise<Response>((_resolve, reject) => {
+        init?.signal?.addEventListener("abort", () => reject(new DOMException("Aborted", "AbortError")), { once: true });
+      })) as typeof fetch;
+      const pending = registry.suggestModels("openai", fetchImpl);
+      await vi.advanceTimersByTimeAsync(5_000);
+      expect(await pending).toEqual(expect.arrayContaining(["gpt-5", "configured-model"]));
+      expect(fetchImpl).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
     }
   });
 });

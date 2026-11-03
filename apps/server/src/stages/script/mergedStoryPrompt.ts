@@ -1,7 +1,12 @@
-import type { Project } from "@vg/shared";
+import type { BudgetFeatures, Project } from "@vg/shared";
 
-export function mergedStoryPrompt(project: Project, wordsPerMinute: number): { system: string; prompt: string } {
+export function mergedStoryPrompt(
+  project: Project,
+  wordsPerMinute: number,
+  depth: BudgetFeatures["researchDepth"] = "standard",
+): { system: string; prompt: string } {
   const pace = project.settings.wordsPerMinute ?? wordsPerMinute;
+  const factTargets = { light: "6-8", standard: "10-12", deep: "14-16" } as const;
   const pacing = project.settings.aspectRatio === "9:16" ? " (vertical, fast pacing)" : "";
   return {
     system: [
@@ -18,7 +23,7 @@ export function mergedStoryPrompt(project: Project, wordsPerMinute: number): { s
       `Target duration: ${project.settings.targetDurationSec} seconds`,
       `Speaking pace: ${pace} words per minute`,
       "Return {research:{summary,keyFacts,timeline,angles,outline,cautions},script:{title,hook,sections,outro,music}}.",
-      "Research: 5-12 keyFacts[{fact,confidence,sourceHint|null}], at most 10 timeline[{date,event}] and 6 cautions[string]; outline 3-8 items [{section,purpose,points[string]}].",
+      `Research: ${factTargets[depth]} keyFacts[{fact,confidence,sourceHint|null}], at most 10 timeline[{date,event}] and 6 cautions[string]; outline 3-8 items [{section,purpose,points[string]}].`,
       "Script: narration within 20% of target; sections[{id,heading,narration,visualQueries:{primary,alternatives[]},visualNotes,musicMood,energy}]. Provide 0-3 visual-query alternatives per section; the server calculates duration. music:{mood,energy,keywords[]}.",
       "Enum values must be these English words exactly: confidence = high|medium|low; energy = low|medium|high. JSON keys stay in English.",
     ].join("\n"),

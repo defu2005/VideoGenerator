@@ -79,7 +79,7 @@ Mỗi project có `mode`, và mỗi stage có thể override `executor`.
 |---|---|---|
 | 0 — Code | **scene plan (tách scene, thời lượng)**, ranking ảnh, dedupe (perceptual hash), kích thước, aspect, watermark theo domain, tách câu subtitle, timeline, FFmpeg, ducking, xếp hạng nhạc theo mood/BPM/duration | Free |
 | 1 — API rẻ | Image search API (Wikimedia, Openverse, Pexels…), music API, TTS | Thấp |
-| 2 — LLM text | research, script, visual queries, music mood; ở chế độ cao hơn: review/sửa script, xếp hạng ảnh theo ngữ nghĩa (text metadata) | Theo **chế độ ngân sách** (bên dưới), cache theo input hash |
+| 2 — LLM text | research, script, visual queries, music mood; ở chế độ cao hơn: review/sửa script, xếp hạng ảnh theo ngữ nghĩa (text metadata) | Theo **chế độ ngân sách** (bên dưới), cache theo input hash + provider/model |
 | 3 — LLM vision | Hiểu nội dung ảnh | **Tắt mặc định.** Chỉ ở QUALITY/CUSTOM khi user bật, hoặc user bấm trên 1 candidate; luôn báo chi phí trước |
 
 Mọi LLM call ghi `usage` (tokens/requests, cost ước tính) vào job để UI hiển thị.
@@ -89,13 +89,13 @@ Mọi LLM call ghi `usage` (tokens/requests, cost ước tính) vào job để U
 |---|---|---|
 | `ECO` | Rẻ nhất: research + script gộp 1 call; chuẩn hóa bằng code, không gọi sửa, không trợ giúp ảnh/nhạc | 1 (tối đa 1) |
 | `BALANCED` (mặc định, ưu tiên chất lượng — TASK-004F) | Research sâu vừa + script tách riêng; review script 1 lượt; AI hỗ trợ từ khóa scene, xếp hạng ảnh, mood nhạc, metadata; repair 1 lần; headroom output 1.5× | ≈5 (tối đa ≈9) |
-| `QUALITY` | Research sâu; review + polish script 2 lượt; mọi trợ giúp AI; repair 2 lần; headroom 2×; vision vẫn opt-in | ≈7 (tối đa ≈14) |
+| `QUALITY` | Research sâu; review + polish script 2 lượt; mọi trợ giúp AI; repair 2 lần; headroom 2×; vision vẫn opt-in | ≈7 (ước tính bảo thủ 6–15, tùy trợ giúp ảnh và repair) |
 | `MAX` (TASK-004G) | Không tiết kiệm token: mọi tính năng ở mức cao nhất + fact-check script, tìm ảnh rộng hơn, **AI vision kiểm tra top 5 ảnh mỗi scene** (tự tìm lại tối đa 2 vòng nếu < 7/10), kiểm tra đồng nhất giữa các scene, **kiểm tra video sau render** (ffprobe + vision trên frame giữa mỗi scene). Scene không đạt luôn bị gắn `NEEDS_ATTENTION`, không bao giờ bị bỏ qua âm thầm | ≈10 text + vision theo số scene (hiển thị trước khi chạy, không áp trần) |
 | `CUSTOM` | Dùng cấu hình BALANCED rồi áp dụng các feature override; ước tính theo cấu hình | tùy cấu hình |
 
 **Định tuyến model theo tác vụ (TASK-004F):** mỗi tác vụ LLM (`research`, `script`, `scriptReview`, `sceneQueries`, `visualAltQueries`, `visualRerank`, `visionCheck`, `musicAssist`, `metadata`) có route riêng `{provider, model, maxOutputTokens?, fallback?}`. Thứ tự ưu tiên: dự án theo tác vụ → dự án mặc định → app theo tác vụ → app mặc định → ENV. Usage ghi từng call (task/provider/model).
 
-Các feature hỗ trợ ảnh, nhạc và vision được lưu trong cấu hình ngân sách để các task tương ứng sử dụng. Chúng không làm tăng call count hiện tại; vision luôn tắt trừ khi user chủ động bật trong CUSTOM.
+Ước tính hiện tại bao gồm route research/script/review/scene-query/visual-search; scene-query dùng một call batch cho mọi scene khi được bật, còn alternative query và rerank phụ thuộc kết quả tìm ảnh. Music assist và metadata đã có feature flag/task route nhưng thuộc các stage sau; vision luôn tắt trừ khi user chủ động bật trong CUSTOM.
 
 ### Quy tắc LLM (bắt buộc cho mọi task)
 1. **Ở mọi chế độ, việc code làm tốt tương đương thì viết code**, không gọi LLM: tách câu/scene, tính thời lượng, lọc trùng, format, subtitle, timeline, render, validate, chuẩn hóa output.
@@ -171,7 +171,7 @@ topic ─► script ─► scenes ─┬─► visualQueries ─► candidates �
 
 | Loại | MVP | Sau |
 |---|---|---|
-| LLM | Đa provider: Anthropic, Gemini, OpenAI-compatible (OpenAI, Ollama, OpenRouter, DeepSeek, Groq, custom), CLI theo gói đăng ký (claude-cli, copilot-cli; gemini-cli đã bị Google ngừng cho tài khoản cá nhân); chọn theo project/stage; mặc định gộp research + script + visual queries + music mood trong 1 call, cache theo input hash; có thể chọn separate/off; user có thể tự viết script (0 token) | thêm provider khác |
+| LLM | Đa provider: Anthropic, Gemini, OpenAI-compatible (OpenAI, Ollama, OpenRouter, DeepSeek, Groq, custom), CLI theo gói đăng ký (claude-cli, copilot-cli; gemini-cli đã bị Google ngừng cho tài khoản cá nhân); route provider/model theo từng task với thứ tự ưu tiên project → app → ENV và fallback; cache theo input hash + provider/model; user có thể tự viết script (0 token) | thêm provider khác |
 | Image search | Wikimedia Commons, Openverse (license metadata tốt, free); Pexels (API key) | web image search (Brave/SerpAPI), AI image gen |
 | TTS | 1 adapter giá rẻ, hỗ trợ tiếng Việt | local TTS |
 | Music | Thư viện local (`data/music/` + metadata JSON), Jamendo API | thêm nguồn |

@@ -50,6 +50,13 @@
       "when": 1793669359729,
       "tag": "0006_visuals",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "6",
+      "when": 1793673157226,
+      "tag": "0007_opposite_frightful_four",
+      "breakpoints": true
     }
   ]
 }

@@ -1,11 +1,12 @@
-import { MergedStorySchema, ResearchNotesSchema } from "@vg/shared";
+import { MergedStorySchema, ResearchNotesSchema, type LlmCallUsage } from "@vg/shared";
 import type Database from "better-sqlite3";
 import type { AppConfig } from "../../lib/config.js";
 import { StageError, type StageContext, type StageExecutor } from "../../pipeline/stageExecutor.js";
 import { LlmCache } from "../../providers/llm/cache.js";
 import { estimateLlmCost } from "../../providers/llm/pricing.js";
 import type { LlmProviderRegistry } from "../../providers/llm/registry.js";
-import { generateStructured } from "../../providers/llm/structured.js";
+import type { ResolvedLlmRoute } from "../../providers/llm/registry.js";
+import { generateRoutedStructured } from "../../providers/llm/structured.js";
 import { LlmError } from "../../providers/llm/types.js";
 import { preflight } from "../../providers/llm/preflight.js";
 import { resolveBudget, storyModeForProject } from "@vg/shared";
@@ -13,6 +14,7 @@ import { checkScriptDuration, computeSectionDurations, maxOutputTokensForDuratio
 import { researchPrompt } from "./prompt.js";
 import { mergedStoryPrompt } from "../script/mergedStoryPrompt.js";
 import { z } from "zod";
+import { getAppLlmSettings } from "../../providers/llm/settings.js";
 
 type ExistingScript = { data: string; version: number; input_hash: string; review_notes: string | null };
 
@@ -32,29 +34,34 @@ export class ResearchExecutor implements StageExecutor {
     context.reportProgress(10, "Building research prompt");
     const project = context.project;
     const mode = storyModeForProject(project);
-    const repairAttempts = resolveBudget(project).repairAttempts;
+    const budget = resolveBudget(project);
+    const repairAttempts = budget.repairAttempts;
     let usageFeature = "research";
-    let spentUsage: { llmCalls: number; inputTokens: number; outputTokens: number; tokensUnknown?: boolean } | undefined;
+    let spentUsage: { llmCalls: number; inputTokens: number; outputTokens: number; tokensUnknown?: boolean; calls?: LlmCallUsage[] } | undefined;
     let usageRecorded = false;
-    let selected: ReturnType<LlmProviderRegistry["resolve"]> | undefined;
+    let selected: ResolvedLlmRoute | undefined;
     try {
       if (mode === "off") {
         throw new StageError("Research is disabled by the project's research mode.", "LLM_RESEARCH_DISABLED", false);
       }
-      selected = this.registry.resolve(project.settings.llm?.research, project.settings.llm?.default, "research");
+      selected = this.registry.resolveTask("research", project, getAppLlmSettings(this.sqlite));
       const inputHash = researchInputHash(project);
       let effectiveMode = mode;
       usageFeature = mode === "merged" ? "story" : "research";
       let promptInput = mode === "merged"
-        ? mergedStoryPrompt(project, this.config.SPEECH_WORDS_PER_MINUTE)
-        : researchPrompt(project);
+        ? mergedStoryPrompt(project, this.config.SPEECH_WORDS_PER_MINUTE, budget.researchDepth)
+        : researchPrompt(project, budget.researchDepth);
+      const desiredOutputTokens = Math.ceil(
+        maxOutputTokensForDuration(project.settings.targetDurationSec, this.config.SPEECH_WORDS_PER_MINUTE)
+          * budget.outputHeadroom,
+      );
       let limitMessage: string | undefined;
       let check = preflight({
         provider: selected.provider,
         mode,
         project,
         wordsPerMinute: this.config.SPEECH_WORDS_PER_MINUTE,
-        maxOutputTokens: maxOutputTokensForDuration(project.settings.targetDurationSec, this.config.SPEECH_WORDS_PER_MINUTE),
+        maxOutputTokens: desiredOutputTokens,
         input: promptInput,
       });
       if (check.decision === "reject") throw check.error;
@@ -62,13 +69,13 @@ export class ResearchExecutor implements StageExecutor {
         limitMessage = check.message;
         effectiveMode = "separate";
         usageFeature = "research";
-        promptInput = researchPrompt(project);
+        promptInput = researchPrompt(project, budget.researchDepth);
         check = preflight({
           provider: selected.provider,
           mode: "separate",
           project,
           wordsPerMinute: this.config.SPEECH_WORDS_PER_MINUTE,
-          maxOutputTokens: maxOutputTokensForDuration(project.settings.targetDurationSec, this.config.SPEECH_WORDS_PER_MINUTE),
+          maxOutputTokens: desiredOutputTokens,
           input: promptInput,
         });
         if (check.decision === "reject") throw check.error;
@@ -80,8 +87,9 @@ export class ResearchExecutor implements StageExecutor {
       });
       context.reportProgress(20, "Calling research provider");
       const request = {
-        provider: selected.provider,
-        model: selected.model,
+        registry: this.registry,
+        route: selected,
+        task: "research" as const,
         system,
         prompt,
         maxOutputTokens: check.maxOutputTokens,
@@ -92,13 +100,13 @@ export class ResearchExecutor implements StageExecutor {
         logger: context.logger,
       };
       const generated = effectiveMode === "merged"
-        ? await generateStructured({
+        ? await generateRoutedStructured({
           ...request,
           schema: mergedSchema,
           schemaName: "MergedStory",
           schemaVersion: "2",
         })
-        : await generateStructured({
+        : await generateRoutedStructured({
           ...request,
           schema: ResearchNotesSchema,
           schemaName: "ResearchNotes",
@@ -153,6 +161,7 @@ export class ResearchExecutor implements StageExecutor {
         model: generated.model,
         ...(generated.usage.tokensUnknown ? { tokensUnknown: true } : {}),
         features: { [usageFeature]: generated.usage.llmCalls },
+        calls: generated.usage.calls,
       });
       usageRecorded = true;
       context.reportProgress(100, effectiveMode === "merged" ? "Research and script saved" : "Research notes saved");
@@ -173,7 +182,7 @@ export class ResearchExecutor implements StageExecutor {
 function recordFailureUsage(
   error: unknown,
   context: StageContext,
-  spentUsage?: { llmCalls: number; inputTokens: number; outputTokens: number; tokensUnknown?: boolean },
+  spentUsage?: { llmCalls: number; inputTokens: number; outputTokens: number; tokensUnknown?: boolean; calls?: LlmCallUsage[] },
   provider?: string,
   model?: string,
   feature = "research",
@@ -187,6 +196,7 @@ function recordFailureUsage(
     ...(model ? { model } : {}),
     ...(usage.tokensUnknown ? { tokensUnknown: true } : {}),
     features: { [feature]: usage.llmCalls },
+    ...(usage.calls ? { calls: usage.calls } : {}),
   });
 }
 

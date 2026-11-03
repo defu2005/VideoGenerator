@@ -78,6 +78,66 @@ afterEach(() => {
 });
 
 describe("PipelinePanel", () => {
+  it("renders per-task provider, model, and call ranges in the budget estimate", async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      if (String(input).endsWith("/llm-routes")) {
+        return jsonResponse({
+          routes: {
+            research: { provider: "mock", model: "research-model", source: "app-task" },
+            script: { provider: "mock", model: "script-model", source: "app-task" },
+            scriptReview: { provider: "mock", model: "review-model", source: "app-task" },
+            sceneQueries: { provider: "mock", model: "scene-model", source: "app-task" },
+            visualAltQueries: { provider: "mock", model: "alt-model", source: "app-task" },
+            visualRerank: { provider: "mock", model: "rerank-model", source: "app-task" },
+          },
+        });
+      }
+      return jsonResponse(makePipeline());
+    });
+    const project: Project = {
+      id: projectId,
+      title: "Test project",
+      description: "",
+      topic: "Test topic",
+      mode: "ASSISTED",
+      settings: {
+        budget: { mode: "BALANCED" },
+        language: "en",
+        targetDurationSec: 120,
+        aspectRatio: "16:9",
+        platform: "youtube",
+        style: "storytelling",
+        tone: "dramatic",
+        audience: "general",
+        wordsPerMinute: 150,
+        sceneDurationSec: 7,
+        visualStyle: "mixed",
+        subtitles: { enabled: true, maxCharsPerLine: 42 },
+        music: { enabled: true, volume: 0.15 },
+        userSet: [],
+        stageExecutors: {},
+        autoRender: false,
+      },
+      status: "DRAFT",
+      stage: "TOPIC",
+      thumbnailPath: null,
+      durationSec: null,
+      version: 1,
+      createdAt: now,
+      updatedAt: now,
+      archivedAt: null,
+    };
+    vi.stubGlobal("fetch", fetchMock);
+    vi.stubGlobal("EventSource", MockEventSource);
+
+    renderWithProviders(<PipelinePanel projectId={projectId} project={project} />);
+
+    expect(await screen.findByText(/Ước tính: ~5–9 lượt gọi AI/)).toBeInTheDocument();
+    expect(screen.getByText("research: mock · research-model · 1–2 calls")).toBeInTheDocument();
+    expect(screen.getByText("scriptReview: mock · review-model · 1–2 calls")).toBeInTheDocument();
+    expect(screen.getByText("sceneQueries: mock · scene-model · 1 calls")).toBeInTheDocument();
+  });
+
   it("explains when there are no AI calls left to estimate", async () => {
     const pipeline = makePipeline();
     pipeline.stages = pipeline.stages.map((stage) => ({ ...stage, state: "DONE" }));

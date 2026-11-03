@@ -74,10 +74,10 @@ export function buildApp({ config }: { config: AppConfig }) {
   registerHealthRoutes(server, database.sqlite);
   registerProjectRoutes(server, projectService);
   registerRecommendationRoutes(server);
-  registerBudgetRoutes(server, projectService, jobRepository, config);
+  registerBudgetRoutes(server, projectService, jobRepository, config, llmProviders);
   registerDashboardRoutes(server, projectService);
   registerPipelineRoutes(server, projectService, jobRepository, orchestrator, events, sceneService);
-  registerLlmRoutes(server, llmProviders, database.sqlite);
+  registerLlmRoutes(server, llmProviders, database.sqlite, projectService);
   registerScriptRoutes(server, scriptService, projectService, config);
   registerSceneRoutes(server, sceneService);
   registerVisualRoutes(server, visualService, jobRepository);

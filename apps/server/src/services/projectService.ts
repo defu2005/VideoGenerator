@@ -3,6 +3,7 @@ import { and, asc, count, desc, eq, inArray, isNotNull, isNull, sql } from "driz
 import {
   PROJECT_STATUSES,
   ProjectSchema,
+  LlmSettingsSchema,
   PipelineStageSchema,
   ProjectStatusSchema,
   recommendBrief,
@@ -56,6 +57,14 @@ function briefSettingsFromInput(input: CreateProjectInput | UpdateProjectInput):
   };
 }
 
+function normalizeLlmSettings(settings: ProjectSettingsInput["llm"]): ProjectSettings["llm"] {
+  if (!settings) return undefined;
+  return LlmSettingsSchema.parse({
+    ...settings,
+    tasks: Object.fromEntries(Object.entries(settings.tasks ?? {}).filter(([, route]) => route !== null)),
+  });
+}
+
 function mergeSettings(current: ProjectSettings, update: ProjectSettingsInput): ProjectSettings {
   return {
     ...current,
@@ -80,10 +89,20 @@ function mergeSettings(current: ProjectSettings, update: ProjectSettingsInput): 
       ...current.stageExecutors,
       ...update.stageExecutors,
     },
-    llm: {
-      ...current.llm,
-      ...update.llm,
-    },
+    llm: update.llm
+      ? (() => {
+        const tasks = { ...current.llm?.tasks };
+        for (const [task, route] of Object.entries(update.llm.tasks ?? {})) {
+          if (route === null) delete tasks[task as keyof typeof tasks];
+          else if (route) tasks[task as keyof typeof tasks] = route;
+        }
+        return LlmSettingsSchema.parse({
+          ...current.llm,
+          ...update.llm,
+          tasks,
+        });
+      })()
+      : current.llm,
   };
 }
 
@@ -138,7 +157,7 @@ export function createProjectService(db: AppDatabase, config: AppConfig, logger:
       userSet,
       researchMode: inputSettings.researchMode,
       stageExecutors: inputSettings.stageExecutors ?? {},
-      llm: inputSettings.llm,
+      llm: normalizeLlmSettings(inputSettings.llm),
       autoRender: inputSettings.autoRender ?? false,
     };
     const project: Project = {

@@ -1,4 +1,4 @@
-import { ResearchNotesSchema, resolveBudget, ScriptSchema, storyModeForProject, type Script } from "@vg/shared";
+import { ResearchNotesSchema, resolveBudget, ScriptSchema, storyModeForProject, type LlmCallUsage, type Script } from "@vg/shared";
 import type Database from "better-sqlite3";
 import { z } from "zod";
 import type { AppConfig } from "../../lib/config.js";
@@ -6,12 +6,14 @@ import { StageError, type StageContext, type StageExecutor } from "../../pipelin
 import { LlmCache } from "../../providers/llm/cache.js";
 import { estimateLlmCost } from "../../providers/llm/pricing.js";
 import type { LlmProviderRegistry } from "../../providers/llm/registry.js";
-import { generateStructured } from "../../providers/llm/structured.js";
+import type { ResolvedLlmRoute } from "../../providers/llm/registry.js";
+import { generateRoutedStructured } from "../../providers/llm/structured.js";
 import { LlmError } from "../../providers/llm/types.js";
 import { preflight } from "../../providers/llm/preflight.js";
 import { scriptPrompt } from "./prompt.js";
 import { checkScriptDuration, computeSectionDurations, maxOutputTokensForDuration, researchInputHash, scriptContentHash, scriptInputHash } from "./scriptUtils.js";
 import { scriptReviewPrompt } from "./reviewPrompt.js";
+import { getAppLlmSettings } from "../../providers/llm/settings.js";
 
 type ResearchRow = { input_hash: string; data: string; provider: string; model: string };
 type ExistingScript = {
@@ -84,12 +86,13 @@ export class ScriptExecutor implements StageExecutor {
       }
     }
 
-    const spentUsage = { llmCalls: 0, inputTokens: 0, outputTokens: 0, tokensUnknown: false };
+    const spentUsage = { llmCalls: 0, inputTokens: 0, outputTokens: 0, tokensUnknown: false, calls: [] as LlmCallUsage[] };
     const features: Record<string, number> = {};
     let spentCost = 0;
     let usageRecorded = false;
     let activeFeature = "script";
-    let selected: ReturnType<LlmProviderRegistry["resolve"]> | undefined;
+    let selected: ResolvedLlmRoute | undefined;
+    const appRouting = getAppLlmSettings(this.sqlite);
     try {
       const research = applicableResearch
         ? ResearchNotesSchema.parse(JSON.parse(applicableResearch.data) as unknown)
@@ -108,7 +111,7 @@ export class ScriptExecutor implements StageExecutor {
         provider = existing!.provider ?? researchRow?.provider ?? "unknown";
         model = existing!.model ?? researchRow?.model ?? "unknown";
       } else {
-        selected = this.registry.resolve(project.settings.llm?.script, project.settings.llm?.default, "script");
+        selected = this.registry.resolveTask("script", project, appRouting);
         const inputHash = scriptInputHash(project, applicableResearch?.input_hash);
         const initialPrompt = scriptPrompt(project, research, this.config.SPEECH_WORDS_PER_MINUTE);
         const check = preflight({
@@ -116,10 +119,10 @@ export class ScriptExecutor implements StageExecutor {
           mode: "off",
           project,
           wordsPerMinute: this.config.SPEECH_WORDS_PER_MINUTE,
-          maxOutputTokens: maxOutputTokensForDuration(
+          maxOutputTokens: Math.ceil(maxOutputTokensForDuration(
             project.settings.targetDurationSec,
             this.config.SPEECH_WORDS_PER_MINUTE,
-          ),
+          ) * budget.outputHeadroom),
           input: initialPrompt,
           ...(research ? {
             research,
@@ -133,9 +136,10 @@ export class ScriptExecutor implements StageExecutor {
           if (reject) ctx.addIssue({ code: z.ZodIssueCode.custom, message: reject });
         });
         context.reportProgress(20, "Calling script provider");
-        const generated = await generateStructured({
-          provider: selected.provider,
-          model: selected.model,
+        const generated = await generateRoutedStructured({
+          registry: this.registry,
+          route: selected,
+          task: "script",
           system,
           prompt,
           schema: validatedSchema,
@@ -162,9 +166,8 @@ export class ScriptExecutor implements StageExecutor {
       let reviewSkippedCode: string | null = null;
       const baseVersion = (existing?.version ?? 0) + (existing?.data === JSON.stringify(baseData) ? 0 : 1);
       let version = baseVersion;
-      if (budget.scriptReview) {
-        selected ??= this.registry.resolve(project.settings.llm?.script, project.settings.llm?.default, "script");
-        const reviewPrompt = scriptReviewPrompt(project, research, baseData, this.config.SPEECH_WORDS_PER_MINUTE);
+      if (budget.scriptReviewPasses > 0) {
+        const reviewRoute = this.registry.resolveTask("scriptReview", project, appRouting);
         const reviewSchema = z.object({
           revisedScript: ScriptSchema,
           notes: z.array(z.string()).max(8),
@@ -177,50 +180,66 @@ export class ScriptExecutor implements StageExecutor {
           const { reject } = checkScriptDuration(revisedScript, project.settings.targetDurationSec, this.config.SPEECH_WORDS_PER_MINUTE);
           if (reject) ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["revisedScript"], message: reject });
         });
-        const reviewHash = `${scriptInputHash(project, applicableResearch?.input_hash)}:${scriptContentHash(baseData)}:${JSON.stringify(research ?? null)}`;
-        context.reportProgress(70, "Reviewing and revising script");
-        activeFeature = "review";
-        try {
-          const reviewedResult = await generateStructured({
-            provider: selected.provider,
-            model: selected.model,
-            ...reviewPrompt,
-            schema: reviewSchema,
-            schemaName: "ScriptReview",
-            schemaVersion: "1",
-            maxOutputTokens: maxOutputTokensForDuration(
-              project.settings.targetDurationSec,
-              this.config.SPEECH_WORDS_PER_MINUTE,
-            ),
-            repairAttempts: budget.repairAttempts,
-            signal: context.signal,
-            cache: this.cache,
-            cacheKeyExtra: reviewHash,
-            logger: context.logger,
-          });
-          addUsage(spentUsage, features, "review", reviewedResult.usage);
-          spentCost += estimateLlmCost(this.config, reviewedResult.provider, reviewedResult.model, reviewedResult.usage);
-          finalData = computeSectionDurations(reviewedResult.value.revisedScript, this.config.SPEECH_WORDS_PER_MINUTE);
-          reviewNotes = reviewedResult.value.notes;
-          reviewed = true;
-          provider = reviewedResult.provider;
-          model = reviewedResult.model;
-          if (JSON.stringify(finalData) !== JSON.stringify(baseData)) version += 1;
-        } catch (error) {
-          const code = error instanceof LlmError
-            ? error.code
-            : error instanceof z.ZodError
-              ? "LLM_INVALID_OUTPUT"
-              : "LLM_UNAVAILABLE";
-          reviewSkippedCode = code;
-          if (error instanceof LlmError && error.usage) {
-            addUsage(spentUsage, features, "review", error.usage);
-            spentCost += estimateLlmCost(this.config, selected.provider.id, selected.model, error.usage);
+        let priorNotes: string[] = [];
+        for (let pass = 1; pass <= budget.scriptReviewPasses; pass += 1) {
+          const reviewPrompt = scriptReviewPrompt(
+            project,
+            research,
+            finalData,
+            this.config.SPEECH_WORDS_PER_MINUTE,
+            pass,
+            priorNotes,
+          );
+          const reviewHash = `${scriptInputHash(project, applicableResearch?.input_hash)}:${scriptContentHash(finalData)}:${JSON.stringify(research ?? null)}:${pass}:${JSON.stringify(priorNotes)}`;
+          context.reportProgress(70, `Reviewing and revising script (${pass}/${budget.scriptReviewPasses})`);
+          activeFeature = "review";
+          try {
+            const reviewedResult = await generateRoutedStructured({
+              registry: this.registry,
+              route: reviewRoute,
+              task: "scriptReview",
+              ...reviewPrompt,
+              schema: reviewSchema,
+              schemaName: "ScriptReview",
+              schemaVersion: "2",
+              maxOutputTokens: Math.ceil(maxOutputTokensForDuration(
+                project.settings.targetDurationSec,
+                this.config.SPEECH_WORDS_PER_MINUTE,
+              ) * budget.outputHeadroom),
+              repairAttempts: budget.repairAttempts,
+              signal: context.signal,
+              cache: this.cache,
+              cacheKeyExtra: reviewHash,
+              logger: context.logger,
+            });
+            addUsage(spentUsage, features, "review", reviewedResult.usage);
+            spentCost += estimateLlmCost(this.config, reviewedResult.provider, reviewedResult.model, reviewedResult.usage);
+            finalData = computeSectionDurations(reviewedResult.value.revisedScript, this.config.SPEECH_WORDS_PER_MINUTE);
+            reviewNotes = [...priorNotes, ...reviewedResult.value.notes].slice(0, 8);
+            priorNotes = reviewNotes;
+            reviewed = true;
+            provider = reviewedResult.provider;
+            model = reviewedResult.model;
+          } catch (error) {
+            const code = error instanceof LlmError
+              ? error.code
+              : error instanceof z.ZodError
+                ? "LLM_INVALID_OUTPUT"
+                : "LLM_UNAVAILABLE";
+            reviewSkippedCode = code;
+            if (error instanceof LlmError && error.usage) {
+              addUsage(spentUsage, features, "review", error.usage);
+              spentCost += estimateLlmCost(this.config, reviewRoute.provider.id, reviewRoute.model, error.usage);
+            }
+            if (!reviewed) {
+              finalData = baseData;
+              reviewNotes = null;
+            }
+            context.reportProgress(75, `AI review skipped (${code}): kept the ${reviewed ? "last reviewed" : "original"} script`);
+            break;
           }
-          finalData = baseData;
-          reviewNotes = null;
-          context.reportProgress(75, `AI review skipped (${code}): kept the original script`);
         }
+        if (JSON.stringify(finalData) !== JSON.stringify(baseData)) version += 1;
       }
 
       context.reportProgress(85, "Saving script");
@@ -249,6 +268,7 @@ export class ScriptExecutor implements StageExecutor {
         ...(model ? { model } : {}),
         ...(spentUsage.tokensUnknown ? { tokensUnknown: true } : {}),
         features,
+        calls: spentUsage.calls,
       });
       usageRecorded = true;
       const message = reviewSkippedCode
@@ -266,7 +286,7 @@ export class ScriptExecutor implements StageExecutor {
 function recordFailureUsage(
   error: unknown,
   context: StageContext,
-  spentUsage: { llmCalls: number; inputTokens: number; outputTokens: number; tokensUnknown: boolean },
+  spentUsage: { llmCalls: number; inputTokens: number; outputTokens: number; tokensUnknown: boolean; calls: LlmCallUsage[] },
   features: Record<string, number>,
   activeFeature: string,
   spentCost: number,
@@ -279,11 +299,12 @@ function recordFailureUsage(
     inputTokens: spentUsage.inputTokens + (errorUsage?.inputTokens ?? 0),
     outputTokens: spentUsage.outputTokens + (errorUsage?.outputTokens ?? 0),
     tokensUnknown: spentUsage.tokensUnknown || errorUsage?.tokensUnknown === true,
+    calls: [...spentUsage.calls, ...(errorUsage?.calls ?? [])],
   };
   if (errorUsage && errorUsage.llmCalls > 0) {
     features[activeFeature] = (features[activeFeature] ?? 0) + errorUsage.llmCalls;
   }
-  if (combined.llmCalls === 0 && combined.inputTokens === 0 && combined.outputTokens === 0) return;
+  if (combined.llmCalls === 0 && combined.inputTokens === 0 && combined.outputTokens === 0 && combined.calls.length === 0) return;
   context.recordUsage({
     ...combined,
     costUsd: spentCost,
@@ -291,19 +312,21 @@ function recordFailureUsage(
     ...(model ? { model } : {}),
     ...(combined.tokensUnknown ? { tokensUnknown: true } : {}),
     features,
+    calls: combined.calls,
   });
 }
 
 function addUsage(
-  total: { llmCalls: number; inputTokens: number; outputTokens: number; tokensUnknown: boolean },
+  total: { llmCalls: number; inputTokens: number; outputTokens: number; tokensUnknown: boolean; calls: LlmCallUsage[] },
   features: Record<string, number>,
   feature: string,
-  usage: { llmCalls: number; inputTokens: number; outputTokens: number; tokensUnknown?: boolean },
+  usage: { llmCalls: number; inputTokens: number; outputTokens: number; tokensUnknown?: boolean; calls?: LlmCallUsage[] },
 ): void {
   total.llmCalls += usage.llmCalls;
   total.inputTokens += usage.inputTokens;
   total.outputTokens += usage.outputTokens;
   total.tokensUnknown ||= usage.tokensUnknown === true;
+  total.calls.push(...(usage.calls ?? []));
   features[feature] = (features[feature] ?? 0) + usage.llmCalls;
 }
 

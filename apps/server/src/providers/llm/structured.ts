@@ -1,5 +1,7 @@
 import type { FastifyBaseLogger } from "fastify";
 import type { z } from "zod";
+import type { LlmCallUsage, LlmTaskId } from "@vg/shared";
+import type { LlmProviderRegistry, ResolvedLlmRoute } from "./registry.js";
 import { LlmCache, createLlmCacheKey } from "./cache.js";
 import type { LlmProvider } from "./types.js";
 import { LlmError } from "./types.js";
@@ -18,9 +20,10 @@ export async function generateStructured<T>(input: {
   cache?: LlmCache;
   cacheKeyExtra?: string;
   logger?: FastifyBaseLogger;
-}): Promise<{
+  task?: LlmTaskId;
+} ): Promise<{
   value: T;
-  usage: { llmCalls: number; inputTokens: number; outputTokens: number; tokensUnknown?: boolean };
+  usage: { llmCalls: number; inputTokens: number; outputTokens: number; tokensUnknown?: boolean; calls: LlmCallUsage[] };
   provider: string;
   model: string;
   cached: boolean;
@@ -43,7 +46,21 @@ export async function generateStructured<T>(input: {
     }
     return {
       value: result.data,
-      usage: { llmCalls: 0, inputTokens: 0, outputTokens: 0 },
+      usage: {
+        llmCalls: 0,
+        inputTokens: 0,
+        outputTokens: 0,
+        calls: [{
+          task: input.task ?? "unknown",
+          provider: input.provider.id,
+          model: input.model,
+          inputTokens: 0,
+          outputTokens: 0,
+          cached: true,
+          fallback: false,
+          ok: true,
+        }],
+      },
       provider: input.provider.id,
       model: input.model,
       cached: true,
@@ -54,16 +71,19 @@ export async function generateStructured<T>(input: {
   let totalOutputTokens = 0;
   let calls = 0;
   let tokensUnknown = false;
+  const callDetails: LlmCallUsage[] = [];
   const usage = () => ({
     llmCalls: calls,
     inputTokens: totalInputTokens,
     outputTokens: totalOutputTokens,
     ...(tokensUnknown ? { tokensUnknown: true } : {}),
+    calls: [...callDetails],
   });
   const maxOutputTokens = Math.min(input.maxOutputTokens, input.provider.limits?.maxOutputTokens ?? Number.POSITIVE_INFINITY);
   let response;
   try {
     response = await input.provider.generate({
+      schemaName: input.schemaName,
       model: input.model,
       system: input.system,
       messages: [{ role: "user", content: input.prompt }],
@@ -71,12 +91,36 @@ export async function generateStructured<T>(input: {
       json: true,
     }, input.signal);
   } catch (error) {
+    if (input.signal.aborted || isAbortError(error)) throw error;
+    const errorUsage = error instanceof LlmError ? error.usage : undefined;
+    callDetails.push({
+      task: input.task ?? "unknown",
+      provider: input.provider.id,
+      model: input.model,
+      inputTokens: errorUsage?.inputTokens ?? 0,
+      outputTokens: errorUsage?.outputTokens ?? 0,
+      ...(input.provider.id === "copilot-cli" && attemptedCalls(error) ? { premiumRequests: 1 } : {}),
+      cached: false,
+      fallback: false,
+      ok: false,
+    });
     throw withUsage(error, { ...usage(), llmCalls: calls + attemptedCalls(error) }, input.provider.id === "copilot-cli");
   }
   calls += 1;
   totalInputTokens += response.usage.inputTokens;
   totalOutputTokens += response.usage.outputTokens;
   tokensUnknown ||= response.usage.tokensUnknown === true;
+  callDetails.push({
+    task: input.task ?? "unknown",
+    provider: input.provider.id,
+    model: input.model,
+    inputTokens: response.usage.inputTokens,
+    outputTokens: response.usage.outputTokens,
+    ...(input.provider.id === "copilot-cli" ? { premiumRequests: 1 } : {}),
+    cached: false,
+    fallback: false,
+    ok: true,
+  });
 
   if (response.finishReason === "length") {
     throw new LlmError(
@@ -95,6 +139,7 @@ export async function generateStructured<T>(input: {
   while (!validation.success && repairs < repairAttempts) {
     try {
       response = await input.provider.generate({
+        schemaName: input.schemaName,
         model: input.model,
         system: input.system,
         messages: [
@@ -106,6 +151,19 @@ export async function generateStructured<T>(input: {
         json: true,
       }, input.signal);
     } catch (error) {
+      if (input.signal.aborted || isAbortError(error)) throw error;
+      const errorUsage = error instanceof LlmError ? error.usage : undefined;
+      callDetails.push({
+        task: input.task ?? "unknown",
+        provider: input.provider.id,
+        model: input.model,
+        inputTokens: errorUsage?.inputTokens ?? 0,
+        outputTokens: errorUsage?.outputTokens ?? 0,
+        ...(input.provider.id === "copilot-cli" && attemptedCalls(error) ? { premiumRequests: 1 } : {}),
+        cached: false,
+        fallback: false,
+        ok: false,
+      });
       throw withUsage(error, { ...usage(), llmCalls: calls + attemptedCalls(error) }, input.provider.id === "copilot-cli");
     }
     calls += 1;
@@ -113,6 +171,17 @@ export async function generateStructured<T>(input: {
     totalInputTokens += response.usage.inputTokens;
     totalOutputTokens += response.usage.outputTokens;
     tokensUnknown ||= response.usage.tokensUnknown === true;
+    callDetails.push({
+      task: input.task ?? "unknown",
+      provider: input.provider.id,
+      model: input.model,
+      inputTokens: response.usage.inputTokens,
+      outputTokens: response.usage.outputTokens,
+      ...(input.provider.id === "copilot-cli" ? { premiumRequests: 1 } : {}),
+      cached: false,
+      fallback: false,
+      ok: true,
+    });
     if (response.finishReason === "length") {
       throw new LlmError(
         "LLM output was truncated by the provider limit. Try a shorter target duration or a higher output-token limit.",
@@ -131,8 +200,8 @@ export async function generateStructured<T>(input: {
       schema: input.schemaName,
       issues: validation.success ? [] : validation.issues.slice(0, 15),
     }, "LLM output failed structured validation");
-    const message = repairAttempts === 0
-      ? "The LLM response did not match the required output format. Switch to BALANCED to allow one repair attempt."
+    const message = input.task === "sceneQueries" || input.task === "visualAltQueries" || input.task === "visualRerank"
+      ? "The LLM response did not match the required output format. Bỏ qua bước AI, giữ kết quả bằng code."
       : "The LLM response did not match the required output format.";
     throw new LlmError(message, "LLM_INVALID_OUTPUT", false, undefined, usage());
   }
@@ -147,6 +216,96 @@ export async function generateStructured<T>(input: {
   };
 }
 
+export async function generateRoutedStructured<T>(input: {
+  registry: LlmProviderRegistry;
+  route: ResolvedLlmRoute;
+  task: LlmTaskId;
+} & Omit<Parameters<typeof generateStructured<T>>[0], "provider" | "model" | "task">): Promise<Awaited<ReturnType<typeof generateStructured<T>>>> {
+  const { registry, route, task, ...request } = input;
+  const fallbackAttempt = async (
+    firstCalls: LlmCallUsage[],
+    firstUsage: { llmCalls: number; inputTokens: number; outputTokens: number; tokensUnknown?: boolean },
+  ) => {
+    if (!route.fallback) throw new LlmError("No fallback route is configured.", "LLM_NOT_CONFIGURED", false);
+    const fallback = route.failedRoute
+      ? { provider: route.provider, model: route.model }
+      : registry.resolveFallback(route.fallback);
+    try {
+      const generated = await generateStructured({
+        ...request,
+        provider: fallback.provider,
+        model: fallback.model,
+        task,
+        maxOutputTokens: route.maxOutputTokens ?? request.maxOutputTokens,
+      });
+      return {
+        ...generated,
+        usage: {
+          ...generated.usage,
+          llmCalls: firstUsage.llmCalls + generated.usage.llmCalls,
+          inputTokens: firstUsage.inputTokens + generated.usage.inputTokens,
+          outputTokens: firstUsage.outputTokens + generated.usage.outputTokens,
+          ...((firstUsage.tokensUnknown || generated.usage.tokensUnknown) ? { tokensUnknown: true } : {}),
+          calls: [
+            ...firstCalls,
+            ...generated.usage.calls.map((call) => ({ ...call, fallback: true })),
+          ],
+        },
+      };
+    } catch (error) {
+      if (!(error instanceof LlmError)) throw error;
+      const fallbackUsage = error.usage;
+      throw new LlmError(error.message, error.code, error.retryable, error.status, {
+        llmCalls: firstUsage.llmCalls + (fallbackUsage?.llmCalls ?? 0),
+        inputTokens: firstUsage.inputTokens + (fallbackUsage?.inputTokens ?? 0),
+        outputTokens: firstUsage.outputTokens + (fallbackUsage?.outputTokens ?? 0),
+        ...(firstUsage.tokensUnknown || fallbackUsage?.tokensUnknown ? { tokensUnknown: true } : {}),
+        calls: [
+          ...firstCalls,
+          ...(fallbackUsage?.calls ?? []).map((call) => ({ ...call, fallback: true })),
+        ],
+      });
+    }
+  };
+
+  if (route.failedRoute) {
+    return fallbackAttempt([{
+      task,
+      provider: route.failedRoute.provider,
+      model: route.failedRoute.model,
+      inputTokens: 0,
+      outputTokens: 0,
+      cached: false,
+      fallback: false,
+      ok: false,
+    }], { llmCalls: 0, inputTokens: 0, outputTokens: 0 });
+  }
+
+  try {
+    return await generateStructured({
+      ...request,
+      provider: route.provider,
+      model: route.model,
+      maxOutputTokens: route.maxOutputTokens ?? request.maxOutputTokens,
+      task,
+    });
+  } catch (error) {
+    if (!(error instanceof LlmError) || !shouldFallback(error) || !route.fallback) throw error;
+    return fallbackAttempt(
+      error.usage?.calls ?? [],
+      error.usage ?? { llmCalls: 0, inputTokens: 0, outputTokens: 0 },
+    );
+  }
+}
+
+function shouldFallback(error: LlmError): boolean {
+  return error.code !== "LLM_INVALID_OUTPUT";
+}
+
+function isAbortError(error: unknown): boolean {
+  return error instanceof Error && error.name === "AbortError";
+}
+
 // Errors raised before a request reaches the provider (missing CLI, nothing configured) spend no call.
 const NOT_SENT_CODES = new Set(["LLM_NOT_CONFIGURED", "LLM_LIMIT_TOO_SMALL"]);
 
@@ -156,7 +315,7 @@ function attemptedCalls(error: unknown): number {
 
 function withUsage(
   error: unknown,
-  usage: { llmCalls: number; inputTokens: number; outputTokens: number; tokensUnknown?: boolean },
+  usage: { llmCalls: number; inputTokens: number; outputTokens: number; tokensUnknown?: boolean; calls?: LlmCallUsage[] },
   tokensUnknown = false,
 ): LlmError {
   if (error instanceof LlmError) {
@@ -166,6 +325,9 @@ function withUsage(
       inputTokens: usage.inputTokens + (error.usage?.inputTokens ?? 0),
       outputTokens: usage.outputTokens + (error.usage?.outputTokens ?? 0),
       ...(unknownTokens ? { tokensUnknown: true } : {}),
+      ...((usage.calls || error.usage?.calls) ? {
+        calls: [...(usage.calls ?? []), ...(error.usage?.calls ?? [])],
+      } : {}),
     });
   }
   return new LlmError(

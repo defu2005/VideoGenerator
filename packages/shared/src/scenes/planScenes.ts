@@ -121,6 +121,7 @@ function sceneDraft(
     label: unit.label,
     narration,
     visualNotes: section?.visualNotes ?? "",
+    visualDescription: section?.visualNotes ?? "",
     visualQueries: queryAssignment.visualQueries,
     queryVariant: queryAssignment.queryVariant,
     musicMood: section?.musicMood ?? "",

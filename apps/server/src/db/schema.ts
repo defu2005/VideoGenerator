@@ -25,6 +25,12 @@ export const projects = sqliteTable("projects", {
 
 export type ProjectRow = typeof projects.$inferSelect;
 
+export const appSettings = sqliteTable("app_settings", {
+  key: text("key").primaryKey(),
+  value: text("value", { mode: "json" }).notNull(),
+  updatedAt: text("updated_at").notNull(),
+});
+
 export const jobs = sqliteTable("jobs", {
   id: text("id").primaryKey(),
   projectId: text("project_id").notNull().references(() => projects.id, { onDelete: "cascade" }),
@@ -42,6 +48,17 @@ export const jobs = sqliteTable("jobs", {
     outputTokens: number;
     costUsd: number;
     features?: Record<string, number>;
+    calls?: {
+      task: string;
+      provider: string;
+      model: string;
+      inputTokens: number;
+      outputTokens: number;
+      premiumRequests?: number;
+      cached: boolean;
+      fallback: boolean;
+      ok: boolean;
+    }[];
   } | null>(),
   createdAt: text("created_at").notNull(),
   startedAt: text("started_at"),
@@ -100,6 +117,7 @@ export const scenes = sqliteTable("scenes", {
   label: text("label").notNull(),
   narration: text("narration").notNull(),
   visualNotes: text("visual_notes").notNull(),
+  visualDescription: text("visual_description").notNull().default(""),
   visualQueries: text("visual_queries", { mode: "json" }).$type<{ primary: string; alternatives: string[] }>().notNull(),
   musicMood: text("music_mood").notNull(),
   energy: text("energy").notNull(),

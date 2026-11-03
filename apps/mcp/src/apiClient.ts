@@ -9,6 +9,8 @@ import type {
   ScenePlanSummary,
   ProjectVisuals,
   SceneVisuals,
+  LlmRoute,
+  LlmTaskId,
 } from "@vg/shared";
 
 const SERVER_DOWN_GUIDANCE = "Start it with `npm run dev`.";
@@ -78,6 +80,15 @@ export class VideoAgentApiClient {
 
   getSceneVisuals(projectId: string, sceneId: string): Promise<SceneVisuals> {
     return this.request(`/api/projects/${encodeURIComponent(projectId)}/scenes/${encodeURIComponent(sceneId)}/visuals`);
+  }
+
+  getLlmRoutes(projectId: string): Promise<{
+    routes: Partial<Record<LlmTaskId, (LlmRoute & {
+      model: string;
+      source: "project-task" | "project-default" | "app-task" | "app-default" | "env-task" | "env-default";
+    }) | null>>;
+  }> {
+    return this.request(`/api/projects/${encodeURIComponent(projectId)}/llm-routes`);
   }
 
   getPrompt(projectId: string, stage: "RESEARCH" | "SCRIPT" | "STORY"): Promise<{

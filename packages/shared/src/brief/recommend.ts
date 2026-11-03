@@ -1,5 +1,6 @@
 import type { AutonomyMode, ProjectSettings } from "../index.js";
 import type { BudgetSettingsInput } from "../budget/modes.js";
+import type { ProjectSettingsInput } from "../schemas/project.js";
 import {
   DEFAULT_BRIEF_VALUES,
   PLATFORM_PRESETS,
@@ -27,10 +28,11 @@ export type RecommendBriefInput = {
   title?: string;
   description?: string;
   mode?: AutonomyMode;
-  settings?: Omit<Partial<ProjectSettings>, "subtitles" | "music" | "budget"> & {
+  settings?: Omit<Partial<ProjectSettings>, "subtitles" | "music" | "budget" | "llm"> & {
     subtitles?: Partial<ProjectSettings["subtitles"]>;
     music?: Partial<ProjectSettings["music"]>;
     budget?: BudgetSettingsInput;
+    llm?: ProjectSettingsInput["llm"];
   };
 };
 

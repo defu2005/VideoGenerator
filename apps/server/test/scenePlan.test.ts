@@ -160,7 +160,7 @@ describe("SCENE_PLAN executor and API", () => {
     expect(after.map((row) => row.id)).not.toEqual(firstIds);
   });
 
-  it("skips QUALITY assist without a split unit and falls back when the provider is unavailable", async () => {
+  it("assists every planned scene and falls back when the provider is unavailable", async () => {
     const project = await createProject("QUALITY");
     const singleSceneScript: Script = {
       ...script,
@@ -168,7 +168,7 @@ describe("SCENE_PLAN executor and API", () => {
     };
     await saveScript(project.id, singleSceneScript);
     const noSplit = await execute(project);
-    expect(noSplit.usage.reduce((sum, item) => sum + (item.llmCalls ?? 0), 0)).toBe(0);
+    expect(noSplit.usage.reduce((sum, item) => sum + (item.llmCalls ?? 0), 0)).toBe(1);
 
     const splitProject = { ...project, settings: { ...project.settings, budget: { mode: "QUALITY" as const } } };
     await saveScript(project.id, script);

@@ -15,6 +15,7 @@ import {
   type VisualSelection,
   type ScoreBreakdown,
   resolveBudget,
+  type LlmCallUsage,
 } from "@vg/shared";
 import type Database from "better-sqlite3";
 import type { FastifyBaseLogger } from "fastify";
@@ -33,8 +34,9 @@ import { markStaleFrom } from "../pipeline/invalidation.js";
 import { StageError, type StageContext, type StageResult } from "../pipeline/stageExecutor.js";
 import type { LlmProviderRegistry } from "../providers/llm/registry.js";
 import { LlmCache } from "../providers/llm/cache.js";
-import { generateStructured } from "../providers/llm/structured.js";
+import { generateRoutedStructured } from "../providers/llm/structured.js";
 import { LlmError } from "../providers/llm/types.js";
+import { getAppLlmSettings } from "../providers/llm/settings.js";
 import { buildAltQueryPrompt, AltQueryResponseSchema } from "../stages/visuals/altQueryPrompt.js";
 import { buildRerankPrompt, RerankResponseSchema } from "../stages/visuals/rerankPrompt.js";
 
@@ -44,6 +46,7 @@ type SceneRow = {
   order: number;
   narration: string;
   visual_notes: string;
+  visual_description: string;
   visual_queries: string;
 };
 
@@ -156,7 +159,7 @@ export class VisualService {
     const ranked = this.rankVisuals(
       combined,
       scene.visualQueries.primary,
-      scene.visualNotes,
+      scene.visualDescription || scene.visualNotes,
       project.settings.language,
       aspectNumber(project.settings.aspectRatio),
       providers.map((item) => item.id),
@@ -238,6 +241,7 @@ export class VisualService {
     let llmCalls = 0;
     let inputTokens = 0;
     let outputTokens = 0;
+    const llmCallDetails: LlmCallUsage[] = [];
     const inputHashes: string[] = [];
     const sceneSearches: SceneSearchData[] = [];
     const sectionQueries = this.loadSectionQueries(project.id);
@@ -247,6 +251,7 @@ export class VisualService {
       const searchHash = createHash("sha256").update(JSON.stringify([
         scene.visualQueries,
         scene.queryVariant,
+        scene.visualDescription,
         scene.visualNotes,
         project.settings.language,
         project.settings.aspectRatio,
@@ -301,7 +306,7 @@ export class VisualService {
       ? sceneSearches.filter((item) => !item.unchanged && this.relevantCount(
         item.candidates,
         item.scene.visualQueries.primary,
-        item.scene.visualNotes,
+        item.scene.visualDescription || item.scene.visualNotes,
         project.settings.language,
         project.settings.aspectRatio,
         enabledProviders.map((provider) => provider.id),
@@ -309,13 +314,16 @@ export class VisualService {
       : [];
     if (assistScenes.length) {
       try {
-        const llm = llmProviders.resolve(project.settings.llm?.sceneplan, project.settings.llm?.default, "sceneplan");
-        const result = await generateStructured({
-          provider: llm.provider,
-          model: llm.model,
+        const llm = llmProviders.resolveTask("visualAltQueries", project, getAppLlmSettings(this.sqlite));
+        const result = await generateRoutedStructured({
+          registry: llmProviders,
+          route: llm,
+          task: "visualAltQueries",
           ...buildAltQueryPrompt(assistScenes.map((item) => ({
             sceneId: item.scene.id,
-            visualNotes: project.settings.language === "en" ? item.scene.visualNotes : "",
+            visualNotes: project.settings.language === "en"
+              ? item.scene.visualDescription || item.scene.visualNotes
+              : "",
             narration: item.scene.narration,
             queries: item.scene.visualQueries,
           }))),
@@ -331,6 +339,7 @@ export class VisualService {
         llmCalls += result.usage.llmCalls;
         inputTokens += result.usage.inputTokens;
         outputTokens += result.usage.outputTokens;
+        llmCallDetails.push(...result.usage.calls);
         for (const suggested of result.value.scenes) {
           const item = assistScenes.find((entry) => entry.scene.id === suggested.sceneId);
           if (!item) continue;
@@ -338,7 +347,7 @@ export class VisualService {
             if (this.relevantCount(
               item.candidates,
               item.scene.visualQueries.primary,
-              item.scene.visualNotes,
+              item.scene.visualDescription || item.scene.visualNotes,
               project.settings.language,
               project.settings.aspectRatio,
               enabledProviders.map((provider) => provider.id),
@@ -357,6 +366,7 @@ export class VisualService {
           llmCalls += error.usage.llmCalls;
           inputTokens += error.usage.inputTokens;
           outputTokens += error.usage.outputTokens;
+          llmCallDetails.push(...(error.usage.calls ?? []));
         }
         const code = error instanceof LlmError ? error.code : "LLM_UNAVAILABLE";
         context.logger.warn({ err: error, code }, "AI query assist skipped");
@@ -369,7 +379,7 @@ export class VisualService {
       let ranked = this.rankVisuals(
         combined,
         item.scene.visualQueries.primary,
-        item.scene.visualNotes,
+        item.scene.visualDescription || item.scene.visualNotes,
         project.settings.language,
         aspectNumber(project.settings.aspectRatio),
         enabledProviders.map((provider) => provider.id),
@@ -382,10 +392,11 @@ export class VisualService {
       const rerankable = rankedScenes.filter((entry) => !entry.item.unchanged && entry.ranked.length);
       if (rerankable.length) {
         try {
-          const llm = llmProviders.resolve(project.settings.llm?.sceneplan, project.settings.llm?.default, "sceneplan");
-          const result = await generateStructured({
-            provider: llm.provider,
-            model: llm.model,
+          const llm = llmProviders.resolveTask("visualRerank", project, getAppLlmSettings(this.sqlite));
+          const result = await generateRoutedStructured({
+            registry: llmProviders,
+            route: llm,
+            task: "visualRerank",
             ...buildRerankPrompt(rerankable.map(({ item, ranked }) => ({
               sceneId: item.scene.id,
               narration: item.scene.narration,
@@ -408,6 +419,7 @@ export class VisualService {
           llmCalls += result.usage.llmCalls;
           inputTokens += result.usage.inputTokens;
           outputTokens += result.usage.outputTokens;
+          llmCallDetails.push(...result.usage.calls);
           for (const rankedScene of rerankable) {
             const order = result.value.scenes.find((scene) => scene.sceneId === rankedScene.item.scene.id)?.order;
             if (!order) continue;
@@ -433,6 +445,7 @@ export class VisualService {
             llmCalls += error.usage.llmCalls;
             inputTokens += error.usage.inputTokens;
             outputTokens += error.usage.outputTokens;
+            llmCallDetails.push(...(error.usage.calls ?? []));
           }
           context.logger.warn({ err: error }, "Semantic image rerank failed; keeping code ranking");
         }
@@ -520,6 +533,7 @@ export class VisualService {
       llmCalls,
       inputTokens,
       outputTokens,
+      ...(llmCallDetails.length ? { calls: llmCallDetails } : {}),
       features: { imageProviderRequests: stats.requests, imageCacheHits: stats.cacheHits },
     });
     const cacheHits = stats.cacheHits;
@@ -558,7 +572,7 @@ export class VisualService {
       if (!key || seenQueries.has(key) || this.relevantCount(
         results,
         scene.visualQueries.primary,
-        scene.visualNotes,
+        scene.visualDescription || scene.visualNotes,
         language,
         aspectRatio,
         providers.map((provider) => provider.id),
@@ -683,7 +697,7 @@ export class VisualService {
 
   private loadScenes(projectId: string): Scene[] {
     const rows = this.sqlite.prepare(
-      "SELECT id, project_id, \"order\", kind, section_id, label, narration, visual_notes, visual_queries, music_mood, energy, est_duration_sec, duration_override_sec, start_sec, transition_note, origin, edited, input_hash, created_at, updated_at FROM scenes WHERE project_id = ? ORDER BY \"order\"",
+      "SELECT id, project_id, \"order\", kind, section_id, label, narration, visual_notes, visual_description, visual_queries, music_mood, energy, est_duration_sec, duration_override_sec, start_sec, transition_note, origin, edited, input_hash, created_at, updated_at FROM scenes WHERE project_id = ? ORDER BY \"order\"",
     ).all(projectId) as (SceneRow & Record<string, unknown>)[];
     return rows.map((row) => {
       const queries = StoredVisualQueriesSchema.parse(JSON.parse(row.visual_queries) as unknown);
@@ -696,6 +710,7 @@ export class VisualService {
         label: row.label as string,
         narration: row.narration,
         visualNotes: row.visual_notes,
+        visualDescription: row.visual_description,
         visualQueries: { primary: queries.primary, alternatives: queries.alternatives },
         queryVariant: queries.queryVariant,
         musicMood: row.music_mood as string,

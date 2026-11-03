@@ -40,7 +40,7 @@ export const ResearchNotesSchema = z.object({
     fact: z.string().min(1),
     confidence: LevelSchema,
     sourceHint: z.string().nullable(),
-  }).strict()).min(5).max(12),
+  }).strict()).min(5).max(16),
   timeline: z.array(z.object({
     date: z.string(),
     event: z.string().min(1),

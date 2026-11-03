@@ -147,16 +147,19 @@ describe("CreateProjectDialog", () => {
     fireEvent.click(screen.getByRole("button", { name: /Customize/ }));
     const mode = screen.getByLabelText("Chế độ AI / Budget mode");
     expect(mode).toHaveValue("BALANCED");
-    expect(screen.getByText("Ước tính: ~2–5 lượt gọi AI (BALANCED)")).toBeInTheDocument();
+    expect(screen.getByText("Ước tính: ~5–9 lượt gọi AI (BALANCED)")).toBeInTheDocument();
 
     fireEvent.change(mode, { target: { value: "ECO" } });
     expect(screen.getByText("Ước tính: ~1 lượt gọi AI (ECO)")).toBeInTheDocument();
     fireEvent.change(mode, { target: { value: "CUSTOM" } });
-    const review = screen.getByRole("checkbox", { name: "scriptReview" });
-    expect(review).not.toBeChecked();
-    fireEvent.click(review);
-    expect(review).toBeChecked();
-    expect(screen.getByText("Ước tính: ~3–7 lượt gọi AI (CUSTOM)")).toBeInTheDocument();
+    const reviewPasses = screen.getByLabelText("scriptReviewPasses");
+    expect(reviewPasses).toHaveValue("1");
+    fireEvent.change(reviewPasses, { target: { value: "0" } });
+    expect(reviewPasses).toHaveValue("0");
+    expect(screen.getByText("Ước tính: ~4–7 lượt gọi AI (CUSTOM)")).toBeInTheDocument();
+    fireEvent.change(reviewPasses, { target: { value: "2" } });
+    expect(reviewPasses).toHaveValue("2");
+    expect(screen.getByText("Ước tính: ~6–11 lượt gọi AI (CUSTOM)")).toBeInTheDocument();
     expect(screen.getAllByText(/available in a later step/)).toHaveLength(2);
   });
 });

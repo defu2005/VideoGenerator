@@ -285,6 +285,9 @@ export class PipelineOrchestrator {
           ...((usage.features || previous.features) ? {
             features: mergeFeatureUsage(previous.features, usage.features),
           } : {}),
+          ...((usage.calls || previous.calls) ? {
+            calls: [...(previous.calls ?? []), ...(usage.calls ?? [])],
+          } : {}),
         },
       });
     });

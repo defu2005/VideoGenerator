@@ -153,13 +153,16 @@ function parseCopilotResponse(output: string): ParsedCliResponse | undefined {
   };
 }
 
-function classifyCopilotFailure(message: string): LlmError {
+export function classifyCopilotFailure(message: string): LlmError {
   const normalized = message.toLowerCase();
   if (/quota|limit reached|usage limit|credits? (?:are )?(?:exhausted|depleted)|premium requests? (?:are )?(?:exhausted|used up)/.test(normalized)) {
     return new LlmError("GitHub Copilot usage quota has been exhausted.", "LLM_QUOTA_EXHAUSTED", false);
   }
   if (/not signed in|not licensed to use copilot|no copilot access|not authenticated|authentication required|unauthorized|\b401\b|\b403\b|run.*login/.test(normalized)) {
     return new LlmError("Copilot CLI is not signed in or this account has no Copilot access", "LLM_AUTH", false);
+  }
+  if (/invalid model|unknown model|model.{0,80}(?:not (?:valid|available|supported|found)|unsupported)|unsupported model/.test(normalized)) {
+    return new LlmError("Model không hợp lệ cho Copilot CLI", "LLM_NOT_CONFIGURED", false);
   }
   // CLI argument/usage errors are rejected locally before any request is sent.
   if (/for more information, try '--help'|unexpected argument|a value is required for/.test(normalized)) {

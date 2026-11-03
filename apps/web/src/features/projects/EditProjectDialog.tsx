@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
-import { recommendBrief, UpdateProjectInputSchema, type Project, type ProjectSettings } from "@vg/shared";
+import { recommendBrief, UpdateProjectInputSchema, type LlmRoute, type Project, type ProjectSettings } from "@vg/shared";
 import { ApiRequestError } from "../../services/apiClient";
 import { useUpdateProject } from "../../hooks/useProjects";
 import { ProjectFormFields, type ProjectDraft } from "./ProjectFormFields";
@@ -46,6 +46,7 @@ export function EditProjectDialog({
   const mutation = useUpdateProject();
   const dialogRef = useRef<HTMLDialogElement>(null);
   const [draft, setDraft] = useState<ProjectDraft>(() => draftFromProject(project));
+  const [llmTasks, setLlmTasks] = useState<NonNullable<ProjectSettings["llm"]>["tasks"]>(project.settings.llm?.tasks ?? {});
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [requestError, setRequestError] = useState("");
   const [advanced, setAdvanced] = useState(false);
@@ -67,6 +68,7 @@ export function EditProjectDialog({
   useEffect(() => {
     if (open) {
       setDraft(draftFromProject(project));
+      setLlmTasks(project.settings.llm?.tasks ?? {});
       setBriefSettings(project.settings);
       setBriefUserSet(project.settings.userSet);
       setBriefChanges([]);
@@ -184,14 +186,29 @@ export function EditProjectDialog({
     if (Object.keys(stageExecutors).length) {
       settings.stageExecutors = stageExecutors;
     }
-    if (draft.llmProvider !== (project.settings.llm?.default?.provider ?? "")
-      || draft.llmModel !== (project.settings.llm?.default?.model ?? "")) {
-      settings.llm = {
-        default: {
+    const defaultRouteChanged = draft.llmProvider !== (project.settings.llm?.default?.provider ?? "")
+      || draft.llmModel !== (project.settings.llm?.default?.model ?? "");
+    const taskRoutesChanged = JSON.stringify(llmTasks) !== JSON.stringify(project.settings.llm?.tasks ?? {});
+    if (defaultRouteChanged || taskRoutesChanged) {
+      const llm: Record<string, unknown> = {};
+      if (defaultRouteChanged) {
+        llm.default = {
           provider: draft.llmProvider || project.settings.llm?.default?.provider || "",
           ...(draft.llmModel.trim() ? { model: draft.llmModel.trim() } : {}),
-        },
-      };
+        };
+      }
+      if (taskRoutesChanged) {
+        const tasks: Record<string, LlmRoute | null> = {};
+        for (const [task, route] of Object.entries(project.settings.llm?.tasks ?? {})) {
+          if (!(task in (llmTasks ?? {}))) tasks[task] = null;
+          else if (route) tasks[task] = route;
+        }
+        for (const [task, route] of Object.entries(llmTasks ?? {})) {
+          if (route) tasks[task] = route;
+        }
+        llm.tasks = tasks;
+      }
+      settings.llm = llm;
     }
     if (Object.keys(settings).length) patch.settings = settings;
     if (briefResets.length) patch.resetToRecommended = briefResets;
@@ -242,6 +259,9 @@ export function EditProjectDialog({
             onChange={change}
             advanced={advanced}
             onToggleAdvanced={() => setAdvanced((value) => !value)}
+            projectId={project.id}
+            llmTasks={llmTasks}
+            onLlmTasksChange={setLlmTasks}
           />
           <BriefFields
             topic={draft.topic}

@@ -10,6 +10,19 @@ export const JobErrorSchema = z.object({
 });
 export type JobError = z.infer<typeof JobErrorSchema>;
 
+export const LlmCallUsageSchema = z.object({
+  task: z.string().min(1),
+  provider: z.string().min(1),
+  model: z.string(),
+  inputTokens: z.number().int().nonnegative(),
+  outputTokens: z.number().int().nonnegative(),
+  premiumRequests: z.number().int().nonnegative().optional(),
+  cached: z.boolean(),
+  fallback: z.boolean(),
+  ok: z.boolean(),
+}).strict();
+export type LlmCallUsage = z.infer<typeof LlmCallUsageSchema>;
+
 export const JobUsageSchema = z.object({
   llmCalls: z.number().int().nonnegative(),
   inputTokens: z.number().int().nonnegative(),
@@ -19,6 +32,7 @@ export const JobUsageSchema = z.object({
   model: z.string().optional(),
   tokensUnknown: z.boolean().optional(),
   features: z.record(z.string(), z.number().int().nonnegative()).optional(),
+  calls: z.array(LlmCallUsageSchema).optional(),
 });
 export type JobUsage = z.infer<typeof JobUsageSchema>;
 

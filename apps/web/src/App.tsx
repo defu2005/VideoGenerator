@@ -4,6 +4,7 @@ import { AppLayout } from "./components/layout/AppLayout";
 import { DashboardPage } from "./features/dashboard/DashboardPage";
 import { ProjectDetailPage } from "./features/projects/ProjectDetailPage";
 import { ProjectListPage } from "./features/projects/ProjectListPage";
+import { AiSettingsPage } from "./features/settings/AiSettingsPage";
 import { queryRetryDelay, shouldRetryQuery } from "./services/queryRetry";
 
 const queryClient = new QueryClient({
@@ -24,6 +25,7 @@ export function App() {
           <Route element={<AppLayout />}>
             <Route index element={<DashboardPage />} />
             <Route path="projects" element={<ProjectListPage />} />
+            <Route path="settings/ai" element={<AiSettingsPage />} />
             <Route path="projects/:id" element={<Navigate replace to="overview" />} />
             <Route path="projects/:id/:tab" element={<ProjectDetailPage />} />
             <Route path="*" element={<NotFoundPage />} />
