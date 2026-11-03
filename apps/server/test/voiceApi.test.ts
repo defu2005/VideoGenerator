@@ -56,7 +56,7 @@ describe("voice API", () => {
   it("lists voices, summarizes missing tracks, regenerates, streams ranges, uploads, and marks downstream stages stale", async () => {
     const voices = await app.inject({ method: "GET", url: "/api/tts/voices" });
     expect(voices.statusCode).toBe(200);
-    expect(voices.json().voices).toContainEqual({ language: "vi", gender: "female", name: "vi-VN-HoaiMyNeural" });
+    expect(voices.json().voices).toContainEqual({ language: "vi", gender: "female", name: "vi-VN-HoaiMyNeural", multilingual: false });
 
     const empty = await app.inject({ method: "GET", url: `/api/projects/${project.id}/voice` });
     expect(empty.statusCode).toBe(200);

@@ -23,6 +23,10 @@ const STATIC_VOICES: TtsVoice[] = [
   { language: "vi", gender: "male", name: "vi-VN-NamMinhNeural" },
   { language: "en", gender: "female", name: "en-US-AriaNeural" },
   { language: "en", gender: "male", name: "en-US-GuyNeural" },
+  { language: "ja", gender: "female", name: "ja-JP-NanamiNeural" },
+  { language: "pt", gender: "female", name: "pt-BR-FernandaNeural" },
+  { language: "en", gender: "neutral", name: "en-US-JennyMultilingualNeural", multilingual: true },
+  { language: "ja", gender: "neutral", name: "ja-JP-KeitaMultilingualNeural", multilingual: true },
 ];
 
 function parseSrt(input: string): TtsCue[] {
@@ -78,10 +82,10 @@ export class EdgeTtsProvider implements TtsProvider {
         .filter(Boolean)
         .map((line) => {
           const columns = line.split(/\s+/);
-          const name = columns.find((column) => /^[a-z]{2}-[A-Z]{2}-[\w]+$/.test(column)) ?? "";
-          const language = name.slice(0, 5) || "unknown";
+          const name = columns.find((column) => /^[a-z]{2}-[A-Z]{2}-[\w]+$/.test(column) || /Multilingual/i.test(column)) ?? "";
+          const language = name ? name.split("-").slice(0, 2).join("-") : "unknown";
           const gender: TtsVoice["gender"] = /female/i.test(line) ? "female" : /\bmale\b/i.test(line) ? "male" : "unknown";
-          return { language, name, gender };
+          return { language, name, gender, multilingual: /Multilingual/i.test(name) };
         })
         .filter((voice) => voice.name.length > 0);
       this.listCache = { expiresAt: now + 10 * 60_000, voices: parsed.length > 0 ? parsed : STATIC_VOICES };

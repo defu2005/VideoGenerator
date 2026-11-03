@@ -13,6 +13,7 @@ import { markStaleFrom } from "../pipeline/invalidation.js";
 import type { JobRepository } from "../jobs/jobRepository.js";
 import { probeDurationSec } from "../media/ffmpeg.js";
 import type { TtsCue } from "../providers/tts/types.js";
+import { defaultVoiceFor } from "../lib/defaultVoice.js";
 
 const ProjectParams = z.object({ id: z.string().uuid() }).strict();
 const SceneParams = z.object({ id: z.string().uuid(), sceneId: z.string().uuid() }).strict();
@@ -83,7 +84,10 @@ export function registerVoiceRoutes(
   config: AppConfig,
 ): void {
   app.get("/api/tts/voices", async () => {
-    const voices = await registry.listVoices();
+    const voices = (await registry.listVoices()).map((voice) => ({
+      ...voice,
+      multilingual: Boolean(voice.multilingual ?? /Multilingual/i.test(voice.name)),
+    }));
     return { voices };
   });
 
@@ -138,7 +142,8 @@ export function registerVoiceRoutes(
     const scene = db.prepare("SELECT id, narration FROM scenes WHERE id = ? AND project_id = ?").get(sceneId, id) as { id: string; narration: string } | undefined;
     if (!scene) throw new AppError(404, "SCENE_NOT_FOUND", "Scene not found");
     const body = RegenerateBody.parse(request.body ?? {});
-    const voice = body.voice ?? project.settings.voice?.voice ?? (project.settings.language.toLowerCase().startsWith("vi") ? config.TTS_VOICE_VI : config.TTS_VOICE_EN);
+    const voices = await registry.listVoices();
+    const voice = body.voice ?? project.settings.voice?.voice ?? defaultVoiceFor(project.settings.language, voices, config, () => undefined);
     const rate = body.rate ?? project.settings.voice?.rate ?? config.TTS_RATE;
     const provider = registry.resolve();
     const hash = createHash("sha256").update(`${scene.narration}\u0000${voice}\u0000${rate}\u0000${provider.id}`).digest("hex");

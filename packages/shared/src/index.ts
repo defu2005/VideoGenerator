@@ -14,6 +14,7 @@ export * from "./schemas/scene.js";
 export * from "./schemas/visual.js";
 export * from "./schemas/usage.js";
 export * from "./schemas/voice.js";
+export * from "./subtitles/index.js";
 export * from "./visuals/license.js";
 export * from "./visuals/rank.js";
 export * from "./visuals/dedupe.js";

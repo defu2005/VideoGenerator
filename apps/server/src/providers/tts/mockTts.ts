@@ -42,9 +42,13 @@ export class MockTtsProvider implements TtsProvider {
 
   async listVoices(): Promise<TtsVoice[]> {
     return [
-      { language: "vi", name: "vi-VN-HoaiMyNeural", gender: "female" },
-      { language: "en", name: "en-US-AriaNeural", gender: "female" },
-      { language: "vi", name: "vi-VN-NamMinhNeural", gender: "male" },
+      { language: "vi", name: "vi-VN-HoaiMyNeural", gender: "female", multilingual: false },
+      { language: "en", name: "en-US-AriaNeural", gender: "female", multilingual: false },
+      { language: "vi", name: "vi-VN-NamMinhNeural", gender: "male", multilingual: false },
+      { language: "ja", name: "ja-JP-NanamiNeural", gender: "female", multilingual: false },
+      { language: "pt-BR", name: "pt-BR-FernandaNeural", gender: "female", multilingual: false },
+      { language: "en", name: "en-US-JennyMultilingualNeural", gender: "neutral", multilingual: true },
+      { language: "ja", name: "ja-JP-KeitaMultilingualNeural", gender: "neutral", multilingual: true },
     ];
   }
 

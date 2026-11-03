@@ -156,6 +156,19 @@ export const voiceTracks = sqliteTable("voice_tracks", {
   index("voice_tracks_project_idx").on(table.projectId),
 ]);
 
+export const subtitleTracks = sqliteTable("subtitle_tracks", {
+  id: text("id").primaryKey(),
+  projectId: text("project_id").notNull().references(() => projects.id, { onDelete: "cascade" }),
+  cues: text("cues", { mode: "json" }).$type<Array<{ index?: number; sceneId?: string; startSec: number; endSec: number; text: string; edited?: boolean }>>().notNull().default([]),
+  srtPath: text("srt_path").notNull(),
+  assPath: text("ass_path").notNull(),
+  inputHash: text("input_hash").notNull(),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+}, (table) => [
+  uniqueIndex("subtitle_tracks_project_uq").on(table.projectId),
+]);
+
 export const visualCandidates = sqliteTable("visual_candidates", {
   id: text("id").primaryKey(),
   projectId: text("project_id").notNull().references(() => projects.id, { onDelete: "cascade" }),

@@ -14,8 +14,9 @@ import { SceneBoard } from "../scenes/SceneBoard";
 import { VisualReview } from "../visuals/VisualReview";
 import { ProjectUsagePanel } from "../usage/ProjectUsagePanel";
 import { VoicePanel } from "../voice/VoicePanel";
+import { SubtitlePanel } from "../subtitles/SubtitlePanel";
 
-const TABS = ["overview", "script", "scenes", "visuals", "voice", "music", "timeline", "render", "usage"] as const;
+const TABS = ["overview", "script", "scenes", "visuals", "voice", "subtitles", "music", "timeline", "render", "usage"] as const;
 
 function formatUpdated(value: string): string {
   return new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" }).format(new Date(value));
@@ -158,7 +159,9 @@ export function ProjectDetailPage() {
               ? <VisualReview project={project} />
               : tab === "voice"
                 ? <VoicePanel project={project} />
-              : <section className="panel coming-soon"><span className="coming-icon">◷</span><p className="eyebrow">{tab.toUpperCase()}</p><h2>Coming in a later task</h2><p>This project workspace will be available in a later task.</p></section>}
+                : tab === "subtitles"
+                  ? <SubtitlePanel project={project} />
+                  : <section className="panel coming-soon"><span className="coming-icon">◷</span><p className="eyebrow">{tab.toUpperCase()}</p><h2>Coming in a later task</h2><p>This project workspace will be available in a later task.</p></section>}
       <EditProjectDialog project={project} open={editing} onClose={() => setEditing(false)} />
       <ConfirmDialog
         open={confirmDelete}

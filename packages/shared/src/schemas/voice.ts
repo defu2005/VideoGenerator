@@ -4,6 +4,7 @@ export const TtsVoiceSchema = z.object({
   language: z.string().min(1),
   gender: z.enum(["female", "male", "neutral", "unknown"]).optional(),
   name: z.string().min(1),
+  multilingual: z.boolean().default(false),
 }).strict();
 export type TtsVoice = z.infer<typeof TtsVoiceSchema>;
 

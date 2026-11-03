@@ -4,6 +4,7 @@ export type TtsVoice = {
   language: string;
   gender?: "female" | "male" | "neutral" | "unknown";
   name: string;
+  multilingual?: boolean;
 };
 
 export type TtsSynthesisInput = {

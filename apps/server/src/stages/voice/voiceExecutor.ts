@@ -6,6 +6,7 @@ import type { AppConfig } from "../../lib/config.js";
 import { StageError, type StageContext, type StageExecutor } from "../../pipeline/stageExecutor.js";
 import { projectDir } from "../../storage/paths.js";
 import type { TtsProviderRegistry } from "../../providers/tts/registry.js";
+import { defaultVoiceFor } from "../../lib/defaultVoice.js";
 
 function formatDuration(totalSeconds: number): string {
   const roundedSeconds = Math.round(totalSeconds);
@@ -34,7 +35,10 @@ export class VoiceExecutor implements StageExecutor {
   async run(context: StageContext) {
     const project = context.project;
     const provider = this.providers.resolve();
-    const voice = project.settings.voice?.voice || (project.settings.language.toLowerCase().startsWith("vi") ? this.config.TTS_VOICE_VI : this.config.TTS_VOICE_EN);
+    const voices = typeof provider.listVoices === "function"
+      ? await provider.listVoices()
+      : (typeof this.providers.listVoices === "function" ? await this.providers.listVoices() : []);
+    const voice = project.settings.voice?.voice || defaultVoiceFor(project.settings.language, voices, this.config, (message) => context.logger.warn(message));
     const rate = project.settings.voice?.rate || this.config.TTS_RATE;
     const scenes = this.sqlite.prepare("SELECT * FROM scenes WHERE project_id = ? ORDER BY \"order\" ASC").all(project.id) as Array<{ id: string; narration: string; order: number; label: string }>;
     const projectRoot = projectDir(this.config.DATA_DIR, project.id);

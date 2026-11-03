@@ -34,8 +34,10 @@ import { MAX_IMAGE_BYTES } from "./services/imageStore.js";
 import { UsageService } from "./services/usageService.js";
 import { registerUsageRoutes } from "./api/usage.js";
 import { registerVoiceRoutes } from "./api/voice.js";
+import { registerSubtitleRoutes } from "./api/subtitles.js";
 import { TtsProviderRegistry } from "./providers/tts/registry.js";
 import { VoiceExecutor } from "./stages/voice/voiceExecutor.js";
+import { SubtitleExecutor } from "./stages/subtitle/subtitleExecutor.js";
 
 export function buildApp({ config }: { config: AppConfig }) {
   const server = Fastify({
@@ -89,6 +91,7 @@ export function buildApp({ config }: { config: AppConfig }) {
         SCENE_PLAN: new ScenePlanExecutor(database.sqlite, llmProviders, config),
         VISUAL_SEARCH: new VisualSearchExecutor(visualService, llmProviders),
         VOICE: new VoiceExecutor(database.sqlite, ttsProviders, config),
+        SUBTITLE: new SubtitleExecutor(database.sqlite, config),
       },
     ),
     config,
@@ -108,6 +111,7 @@ export function buildApp({ config }: { config: AppConfig }) {
   registerSceneRoutes(server, sceneService);
   registerVisualRoutes(server, visualService, jobRepository);
   registerVoiceRoutes(server, ttsProviders, database.sqlite, projectService, jobRepository, config);
+  registerSubtitleRoutes(server, database.sqlite, jobRepository, config);
 
   server.addHook("onReady", async () => worker.start());
   server.addHook("onClose", async () => {

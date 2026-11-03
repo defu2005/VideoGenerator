@@ -32,6 +32,31 @@ describe("ProjectFormFields task routes", () => {
     });
   });
 
+  it("shows multilingual voices in the multilingual voice group", async () => {
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url === "/api/llm/providers") return jsonResponse([]);
+      if (url === "/api/tts/voices") return jsonResponse({ voices: [
+        { language: "en-US", gender: "female", name: "en-US-EmmaMultilingualNeural", multilingual: true },
+      ] });
+      throw new Error(`Unexpected offline test request: ${url}`);
+    }));
+    renderWithProviders(<ProjectFormFields
+      draft={{ ...DEFAULT_PROJECT_DRAFT, language: "vi" }}
+      errors={{}}
+      onChange={() => undefined}
+      advanced
+      onToggleAdvanced={() => undefined}
+    />);
+
+    const voice = await screen.findByRole("combobox", { name: "Giọng đọc" });
+
+    expect(await screen.findByRole("group", { name: "Giọng đa ngôn ngữ" })).toContainElement(
+      await screen.findByRole("option", { name: "en-US-EmmaMultilingualNeural" }),
+    );
+    expect(voice).toBeInTheDocument();
+  });
+
   it("shows effective route source badges and lets a project override one task", async () => {
     const onLlmTasksChange = vi.fn();
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {

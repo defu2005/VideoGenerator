@@ -117,10 +117,14 @@ export function ProjectFormFields({
     if (draft.llmModel && !providerModels.data.includes(draft.llmModel)) onChange("llmModel", "");
   }, [draft.llmModel, draft.llmProvider, onChange, providerModels.data, providerModels.isSuccess]);
   const availableProviders = providers.data ?? [];
-  const languagePrefix = draft.language.split("-")[0]?.toLowerCase() ?? draft.language.toLowerCase();
-  const availableVoices = (voices.data?.voices ?? []).filter((voice) =>
-    voice.language.toLowerCase().startsWith(languagePrefix) || languagePrefix.startsWith(voice.language.toLowerCase()),
-  );
+  const availableVoices = voices.data?.voices ?? [];
+  const normalizeLanguage = (value: string) => value.trim().toLowerCase().replace(/_/g, "-");
+  const matchingVoices = availableVoices.filter((voice) => {
+    const language = normalizeLanguage(voice.language);
+    const target = normalizeLanguage(draft.language);
+    return language === target || language.startsWith(`${target}-`) || target.startsWith(`${language}-`);
+  }).filter((voice) => !voice.multilingual);
+  const multilingualVoices = availableVoices.filter((voice) => voice.multilingual);
   const selectedProvider = availableProviders.find((provider) => provider.id === draft.llmProvider);
   return (
     <>
@@ -210,7 +214,12 @@ export function ProjectFormFields({
               {draft.voice && !availableVoices.some((voice) => voice.name === draft.voice) && (
                 <option value={draft.voice}>{draft.voice}</option>
               )}
-              {availableVoices.map((voice) => <option key={voice.name} value={voice.name}>{voice.name}</option>)}
+              {matchingVoices.map((voice) => <option key={voice.name} value={voice.name}>{voice.name}</option>)}
+              {multilingualVoices.length > 0 && (
+                <optgroup label="Giọng đa ngôn ngữ">
+                  {multilingualVoices.map((voice) => <option key={voice.name} value={voice.name}>{voice.name}</option>)}
+                </optgroup>
+              )}
             </select>
             {voices.isError && <small className="field-error">Unable to load voices: {voices.error.message}</small>}
           </label>
