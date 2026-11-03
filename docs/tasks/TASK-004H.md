@@ -1,5 +1,15 @@
 # TASK-004H — Gemini CLI provider (`gemini-cli`), text + vision
 
+> **STATUS: ON HOLD (architect, 2026-11-03).** A real run with the user's Google sign-in fails:
+> `IneligibleTierError: This client is no longer supported for Gemini Code Assist for individuals. To continue using Gemini, please migrate to the Antigravity suite of products` (reasonCode `UNSUPPORTED_CLIENT`, tier `free-tier`).
+> Google stopped serving Gemini CLI for individual accounts (free, Google AI Pro, Ultra) on 2026-06-18; only API keys (AI Studio / paid) and Code Assist Standard/Enterprise licenses still work.
+> Buying Gemini Pro would **not** re-enable it. With an API key, `gemini-cli` adds nothing over the existing `gemini` API provider.
+> Replacement path:
+> - (a) make the existing `gemini` API provider vision-capable in TASK-004G (works with a free AI Studio key);
+> - (b) evaluate the Antigravity CLI (`agy`, headless `-p --output-format json`) as `antigravity-cli` only after the user installs it and a real headless run with their account is recorded (eligibility for personal plans is reported as unreliable).
+> Do not dispatch this spec as written.
+
+
 ## GOAL
 Add **Google Gemini CLI** as an LLM provider (`gemini-cli`), alongside `claude-cli` and `copilot-cli`. The user can then use their Google account quota, or a Gemini Pro / Google AI Pro plan they may buy later. The provider must be usable for **every LLM task** through TASK-004F routing, and for **vision** (TASK-004G).
 

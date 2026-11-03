@@ -171,7 +171,7 @@ topic ─► script ─► scenes ─┬─► visualQueries ─► candidates �
 
 | Loại | MVP | Sau |
 |---|---|---|
-| LLM | Đa provider: Anthropic, Gemini, OpenAI-compatible (OpenAI, Ollama, OpenRouter, DeepSeek, Groq, custom), CLI theo gói đăng ký (claude-cli, copilot-cli, gemini-cli); chọn theo project/stage; mặc định gộp research + script + visual queries + music mood trong 1 call, cache theo input hash; có thể chọn separate/off; user có thể tự viết script (0 token) | thêm provider khác |
+| LLM | Đa provider: Anthropic, Gemini, OpenAI-compatible (OpenAI, Ollama, OpenRouter, DeepSeek, Groq, custom), CLI theo gói đăng ký (claude-cli, copilot-cli; gemini-cli đã bị Google ngừng cho tài khoản cá nhân); chọn theo project/stage; mặc định gộp research + script + visual queries + music mood trong 1 call, cache theo input hash; có thể chọn separate/off; user có thể tự viết script (0 token) | thêm provider khác |
 | Image search | Wikimedia Commons, Openverse (license metadata tốt, free); Pexels (API key) | web image search (Brave/SerpAPI), AI image gen |
 | TTS | 1 adapter giá rẻ, hỗ trợ tiếng Việt | local TTS |
 | Music | Thư viện local (`data/music/` + metadata JSON), Jamendo API | thêm nguồn |
@@ -215,7 +215,7 @@ Lỗi luôn có dạng: `{ "error": { "code": "PROJECT_NOT_FOUND", "message": ".
 | TASK-005 | Scene plan bằng code (tách câu, gom theo thời lượng scene, chia query/mood) + Scene Board (sửa/tách/gộp/sắp xếp); QUALITY +1 call gợi ý query theo scene | 004E | 3 |
 | TASK-006 | Image provider interface + Wikimedia/Openverse/Pexels + candidate store + ranking + dedupe | 005 | 4 |
 | TASK-007 | Visual Review UI: lưới candidate (top 8, xem thêm), panel metadata đầy đủ (nguồn, URL, tác giả, license, attribution, kích thước, tỉ lệ, file, watermark, điểm), approve/reject/replace/remove, sửa query + search again, custom URL, upload, Approve All; tải preview + ảnh được chọn về local (kiểm tra tải được/không hỏng/kích thước thật); scene visual status | 006 | 4 |
-| TASK-004H | Provider `gemini-cli` (Gemini CLI 0.66, tài khoản Google / gói Gemini Pro): text + vision (`@file` + `--include-directories`), chế độ read-only `--approval-mode plan` | 004F | 2 |
+| TASK-004H | ~~Provider `gemini-cli`~~ **tạm dừng**: Google ngừng Gemini CLI cho tài khoản cá nhân (free/AI Pro/Ultra) từ 18/6/2026. Thay bằng: provider `gemini` API (AI Studio key) có vision trong 004G; cân nhắc `antigravity-cli` (agy) sau khi chạy thử thật | 004F | 2 |
 | TASK-004G | Chế độ MAX: vision cho provider (copilot-cli `--attachment`, claude-cli Read, API multimodal), kiểm tra ảnh bằng vision + vòng tìm lại, `NEEDS_ATTENTION`, hợp đồng kiểm tra render | 004F, 007 | 4 |
 | TASK-007B | Thêm nguồn ảnh: Pixabay, Unsplash (API key, tuân thủ quy định attribution/hotlink), web image search (Brave Search API, license `UNKNOWN`); phát hiện watermark nâng cao; Generate Image (sau) | 007 | 4 |
 | TASK-008 | TTS provider + Voice stage + Voice UI | 005 | 5 |
