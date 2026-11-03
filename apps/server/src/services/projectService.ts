@@ -89,6 +89,9 @@ function mergeSettings(current: ProjectSettings, update: ProjectSettingsInput): 
       ...current.stageExecutors,
       ...update.stageExecutors,
     },
+    voice: update.voice
+      ? { ...current.voice, ...update.voice }
+      : current.voice,
     llm: update.llm
       ? (() => {
         const tasks = { ...current.llm?.tasks };
@@ -157,6 +160,7 @@ export function createProjectService(db: AppDatabase, config: AppConfig, logger:
       userSet,
       researchMode: inputSettings.researchMode,
       stageExecutors: inputSettings.stageExecutors ?? {},
+      voice: inputSettings.voice,
       llm: normalizeLlmSettings(inputSettings.llm),
       autoRender: inputSettings.autoRender ?? false,
     };

@@ -77,6 +77,32 @@
 }
 
 .visual-review { display: grid; min-width: 0; gap: 12px; }
+.voice-panel { display: grid; min-width: 0; gap: 12px; }
+.voice-header { display: flex; align-items: center; justify-content: space-between; gap: 18px; padding: 18px 20px; }
+.voice-header h2, .voice-header p { margin: 4px 0 0; }
+.voice-header h2 { font-size: 18px; }
+.voice-header p:not(.eyebrow) { color: #78839a; font-size: 11px; }
+.voice-scene-list { display: grid; gap: 10px; }
+.voice-scene { display: grid; gap: 10px; padding: 15px; }
+.voice-scene-heading { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.voice-scene-heading .eyebrow, .voice-scene-heading h3 { margin: 0; }
+.voice-scene-heading h3 { margin-top: 3px; font-size: 14px; }
+.voice-origin { border-radius: 999px; background: #e7f6ed; padding: 5px 9px; color: #168352; font-size: 10px; font-weight: 700; }
+.voice-origin.user { background: #edf1ff; color: #405ac5; }
+.voice-narration summary { display: grid; gap: 5px; color: #59667d; cursor: pointer; font-size: 11px; }
+.voice-narration-preview { display: -webkit-box; overflow: hidden; color: #6f7a90; font-size: 11px; line-height: 1.6; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
+.voice-narration > p { margin: 7px 0 0; color: #6f7a90; font-size: 11px; line-height: 1.6; }
+.voice-narration[open] .voice-narration-preview { display: none; }
+.voice-scene audio { width: 100%; }
+.voice-duration, .voice-scene > small, .voice-missing { margin: 0; color: #78839a; font-size: 10px; }
+.voice-duration.warning { color: #a45c17; }
+.voice-duration.warning span { font-weight: 700; }
+.voice-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.voice-upload { position: relative; overflow: hidden; }
+.voice-upload input { position: absolute; width: 1px; height: 1px; opacity: 0; }
+.voice-empty { padding: 24px; }
+.voice-empty h2, .voice-empty p { margin: 0; }
+.voice-empty p { margin-top: 6px; color: #78839a; font-size: 12px; }
 .visual-toolbar { display: grid; gap: 12px; padding: 15px; }
 .visual-status-chips, .visual-license-summary, .visual-top-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 7px; }
 .visual-chip, .visual-status, .visual-warning { width: fit-content; border-radius: 999px; background: #eef1f7; padding: 5px 9px; color: #56627a; font-size: 10px; font-weight: 650; }

@@ -79,6 +79,35 @@ describe("ProjectDetailPage", () => {
   });
 
   describe("EditProjectDialog", () => {
+    it("saves selected voice and speed settings", async () => {
+      const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = String(input);
+        if (url === "/api/llm/providers") return jsonResponse([]);
+        if (url === "/api/tts/voices") return jsonResponse({ voices: [
+          { language: "en-US", gender: "female", name: "en-US-AriaNeural" },
+        ] });
+        if (url.endsWith("/llm-routes")) return jsonResponse({ routes: {} });
+        if (init?.method === "PATCH") return jsonResponse(project);
+        return jsonResponse(project);
+      });
+      vi.stubGlobal("fetch", fetchMock);
+      renderWithProviders(<EditProjectDialog project={project} open onClose={vi.fn()} />);
+      fireEvent.click(screen.getByRole("button", { name: /Advanced settings/ }));
+      await screen.findByRole("option", { name: "en-US-AriaNeural" });
+      fireEvent.change(screen.getByLabelText("Giọng đọc"), { target: { value: "en-US-AriaNeural" } });
+      fireEvent.change(screen.getByLabelText("Tốc độ"), { target: { value: "+10%" } });
+      fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+
+      await waitFor(() => expect(fetchMock).toHaveBeenCalledWith(
+        `/api/projects/${project.id}`,
+        expect.objectContaining({ method: "PATCH" }),
+      ));
+      const request = fetchMock.mock.calls.find(([, init]) => init?.method === "PATCH")?.[1] as RequestInit;
+      expect(JSON.parse(String(request.body))).toMatchObject({
+        settings: { voice: { voice: "en-US-AriaNeural", rate: "+10%" } },
+      });
+    });
+
     it("submits edited brief values so the server marks them user-set", async () => {
       const fetchMock = vi.fn(async (input: RequestInfo | URL, _init?: RequestInit) =>
         String(input) === "/api/llm/providers" ? jsonResponse([]) : jsonResponse(project));

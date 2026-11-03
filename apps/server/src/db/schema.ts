@@ -136,6 +136,26 @@ export const scenes = sqliteTable("scenes", {
   index("scenes_project_idx").on(table.projectId),
 ]);
 
+export const voiceTracks = sqliteTable("voice_tracks", {
+  id: text("id").primaryKey(),
+  projectId: text("project_id").notNull().references(() => projects.id, { onDelete: "cascade" }),
+  sceneId: text("scene_id").notNull().references(() => scenes.id, { onDelete: "cascade" }),
+  provider: text("provider").notNull(),
+  voice: text("voice").notNull(),
+  rate: text("rate").notNull(),
+  origin: text("origin", { enum: ["AGENT", "USER"] }).notNull(),
+  audioPath: text("audio_path").notNull(),
+  durationSec: real("duration_sec").notNull(),
+  cues: text("cues", { mode: "json" }).$type<Array<{ startSec: number; endSec: number; text: string }>>().notNull().default([]),
+  inputHash: text("input_hash").notNull(),
+  narrationHash: text("narration_hash").notNull().default(""),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+}, (table) => [
+  uniqueIndex("voice_tracks_scene_uq").on(table.sceneId),
+  index("voice_tracks_project_idx").on(table.projectId),
+]);
+
 export const visualCandidates = sqliteTable("visual_candidates", {
   id: text("id").primaryKey(),
   projectId: text("project_id").notNull().references(() => projects.id, { onDelete: "cascade" }),

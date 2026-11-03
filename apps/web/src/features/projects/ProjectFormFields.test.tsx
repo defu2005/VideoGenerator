@@ -1,9 +1,37 @@
 import { fireEvent, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { jsonResponse, renderWithProviders } from "../../test/testUtils";
-import { DEFAULT_PROJECT_DRAFT, ProjectFormFields } from "./ProjectFormFields";
+import { DEFAULT_PROJECT_DRAFT, ProjectFormFields, settingsFromDraft } from "./ProjectFormFields";
 
 describe("ProjectFormFields task routes", () => {
+  it("loads language-matched voices and includes voice settings in the saved project settings", async () => {
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url === "/api/llm/providers") return jsonResponse([]);
+      if (url === "/api/tts/voices") return jsonResponse({ voices: [
+        { language: "vi-VN", gender: "female", name: "vi-VN-HoaiMyNeural" },
+        { language: "en-US", gender: "female", name: "en-US-AriaNeural" },
+      ] });
+      throw new Error(`Unexpected offline test request: ${url}`);
+    }));
+    const onChange = vi.fn();
+    renderWithProviders(<ProjectFormFields
+      draft={{ ...DEFAULT_PROJECT_DRAFT, language: "vi" }}
+      errors={{}}
+      onChange={onChange}
+      advanced
+      onToggleAdvanced={() => undefined}
+    />);
+    const voice = await screen.findByRole("combobox", { name: "Giọng đọc" });
+    expect(await screen.findByRole("option", { name: "vi-VN-HoaiMyNeural" })).toBeInTheDocument();
+    expect(screen.queryByRole("option", { name: "en-US-AriaNeural" })).not.toBeInTheDocument();
+    fireEvent.change(voice, { target: { value: "vi-VN-HoaiMyNeural" } });
+    expect(onChange).toHaveBeenLastCalledWith("voice", "vi-VN-HoaiMyNeural");
+    expect(settingsFromDraft({ ...DEFAULT_PROJECT_DRAFT, voice: "vi-VN-HoaiMyNeural", rate: "+10%" })).toMatchObject({
+      voice: { voice: "vi-VN-HoaiMyNeural", rate: "+10%" },
+    });
+  });
+
   it("shows effective route source badges and lets a project override one task", async () => {
     const onLlmTasksChange = vi.fn();
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {

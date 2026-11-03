@@ -21,6 +21,8 @@ function draftFromProject(project: Project): ProjectDraft {
     scriptExecutor: project.settings.stageExecutors.script ?? "",
     llmProvider: project.settings.llm?.default?.provider ?? "",
     llmModel: project.settings.llm?.default?.model ?? "",
+    voice: project.settings.voice?.voice ?? "",
+    rate: project.settings.voice?.rate ?? "+0%",
     autoRender: project.settings.autoRender,
   };
 }
@@ -161,6 +163,9 @@ export function EditProjectDialog({
     }
     if (draft.researchMode !== (project.settings.researchMode ?? "")) {
       settings.researchMode = draft.researchMode || undefined;
+    }
+    if (draft.voice !== (project.settings.voice?.voice ?? "") || draft.rate !== (project.settings.voice?.rate ?? "+0%")) {
+      settings.voice = { voice: draft.voice, rate: draft.rate };
     }
     const stageExecutors: Record<string, string> = {};
     const clearErrors: Record<string, string> = {};

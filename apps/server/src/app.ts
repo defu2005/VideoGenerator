@@ -33,6 +33,9 @@ import { registerVisualRoutes } from "./api/visuals.js";
 import { MAX_IMAGE_BYTES } from "./services/imageStore.js";
 import { UsageService } from "./services/usageService.js";
 import { registerUsageRoutes } from "./api/usage.js";
+import { registerVoiceRoutes } from "./api/voice.js";
+import { TtsProviderRegistry } from "./providers/tts/registry.js";
+import { VoiceExecutor } from "./stages/voice/voiceExecutor.js";
 
 export function buildApp({ config }: { config: AppConfig }) {
   const server = Fastify({
@@ -44,6 +47,10 @@ export function buildApp({ config }: { config: AppConfig }) {
   server.addContentTypeParser(/^image\/(?:jpeg|png|webp|gif)$/, {
     parseAs: "buffer",
     bodyLimit: MAX_IMAGE_BYTES,
+  }, (_request, body, done) => done(null, body));
+  server.addContentTypeParser(/^(?:audio\/(?:mpeg|wav|x-wav|mp4|ogg)|multipart\/form-data)(?:;|$)/i, {
+    parseAs: "buffer",
+    bodyLimit: 25 * 1024 * 1024 + 64 * 1024,
   }, (_request, body, done) => done(null, body));
 
   const database = openDatabase(config.DATABASE_PATH);
@@ -68,6 +75,7 @@ export function buildApp({ config }: { config: AppConfig }) {
       : { allowed: true },
   );
   const llmProviders = new LlmProviderRegistry(config);
+  const ttsProviders = new TtsProviderRegistry(config);
   const scriptService = new ScriptService(database.sqlite, jobRepository, orchestrator, config);
   const sceneService = new SceneService(database.sqlite, jobRepository);
   const worker = new JobWorker(
@@ -80,6 +88,7 @@ export function buildApp({ config }: { config: AppConfig }) {
         SCRIPT: new ScriptExecutor(database.sqlite, llmProviders, config),
         SCENE_PLAN: new ScenePlanExecutor(database.sqlite, llmProviders, config),
         VISUAL_SEARCH: new VisualSearchExecutor(visualService, llmProviders),
+        VOICE: new VoiceExecutor(database.sqlite, ttsProviders, config),
       },
     ),
     config,
@@ -98,6 +107,7 @@ export function buildApp({ config }: { config: AppConfig }) {
   registerScriptRoutes(server, scriptService, projectService, config);
   registerSceneRoutes(server, sceneService);
   registerVisualRoutes(server, visualService, jobRepository);
+  registerVoiceRoutes(server, ttsProviders, database.sqlite, projectService, jobRepository, config);
 
   server.addHook("onReady", async () => worker.start());
   server.addHook("onClose", async () => {

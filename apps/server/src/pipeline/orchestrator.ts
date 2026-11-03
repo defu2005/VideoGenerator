@@ -107,6 +107,28 @@ export class PipelineOrchestrator {
       const stages = this.repository.getStages(projectId);
       const incomplete = stages.find((item, index) => index < position && item.state !== "DONE" && item.state !== "SKIPPED");
       if (incomplete) this.invalid(`Complete ${incomplete.stage} before running ${stage}.`);
+      if (stage === "VOICE" && project.settings.stageExecutors.voice === "USER") {
+        if (!this.hasAllUserVoiceTracks(projectId)) {
+          this.waitForUser(projectId, stage, "Upload a voice track for every narrated scene, then continue.");
+          return;
+        }
+        if (this.repository.getStage(projectId, stage).state === "DONE") markStaleFrom(this.repository, projectId, stage);
+        this.repository.updateStage(projectId, stage, {
+          state: "DONE",
+          progress: 100,
+          message: "Provided by user",
+          jobId: null,
+          error: null,
+        });
+        if (this.repository.getRunMode(projectId) === "ALL") {
+          this.repository.updateProject(projectId, { stage });
+          this.continueAll(projectId, position);
+          return;
+        }
+        this.repository.setRunMode(projectId, "SINGLE");
+        this.updateProjectStatus(projectId, stage);
+        return;
+      }
       if (this.repository.getStage(projectId, stage).state === "DONE") {
         markStaleFrom(this.repository, projectId, stage);
       }
@@ -436,6 +458,22 @@ export class PipelineOrchestrator {
       return;
     }
     const project = this.requireProject(projectId);
+    if (next === "VOICE" && project.settings.stageExecutors.voice === "USER") {
+      if (!this.hasAllUserVoiceTracks(projectId)) {
+        this.waitForUser(projectId, next, "Upload a voice track for every narrated scene, then continue.");
+        return;
+      }
+      this.repository.updateStage(projectId, "VOICE", {
+        state: "DONE",
+        progress: 100,
+        message: "Provided by user",
+        jobId: null,
+        error: null,
+      });
+      this.repository.updateProject(projectId, { stage: "VOICE" });
+      this.continueAll(projectId, STAGE_ORDER.indexOf("VOICE"));
+      return;
+    }
     if ((next === "RESEARCH" || next === "SCRIPT") && project.settings.stageExecutors.script === "USER") {
       const script = this.repository.getScriptOrigin(projectId);
       const userScriptExists = script !== undefined && (script.origin === "USER" || script.edited);
@@ -501,15 +539,25 @@ export class PipelineOrchestrator {
     this.updateProjectStatus(projectId, next);
   }
 
-  private waitForUser(projectId: string, stage: PipelineStage): void {
+  private waitForUser(projectId: string, stage: PipelineStage, message = "Write or paste your script in the Script tab"): void {
     this.repository.updateStage(projectId, stage, {
       state: "WAITING_USER",
       progress: 0,
-      message: "Write or paste your script in the Script tab",
+      message,
       jobId: null,
       error: null,
     });
     this.repository.updateProject(projectId, { stage, status: "REVIEW" });
+  }
+
+  private hasAllUserVoiceTracks(projectId: string): boolean {
+    const missing = this.repository.sqlite.prepare(
+      `SELECT COUNT(*) AS count
+       FROM scenes s
+       LEFT JOIN voice_tracks v ON v.scene_id = s.id
+       WHERE s.project_id = ? AND length(trim(s.narration)) > 0 AND v.id IS NULL`,
+    ).get(projectId) as { count: number };
+    return missing.count === 0;
   }
 
   private skipResearch(projectId: string, message: string): void {

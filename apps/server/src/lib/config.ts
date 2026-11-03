@@ -1,6 +1,6 @@
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { config as loadDotenv } from "dotenv";
-import { dirname, isAbsolute, join, resolve } from "node:path";
+import { delimiter, dirname, isAbsolute, join, resolve } from "node:path";
 import { z } from "zod";
 import { LLM_TASKS, type LlmProviderId, type LlmTaskId, type LlmRoute } from "@vg/shared";
 import type { LlmProviderLimits } from "../providers/llm/types.js";
@@ -21,6 +21,29 @@ function findWorkspaceRoot(startDirectory: string): string | undefined {
 
 const workspaceRoot = findWorkspaceRoot(process.cwd()) ?? process.cwd();
 loadDotenv({ path: join(workspaceRoot, ".env") });
+
+function resolveEdgeTtsPath(env: NodeJS.ProcessEnv = process.env): string {
+  const direct = env.EDGE_TTS_PATH || env.EDGE_TTS_BIN || env.EDGE_TTS_EXECUTABLE;
+  if (direct) return direct;
+  const candidates: string[] = [];
+  const pathEntries = (env.PATH ?? env.Path ?? "").split(delimiter).filter(Boolean);
+  for (const entry of pathEntries) candidates.push(join(entry, "edge-tts"), join(entry, "edge-tts.exe"));
+  if (process.platform === "win32") {
+    for (const [root, versions] of [
+      [env.APPDATA, /^Python3/],
+      [env.LOCALAPPDATA, /^Python/],
+    ] as const) {
+      if (!root) continue;
+      const pythonRoot = join(root, "Python");
+      if (!existsSync(pythonRoot)) continue;
+      for (const version of readdirSync(pythonRoot)) {
+        if (versions.test(version)) candidates.push(join(pythonRoot, version, "Scripts", "edge-tts.exe"));
+      }
+    }
+  }
+  for (const candidate of candidates) if (existsSync(candidate)) return candidate;
+  return "edge-tts";
+}
 
 const ConfigSchema = z.object({
   PORT: z.coerce.number().int().min(1).max(65535).default(3001),
@@ -90,6 +113,12 @@ const ConfigSchema = z.object({
   JOB_MAX_ATTEMPTS: z.coerce.number().int().positive().max(20).default(3),
   JOB_RETRY_BASE_MS: z.coerce.number().int().nonnegative().default(2_000),
   FAKE_STAGE_DELAY_MS: z.coerce.number().int().nonnegative().default(300),
+  TTS_PROVIDER: z.enum(["edge-tts", "mock"]).default("edge-tts"),
+  EDGE_TTS_PATH: z.string().min(1).default(resolveEdgeTtsPath()),
+  TTS_VOICE_VI: z.string().min(1).default("vi-VN-HoaiMyNeural"),
+  TTS_VOICE_EN: z.string().min(1).default("en-US-AriaNeural"),
+  TTS_RATE: z.string().regex(/^[+-]\d{1,3}%$/).default("+0%"),
+  TTS_TIMEOUT_MS: z.coerce.number().int().positive().default(60_000),
   IMAGE_PROVIDERS: z.string().default("wikimedia,openverse,pexels"),
   IMAGE_SEARCH_USER_AGENT: z.string().min(1).default("VideoAgent/0.1 (local)"),
   IMAGE_SEARCH_TIMEOUT_MS: z.coerce.number().int().positive().default(15_000),
@@ -166,6 +195,12 @@ export type AppConfig = {
   JOB_MAX_ATTEMPTS: number;
   JOB_RETRY_BASE_MS: number;
   FAKE_STAGE_DELAY_MS: number;
+  TTS_PROVIDER: "edge-tts" | "mock";
+  EDGE_TTS_PATH: string;
+  TTS_VOICE_VI: string;
+  TTS_VOICE_EN: string;
+  TTS_RATE: string;
+  TTS_TIMEOUT_MS: number;
   IMAGE_PROVIDERS: string;
   IMAGE_SEARCH_USER_AGENT: string;
   IMAGE_SEARCH_TIMEOUT_MS: number;

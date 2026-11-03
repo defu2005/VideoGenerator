@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { afterEach, describe, expect, it } from "vitest";
 import { STAGE_ORDER, type PipelineStage } from "@vg/shared";
 import { markStaleFrom } from "../src/pipeline/invalidation.js";
@@ -124,6 +125,45 @@ describe("pipeline state machine", () => {
       expect.objectContaining({ statusCode: 409, code: "INVALID_PIPELINE_STATE" }),
     );
     expect(() => harness.orchestrator.runStage(harness.projectId, "VISUAL_REVIEW")).toThrowError(AppError);
+  });
+
+  it("waits at a USER voice stage until every narrated scene has a track", () => {
+    const harness = makeHarness();
+    const project = harness.repository.getProject(harness.projectId)!;
+    harness.sqlite.prepare("UPDATE projects SET settings = ? WHERE id = ?").run(
+      JSON.stringify({ ...project.settings, stageExecutors: { voice: "USER" } }),
+      harness.projectId,
+    );
+    harness.repository.atomic(() => {
+      harness.repository.ensureStages(harness.projectId);
+      for (const stage of STAGE_ORDER.slice(0, STAGE_ORDER.indexOf("VOICE"))) {
+        harness.repository.updateStage(harness.projectId, stage, { state: "DONE", progress: 100 });
+      }
+    });
+    const sceneId = randomUUID();
+    const now = new Date().toISOString();
+    harness.sqlite.prepare(
+      `INSERT INTO scenes (id, project_id, "order", kind, section_id, label, narration, visual_notes, visual_queries,
+        music_mood, energy, est_duration_sec, duration_override_sec, start_sec, transition_note, origin, edited,
+        input_hash, created_at, updated_at)
+       VALUES (?, ?, 0, 'section', NULL, 'Narrated scene', 'Hello', '', ?, '', 'medium', 4, NULL, 0, '', 'USER', 0, 'input', ?, ?)`,
+    ).run(sceneId, harness.projectId, JSON.stringify({ primary: "", alternatives: [], queryVariant: false }), now, now);
+
+    harness.orchestrator.runAll(harness.projectId);
+    expect(harness.repository.getStage(harness.projectId, "VOICE")).toMatchObject({
+      state: "WAITING_USER",
+      message: "Upload a voice track for every narrated scene, then continue.",
+    });
+
+    harness.sqlite.prepare(
+      `INSERT INTO voice_tracks (id, project_id, scene_id, provider, voice, rate, origin, audio_path, duration_sec,
+        cues, input_hash, narration_hash, created_at, updated_at)
+       VALUES (?, ?, ?, 'USER', 'user-upload', '+0%', 'USER', 'fixture.wav', 1, '[]', 'input', 'narration', ?, ?)`,
+    ).run(randomUUID(), harness.projectId, sceneId, now, now);
+    harness.orchestrator.runStage(harness.projectId, "VOICE");
+
+    expect(harness.repository.getStage(harness.projectId, "VOICE")).toMatchObject({ state: "DONE", message: "Provided by user" });
+    expect(harness.repository.getStage(harness.projectId, "SUBTITLE").state).toBe("QUEUED");
   });
 
   it("stales later completed stages when re-running a completed stage", () => {

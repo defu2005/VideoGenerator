@@ -3,6 +3,7 @@ import { useEffect, useRef } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { ModelField } from "../llm/ModelField";
 import { getLlmProviders, getProjectLlmRoutes, getProviderModels } from "../../services/llmApi";
+import { getTtsVoices } from "../../services/voiceApi";
 
 export type ProjectDraft = {
   title: string;
@@ -19,6 +20,8 @@ export type ProjectDraft = {
   scriptExecutor: "" | "AGENT" | "USER";
   llmProvider: string;
   llmModel: string;
+  voice: string;
+  rate: string;
   autoRender: boolean;
 };
 
@@ -37,6 +40,8 @@ export const DEFAULT_PROJECT_DRAFT: ProjectDraft = {
   scriptExecutor: "",
   llmProvider: "",
   llmModel: "",
+  voice: "",
+  rate: "+0%",
   autoRender: false,
 };
 
@@ -58,6 +63,12 @@ export function settingsFromDraft(draft: ProjectDraft): ProjectSettingsInput {
           provider: draft.llmProvider,
           ...(draft.llmModel.trim() ? { model: draft.llmModel.trim() } : {}),
         },
+      },
+    } : {}),
+    ...(draft.voice || draft.rate !== "+0%" ? {
+      voice: {
+        ...(draft.voice ? { voice: draft.voice } : {}),
+        ...(draft.rate !== "+0%" ? { rate: draft.rate } : {}),
       },
     } : {}),
     autoRender: draft.autoRender,
@@ -96,6 +107,7 @@ export function ProjectFormFields({
     queryFn: () => getProjectLlmRoutes(projectId!),
     enabled: Boolean(projectId),
   });
+  const voices = useQuery({ queryKey: ["tts-voices"], queryFn: getTtsVoices });
   // Set when the user picks another provider; the model is checked once that provider's list loads.
   // A custom model name typed for the current provider is never cleared.
   const providerSwitchedTo = useRef<string | null>(null);
@@ -105,6 +117,10 @@ export function ProjectFormFields({
     if (draft.llmModel && !providerModels.data.includes(draft.llmModel)) onChange("llmModel", "");
   }, [draft.llmModel, draft.llmProvider, onChange, providerModels.data, providerModels.isSuccess]);
   const availableProviders = providers.data ?? [];
+  const languagePrefix = draft.language.split("-")[0]?.toLowerCase() ?? draft.language.toLowerCase();
+  const availableVoices = (voices.data?.voices ?? []).filter((voice) =>
+    voice.language.toLowerCase().startsWith(languagePrefix) || languagePrefix.startsWith(voice.language.toLowerCase()),
+  );
   const selectedProvider = availableProviders.find((provider) => provider.id === draft.llmProvider);
   return (
     <>
@@ -185,6 +201,27 @@ export function ProjectFormFields({
               <option value="">Mode default</option>
               <option value="AGENT">Agent</option>
               <option value="USER">User</option>
+            </select>
+          </label>
+          <label className="form-field">
+            <span>Giọng đọc</span>
+            <select value={draft.voice} onChange={(event) => onChange("voice", event.target.value)}>
+              <option value="">Mặc định</option>
+              {draft.voice && !availableVoices.some((voice) => voice.name === draft.voice) && (
+                <option value={draft.voice}>{draft.voice}</option>
+              )}
+              {availableVoices.map((voice) => <option key={voice.name} value={voice.name}>{voice.name}</option>)}
+            </select>
+            {voices.isError && <small className="field-error">Unable to load voices: {voices.error.message}</small>}
+          </label>
+          <label className="form-field">
+            <span>Tốc độ</span>
+            <select value={draft.rate} onChange={(event) => onChange("rate", event.target.value)}>
+              <option value="-20%">-20%</option>
+              <option value="-10%">-10%</option>
+              <option value="+0%">+0%</option>
+              <option value="+10%">+10%</option>
+              <option value="+20%">+20%</option>
             </select>
           </label>
           <label className="form-field">

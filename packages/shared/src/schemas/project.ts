@@ -73,6 +73,10 @@ export const ProjectSettingsSchema = z.object({
     voice: StageExecutorSchema.optional(),
     music: StageExecutorSchema.optional(),
   }).default({}),
+  voice: z.object({
+    voice: z.string().trim().max(200).optional(),
+    rate: z.string().regex(/^[+-]\d{1,3}%$/).optional(),
+  }).strict().optional(),
   llm: LlmSettingsSchema.optional(),
   autoRender: z.boolean().default(false),
 }).extend({
@@ -101,6 +105,10 @@ export const ProjectSettingsInputSchema = z.object({
     voice: StageExecutorSchema.optional(),
     music: StageExecutorSchema.optional(),
   }).optional(),
+  voice: z.object({
+    voice: z.string().trim().max(200).optional(),
+    rate: z.string().regex(/^[+-]\d{1,3}%$/).optional(),
+  }).strict().optional(),
   llm: LlmSettingsInputSchema.optional(),
   autoRender: z.boolean().optional(),
   ...VideoBriefSettingsInputSchema.shape,

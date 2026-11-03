@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { existsSync, rmSync } from "node:fs";
 import {
   ScenePlanSummarySchema,
   SceneSchema,
@@ -184,7 +185,8 @@ export class SceneService {
   }
 
   merge(projectId: string, sceneIds: [string, string]) {
-    return this.mutate(projectId, () => {
+    const deletedTrack = this.voiceTrackPath(sceneIds[1], projectId);
+    const result = this.mutate(projectId, () => {
       const project = this.requireProject(projectId);
       const scenes = this.list(projectId);
       const left = scenes.find((scene) => scene.id === sceneIds[0]);
@@ -207,10 +209,13 @@ export class SceneService {
       this.compactOrders(projectId, scenes.length);
       return this.recompute(projectId, project);
     });
+    if (deletedTrack && existsSync(deletedTrack)) rmSync(deletedTrack, { force: true });
+    return result;
   }
 
   delete(projectId: string, sceneId: string) {
-    return this.mutate(projectId, () => {
+    const deletedTrack = this.voiceTrackPath(sceneId, projectId);
+    const result = this.mutate(projectId, () => {
       const project = this.requireProject(projectId);
       const scenes = this.list(projectId);
       const scene = scenes.find((item) => item.id === sceneId);
@@ -220,6 +225,15 @@ export class SceneService {
       this.compactOrders(projectId, scenes.length);
       return this.recompute(projectId, project);
     });
+    if (deletedTrack && existsSync(deletedTrack)) rmSync(deletedTrack, { force: true });
+    return result;
+  }
+
+  private voiceTrackPath(sceneId: string, projectId: string): string | undefined {
+    const track = this.sqlite.prepare(
+      "SELECT audio_path FROM voice_tracks WHERE scene_id = ? AND project_id = ?",
+    ).get(sceneId, projectId) as { audio_path: string } | undefined;
+    return track?.audio_path;
   }
 
   private mutate<T>(projectId: string, operation: () => T): T {

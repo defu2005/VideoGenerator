@@ -1,4 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
+import { existsSync, rmSync } from "node:fs";
 import {
   ensureConsecutiveQueryVariety,
   resolveBudget,
@@ -181,6 +182,8 @@ export class ScenePlanExecutor implements StageExecutor {
     const insert = this.sqlite.prepare(
       "INSERT INTO scenes (id, project_id, \"order\", kind, section_id, label, narration, visual_notes, visual_description, visual_queries, music_mood, energy, est_duration_sec, duration_override_sec, start_sec, transition_note, origin, edited, input_hash, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'AGENT', 0, ?, ?, ?)",
     );
+    const oldVoiceFiles = this.sqlite.prepare("SELECT audio_path FROM voice_tracks WHERE project_id = ?")
+      .all(context.project.id) as { audio_path: string }[];
     const replace = this.sqlite.transaction(() => {
       this.sqlite.prepare("DELETE FROM scenes WHERE project_id = ?").run(context.project.id);
       scenes.forEach((scene, order) => insert.run(
@@ -206,6 +209,7 @@ export class ScenePlanExecutor implements StageExecutor {
       ));
     });
     replace();
+    for (const track of oldVoiceFiles) if (existsSync(track.audio_path)) rmSync(track.audio_path, { force: true });
     context.reportProgress(100, message);
     return { outputHash: inputHash, message };
   }
