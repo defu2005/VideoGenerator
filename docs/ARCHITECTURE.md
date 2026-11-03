@@ -218,7 +218,8 @@ Lỗi luôn có dạng: `{ "error": { "code": "PROJECT_NOT_FOUND", "message": ".
 | TASK-004H | Provider `antigravity-cli` (Antigravity CLI `agy`, tài khoản Google: Gemini 3.8, Claude Sonnet/Opus 4.6, GPT-OSS) — text + vision, `--mode plan`, `--json-schema`; thay cho gemini-cli đã bị Google ngừng | 004F | 2 |
 | TASK-004I | Xem token tiêu thụ theo video và theo quá trình (stage / tác vụ / model / từng lần chạy) + tổng toàn app; tổng hợp từ `jobs.usage.calls`, 0 LLM call | 004F | 2 |
 | TASK-004G | Chế độ MAX: vision cho provider (copilot-cli `--attachment`, claude-cli Read, API multimodal), kiểm tra ảnh bằng vision + vòng tìm lại, `NEEDS_ATTENTION`, hợp đồng kiểm tra render | 004F, 007 | 4 |
-| TASK-007B | Thêm nguồn ảnh: Pixabay, Unsplash (API key, tuân thủ quy định attribution/hotlink), web image search (Brave Search API, license `UNKNOWN`); phát hiện watermark nâng cao; Generate Image (sau) | 007 | 4 |
+| TASK-007B | Thêm nguồn ảnh/video: Pixabay, Unsplash, NASA, The Met, Library of Congress, Smithsonian, Europeana, Flickr (CC), Pexels/Pixabay Videos; chọn nguồn theo chủ đề bằng luật; phát hiện watermark nâng cao | 007 | 4 |
+| TASK-007C | "Nhờ AI tìm ảnh": LLM có web search (claude-cli `WebSearch/WebFetch`, anthropic `web_search`) trả link → app tải, kiểm tra, xác minh license; ảnh chưa xác minh license không bao giờ tự duyệt. Phần sau (007D): AI tạo ảnh (Gemini/OpenAI image API) | 007, 004F | 4 |
 | TASK-008 | TTS provider + Voice stage + Voice UI | 005 | 5 |
 | TASK-009 | Subtitle generation (từ voice duration, chia câu) | 008 | 5 |
 | TASK-010 | Music provider + search + ranking + Music Review UI | 005 | 6 |
