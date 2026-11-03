@@ -1,5 +1,5 @@
 import { spawn, type ChildProcessWithoutNullStreams, type SpawnOptions } from "node:child_process";
-import { mkdirSync, writeFileSync } from "node:fs";
+import { mkdirSync } from "node:fs";
 import { join } from "node:path";
 import type { LlmRequest, LlmResponse } from "./types.js";
 import {
@@ -104,12 +104,6 @@ export class AntgravityCliProvider extends CliProviderBase {
           ...(request.model ? ["--model", request.model] : []),
           ...(effort ? ["--effort", effort] : []),
         ];
-        // JSON schema for structured output
-        if (request.json && (request.jsonSchema || request.schemaName)) {
-          const schemaPath = join(cwd, "schema.json");
-          writeFileSync(schemaPath, JSON.stringify(request.jsonSchema ?? { type: "object", title: request.schemaName ?? "response" }));
-          args.push("--json-schema", schemaPath);
-        }
         return args;
       },
       // Prompt is embedded in --print=<prompt> arg; stdin gets empty string.

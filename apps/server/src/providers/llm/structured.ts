@@ -377,6 +377,45 @@ function extractJson(text: string): unknown {
   try {
     return JSON.parse(withoutFence.slice(start, end + 1)) as unknown;
   } catch {
+    const balancedObject = firstBalancedJsonObject(withoutFence);
+    if (balancedObject !== undefined) {
+      try {
+        return JSON.parse(balancedObject) as unknown;
+      } catch {
+        // The first balanced object is malformed; preserve the structured-output error.
+      }
+    }
     throw new SyntaxError("LLM response contained malformed JSON");
   }
+}
+
+function firstBalancedJsonObject(text: string): string | undefined {
+  let start = -1;
+  let depth = 0;
+  let inString = false;
+  let escaped = false;
+
+  for (let index = 0; index < text.length; index += 1) {
+    const character = text[index];
+    if (inString) {
+      if (escaped) {
+        escaped = false;
+      } else if (character === "\\") {
+        escaped = true;
+      } else if (character === "\"") {
+        inString = false;
+      }
+      continue;
+    }
+    if (character === "\"" && depth > 0) {
+      inString = true;
+    } else if (character === "{") {
+      if (depth === 0) start = index;
+      depth += 1;
+    } else if (character === "}" && depth > 0) {
+      depth -= 1;
+      if (depth === 0) return text.slice(start, index + 1);
+    }
+  }
+  return undefined;
 }

@@ -30,6 +30,34 @@ function providerFrom(responses: string[]): LlmProvider {
 }
 
 describe("generateStructured", () => {
+  it.each([
+    ["two identical objects", "{\"a\":1}\n{\"a\":1}"],
+    ["an object followed by prose containing a brace", "{\"a\":1} trailing } prose"],
+    ["braces inside a string value", "{\"a\":1,\"text\":\"a } b\"}"],
+    ["an escaped quote and brace inside a string", "{\"a\":1,\"text\":\"a \\\" } b\"}\n{\"a\":2}"],
+  ])("extracts the first balanced object from %s", async (_description, responseText) => {
+    const { db, cache } = cacheDb();
+    const provider = providerFrom([responseText]);
+    const result = await generateStructured({
+      provider, model: "mock-v1", system: "system", prompt: "prompt", schema: z.object({ a: z.number() }),
+      schemaName: "Example", schemaVersion: "1", maxOutputTokens: 100, signal: controller(), cache,
+      repairAttempts: 0,
+    });
+    expect(result.value).toEqual({ a: 1 });
+    db.close();
+  });
+
+  it("still rejects truly broken JSON", async () => {
+    const { db, cache } = cacheDb();
+    const provider = providerFrom(["{\"a\":"]);
+    await expect(generateStructured({
+      provider, model: "mock-v1", system: "system", prompt: "prompt", schema: z.object({ a: z.number() }),
+      schemaName: "Example", schemaVersion: "1", maxOutputTokens: 100, signal: controller(), cache,
+      repairAttempts: 0,
+    })).rejects.toMatchObject({ code: "LLM_INVALID_OUTPUT", retryable: false });
+    db.close();
+  });
+
   it("strips code fences and leading text before schema validation", async () => {
     const { db, cache } = cacheDb();
     const provider = providerFrom(["Here is the result:\n```json\n{\"answer\":\"ok\"}\n```"]);

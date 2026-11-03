@@ -318,16 +318,14 @@ process.stdin.on("end", () => {
     expect(capturedArgs).not.toContain("--effort");
   });
 
-  it("writes and passes a JSON schema file when structured output is requested", async () => {
+  it("does not pass --json-schema for structured requests", async () => {
     let capturedArgs: string[] = [];
     const source = `
 process.stdin.on("data", () => {});
 process.stdin.on("end", () => {
-  const schemaIndex = process.argv.indexOf("--json-schema");
-  const schemaPath = schemaIndex >= 0 ? (process.argv[schemaIndex + 1] ?? "") : "";
   process.stdout.write(JSON.stringify({
     status: "SUCCESS",
-    response: schemaPath ? "ok" : "missing",
+    response: "ok",
     usage: { input_tokens: 1, output_tokens: 1, thinking_tokens: 0, cache_read_tokens: 0 },
     denied_actions: [],
   }));
@@ -352,8 +350,7 @@ process.stdin.on("end", () => {
       jsonSchema: { type: "object", properties: { answer: { type: "string" } }, required: ["answer"] },
     }, new AbortController().signal);
     expect(response.text).toBe("ok");
-    expect(capturedArgs).toContain("--json-schema");
-    expect(capturedArgs[capturedArgs.indexOf("--json-schema") + 1]).toMatch(/schema\.json$/);
+    expect(capturedArgs).not.toContain("--json-schema");
   });
 
   it("parses success JSON, returns correct usage (input+cache, output+thinking)", async () => {
