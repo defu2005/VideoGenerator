@@ -9,6 +9,14 @@ import { MockLlmProvider } from "./mock.js";
 import { OpenAiCompatibleProvider } from "./openaiCompatible.js";
 import { LlmError, type LlmProvider } from "./types.js";
 
+// Active Claude models, newest first within each family. Deprecated ones are left out.
+const CLAUDE_MODELS = [
+  "claude-fable-5-1", "claude-opus-5-5", "claude-sonnet-5-5", "claude-haiku-5-5",
+  "claude-fable-5", "claude-opus-5", "claude-sonnet-5",
+  "claude-opus-4-8", "claude-opus-4-7", "claude-opus-4-6", "claude-sonnet-4-6",
+  "claude-opus-4-5", "claude-sonnet-4-5", "claude-haiku-4-5",
+];
+
 export class LlmProviderRegistry {
   private readonly providers = new Map<string, LlmProvider & { configured?: boolean; hint?: string }>();
   private readonly modelCache = new Map<string, { expiresAt: number; models: string[] }>();
@@ -63,7 +71,7 @@ export class LlmProviderRegistry {
   async suggestModels(id: string, fetchImpl: typeof fetch = fetch): Promise<string[]> {
     const provider = this.providers.get(id);
     const staticModels: Record<string, string[]> = {
-      anthropic: ["claude-opus-5-5", "claude-sonnet-5-5", "claude-haiku-5-5"],
+      anthropic: CLAUDE_MODELS,
       gemini: ["gemini-2.5-pro", "gemini-2.5-flash"],
       openai: ["gpt-5", "gpt-5-mini", "gpt-4.1"],
       ollama: [],
@@ -72,7 +80,7 @@ export class LlmProviderRegistry {
       groq: ["llama-3.3-70b-versatile", "openai/gpt-oss-120b"],
       custom: [],
       mock: ["mock"],
-      "claude-cli": ["claude-opus-5-5", "claude-sonnet-5-5", "claude-haiku-5-5"],
+      "claude-cli": CLAUDE_MODELS,
       "copilot-cli": ["gpt-6-luna"],
     };
     if (!LlmProviderIdSchema.safeParse(id).success) return [];
