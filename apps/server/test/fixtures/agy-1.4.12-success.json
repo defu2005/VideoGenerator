@@ -1,0 +1,15 @@
+{
+  "conversation_id": "conv-abc123",
+  "status": "SUCCESS",
+  "response": "Đây là câu trả lời từ Antigravity CLI cho yêu cầu của bạn.",
+  "duration_seconds": 6.9,
+  "num_turns": 1,
+  "usage": {
+    "input_tokens": 7641,
+    "output_tokens": 452,
+    "thinking_tokens": 447,
+    "cache_read_tokens": 0,
+    "total_tokens": 8093
+  },
+  "denied_actions": []
+}

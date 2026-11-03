@@ -2,6 +2,7 @@ import { LlmProviderIdSchema, type LlmProviderId, type LlmProviderInfo, type Llm
 import type { AppConfig } from "../../lib/config.js";
 import { AnthropicProvider } from "./anthropic.js";
 import { ClaudeCliProvider, resolveClaudeCliPath } from "./claudeCli.js";
+import { AntgravityCliProvider, resolveAgyPath, AGY_STATIC_MODELS } from "./antigravityCli.js";
 import { CopilotCliProvider } from "./copilotCli.js";
 import { resolveCopilotCliLaunch } from "./cliProvider.js";
 import { GeminiProvider } from "./gemini.js";
@@ -57,6 +58,15 @@ export class LlmProviderRegistry {
         launch ? { command: launch.command, argsPrefix: launch.argsPrefix } : undefined,
       ));
     }
+    if (config.ANTIGRAVITY_CLI_ENABLED) {
+      this.addProvider(new AntgravityCliProvider(
+        resolveAgyPath(config.ANTIGRAVITY_CLI_PATH ?? ""),
+        config.DATA_DIR,
+        Math.min(config.LLM_TIMEOUT_MS, Math.max(1, config.STAGE_TIMEOUT_MS - 1)),
+        config.ANTIGRAVITY_CLI_MODEL ?? null,
+        config.ANTIGRAVITY_CLI_EFFORT,
+      ));
+    }
     if (config.LLM_ENABLE_MOCK) this.addProvider(new MockLlmProvider());
   }
 
@@ -82,6 +92,7 @@ export class LlmProviderRegistry {
       mock: ["mock"],
       "claude-cli": CLAUDE_MODELS,
       "copilot-cli": ["gpt-6-luna"],
+      "antigravity-cli": AGY_STATIC_MODELS,
     };
     if (!LlmProviderIdSchema.safeParse(id).success) return [];
     const baseUrl = id === "openai" ? this.config.OPENAI_BASE_URL
@@ -139,6 +150,7 @@ export class LlmProviderRegistry {
       mock: "Mock (development)",
       "claude-cli": "Claude Code CLI",
       "copilot-cli": "GitHub Copilot CLI",
+      "antigravity-cli": "Antigravity CLI (tài khoản Google)",
     };
     const hints: Record<LlmProviderId, string> = {
       anthropic: "Set ANTHROPIC_API_KEY to configure Anthropic API.",
@@ -152,10 +164,11 @@ export class LlmProviderRegistry {
       mock: "Set LLM_ENABLE_MOCK=true to enable the mock provider.",
       "claude-cli": "Enable CLAUDE_CLI_ENABLED and install/sign in to Claude Code CLI.",
       "copilot-cli": "Enable COPILOT_CLI_ENABLED and install/sign in to GitHub Copilot CLI.",
+      "antigravity-cli": "Cài agy và chạy `agy` một lần để đăng nhập Google",
     };
     return LlmProviderIdSchema.options.map((id) => {
       const provider = this.providers.get(id);
-      const isCliProvider = id === "claude-cli" || id === "copilot-cli";
+      const isCliProvider = id === "claude-cli" || id === "copilot-cli" || id === "antigravity-cli";
       const configured = provider
         ? isCliProvider
           ? provider.configured === true
@@ -196,6 +209,9 @@ export class LlmProviderRegistry {
     if (providerId === "copilot-cli" && !this.config.COPILOT_CLI_ENABLED) {
       throw createNotConfiguredError("GitHub Copilot CLI is disabled. Set COPILOT_CLI_ENABLED=true to enable it.");
     }
+    if (providerId === "antigravity-cli" && !this.config.ANTIGRAVITY_CLI_ENABLED) {
+      throw createNotConfiguredError("Antigravity CLI is disabled. Set ANTIGRAVITY_CLI_ENABLED=true to enable it.");
+    }
     if (!provider) {
       throw createNotConfiguredError(providerId
         ? `LLM provider "${providerId}" is not configured. Set its API key or base URL in the server environment.`
@@ -207,12 +223,15 @@ export class LlmProviderRegistry {
     if (provider.id === "copilot-cli" && !provider.configured) {
       throw createNotConfiguredError(provider.hint ?? "Install GitHub Copilot CLI and sign in once");
     }
+    if (provider.id === "antigravity-cli" && !provider.configured) {
+      throw createNotConfiguredError(provider.hint ?? "Cài agy và chạy `agy` một lần để đăng nhập Google");
+    }
     const model = projectStageSelection?.model
       ?? projectDefaultSelection?.model
       ?? stageModel
       ?? this.config.LLM_DEFAULT_MODEL
       ?? provider.defaultModel;
-    if (!model && provider.id !== "claude-cli" && provider.id !== "copilot-cli") {
+    if (!model && provider.id !== "claude-cli" && provider.id !== "copilot-cli" && provider.id !== "antigravity-cli") {
       throw createNotConfiguredError(`No model is configured for ${provider.label}. Set the model in project settings or configure ${provider.id.toUpperCase()}_MODEL.`);
     }
     return { provider, model: model ?? "" };
@@ -243,7 +262,7 @@ export class LlmProviderRegistry {
       provider = fallback.provider;
       model = fallback.model;
     }
-    if (!model && provider.id !== "claude-cli" && provider.id !== "copilot-cli") {
+    if (!model && provider.id !== "claude-cli" && provider.id !== "copilot-cli" && provider.id !== "antigravity-cli") {
       throw createNotConfiguredError(`No model is configured for ${provider.label}. Set the model in project or app settings, or configure ${provider.id.toUpperCase()}_MODEL.`);
     }
     return {
@@ -274,7 +293,7 @@ export class LlmProviderRegistry {
   resolveFallback(route: { provider: string; model?: string }): { provider: LlmProvider; model: string } {
     const provider = this.requireConfiguredProvider(route.provider);
     const model = route.model ?? provider.defaultModel ?? "";
-    if (!model && provider.id !== "claude-cli" && provider.id !== "copilot-cli") {
+    if (!model && provider.id !== "claude-cli" && provider.id !== "copilot-cli" && provider.id !== "antigravity-cli") {
       throw createNotConfiguredError(`No model is configured for fallback provider ${provider.label}.`);
     }
     return { provider, model };
@@ -313,10 +332,13 @@ export class LlmProviderRegistry {
     if (providerId === "copilot-cli" && !this.config.COPILOT_CLI_ENABLED) {
       throw createNotConfiguredError("GitHub Copilot CLI is disabled. Set COPILOT_CLI_ENABLED=true to enable it.");
     }
+    if (providerId === "antigravity-cli" && !this.config.ANTIGRAVITY_CLI_ENABLED) {
+      throw createNotConfiguredError("Antigravity CLI is disabled. Set ANTIGRAVITY_CLI_ENABLED=true to enable it.");
+    }
     if (!provider) {
       throw createNotConfiguredError(`LLM provider "${providerId}" is not configured. Set its API key or base URL in the server environment.`);
     }
-    if ((provider.id === "claude-cli" || provider.id === "copilot-cli") && !provider.configured) {
+    if ((provider.id === "claude-cli" || provider.id === "copilot-cli" || provider.id === "antigravity-cli") && !provider.configured) {
       throw createNotConfiguredError(provider.hint ?? `${provider.label} is not configured.`);
     }
     return provider;

@@ -13,6 +13,7 @@ export const LlmProviderIdSchema = z.enum([
   "mock",
   "claude-cli",
   "copilot-cli",
+  "antigravity-cli",
 ]);
 export type LlmProviderId = z.infer<typeof LlmProviderIdSchema>;
 

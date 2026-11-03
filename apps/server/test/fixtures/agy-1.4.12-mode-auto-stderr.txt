@@ -1,0 +1,1 @@
+Warning: --mode auto is not recommended for non-interactive use. Using --mode plan instead.

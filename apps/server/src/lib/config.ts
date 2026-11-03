@@ -62,6 +62,10 @@ const ConfigSchema = z.object({
   COPILOT_CLI_ENABLED: z.stringbool().default(false),
   COPILOT_CLI_PATH: z.string().min(1).default("copilot"),
   COPILOT_CLI_MODEL: z.string().optional(),
+  ANTIGRAVITY_CLI_ENABLED: z.stringbool().default(false),
+  ANTIGRAVITY_CLI_PATH: z.string().optional(),
+  ANTIGRAVITY_CLI_MODEL: z.string().optional(),
+  ANTIGRAVITY_CLI_EFFORT: z.string().default(""),
   ANTHROPIC_API_KEY: z.string().optional(),
   ANTHROPIC_MODEL: z.string().default("claude-haiku-5-5"),
   GEMINI_API_KEY: z.string().optional(),
@@ -133,6 +137,10 @@ export type AppConfig = {
   COPILOT_CLI_ENABLED: boolean;
   COPILOT_CLI_PATH: string;
   COPILOT_CLI_MODEL?: string;
+  ANTIGRAVITY_CLI_ENABLED: boolean;
+  ANTIGRAVITY_CLI_PATH?: string;
+  ANTIGRAVITY_CLI_MODEL?: string;
+  ANTIGRAVITY_CLI_EFFORT: string;
   ANTHROPIC_API_KEY?: string;
   ANTHROPIC_MODEL: string;
   GEMINI_API_KEY?: string;
@@ -180,6 +188,7 @@ const providerLimitPrefixes: Partial<Record<LlmProviderId, string>> = {
   mock: "MOCK",
   "claude-cli": "CLAUDE_CLI",
   "copilot-cli": "COPILOT_CLI",
+  "antigravity-cli": "ANTIGRAVITY_CLI",
 };
 
 export function parseConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {

@@ -1,0 +1,15 @@
+{
+  "conversation_id": "conv-def456",
+  "status": "SUCCESS",
+  "response": "{\"title\": \"Video về khoa học\", \"description\": \"Mô tả video\"}",
+  "duration_seconds": 4.2,
+  "num_turns": 1,
+  "usage": {
+    "input_tokens": 3210,
+    "output_tokens": 88,
+    "thinking_tokens": 120,
+    "cache_read_tokens": 500,
+    "total_tokens": 3918
+  },
+  "denied_actions": []
+}

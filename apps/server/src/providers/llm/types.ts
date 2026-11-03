@@ -19,6 +19,7 @@ export type LlmProviderLimits = {
 
 export type LlmRequest = {
   schemaName?: string;
+  jsonSchema?: Record<string, unknown>;
   model: string;
   system: string;
   messages: { role: "user" | "assistant"; content: string }[];

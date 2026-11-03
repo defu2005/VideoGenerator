@@ -1,5 +1,5 @@
 import type { FastifyBaseLogger } from "fastify";
-import type { z } from "zod";
+import { z } from "zod";
 import type { LlmCallUsage, LlmTaskId } from "@vg/shared";
 import type { LlmProviderRegistry, ResolvedLlmRoute } from "./registry.js";
 import { LlmCache, createLlmCacheKey } from "./cache.js";
@@ -67,6 +67,13 @@ export async function generateStructured<T>(input: {
     };
   }
 
+  // Only agy uses this. Some zod schemas (transforms) cannot be converted; then send none.
+  let jsonSchema: Record<string, unknown> | undefined;
+  try {
+    jsonSchema = z.toJSONSchema(input.schema) as Record<string, unknown>;
+  } catch {
+    jsonSchema = undefined;
+  }
   let totalInputTokens = 0;
   let totalOutputTokens = 0;
   let calls = 0;
@@ -84,6 +91,7 @@ export async function generateStructured<T>(input: {
   try {
     response = await input.provider.generate({
       schemaName: input.schemaName,
+      jsonSchema,
       model: input.model,
       system: input.system,
       messages: [{ role: "user", content: input.prompt }],
@@ -140,6 +148,7 @@ export async function generateStructured<T>(input: {
     try {
       response = await input.provider.generate({
         schemaName: input.schemaName,
+        jsonSchema,
         model: input.model,
         system: input.system,
         messages: [

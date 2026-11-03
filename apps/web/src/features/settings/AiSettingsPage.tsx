@@ -14,6 +14,9 @@ import type { LlmRoute, LlmSettings } from "@vg/shared";
 
 type RouteUpdate = Partial<LlmRoute>;
 
+const DEFAULT_STRONG_MODEL = "claude-sonnet-4-6";
+const DEFAULT_FAST_MODEL = "gemini-3.8-flash-low";
+
 function routeWithDefaults(route: LlmRoute | undefined, patch: RouteUpdate): LlmRoute | undefined {
   const provider = patch.provider ?? route?.provider;
   if (!provider) return undefined;
@@ -169,6 +172,14 @@ export function AiSettingsPage() {
   useEffect(() => {
     if (settings.data) setDraft(settings.data);
   }, [settings.data]);
+
+  // Picking Antigravity in a preset suggests its usual model; it never switches the provider.
+  useEffect(() => {
+    if (strongProvider === "antigravity-cli" && !strongModel) setStrongModel(DEFAULT_STRONG_MODEL);
+  }, [strongProvider, strongModel]);
+  useEffect(() => {
+    if (fastProvider === "antigravity-cli" && !fastModel) setFastModel(DEFAULT_FAST_MODEL);
+  }, [fastProvider, fastModel]);
 
   if (settings.isPending || providers.isPending || tasks.isPending) {
     return <section className="panel"><Spinner label="Đang tải cài đặt AI" /></section>;

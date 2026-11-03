@@ -1,0 +1,15 @@
+{
+  "conversation_id": "conv-ghi789",
+  "status": "SUCCESS",
+  "response": "",
+  "duration_seconds": 2.1,
+  "num_turns": 1,
+  "usage": {
+    "input_tokens": 1000,
+    "output_tokens": 0,
+    "thinking_tokens": 50,
+    "cache_read_tokens": 0,
+    "total_tokens": 1050
+  },
+  "denied_actions": [{"action": "command", "display_name": "RunCommand"}]
+}

@@ -184,6 +184,36 @@ describe("generateStructured", () => {
     db.close();
   });
 
+  it("passes the zod schema as JSON schema to the provider", async () => {
+    const { db, cache } = cacheDb();
+    const provider = providerFrom(["{\"answer\":\"ok\"}"]);
+    await generateStructured({
+      provider, model: "mock-v1", system: "system", prompt: "prompt", schema,
+      schemaName: "Example", schemaVersion: "1", maxOutputTokens: 100, signal: controller(), cache,
+    });
+    expect(provider.generate).toHaveBeenCalledWith(
+      expect.objectContaining({ jsonSchema: expect.objectContaining({ type: "object" }) }),
+      expect.anything(),
+    );
+    db.close();
+  });
+
+  it("still works and sends no JSON schema when the zod schema has a transform", async () => {
+    const { db, cache } = cacheDb();
+    const provider = providerFrom(["{\"answer\":\"ok\"}"]);
+    const transformed = z.object({ answer: z.string().transform((value) => value.toUpperCase()) });
+    const result = await generateStructured({
+      provider, model: "mock-v1", system: "system", prompt: "prompt", schema: transformed,
+      schemaName: "Transformed", schemaVersion: "1", maxOutputTokens: 100, signal: controller(), cache,
+    });
+    expect(result.value).toEqual({ answer: "OK" });
+    expect(provider.generate).toHaveBeenCalledWith(
+      expect.objectContaining({ jsonSchema: undefined }),
+      expect.anything(),
+    );
+    db.close();
+  });
+
   it("skips repair for truncated output and attaches its usage", async () => {
     const { db, cache } = cacheDb();
     const provider = providerFrom(["not complete"]);

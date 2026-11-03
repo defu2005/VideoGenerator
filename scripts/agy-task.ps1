@@ -11,7 +11,7 @@
 param(
   [Parameter(Mandatory = $true)][string]$PromptFile,
   [string]$Model = "claude-sonnet-4-6",
-  [string]$Effort = "high"
+  [string]$Effort = ""
 )
 $ErrorActionPreference = "Stop"
 $repo = Split-Path -Parent $PSScriptRoot
@@ -51,6 +51,7 @@ Write-Host "agy: $agy model=$Model effort=$Effort log=$log"
 $arg = ($text -replace '(\\*)"', '$1$1\"') -replace '(\\+)$', '$1$1'
 $env:AGY_TASK = "1"
 $ErrorActionPreference = "Continue"
-& $agy "--print=$arg" --model $Model --effort $Effort --dangerously-skip-permissions --output-format stream-json --print-timeout 0s 2>&1 |
+$effortArgs = @(); if ($Effort) { $effortArgs = @("--effort", $Effort) }
+& $agy "--print=$arg" --model $Model @effortArgs --dangerously-skip-permissions --output-format stream-json --print-timeout 0s 2>&1 |
   ForEach-Object { $_; Add-Content -Path $log -Value $_ -Encoding UTF8 }
 Write-Host "agy exit code: $LASTEXITCODE"

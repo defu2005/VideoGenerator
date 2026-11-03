@@ -7,5 +7,6 @@ describe("LLM subscription provider pricing", () => {
     const usage = { inputTokens: 10_000, outputTokens: 5_000 };
     expect(estimateLlmCost(config, "claude-cli", "sonnet", usage)).toBe(0);
     expect(estimateLlmCost(config, "copilot-cli", "auto", usage)).toBe(0);
+    expect(estimateLlmCost(config, "antigravity-cli", "claude-sonnet-4-6", usage)).toBe(0);
   });
 });
