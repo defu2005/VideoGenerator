@@ -45,4 +45,69 @@ describe("ProjectFormFields task routes", () => {
       research: { provider: "mock" },
     }));
   });
+
+  it("shows provider models and keeps the model field disabled until a provider is selected", async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url === "/api/llm/providers") {
+        return jsonResponse([
+          { id: "mock", label: "Mock", configured: true, defaultModel: "mock-v1" },
+          { id: "openai", label: "OpenAI", configured: true, defaultModel: "gpt-4o" },
+        ]);
+      }
+      if (url.includes("/models")) {
+        return jsonResponse({ provider: "mock", models: ["mock-v1", "mock-v2"] });
+      }
+      throw new Error(`Unexpected offline test request: ${url}`);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const onChange = vi.fn();
+    const withoutProvider = renderWithProviders(<ProjectFormFields
+      draft={{ ...DEFAULT_PROJECT_DRAFT, llmProvider: "" }}
+      errors={{}}
+      onChange={onChange}
+      advanced
+      onToggleAdvanced={() => undefined}
+    />);
+    const disabledSelect = await screen.findByRole("combobox", { name: "Model: chọn từ danh sách" });
+    expect(disabledSelect).toBeDisabled();
+    expect(screen.getByText("Chọn nhà cung cấp trước để xem danh sách model")).toBeInTheDocument();
+    withoutProvider.unmount();
+
+    renderWithProviders(<ProjectFormFields
+      draft={{ ...DEFAULT_PROJECT_DRAFT, llmProvider: "mock" }}
+      errors={{}}
+      onChange={onChange}
+      advanced
+      onToggleAdvanced={() => undefined}
+    />);
+    const modelSelect = await screen.findByRole("combobox", { name: "Model: chọn từ danh sách" });
+    expect(modelSelect).not.toBeDisabled();
+    await waitFor(() => expect(screen.getByRole("option", { name: "mock-v2" })).toBeInTheDocument());
+
+    fireEvent.change(modelSelect, { target: { value: "mock-v2" } });
+    expect(onChange).toHaveBeenLastCalledWith("llmModel", "mock-v2");
+    fireEvent.change(screen.getByRole("textbox", { name: "Model" }), { target: { value: "custom-model" } });
+    expect(onChange).toHaveBeenLastCalledWith("llmModel", "custom-model");
+  });
+
+  it("keeps a saved custom model that is not in the provider list", async () => {
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url === "/api/llm/providers") return jsonResponse([{ id: "mock", label: "Mock", configured: true, defaultModel: "mock-v1" }]);
+      if (url.includes("/models")) return jsonResponse({ provider: "mock", models: ["mock-v1"] });
+      throw new Error(`Unexpected offline test request: ${url}`);
+    }));
+    const onChange = vi.fn();
+    renderWithProviders(<ProjectFormFields
+      draft={{ ...DEFAULT_PROJECT_DRAFT, llmProvider: "mock", llmModel: "my-custom" }}
+      errors={{}}
+      onChange={onChange}
+      advanced
+      onToggleAdvanced={() => undefined}
+    />);
+    await waitFor(() => expect(screen.getByRole("option", { name: "mock-v1" })).toBeInTheDocument());
+    expect(onChange).not.toHaveBeenCalledWith("llmModel", "");
+  });
 });

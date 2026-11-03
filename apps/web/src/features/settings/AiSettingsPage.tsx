@@ -2,11 +2,11 @@ import { useEffect, useState, type FormEvent } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ErrorState } from "../../components/ErrorState";
 import { Spinner } from "../../components/Spinner";
+import { ModelField } from "../llm/ModelField";
 import {
   getAppLlmRouting,
   getLlmProviders,
   getLlmTasks,
-  getProviderModels,
   saveAppLlmRouting,
   type LlmTask,
 } from "../../services/llmApi";
@@ -25,45 +25,6 @@ function routeWithDefaults(route: LlmRoute | undefined, patch: RouteUpdate): Llm
     ...patch,
     provider,
   };
-}
-
-function ModelField({ provider, value, onChange, label }: {
-  provider?: string;
-  value: string;
-  onChange: (value: string) => void;
-  label: string;
-}) {
-  const models = useQuery({
-    queryKey: ["llm-models", provider],
-    queryFn: () => getProviderModels(provider!),
-    enabled: Boolean(provider),
-  });
-  // A <select> always shows the whole list (a <datalist> hides entries that don't match the typed text).
-  const list = models.data ?? [];
-  const inList = list.includes(value);
-  const emptyLabel = models.isLoading ? "Đang tải danh sách model…"
-    : value && !inList ? "Model tự gõ (ô bên dưới)"
-      : `Mặc định của nhà cung cấp${list.length ? ` · ${list.length} model` : ""}`;
-  return (
-    <span className="model-field">
-      <select
-        aria-label={`${label}: chọn từ danh sách`}
-        value={inList ? value : ""}
-        disabled={!provider}
-        onChange={(event) => onChange(event.target.value)}
-      >
-        <option value="">{emptyLabel}</option>
-        {list.map((model) => <option key={model} value={model}>{model}</option>)}
-      </select>
-      <input
-        aria-label={label}
-        value={value}
-        placeholder="hoặc gõ tên model khác"
-        onChange={(event) => onChange(event.target.value)}
-      />
-      {models.isError && <small className="field-hint">Không tải được danh sách — hãy gõ tên model gói của bạn hỗ trợ.</small>}
-    </span>
-  );
 }
 
 function ProviderField({

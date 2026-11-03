@@ -160,6 +160,73 @@ describe("CreateProjectDialog", () => {
     expect(JSON.parse(String(request.body))).toEqual({ topic: "Lịch sử đại dương" });
   });
 
+  it("sends per-task model settings in the create payload", async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url === "/api/llm/providers") {
+        return jsonResponse([
+          { id: "mock", label: "Mock", configured: true, defaultModel: "mock-v1" },
+          { id: "openai", label: "OpenAI", configured: true, defaultModel: "gpt-4o" },
+        ]);
+      }
+      if (url.includes("/models")) {
+        return jsonResponse({ provider: "mock", models: ["mock-v1", "mock-v2"] });
+      }
+      if (url === "/api/projects" && init?.method === "POST") {
+        return jsonResponse(project, 201);
+      }
+      return jsonResponse([]);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    renderWithProviders(<CreateProjectDialog open onClose={vi.fn()} />);
+    fireEvent.change(screen.getByLabelText(/Topic/), { target: { value: "Ocean life" } });
+    fireEvent.click(screen.getByRole("button", { name: /Customize/ }));
+    fireEvent.click(await screen.findByRole("button", { name: /Advanced settings/ }));
+    fireEvent.change(await screen.findByLabelText("AI provider"), { target: { value: "mock" } });
+    fireEvent.change(screen.getByRole("textbox", { name: "Model" }), { target: { value: "mock-v2" } });
+    fireEvent.click(screen.getByText("Mô hình AI theo tác vụ"));
+    fireEvent.change(await screen.findByLabelText("Nghiên cứu — nhà cung cấp của dự án"), { target: { value: "openai" } });
+    fireEvent.change(screen.getByRole("textbox", { name: "Nghiên cứu — model của dự án" }), { target: { value: "gpt-4o-mini" } });
+    fireEvent.click(screen.getByRole("button", { name: "Tạo" }));
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith(
+      "/api/projects",
+      expect.objectContaining({ method: "POST" }),
+    ));
+    const requestCall = fetchMock.mock.calls.find(([input]) => String(input) === "/api/projects");
+    const body = JSON.parse(String((requestCall?.[1] as RequestInit).body));
+    expect(body.settings ?? {}).toMatchObject({
+      llm: {
+        default: { provider: "mock", model: "mock-v2" },
+        tasks: { research: { provider: "openai", model: "gpt-4o-mini" } },
+      },
+    });
+  });
+
+  it("omits the llm key when no project or task model is set", async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url === "/api/llm/providers") return jsonResponse([]);
+      if (url === "/api/projects" && init?.method === "POST") return jsonResponse(project, 201);
+      return jsonResponse([]);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    renderWithProviders(<CreateProjectDialog open onClose={vi.fn()} />);
+    fireEvent.change(screen.getByLabelText(/Topic/), { target: { value: "Second project" } });
+    fireEvent.click(screen.getByRole("button", { name: /Customize/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Tạo" }));
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith(
+      "/api/projects",
+      expect.objectContaining({ method: "POST" }),
+    ));
+    const requestCall = fetchMock.mock.calls.find(([input]) => String(input) === "/api/projects");
+    const body = JSON.parse(String((requestCall?.[1] as RequestInit).body));
+    expect(body.settings ?? {}).not.toHaveProperty("llm");
+  });
+
   it("shows recommendations and lets a user reset a customized field", () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse([])));
     renderWithProviders(<CreateProjectDialog open onClose={vi.fn()} />);

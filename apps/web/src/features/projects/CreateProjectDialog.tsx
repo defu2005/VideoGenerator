@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
-import { CreateProjectInputSchema, recommendBrief, type BriefSettings } from "@vg/shared";
+import { CreateProjectInputSchema, recommendBrief, type BriefSettings, type ProjectSettings } from "@vg/shared";
 import { useNavigate } from "react-router-dom";
 import { ApiRequestError } from "../../services/apiClient";
 import { useCreateProject } from "../../hooks/useProjects";
@@ -71,6 +71,7 @@ export function CreateProjectDialog({ open, onClose }: { open: boolean; onClose:
   const mutation = useCreateProject();
   const dialogRef = useRef<HTMLDialogElement>(null);
   const [draft, setDraft] = useState<ProjectDraft>(DEFAULT_PROJECT_DRAFT);
+  const [llmTasks, setLlmTasks] = useState<NonNullable<ProjectSettings["llm"]>["tasks"]>({});
   const [brief, setBrief] = useState<BriefSettings>(() => recommendBrief({ topic: "" }).values.settings);
   const [briefUserSet, setBriefUserSet] = useState<string[]>([]);
   const [debouncedTopic, setDebouncedTopic] = useState("");
@@ -97,6 +98,7 @@ export function CreateProjectDialog({ open, onClose }: { open: boolean; onClose:
   useEffect(() => {
     if (open) {
       setDraft(DEFAULT_PROJECT_DRAFT);
+      setLlmTasks({});
       setBrief(recommendBrief({ topic: "" }).values.settings);
       setBriefUserSet([]);
       setDebouncedTopic("");
@@ -172,14 +174,17 @@ export function CreateProjectDialog({ open, onClose }: { open: boolean; onClose:
       if (draft.musicExecutor) stageExecutors.music = draft.musicExecutor;
       if (Object.keys(stageExecutors).length) settings.stageExecutors = stageExecutors;
       if (draft.researchMode) settings.researchMode = draft.researchMode;
+      const llmSettings: Record<string, unknown> = {};
       if (draft.llmProvider) {
-        settings.llm = {
-          default: {
-            provider: draft.llmProvider,
-            ...(draft.llmModel.trim() ? { model: draft.llmModel.trim() } : {}),
-          },
+        llmSettings.default = {
+          provider: draft.llmProvider,
+          ...(draft.llmModel.trim() ? { model: draft.llmModel.trim() } : {}),
         };
       }
+      if (llmTasks && Object.keys(llmTasks).length) {
+        llmSettings.tasks = llmTasks;
+      }
+      if (Object.keys(llmSettings).length) settings.llm = llmSettings;
       if (draft.autoRender) settings.autoRender = true;
       if (Object.keys(settings).length) payload.settings = settings;
     }
@@ -267,6 +272,8 @@ export function CreateProjectDialog({ open, onClose }: { open: boolean; onClose:
                 advanced={advanced}
                 onToggleAdvanced={() => setAdvanced((value) => !value)}
                 advancedOnly
+                llmTasks={llmTasks}
+                onLlmTasksChange={setLlmTasks}
               />
             </>
           )}

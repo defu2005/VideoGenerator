@@ -1,6 +1,8 @@
 import { AUTONOMY_MODES, LLM_TASKS, type AutonomyMode, type LlmRoute, type ProjectSettings, type ProjectSettingsInput } from "@vg/shared";
+import { useEffect, useRef } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { getLlmProviders, getProjectLlmRoutes } from "../../services/llmApi";
+import { ModelField } from "../llm/ModelField";
+import { getLlmProviders, getProjectLlmRoutes, getProviderModels } from "../../services/llmApi";
 
 export type ProjectDraft = {
   title: string;
@@ -84,11 +86,24 @@ export function ProjectFormFields({
   onLlmTasksChange?: (tasks: NonNullable<ProjectSettings["llm"]>["tasks"]) => void;
 }) {
   const providers = useQuery({ queryKey: ["llm-providers"], queryFn: getLlmProviders });
+  const providerModels = useQuery({
+    queryKey: ["llm-models", draft.llmProvider],
+    queryFn: () => getProviderModels(draft.llmProvider),
+    enabled: Boolean(draft.llmProvider),
+  });
   const resolvedRoutes = useQuery({
     queryKey: ["project-llm-routes", projectId],
     queryFn: () => getProjectLlmRoutes(projectId!),
     enabled: Boolean(projectId),
   });
+  // Set when the user picks another provider; the model is checked once that provider's list loads.
+  // A custom model name typed for the current provider is never cleared.
+  const providerSwitchedTo = useRef<string | null>(null);
+  useEffect(() => {
+    if (!draft.llmProvider || providerSwitchedTo.current !== draft.llmProvider || !providerModels.isSuccess) return;
+    providerSwitchedTo.current = null;
+    if (draft.llmModel && !providerModels.data.includes(draft.llmModel)) onChange("llmModel", "");
+  }, [draft.llmModel, draft.llmProvider, onChange, providerModels.data, providerModels.isSuccess]);
   const availableProviders = providers.data ?? [];
   const selectedProvider = availableProviders.find((provider) => provider.id === draft.llmProvider);
   return (
@@ -183,7 +198,15 @@ export function ProjectFormFields({
           </label>
           <label className="form-field">
             <span>AI provider</span>
-            <select value={draft.llmProvider} onChange={(event) => onChange("llmProvider", event.target.value)}>
+            <select
+              value={draft.llmProvider}
+              onChange={(event) => {
+                const nextProvider = event.target.value;
+                providerSwitchedTo.current = nextProvider || null;
+                onChange("llmProvider", nextProvider);
+                if (!nextProvider) onChange("llmModel", "");
+              }}
+            >
               <option value="">Environment default</option>
               {draft.llmProvider && !availableProviders.some((provider) => provider.id === draft.llmProvider) && (
                 <option value={draft.llmProvider}>{draft.llmProvider} (not currently configured)</option>
@@ -225,24 +248,26 @@ export function ProjectFormFields({
           </label>
           <label className="form-field">
             <span>Model (optional)</span>
-            <input
+            <ModelField
+              provider={draft.llmProvider}
               value={draft.llmModel}
-              placeholder="Use provider default"
-              onChange={(event) => onChange("llmModel", event.target.value)}
+              label="Model"
+              onChange={(value) => onChange("llmModel", value)}
             />
+            {!draft.llmProvider && <small className="field-hint">Chọn nhà cung cấp trước để xem danh sách model</small>}
           </label>
-          {projectId && onLlmTasksChange && (
+          {onLlmTasksChange && (
             <details className="project-task-routes">
               <summary>Mô hình AI theo tác vụ</summary>
               <p className="field-hint">Tác vụ để trống sẽ dùng mặc định của dự án, rồi tới cài đặt app (Cài đặt → Mô hình AI), rồi tới ENV.</p>
               {LLM_TASKS.map((task) => {
                 const route = llmTasks?.[task.id];
-                const resolved = resolvedRoutes.data?.[task.id];
-                const sourceLabel = resolved?.source.startsWith("project-") ? "Dự án"
-                  : resolved?.source.startsWith("app-") ? "Mặc định app"
-                    : resolved?.source.startsWith("env") ? "ENV" : "chưa cấu hình";
+                const resolved = projectId ? resolvedRoutes.data?.[task.id] : undefined;
+                const sourceLabel = projectId && resolved?.source?.startsWith("project-") ? "Dự án"
+                  : projectId && resolved?.source?.startsWith("app-") ? "Mặc định app"
+                    : projectId && resolved?.source?.startsWith("env") ? "ENV" : projectId ? "chưa cấu hình" : "";
                 const replaceRoute = (update: Partial<LlmRoute>) => {
-                  const routes = { ...llmTasks };
+                  const routes = { ...(llmTasks ?? {}) };
                   const provider = update.provider ?? route?.provider;
                   if (!provider) delete routes[task.id];
                   else routes[task.id] = { ...route, ...update, provider };
@@ -252,17 +277,17 @@ export function ProjectFormFields({
                   <div className="project-task-route" key={task.id}>
                     <div className="project-task-route-heading">
                       <strong>{task.label}</strong>
-                      <small>
+                      {projectId && (<small>
                         {task.stage} · {sourceLabel}
                         {resolved?.provider ? ` · ${resolved.provider}${resolved.model ? ` / ${resolved.model}` : ""}` : ""}
-                      </small>
+                      </small>)}
                     </div>
                     <select
                       aria-label={`${task.label} — nhà cung cấp của dự án`}
                       value={route?.provider ?? ""}
                       onChange={(event) => {
                         if (!event.target.value) {
-                          const routes = { ...llmTasks };
+                          const routes = { ...(llmTasks ?? {}) };
                           delete routes[task.id];
                           onLlmTasksChange(routes);
                         } else replaceRoute({ provider: event.target.value });
@@ -275,15 +300,14 @@ export function ProjectFormFields({
                         </option>
                       ))}
                     </select>
-                    <input
-                      aria-label={`${task.label} — model của dự án`}
+                    <ModelField
+                      provider={route?.provider}
                       value={route?.model ?? ""}
-                      placeholder="Model (mặc định nếu để trống)"
-                      disabled={!route?.provider}
-                      onChange={(event) => replaceRoute({ model: event.target.value || undefined })}
+                      label={`${task.label} — model của dự án`}
+                      onChange={(model) => replaceRoute({ model: model || undefined })}
                     />
                     <button className="text-button" type="button" onClick={() => {
-                      const routes = { ...llmTasks };
+                      const routes = { ...(llmTasks ?? {}) };
                       delete routes[task.id];
                       onLlmTasksChange(routes);
                     }}>Dùng mặc định</button>
