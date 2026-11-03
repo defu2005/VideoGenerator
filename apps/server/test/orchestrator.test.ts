@@ -64,6 +64,22 @@ describe("pipeline state machine", () => {
     expect(state.stages.find((stage) => stage.stage === "FINAL_APPROVAL")?.state).toBe("WAITING_USER");
   });
 
+  it("pauses AUTO at visual review when selected images are not ready", async () => {
+    const harness = makeHarness({
+      mode: "AUTO",
+      canApprove: (_project, gate) => gate === "VISUAL_REVIEW"
+        ? { allowed: false, message: "1 scene needs attention before visual review can be approved." }
+        : { allowed: true },
+    });
+    harness.orchestrator.runAll(harness.projectId);
+    await drainUntilGate(harness);
+    const state = harness.orchestrator.getPipeline(harness.projectId);
+    const visualGate = state.stages.find((stage) => stage.stage === "VISUAL_REVIEW");
+    expect(state.currentStage).toBe("VISUAL_REVIEW");
+    expect(visualGate?.state).toBe("WAITING_USER");
+    expect(visualGate?.message).toContain("1 scene needs attention");
+  });
+
   it("auto-renders when enabled and manual approval never continues automatically", async () => {
     const automatic = makeHarness({ mode: "AUTO", autoRender: true });
     automatic.orchestrator.runAll(automatic.projectId);

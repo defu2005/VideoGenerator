@@ -340,6 +340,15 @@ export class JobRepository {
     if (this.eventQueue) this.eventQueue.push(event);
     else this.events.publish(event);
   }
+
+  emitVisualUpdated(projectId: string, sceneId: string, action: string): void {
+    this.emit({
+      type: "visual.updated",
+      projectId,
+      data: { sceneId, action },
+      at: this.now().toISOString(),
+    });
+  }
 }
 
 function parseJson(value: unknown): unknown | null {

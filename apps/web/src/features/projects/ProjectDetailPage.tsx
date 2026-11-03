@@ -11,6 +11,7 @@ import { EditProjectDialog } from "./EditProjectDialog";
 import { PipelinePanel } from "../pipeline/PipelinePanel";
 import { ScriptTab } from "../script/ScriptTab";
 import { SceneBoard } from "../scenes/SceneBoard";
+import { VisualReview } from "../visuals/VisualReview";
 
 const TABS = ["overview", "script", "scenes", "visuals", "voice", "music", "timeline", "render"] as const;
 
@@ -149,7 +150,9 @@ export function ProjectDetailPage() {
           ? <ScriptTab project={project} />
           : tab === "scenes"
             ? <SceneBoard project={project} />
-            : <section className="panel coming-soon"><span className="coming-icon">◷</span><p className="eyebrow">{tab.toUpperCase()}</p><h2>Coming in a later task</h2><p>This project workspace will be available in a later task.</p></section>}
+            : tab === "visuals"
+              ? <VisualReview project={project} />
+              : <section className="panel coming-soon"><span className="coming-icon">◷</span><p className="eyebrow">{tab.toUpperCase()}</p><h2>Coming in a later task</h2><p>This project workspace will be available in a later task.</p></section>}
       <EditProjectDialog project={project} open={editing} onClose={() => setEditing(false)} />
       <ConfirmDialog
         open={confirmDelete}

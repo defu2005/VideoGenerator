@@ -36,7 +36,7 @@ export class WikimediaImageProvider implements ImageSearchProvider {
       gsrlimit: String(Math.min(input.perPage, 50)),
       prop: "imageinfo",
       iiprop: "url|size|mime|extmetadata",
-      iiurlwidth: "640",
+      iiurlwidth: "1920",
     }).toString();
     const data = await fetchJsonWithRetry({
       url,

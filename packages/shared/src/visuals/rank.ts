@@ -1,13 +1,14 @@
 import type { LicenseKind, WatermarkStatus } from "../enums.js";
 
+// Relevance first: a sharp but off-topic image must not beat a matching one.
 export const RANK_WEIGHTS = {
-  keyword: 0.35,
-  providerPosition: 0.15,
-  resolution: 0.15,
-  aspect: 0.15,
+  keyword: 0.5,
+  providerPosition: 0.1,
+  resolution: 0.12,
+  aspect: 0.1,
   license: 0.1,
-  watermark: 0.05,
-  fileType: 0.05,
+  watermark: 0.04,
+  fileType: 0.04,
 } as const;
 
 const STOP_WORDS = new Set([
@@ -61,8 +62,9 @@ export function scoreCandidate(
   candidate: RankableCandidate,
   options: { queryTerms: string; sceneTerms: string; targetAspect: number; minShortSide?: number },
 ): { score: number; breakdown: ScoreBreakdown } {
+  // Score against the scene only. The query that found a candidate is not evidence of relevance:
+  // a weak alternative query would otherwise vouch for its own results.
   const terms = new Set([
-    ...normalizeTerms(candidate.searchQuery ?? ""),
     ...normalizeTerms(options.queryTerms),
     ...normalizeTerms(options.sceneTerms),
   ]);

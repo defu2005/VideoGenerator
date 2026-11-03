@@ -2,6 +2,7 @@ import { z } from "zod";
 import {
   CandidateOriginSchema,
   LicenseKindSchema,
+  SceneVisualStatusSchema,
   VisualStatusSchema,
   WatermarkStatusSchema,
 } from "../enums.js";
@@ -18,7 +19,7 @@ export const LicenseMetadataSchema = z.object({
 }).strict();
 export type LicenseMetadata = z.infer<typeof LicenseMetadataSchema>;
 
-export const VisualProviderSchema = z.enum(["wikimedia", "openverse", "pexels", "mock"]);
+export const VisualProviderSchema = z.enum(["wikimedia", "openverse", "pexels", "mock", "custom"]);
 export type VisualProvider = z.infer<typeof VisualProviderSchema>;
 
 export const VisualCandidateSchema = z.object({
@@ -47,6 +48,13 @@ export const VisualCandidateSchema = z.object({
   license: LicenseMetadataSchema,
   rank: z.number().int().nonnegative(),
   discardedAt: z.string().datetime({ offset: true }).nullable(),
+  localPath: z.string().nullable().optional(),
+  sha256: z.string().regex(/^[a-f0-9]{64}$/).nullable().optional(),
+  bytes: z.number().int().nonnegative().nullable().optional(),
+  actualWidth: z.number().int().positive().nullable().optional(),
+  actualHeight: z.number().int().positive().nullable().optional(),
+  downloadedAt: z.string().datetime({ offset: true }).nullable().optional(),
+  downloadError: z.string().nullable().optional(),
   createdAt: z.string().datetime({ offset: true }),
   searchHash: z.string().optional(),
 }).strict();
@@ -76,6 +84,8 @@ export type VisualSelection = z.infer<typeof VisualSelectionSchema>;
 export const SceneVisualsSchema = z.object({
   selection: VisualSelectionSchema.nullable(),
   candidates: z.array(VisualCandidateSchema),
+  status: SceneVisualStatusSchema.optional(),
+  noVisual: z.boolean().optional(),
 }).strict();
 export type SceneVisuals = z.infer<typeof SceneVisualsSchema>;
 
@@ -88,12 +98,41 @@ export const ProjectVisualsSchema = z.object({
     candidateCount: z.number().int().nonnegative(),
     needsUser: z.boolean(),
     lowRelevance: z.boolean(),
+    status: SceneVisualStatusSchema,
+    noVisual: z.boolean(),
+    visualDescription: z.string(),
+    visualQueries: z.object({ primary: z.string(), alternatives: z.array(z.string()) }).strict(),
+    narration: z.string(),
+    startSec: z.number().nonnegative(),
+    durationSec: z.number().nonnegative(),
   }).strict()),
   summary: z.object({
     withImage: z.number().int().nonnegative(),
     needsUser: z.number().int().nonnegative(),
     lowRelevance: z.number().int().nonnegative(),
     licenseCounts: z.record(z.string(), z.number().int().nonnegative()),
+    statusCounts: z.record(SceneVisualStatusSchema, z.number().int().nonnegative()),
   }).strict(),
 }).strict();
 export type ProjectVisuals = z.infer<typeof ProjectVisualsSchema>;
+
+export function deriveSceneVisualStatus(
+  selection: Pick<VisualSelection, "status"> & { candidateId: string } | null,
+  candidates: Pick<VisualCandidate, "id" | "localPath" | "sha256" | "actualWidth" | "actualHeight">[],
+  noVisual: boolean,
+  stageState: string | null | undefined,
+): import("../enums.js").SceneVisualStatus {
+  if (noVisual) return "SKIPPED";
+  if (stageState === "RUNNING") return "SEARCHING";
+  if (!selection) return "NO_VISUAL";
+  if (selection.status === "DISCOVERED" || selection.status === "REVIEW_REQUIRED" || selection.status === "REPLACED") {
+    return "REVIEW_REQUIRED";
+  }
+  if (selection.status === "APPROVED" || selection.status === "CUSTOM" || selection.status === "AI_GENERATED") {
+    const candidate = candidates.find((item) => item.id === selection.candidateId);
+    return candidate?.localPath && candidate.sha256 && candidate.actualWidth && candidate.actualHeight
+      ? "READY_FOR_RENDER"
+      : "APPROVED";
+  }
+  return "NO_VISUAL";
+}

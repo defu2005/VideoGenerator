@@ -58,6 +58,7 @@ const scenes: Scene[] = [
     narration: "First sentence. Second sentence.",
     visualNotes: "A sunrise",
     visualDescription: "A sunrise over a city skyline.",
+    noVisual: false,
     visualQueries: { primary: "sunrise city", alternatives: ["city lights"] },
     queryVariant: false,
     musicMood: "Curious",
@@ -82,6 +83,7 @@ const scenes: Scene[] = [
     narration: "A second scene.",
     visualNotes: "",
     visualDescription: "",
+    noVisual: false,
     visualQueries: { primary: "street", alternatives: [] },
     queryVariant: false,
     musicMood: "",
@@ -108,8 +110,17 @@ const emptyVisuals: ProjectVisuals = {
     candidateCount: 0,
     needsUser: true,
     lowRelevance: false,
+    status: "NO_VISUAL",
+    noVisual: false,
+    visualDescription: scene.visualDescription,
+    visualQueries: scene.visualQueries,
+    narration: scene.narration,
+    startSec: scene.startSec,
+    durationSec: scene.estDurationSec,
   })),
-  summary: { withImage: 0, needsUser: scenes.length, lowRelevance: 0, licenseCounts: {} },
+  summary: { withImage: 0, needsUser: scenes.length, lowRelevance: 0, licenseCounts: {}, statusCounts: {
+    NO_VISUAL: scenes.length, SEARCHING: 0, REVIEW_REQUIRED: 0, APPROVED: 0, READY_FOR_RENDER: 0, SKIPPED: 0,
+  } },
 };
 const pipeline: PipelineState = {
   projectId,
@@ -157,6 +168,12 @@ describe("SceneBoard", () => {
     expect(screen.getByRole("button", { name: "Move scene 1 right" })).toBeEnabled();
   });
 
+  it("opens Visual Review focused on the clicked scene image", async () => {
+    setup();
+    fireEvent.click(await screen.findByRole("button", { name: "Review visual for scene 1" }));
+    expect(screen.getByTestId("current-location")).toHaveTextContent(`/projects/${project.id}/visuals?scene=${scenes[0].id}`);
+  });
+
   it("shows a selected thumbnail, attribution badge and broken-image placeholder", async () => {
     const candidate: VisualCandidate = {
       id: "33333333-3333-4333-8333-333333333333",
@@ -196,10 +213,10 @@ describe("SceneBoard", () => {
     };
     const visuals: ProjectVisuals = {
       scenes: [
-        { sceneId: scenes[0].id, order: 0, selection: null, selectedCandidate: candidate, candidateCount: 1, needsUser: false, lowRelevance: true },
+        { ...emptyVisuals.scenes[0], selectedCandidate: candidate, candidateCount: 1, needsUser: false, lowRelevance: true },
         ...emptyVisuals.scenes.slice(1),
       ],
-      summary: { withImage: 1, needsUser: 1, lowRelevance: 1, licenseCounts: { CC_BY: 1 } },
+      summary: { ...emptyVisuals.summary, withImage: 1, needsUser: 1, lowRelevance: 1, licenseCounts: { CC_BY: 1 } },
     };
     setup(visuals);
     const image = await screen.findByRole("img", { name: "Sunrise over a city" });

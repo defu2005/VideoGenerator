@@ -113,6 +113,8 @@ export function usePipeline(projectId: string) {
         });
         void queryClient.invalidateQueries({ queryKey: projectKeys.detail(projectId) });
         void queryClient.invalidateQueries({ queryKey: projectKeys.dashboard });
+      } else if (event.type === "visual.updated") {
+        void queryClient.invalidateQueries({ queryKey: ["visuals", projectId] });
       }
       if (event.type !== "heartbeat") {
         scheduleRefetch();
@@ -123,6 +125,7 @@ export function usePipeline(projectId: string) {
     source.addEventListener("job.updated", onEvent as EventListener);
     source.addEventListener("stage.updated", onEvent as EventListener);
     source.addEventListener("project.updated", onEvent as EventListener);
+    source.addEventListener("visual.updated", onEvent as EventListener);
     source.addEventListener("open", onOpen);
     source.addEventListener("error", startPolling);
     return () => {

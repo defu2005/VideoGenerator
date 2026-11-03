@@ -23,6 +23,7 @@ export const SceneSchema = z.object({
   narration: z.string(),
   visualNotes: z.string(),
   visualDescription: z.string().default(""),
+  noVisual: z.boolean().default(false),
   visualQueries: VisualQueriesSchema,
   queryVariant: z.boolean().default(false),
   musicMood: z.string(),

@@ -51,6 +51,7 @@ describe("Video Agent MCP tools", () => {
     const tools = await client.listTools();
     const prompts = await client.listPrompts();
     expect(tools.tools.map((tool) => tool.name).sort()).toEqual([
+      "approve_scene_visual",
       "create_project",
       "get_llm_routes",
       "get_pipeline",
@@ -66,6 +67,7 @@ describe("Video Agent MCP tools", () => {
       "save_research",
       "save_script",
       "save_story",
+      "select_scene_visual",
     ]);
     expect(prompts.prompts.map((prompt) => prompt.name).sort()).toEqual([
       "write_research",
@@ -100,6 +102,8 @@ describe("Video Agent MCP tools", () => {
     const sceneId = "22222222-2222-4222-8222-222222222222";
     const fetchImpl = vi.fn(async () => jsonResponse({
       selection: { candidateId: "33333333-3333-4333-8333-333333333333", status: "REPLACED" },
+      status: "NO_VISUAL",
+      localFile: null,
       candidates: [{
         id: "33333333-3333-4333-8333-333333333333",
         projectId,
@@ -142,6 +146,8 @@ describe("Video Agent MCP tools", () => {
     expect(JSON.parse(resultText(result))).toEqual([{
       sceneId,
       selection: { candidateId: "33333333-3333-4333-8333-333333333333", status: "REPLACED" },
+      status: "NO_VISUAL",
+      localFile: null,
       candidates: [{
         title: "River",
         provider: "wikimedia",

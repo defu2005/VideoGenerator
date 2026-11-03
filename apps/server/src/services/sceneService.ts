@@ -23,6 +23,7 @@ type SceneRow = {
   narration: string;
   visual_notes: string;
   visual_description: string;
+  no_visual: number;
   visual_queries: string;
   music_mood: string;
   energy: Scene["energy"];
@@ -61,6 +62,7 @@ function fromRow(row: SceneRow): Scene {
     narration: row.narration,
     visualNotes: row.visual_notes,
     visualDescription: row.visual_description,
+    noVisual: Boolean(row.no_visual),
     visualQueries: {
       primary: storedVisualQueries.primary,
       alternatives: storedVisualQueries.alternatives,

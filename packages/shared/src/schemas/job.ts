@@ -92,6 +92,7 @@ export const PipelineEventSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("job.updated"), projectId: z.string().uuid(), data: JobSchema, at: z.string().datetime({ offset: true }) }),
   z.object({ type: z.literal("stage.updated"), projectId: z.string().uuid(), data: StageRecordSchema, at: z.string().datetime({ offset: true }) }),
   z.object({ type: z.literal("project.updated"), projectId: z.string().uuid(), data: ProjectSchema, at: z.string().datetime({ offset: true }) }),
+  z.object({ type: z.literal("visual.updated"), projectId: z.string().uuid(), data: z.object({ sceneId: z.string().uuid(), action: z.string() }).strict(), at: z.string().datetime({ offset: true }) }),
   z.object({ type: z.literal("heartbeat"), projectId: z.string().uuid(), data: z.null(), at: z.string().datetime({ offset: true }) }),
 ]);
 export type PipelineEvent = z.infer<typeof PipelineEventSchema>;

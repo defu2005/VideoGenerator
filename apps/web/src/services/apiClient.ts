@@ -20,7 +20,7 @@ export async function apiRequest<T>(
 ): Promise<T> {
   const headers = new Headers(options.headers);
   headers.set("Accept", "application/json");
-  if (options.body !== undefined) headers.set("Content-Type", "application/json");
+  if (typeof options.body === "string") headers.set("Content-Type", "application/json");
 
   const response = await fetch(`${API_BASE_URL}${path}`, { ...options, headers });
   if (response.status === 204) return undefined as T;

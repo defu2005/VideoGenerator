@@ -82,6 +82,19 @@ export class VideoAgentApiClient {
     return this.request(`/api/projects/${encodeURIComponent(projectId)}/scenes/${encodeURIComponent(sceneId)}/visuals`);
   }
 
+  approveSceneVisual(projectId: string, sceneId: string): Promise<SceneVisuals> {
+    return this.request(`/api/projects/${encodeURIComponent(projectId)}/scenes/${encodeURIComponent(sceneId)}/visuals/approve`, {
+      method: "POST",
+    });
+  }
+
+  selectSceneVisual(projectId: string, sceneId: string, candidateId: string): Promise<SceneVisuals> {
+    return this.request(`/api/projects/${encodeURIComponent(projectId)}/scenes/${encodeURIComponent(sceneId)}/visuals/select`, {
+      method: "POST",
+      body: JSON.stringify({ candidateId }),
+    });
+  }
+
   getLlmRoutes(projectId: string): Promise<{
     routes: Partial<Record<LlmTaskId, (LlmRoute & {
       model: string;

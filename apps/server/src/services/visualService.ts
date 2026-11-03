@@ -1,5 +1,6 @@
 import { createHash, randomUUID } from "node:crypto";
 import {
+  deriveSceneVisualStatus,
   ProjectVisualsSchema,
   ScriptSchema,
   SceneVisualsSchema,
@@ -22,6 +23,10 @@ import type { FastifyBaseLogger } from "fastify";
 import type { JobRepository } from "../jobs/jobRepository.js";
 import type { AppConfig } from "../lib/config.js";
 import { AppError } from "../lib/errors.js";
+import { ImageDownloadError, ImageStore, isVisualFileName, parseImage, type StoredImage } from "./imageStore.js";
+import { projectDir } from "../storage/paths.js";
+import { existsSync } from "node:fs";
+import { join } from "node:path";
 import { ImageProviderError } from "../providers/images/http.js";
 import { TokenBucketRateLimiter } from "../providers/images/rateLimiter.js";
 import type {
@@ -47,6 +52,7 @@ type SceneRow = {
   narration: string;
   visual_notes: string;
   visual_description: string;
+  no_visual: number;
   visual_queries: string;
 };
 
@@ -74,6 +80,7 @@ const protectedSelectionStatuses = new Set(["APPROVED", "CUSTOM", "REPLACED"]);
 export class VisualService {
   private readonly limiter: TokenBucketRateLimiter;
   private readonly registry: ImageProviderRegistry;
+  private readonly imageStore: ImageStore;
 
   constructor(
     private readonly sqlite: Database.Database,
@@ -83,6 +90,7 @@ export class VisualService {
     dependencies: {
       providers?: ImageSearchProvider[];
       limiter?: TokenBucketRateLimiter;
+      imageStore?: ImageStore;
     } = {},
   ) {
     this.registry = new ImageProviderRegistry(config, dependencies.providers);
@@ -91,27 +99,35 @@ export class VisualService {
       openverse: config.IMAGE_SEARCH_PER_MINUTE_OPENVERSE,
       pexels: config.IMAGE_SEARCH_PER_MINUTE_PEXELS,
     });
+    this.imageStore = dependencies.imageStore ?? new ImageStore(config.DATA_DIR, config.IMAGE_SEARCH_USER_AGENT);
   }
 
   getProjectVisuals(projectId: string) {
     this.requireProject(projectId);
-    const sceneRows = this.sqlite.prepare(
-      "SELECT id, \"order\" FROM scenes WHERE project_id = ? ORDER BY \"order\"",
-    ).all(projectId) as { id: string; order: number }[];
-    const scenes = sceneRows.map((scene) => {
+    const searchState = this.repository.getStage(projectId, "VISUAL_SEARCH").state;
+    const scenes = this.loadScenes(projectId).map((scene) => {
       const selection = this.getSelection(projectId, scene.id);
       const selectedCandidate = selection ? this.findCandidate(selection.candidateId) : null;
       const candidateCount = this.sqlite.prepare(
         "SELECT COUNT(*) AS count FROM visual_candidates WHERE project_id = ? AND scene_id = ? AND discarded_at IS NULL",
       ).get(projectId, scene.id) as { count: number };
+      const candidates = selectedCandidate ? [selectedCandidate] : [];
+      const status = deriveSceneVisualStatus(selection, candidates, scene.noVisual, searchState);
       return {
         sceneId: scene.id,
         order: scene.order,
         selection,
         selectedCandidate,
         candidateCount: candidateCount.count,
-        needsUser: !selectedCandidate,
+        needsUser: status === "NO_VISUAL" || status === "REVIEW_REQUIRED",
         lowRelevance: selectedCandidate?.scoreBreakdown.lowRelevance === true,
+        status,
+        noVisual: scene.noVisual,
+        visualDescription: scene.visualDescription,
+        visualQueries: scene.visualQueries,
+        narration: scene.narration,
+        startSec: scene.startSec,
+        durationSec: scene.durationOverrideSec ?? scene.estDurationSec,
       };
     });
     const licenseCounts: Record<string, number> = {};
@@ -126,6 +142,10 @@ export class VisualService {
         needsUser: scenes.filter((scene) => scene.needsUser).length,
         lowRelevance: scenes.filter((scene) => scene.lowRelevance).length,
         licenseCounts,
+        statusCounts: Object.fromEntries(
+          ["NO_VISUAL", "SEARCHING", "REVIEW_REQUIRED", "APPROVED", "READY_FOR_RENDER", "SKIPPED"]
+            .map((status) => [status, scenes.filter((scene) => scene.status === status).length]),
+        ),
       },
     });
   }
@@ -136,9 +156,17 @@ export class VisualService {
     const rows = this.sqlite.prepare(
       `SELECT * FROM visual_candidates WHERE project_id = ? AND scene_id = ?${includeDiscarded ? "" : " AND discarded_at IS NULL"} ORDER BY rank, created_at`,
     ).all(projectId, sceneId) as Record<string, unknown>[];
+    const candidates = rows.map((row) => this.candidateFromRow(row));
     return SceneVisualsSchema.parse({
       selection,
-      candidates: rows.map((row) => this.candidateFromRow(row)),
+      candidates,
+      status: deriveSceneVisualStatus(
+        selection,
+        candidates,
+        Boolean((this.sqlite.prepare("SELECT no_visual FROM scenes WHERE id = ?").get(sceneId) as { no_visual: number }).no_visual),
+        this.repository.getStage(projectId, "VISUAL_SEARCH").state,
+      ),
+      noVisual: Boolean((this.sqlite.prepare("SELECT no_visual FROM scenes WHERE id = ?").get(sceneId) as { no_visual: number }).no_visual),
     });
   }
 
@@ -158,7 +186,7 @@ export class VisualService {
     const combined = dedupeCandidates([...current, ...results.map((result) => this.toCandidate(result, project, scene, query, ""))]);
     const ranked = this.rankVisuals(
       combined,
-      scene.visualQueries.primary,
+      query,
       scene.visualDescription || scene.visualNotes,
       project.settings.language,
       aspectNumber(project.settings.aspectRatio),
@@ -167,6 +195,7 @@ export class VisualService {
       .slice(0, 24);
     this.repository.atomic(() => {
       for (const [rank, candidate] of ranked.entries()) this.saveCandidate({ ...candidate, rank });
+      this.repository.emitVisualUpdated(projectId, sceneId, "searched");
     });
     return {
       ...this.getSceneVisuals(projectId, sceneId),
@@ -191,11 +220,13 @@ export class VisualService {
         status: "REPLACED",
         selectedBy: "USER",
         motion: null,
-        reviewedAt: now,
+        reviewedAt: null,
         createdAt: now,
         updatedAt: now,
       });
+      this.sqlite.prepare("UPDATE scenes SET no_visual = 0 WHERE id = ?").run(sceneId);
       this.markTimelineStale(projectId);
+      this.repository.emitVisualUpdated(projectId, sceneId, "selected");
     });
     return this.getSceneVisuals(projectId, sceneId);
   }
@@ -225,10 +256,323 @@ export class VisualService {
         } else {
           this.sqlite.prepare("DELETE FROM visual_selections WHERE scene_id = ? AND slot = 0").run(sceneId);
         }
+        this.sqlite.prepare("UPDATE scenes SET no_visual = 0 WHERE id = ?").run(sceneId);
         this.markTimelineStale(projectId);
       }
+      this.repository.emitVisualUpdated(projectId, sceneId, "discarded");
     });
     return this.getSceneVisuals(projectId, sceneId, true);
+  }
+
+  rejectSceneVisual(projectId: string, sceneId: string) {
+    this.requireScene(projectId, sceneId);
+    const selection = this.getSelection(projectId, sceneId);
+    if (!selection) throw new AppError(404, "VISUAL_SELECTION_NOT_FOUND", "This scene has no selected image.");
+    const candidate = this.findCandidate(selection.candidateId);
+    if (!candidate || candidate.projectId !== projectId || candidate.sceneId !== sceneId) {
+      throw new AppError(404, "VISUAL_CANDIDATE_NOT_FOUND", "Selected visual candidate not found.");
+    }
+    const now = new Date().toISOString();
+    this.repository.atomic(() => {
+      this.sqlite.prepare("UPDATE visual_candidates SET discarded_at = ? WHERE id = ?").run(now, candidate.id);
+      const next = this.findNextDistinctCandidate(projectId, sceneId, candidate.id);
+      if (next) {
+        this.upsertSelection({
+          ...selection,
+          candidateId: next.id,
+          status: "REVIEW_REQUIRED",
+          selectedBy: "AGENT",
+          reviewedAt: null,
+          updatedAt: now,
+        });
+      } else {
+        this.sqlite.prepare("DELETE FROM visual_selections WHERE project_id = ? AND scene_id = ? AND slot = 0")
+          .run(projectId, sceneId);
+      }
+      this.sqlite.prepare("UPDATE scenes SET no_visual = 0 WHERE project_id = ? AND id = ?").run(projectId, sceneId);
+      this.markTimelineStale(projectId);
+      this.repository.emitVisualUpdated(projectId, sceneId, next ? "rejected-replaced" : "rejected");
+    });
+    return this.getSceneVisuals(projectId, sceneId);
+  }
+
+  async approveScene(projectId: string, sceneId: string, signal?: AbortSignal) {
+    this.requireScene(projectId, sceneId);
+    const selection = this.getSelection(projectId, sceneId);
+    if (!selection) throw new AppError(404, "VISUAL_SELECTION_NOT_FOUND", "This scene has no selected image.");
+    const candidate = this.findCandidate(selection.candidateId);
+    if (!candidate || candidate.projectId !== projectId || candidate.sceneId !== sceneId) {
+      throw new AppError(404, "VISUAL_CANDIDATE_NOT_FOUND", "Selected visual candidate not found.");
+    }
+    return this.approveSelected(projectId, sceneId, selection, candidate, signal);
+  }
+
+  async approveAll(projectId: string, signal?: AbortSignal) {
+    this.requireProject(projectId);
+    const scenes = this.loadScenes(projectId);
+    const eligible = scenes.flatMap((scene) => {
+      const selection = this.getSelection(projectId, scene.id);
+      if (!selection || !["DISCOVERED", "REVIEW_REQUIRED", "REPLACED"].includes(selection.status)) return [];
+      return [{ sceneId: scene.id, selection }];
+    });
+    let approved = 0;
+    const failed: { sceneId: string; reason: string }[] = [];
+    for (const [index, item] of eligible.entries()) {
+      if (signal?.aborted) throw signal.reason ?? new Error("Visual approval was aborted");
+      try {
+        await this.approveScene(projectId, item.sceneId, signal);
+        approved += 1;
+      } catch (error) {
+        failed.push({
+          sceneId: item.sceneId,
+          reason: error instanceof Error ? error.message : String(error),
+        });
+      }
+      this.repository.emitVisualUpdated(projectId, item.sceneId, `approve-progress:${index + 1}/${eligible.length}`);
+    }
+    return { approved, failed };
+  }
+
+  async addCustomUrl(
+    projectId: string,
+    sceneId: string,
+    input: { url: string; title?: string; author?: string; license?: string },
+  ) {
+    this.requireScene(projectId, sceneId);
+    let stored: StoredImage;
+    try {
+      stored = await this.imageStore.download(projectId, input.url);
+    } catch (error) {
+      throw downloadError(error);
+    }
+    const license = makeLicense({
+      kind: input.license ? "USER_PROVIDED" : "UNKNOWN",
+      name: input.license ?? "",
+      author: input.author ?? "",
+      evidence: input.license || input.author ? "user" : "none",
+    });
+    return this.saveCustomSelection(projectId, sceneId, {
+      origin: "CUSTOM_URL",
+      url: input.url,
+      title: input.title?.trim() || "User-provided image",
+      license,
+      stored,
+    });
+  }
+
+  addUpload(projectId: string, sceneId: string, bytes: Buffer, fileName?: string, expectedMime?: string) {
+    this.requireScene(projectId, sceneId);
+    let stored: StoredImage;
+    try {
+      const parsed = parseImage(bytes);
+      if (expectedMime && parsed.mimeType !== expectedMime.toLowerCase()) {
+        throw new ImageDownloadError(`Uploaded bytes are ${parsed.mimeType}, not the declared ${expectedMime}.`);
+      }
+      stored = this.imageStore.storeBuffer(projectId, bytes);
+    } catch (error) {
+      throw downloadError(error);
+    }
+    return this.saveCustomSelection(projectId, sceneId, {
+      origin: "UPLOAD",
+      url: `https://upload.local.invalid/${stored.sha256}`,
+      title: fileName?.trim().slice(0, 200) || "Uploaded image",
+      license: makeLicense({ kind: "USER_PROVIDED", name: "User-provided", evidence: "user" }),
+      stored,
+    });
+  }
+
+  removeSceneVisual(projectId: string, sceneId: string) {
+    this.requireScene(projectId, sceneId);
+    this.repository.atomic(() => {
+      this.sqlite.prepare("DELETE FROM visual_selections WHERE project_id = ? AND scene_id = ? AND slot = 0")
+        .run(projectId, sceneId);
+      this.sqlite.prepare("UPDATE scenes SET no_visual = 1 WHERE project_id = ? AND id = ?").run(projectId, sceneId);
+      this.markTimelineStale(projectId);
+      this.repository.emitVisualUpdated(projectId, sceneId, "removed");
+    });
+    return this.getSceneVisuals(projectId, sceneId);
+  }
+
+  patchSceneVisualQuery(
+    projectId: string,
+    sceneId: string,
+    input: { visualQueries?: { primary: string; alternatives: string[] }; visualDescription?: string },
+  ) {
+    const scene = this.requireScene(projectId, sceneId);
+    this.repository.atomic(() => {
+      this.sqlite.prepare(
+        "UPDATE scenes SET visual_queries = ?, visual_description = ?, edited = 1, updated_at = ? WHERE project_id = ? AND id = ?",
+      ).run(
+        JSON.stringify(input.visualQueries ?? scene.visualQueries),
+        input.visualDescription ?? scene.visualDescription,
+        new Date().toISOString(),
+        projectId,
+        sceneId,
+      );
+      this.repository.emitVisualUpdated(projectId, sceneId, "query-updated");
+    });
+    return this.getSceneVisuals(projectId, sceneId);
+  }
+
+  canApproveVisualReview(projectId: string): { allowed: true } | { allowed: false; message: string } {
+    const visuals = this.getProjectVisuals(projectId);
+    const needsAttention = visuals.scenes.filter((scene) => scene.status !== "READY_FOR_RENDER" && scene.status !== "SKIPPED").length;
+    return needsAttention === 0
+      ? { allowed: true }
+      : { allowed: false, message: `${needsAttention} scene${needsAttention === 1 ? "" : "s"} need attention before visual review can be approved.` };
+  }
+
+  assertSceneExists(projectId: string, sceneId: string): void {
+    this.requireScene(projectId, sceneId);
+  }
+
+  getVisualFilePath(projectId: string, fileName: string): { path: string; contentType: string } {
+    this.requireProject(projectId);
+    if (!isVisualFileName(fileName)) throw new AppError(404, "VISUAL_FILE_NOT_FOUND", "Visual file not found.");
+    const filePath = join(projectDir(this.config.DATA_DIR, projectId), "visuals", fileName);
+    if (!existsSync(filePath)) throw new AppError(404, "VISUAL_FILE_NOT_FOUND", "Visual file not found.");
+    const extension = fileName.split(".").at(-1);
+    return {
+      path: filePath,
+      contentType: extension === "jpg" ? "image/jpeg" : extension === "webp" ? "image/webp" : `image/${extension}`,
+    };
+  }
+
+  private async approveSelected(
+    projectId: string,
+    sceneId: string,
+    selection: VisualSelection,
+    candidate: VisualCandidate,
+    signal?: AbortSignal,
+  ) {
+    if (candidate.localPath && candidate.sha256 && candidate.actualWidth && candidate.actualHeight) {
+      const now = new Date().toISOString();
+      this.repository.atomic(() => {
+        this.upsertSelection({ ...selection, status: "APPROVED", reviewedAt: now, updatedAt: now });
+        this.markTimelineStale(projectId);
+        this.repository.emitVisualUpdated(projectId, sceneId, "approved");
+      });
+      return this.getSceneVisuals(projectId, sceneId);
+    }
+    let stored: StoredImage;
+    try {
+      stored = await this.imageStore.download(projectId, downloadUrl(candidate), signal);
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : String(error);
+      this.sqlite.prepare("UPDATE visual_candidates SET download_error = ? WHERE id = ?").run(reason, candidate.id);
+      this.repository.emitVisualUpdated(projectId, sceneId, "download-failed");
+      throw new AppError(422, "IMAGE_DOWNLOAD_FAILED", reason);
+    }
+    const now = new Date().toISOString();
+    this.repository.atomic(() => {
+      this.updateCandidateDownload(candidate.id, stored);
+      this.upsertSelection({
+        ...selection,
+        status: "APPROVED",
+        reviewedAt: now,
+        updatedAt: now,
+      });
+      this.markTimelineStale(projectId);
+      this.repository.emitVisualUpdated(projectId, sceneId, "approved");
+    });
+    return this.getSceneVisuals(projectId, sceneId);
+  }
+
+  private saveCustomSelection(
+    projectId: string,
+    sceneId: string,
+    input: { origin: "CUSTOM_URL" | "UPLOAD"; url: string; title: string; license: VisualCandidate["license"]; stored: StoredImage },
+  ) {
+    const scene = this.requireScene(projectId, sceneId);
+    const now = input.stored.downloadedAt;
+    const candidate = VisualCandidateSchema.parse({
+      id: randomUUID(),
+      projectId,
+      sceneId,
+      origin: input.origin,
+      provider: "custom",
+      providerItemId: `${input.origin.toLowerCase()}:${input.stored.sha256}`,
+      query: scene.visualQueries.primary,
+      title: input.title,
+      description: "",
+      tags: [],
+      previewUrl: input.url,
+      imageUrl: input.url,
+      sourceUrl: input.url,
+      sourceSite: input.origin === "UPLOAD" ? "User upload" : "User-provided URL",
+      width: input.stored.width,
+      height: input.stored.height,
+      aspectRatio: input.stored.width / input.stored.height,
+      fileType: input.stored.fileType,
+      watermark: "UNKNOWN",
+      relevanceScore: 1,
+      scoreBreakdown: { keyword: 1, resolution: 1, aspect: 1, license: 1, watermark: 0, providerPosition: 1 },
+      license: input.license,
+      rank: 0,
+      discardedAt: null,
+      createdAt: now,
+      localPath: input.stored.localPath,
+      sha256: input.stored.sha256,
+      bytes: input.stored.bytes,
+      actualWidth: input.stored.width,
+      actualHeight: input.stored.height,
+      downloadedAt: now,
+      downloadError: null,
+    });
+    this.repository.atomic(() => {
+      this.saveCandidate(candidate);
+      const saved = this.sqlite.prepare(
+        "SELECT id FROM visual_candidates WHERE scene_id = ? AND provider = 'custom' AND provider_item_id = ?",
+      ).get(sceneId, candidate.providerItemId) as { id: string };
+      this.upsertSelection({
+        id: randomUUID(),
+        projectId,
+        sceneId,
+        slot: 0,
+        candidateId: saved.id,
+        status: "CUSTOM",
+        selectedBy: "USER",
+        motion: null,
+        reviewedAt: now,
+        createdAt: now,
+        updatedAt: now,
+      });
+      this.sqlite.prepare("UPDATE scenes SET no_visual = 0 WHERE project_id = ? AND id = ?").run(projectId, sceneId);
+      this.markTimelineStale(projectId);
+      this.repository.emitVisualUpdated(projectId, sceneId, "custom-selected");
+    });
+    return this.getSceneVisuals(projectId, sceneId);
+  }
+
+  private updateCandidateDownload(candidateId: string, stored: StoredImage): void {
+    this.sqlite.prepare(
+      "UPDATE visual_candidates SET local_path = ?, sha256 = ?, bytes = ?, actual_width = ?, actual_height = ?, file_type = ?, downloaded_at = ?, download_error = NULL WHERE id = ?",
+    ).run(
+      stored.localPath,
+      stored.sha256,
+      stored.bytes,
+      stored.width,
+      stored.height,
+      stored.fileType,
+      stored.downloadedAt,
+      candidateId,
+    );
+  }
+
+  private findNextDistinctCandidate(projectId: string, sceneId: string, rejectedId: string): VisualCandidate | null {
+    const row = this.sqlite.prepare(
+      `SELECT candidate.* FROM visual_candidates candidate
+       WHERE candidate.project_id = ? AND candidate.scene_id = ? AND candidate.id != ? AND candidate.discarded_at IS NULL
+       AND NOT EXISTS (
+         SELECT 1 FROM visual_selections selected
+         JOIN visual_candidates used ON used.id = selected.candidate_id
+         WHERE selected.project_id = candidate.project_id AND selected.scene_id != candidate.scene_id
+         AND (used.source_url = candidate.source_url
+           OR (used.provider = candidate.provider AND used.provider_item_id = candidate.provider_item_id))
+       )
+       ORDER BY candidate.rank, candidate.created_at LIMIT 1`,
+    ).get(projectId, sceneId, rejectedId) as Record<string, unknown> | undefined;
+    return row ? this.candidateFromRow(row) : null;
   }
 
   async executeStage(context: StageContext, llmProviders: LlmProviderRegistry): Promise<StageResult> {
@@ -697,7 +1041,7 @@ export class VisualService {
 
   private loadScenes(projectId: string): Scene[] {
     const rows = this.sqlite.prepare(
-      "SELECT id, project_id, \"order\", kind, section_id, label, narration, visual_notes, visual_description, visual_queries, music_mood, energy, est_duration_sec, duration_override_sec, start_sec, transition_note, origin, edited, input_hash, created_at, updated_at FROM scenes WHERE project_id = ? ORDER BY \"order\"",
+      "SELECT id, project_id, \"order\", kind, section_id, label, narration, visual_notes, visual_description, no_visual, visual_queries, music_mood, energy, est_duration_sec, duration_override_sec, start_sec, transition_note, origin, edited, input_hash, created_at, updated_at FROM scenes WHERE project_id = ? ORDER BY \"order\"",
     ).all(projectId) as (SceneRow & Record<string, unknown>)[];
     return rows.map((row) => {
       const queries = StoredVisualQueriesSchema.parse(JSON.parse(row.visual_queries) as unknown);
@@ -711,6 +1055,7 @@ export class VisualService {
         narration: row.narration,
         visualNotes: row.visual_notes,
         visualDescription: row.visual_description,
+        noVisual: Boolean(row.no_visual),
         visualQueries: { primary: queries.primary, alternatives: queries.alternatives },
         queryVariant: queries.queryVariant,
         musicMood: row.music_mood as string,
@@ -797,8 +1142,8 @@ export class VisualService {
     ).get(candidate.sceneId, candidate.provider, candidate.providerItemId) as { id: string } | undefined;
     const id = existing?.id ?? candidate.id;
     this.sqlite.prepare(
-      `INSERT INTO visual_candidates (id, project_id, scene_id, origin, provider, provider_item_id, source_provider, query, title, description, tags, preview_url, image_url, source_url, source_site, width, height, aspect_ratio, file_type, watermark, relevance_score, score_breakdown, license, rank, discarded_at, created_at, search_hash)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `INSERT INTO visual_candidates (id, project_id, scene_id, origin, provider, provider_item_id, source_provider, query, title, description, tags, preview_url, image_url, source_url, source_site, width, height, aspect_ratio, file_type, watermark, relevance_score, score_breakdown, license, rank, discarded_at, created_at, search_hash, local_path, sha256, bytes, actual_width, actual_height, downloaded_at, download_error)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT(id) DO UPDATE SET query=excluded.query, title=excluded.title, description=excluded.description, tags=excluded.tags,
        preview_url=excluded.preview_url, image_url=excluded.image_url, source_url=excluded.source_url, source_site=excluded.source_site,
        width=excluded.width, height=excluded.height, aspect_ratio=excluded.aspect_ratio, file_type=excluded.file_type,
@@ -811,6 +1156,9 @@ export class VisualService {
       candidate.aspectRatio, candidate.fileType, candidate.watermark, candidate.relevanceScore,
       JSON.stringify(candidate.scoreBreakdown), JSON.stringify(candidate.license), candidate.rank, candidate.discardedAt,
       candidate.createdAt, candidate.searchHash ?? "",
+      candidate.localPath ?? null, candidate.sha256 ?? null, candidate.bytes ?? null,
+      candidate.actualWidth ?? null, candidate.actualHeight ?? null, candidate.downloadedAt ?? null,
+      candidate.downloadError ?? null,
     );
   }
 
@@ -843,6 +1191,13 @@ export class VisualService {
       discardedAt: row.discarded_at,
       createdAt: row.created_at,
       searchHash: row.search_hash,
+      localPath: row.local_path ?? null,
+      sha256: row.sha256 ?? null,
+      bytes: row.bytes ?? null,
+      actualWidth: row.actual_width ?? null,
+      actualHeight: row.actual_height ?? null,
+      downloadedAt: row.downloaded_at ?? null,
+      downloadError: row.download_error ?? null,
     });
   }
 
@@ -1007,4 +1362,34 @@ function toNormalizedCandidate(
   candidate: NormalizedImageResult & { relevanceScore: number; scoreBreakdown: VisualCandidate["scoreBreakdown"]; rank: number },
 ): NormalizedImageResult {
   return candidate;
+}
+
+function downloadUrl(candidate: VisualCandidate): string {
+  if (candidate.provider === "pexels") return candidate.imageUrl;
+  if (candidate.fileType.toLowerCase() === "svg"
+    || Math.max(candidate.width, candidate.height) > 2560) return candidate.previewUrl;
+  return candidate.imageUrl;
+}
+
+function makeLicense(input: {
+  kind: VisualCandidate["license"]["kind"];
+  name: string;
+  author?: string;
+  evidence: VisualCandidate["license"]["evidence"];
+}): VisualCandidate["license"] {
+  return {
+    kind: input.kind,
+    name: input.name,
+    url: null,
+    author: input.author ?? null,
+    authorUrl: null,
+    attributionRequired: input.kind === "USER_PROVIDED" && Boolean(input.author),
+    attributionText: input.author ? `Image provided by ${input.author}` : "",
+    evidence: input.evidence,
+  };
+}
+
+function downloadError(error: unknown): AppError {
+  const reason = error instanceof Error ? error.message : String(error);
+  return new AppError(422, "IMAGE_DOWNLOAD_FAILED", reason);
 }

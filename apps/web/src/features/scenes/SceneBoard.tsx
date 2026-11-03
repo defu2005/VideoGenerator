@@ -1,4 +1,5 @@
 import { resolveBudget, type Project, type Scene } from "@vg/shared";
+import { useNavigate } from "react-router-dom";
 import { useEffect, useRef, useState } from "react";
 import { ConfirmDialog } from "../../components/ConfirmDialog";
 import { ErrorState } from "../../components/ErrorState";
@@ -11,6 +12,7 @@ import { SceneCard } from "./SceneCard";
 import { SceneEditor } from "./SceneEditor";
 
 export function SceneBoard({ project }: { project: Project }) {
+  const navigate = useNavigate();
   const scenesQuery = useScenes(project.id);
   const visualsQuery = useVisuals(project.id);
   const pipeline = usePipeline(project.id);
@@ -117,6 +119,7 @@ export function SceneBoard({ project }: { project: Project }) {
               <SceneCard
                 key={scene.id}
                 scene={scene}
+                projectId={project.id}
                 visual={visualsQuery.data?.scenes.find((item) => item.sceneId === scene.id)}
                 aspectRatio={project.settings.aspectRatio}
                 count={summary.scenes.length}
@@ -126,6 +129,7 @@ export function SceneBoard({ project }: { project: Project }) {
                   setEditorDirty(false);
                   setSelectedId(scene.id);
                 }}
+                onReviewVisual={() => navigate(`/projects/${project.id}/visuals?scene=${scene.id}`)}
                 onDragStart={(event) => {
                   event.dataTransfer.setData("text/plain", scene.id);
                   event.dataTransfer.effectAllowed = "move";

@@ -50,6 +50,17 @@ export const VISUAL_STATUSES = [
 export const VisualStatusSchema = z.enum(VISUAL_STATUSES);
 export type VisualStatus = z.infer<typeof VisualStatusSchema>;
 
+export const SCENE_VISUAL_STATUSES = [
+  "NO_VISUAL",
+  "SEARCHING",
+  "REVIEW_REQUIRED",
+  "APPROVED",
+  "READY_FOR_RENDER",
+  "SKIPPED",
+] as const;
+export const SceneVisualStatusSchema = z.enum(SCENE_VISUAL_STATUSES);
+export type SceneVisualStatus = z.infer<typeof SceneVisualStatusSchema>;
+
 export const CANDIDATE_ORIGINS = ["SEARCH", "CUSTOM_URL", "UPLOAD", "AI_GENERATED"] as const;
 export const CandidateOriginSchema = z.enum(CANDIDATE_ORIGINS);
 export type CandidateOrigin = z.infer<typeof CandidateOriginSchema>;

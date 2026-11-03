@@ -10,7 +10,9 @@ export class VisualSearchExecutor implements StageExecutor {
     private readonly llmProviders: LlmProviderRegistry,
   ) {}
 
-  run(context: StageContext): Promise<StageResult> {
-    return this.visuals.executeStage(context, this.llmProviders);
+  async run(context: StageContext): Promise<StageResult> {
+    const result = await this.visuals.executeStage(context, this.llmProviders);
+    if (context.project.mode === "AUTO") await this.visuals.approveAll(context.project.id, context.signal);
+    return result;
   }
 }

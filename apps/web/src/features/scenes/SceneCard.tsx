@@ -1,5 +1,6 @@
 import type { ProjectVisuals, Scene } from "@vg/shared";
 import { useEffect, useState } from "react";
+import { localVisualFileUrl } from "../../services/visualsApi";
 
 export function sceneTimecode(seconds: number): string {
   const total = Math.max(0, Math.floor(seconds));
@@ -8,21 +9,25 @@ export function sceneTimecode(seconds: number): string {
 
 export function SceneCard({
   scene,
+  projectId,
   visual,
   aspectRatio,
   count,
   active,
   onSelect,
+  onReviewVisual,
   onDragStart,
   onDrop,
   onMove,
 }: {
   scene: Scene;
+  projectId: string;
   visual?: ProjectVisuals["scenes"][number];
   aspectRatio: "16:9" | "9:16" | "1:1";
   count: number;
   active: boolean;
   onSelect: () => void;
+  onReviewVisual: () => void;
   onDragStart: (event: React.DragEvent<HTMLElement>) => void;
   onDrop: (event: React.DragEvent<HTMLElement>) => void;
   onMove: (direction: -1 | 1) => void;
@@ -49,26 +54,32 @@ export function SceneCard({
       onDrop={onDrop}
       data-scene-id={scene.id}
     >
-      <button className="scene-card-open" type="button" onClick={onSelect} aria-label={`Edit scene ${scene.order + 1}: ${scene.label}`}>
-        <div className="scene-image-box" style={{ aspectRatio: ratio }}>
-          {candidate && !imageFailed ? (
-            <img
-              className="scene-image"
-              src={candidate.previewUrl}
-              loading="lazy"
-              referrerPolicy="no-referrer"
-              alt={candidate.title}
-              onError={() => setImageFailed(true)}
-            />
-          ) : (
-            <div className="scene-image-placeholder">
-              {imageFailed
-                ? `${candidate?.provider ?? "Image"} · Ảnh không tải được`
-                : visual?.needsUser ? "Cần chọn ảnh" : "Ảnh sẽ có ở bước Visual"}
-            </div>
-          )}
-        </div>
-        {license && <span className={`scene-license-badge ${licenseClass}`}>
+      <button
+        className="scene-image-box scene-image-review"
+        style={{ aspectRatio: ratio }}
+        type="button"
+        onClick={onReviewVisual}
+        aria-label={`Review visual for scene ${scene.order + 1}`}
+      >
+        {candidate && !imageFailed ? (
+          <img
+            className="scene-image"
+            src={candidate.localPath ? localVisualFileUrl(projectId, candidate.localPath) : candidate.previewUrl}
+            loading="lazy"
+            referrerPolicy="no-referrer"
+            alt={candidate.title}
+            onError={() => setImageFailed(true)}
+          />
+        ) : (
+          <span className="scene-image-placeholder">
+            {imageFailed
+              ? `${candidate?.provider ?? "Image"} · Ảnh không tải được`
+              : visual?.needsUser ? "Cần chọn ảnh" : "Ảnh sẽ có ở bước Visual"}
+          </span>
+        )}
+        <span className="scene-visual-status">{visual?.status?.replaceAll("_", " ") ?? "NO VISUAL"}</span>
+      </button>
+      {license && <span className={`scene-license-badge ${licenseClass}`}>
           {nonCommercial
             ? "Non-commercial"
             : license.kind === "CC0" ? "CC0"
@@ -76,8 +87,9 @@ export function SceneCard({
                 : license.kind === "UNKNOWN" ? "Unknown — review"
                   : license.kind === "ALL_RIGHTS_RESERVED" ? "All rights reserved"
                     : license.attributionRequired ? "Attribution required" : license.name}
-        </span>}
-        {visual?.lowRelevance && <span className="scene-low-relevance-badge">Ít liên quan — nên chọn lại</span>}
+      </span>}
+      {visual?.lowRelevance && <span className="scene-low-relevance-badge">Ít liên quan — nên chọn lại</span>}
+      <button className="scene-card-open" type="button" onClick={onSelect} aria-label={`Edit scene ${scene.order + 1}: ${scene.label}`}>
         <div className="scene-card-heading">
           <strong>Scene {scene.order + 1}</strong>
           <time>{sceneTimecode(scene.startSec)}–{sceneTimecode(scene.startSec + duration)}</time>

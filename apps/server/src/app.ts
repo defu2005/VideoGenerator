@@ -30,6 +30,7 @@ import { ScenePlanExecutor } from "./stages/scenes/scenePlanExecutor.js";
 import { VisualService } from "./services/visualService.js";
 import { VisualSearchExecutor } from "./stages/visuals/visualSearchExecutor.js";
 import { registerVisualRoutes } from "./api/visuals.js";
+import { MAX_IMAGE_BYTES } from "./services/imageStore.js";
 
 export function buildApp({ config }: { config: AppConfig }) {
   const server = Fastify({
@@ -38,6 +39,10 @@ export function buildApp({ config }: { config: AppConfig }) {
 
   server.setValidatorCompiler(validatorCompiler);
   server.setSerializerCompiler(serializerCompiler);
+  server.addContentTypeParser(/^image\/(?:jpeg|png|webp|gif)$/, {
+    parseAs: "buffer",
+    bodyLimit: MAX_IMAGE_BYTES,
+  }, (_request, body, done) => done(null, body));
 
   const database = openDatabase(config.DATABASE_PATH);
   try {
@@ -49,11 +54,19 @@ export function buildApp({ config }: { config: AppConfig }) {
   const projectService = createProjectService(database.db, config, server.log);
   const events = new PipelineEventBus();
   const jobRepository = new JobRepository(database.sqlite, events);
-  const orchestrator = new PipelineOrchestrator(jobRepository, config, server.log);
+  const visualService = new VisualService(database.sqlite, jobRepository, config, server.log);
+  const orchestrator = new PipelineOrchestrator(
+    jobRepository,
+    config,
+    server.log,
+    undefined,
+    (project, gate) => gate === "VISUAL_REVIEW"
+      ? visualService.canApproveVisualReview(project.id)
+      : { allowed: true },
+  );
   const llmProviders = new LlmProviderRegistry(config);
   const scriptService = new ScriptService(database.sqlite, jobRepository, orchestrator, config);
   const sceneService = new SceneService(database.sqlite, jobRepository);
-  const visualService = new VisualService(database.sqlite, jobRepository, config, server.log);
   const worker = new JobWorker(
     jobRepository,
     orchestrator,
@@ -106,6 +119,16 @@ export function buildApp({ config }: { config: AppConfig }) {
           code: "VALIDATION_ERROR",
           message: "Request validation failed",
           details: error instanceof ZodError ? error.issues : fastifyError.validation,
+        },
+      });
+    }
+
+    if (fastifyError.statusCode === 413 || fastifyError.statusCode === 415) {
+      const tooLarge = fastifyError.statusCode === 413;
+      return reply.code(fastifyError.statusCode).send({
+        error: {
+          code: tooLarge ? "PAYLOAD_TOO_LARGE" : "UNSUPPORTED_MEDIA_TYPE",
+          message: tooLarge ? "Image upload exceeds the 25 MB limit." : "Upload must use JPEG, PNG, WebP, or GIF content type.",
         },
       });
     }

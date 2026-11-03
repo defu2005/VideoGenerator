@@ -64,6 +64,17 @@ describe("visual ranking", () => {
     expect(ranked.map((item) => item.providerItemId)).toEqual(["relevant", "irrelevant"]);
     expect(ranked[0].scoreBreakdown.lowRelevance).toBe(false);
     expect(ranked[1].scoreBreakdown).toMatchObject({ keyword: 0, lowRelevance: true });
-    expect(ranked[1].relevanceScore).toBeCloseTo(0.65);
+    expect(ranked[1].relevanceScore).toBeCloseTo(0.5);
+  });
+
+  it("does not count the query that found a candidate as relevance evidence", () => {
+    const ranked = rankCandidates([
+      { ...candidate, providerItemId: "self-vouched", title: "Hook and loop fastener macro photograph", tags: [],
+        searchQuery: "Hook archival photograph", providerPosition: 1 },
+      { ...candidate, providerItemId: "on-topic", title: "Lee Sedol vs AlphaGo game 4", tags: [],
+        width: 600, height: 600, providerPosition: 0.2 },
+    ], { queryTerms: "Lee Sedol AlphaGo match Seoul 2016", sceneTerms: "", targetAspect: 16 / 9 });
+    expect(ranked.map((item) => item.providerItemId)).toEqual(["on-topic", "self-vouched"]);
+    expect(ranked[1].scoreBreakdown).toMatchObject({ keyword: 0, lowRelevance: true });
   });
 });

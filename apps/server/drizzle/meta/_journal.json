@@ -57,6 +57,13 @@
       "when": 1793673157226,
       "tag": "0007_opposite_frightful_four",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "6",
+      "when": 1793678869365,
+      "tag": "0008_unique_goblin_queen",
+      "breakpoints": true
     }
   ]
 }

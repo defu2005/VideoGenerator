@@ -168,6 +168,10 @@ export function registerVideoAgentTools(
       selection: visuals.selection
         ? { candidateId: visuals.selection.candidateId, status: visuals.selection.status }
         : null,
+      status: visuals.status ?? "NO_VISUAL",
+      localFile: visuals.selection
+        ? visuals.candidates.find((candidate) => candidate.id === visuals.selection?.candidateId)?.localPath ?? null
+        : null,
       candidates: visuals.candidates.slice(0, 5).map((candidate) => ({
         title: candidate.title,
         provider: candidate.provider,
@@ -177,6 +181,17 @@ export function registerVideoAgentTools(
       })),
     }));
   }));
+
+  server.tool("approve_scene_visual", "Download and approve the selected image for one scene.", {
+    ...projectIdShape,
+    sceneId: z.string().uuid(),
+  }, ({ projectId, sceneId }) => invoke(() => api.approveSceneVisual(projectId, sceneId)));
+
+  server.tool("select_scene_visual", "Select an existing candidate image for one scene; approval is still required.", {
+    ...projectIdShape,
+    sceneId: z.string().uuid(),
+    candidateId: z.string().uuid(),
+  }, ({ projectId, sceneId, candidateId }) => invoke(() => api.selectSceneVisual(projectId, sceneId, candidateId)));
 
   server.tool("save_script", "Validate and save a script through the Video Agent API.", {
     ...projectIdShape,

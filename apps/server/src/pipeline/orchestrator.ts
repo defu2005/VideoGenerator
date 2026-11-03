@@ -474,7 +474,8 @@ export class PipelineOrchestrator {
     if (isGate(next)) {
       const autoApprove = project.mode === "AUTO"
         && (next !== "FINAL_APPROVAL" || project.settings.autoRender);
-      if (autoApprove) {
+      const approval = next === "VISUAL_REVIEW" ? this.canApprove(project, next) : { allowed: true as const };
+      if (autoApprove && approval.allowed) {
         this.repository.updateStage(projectId, next, {
           state: "DONE",
           progress: 100,
@@ -489,7 +490,7 @@ export class PipelineOrchestrator {
       this.repository.updateStage(projectId, next, {
         state: "WAITING_USER",
         progress: 0,
-        message: "Waiting for your approval",
+        message: approval.allowed ? "Waiting for your approval" : approval.message,
         jobId: null,
         error: null,
       });
