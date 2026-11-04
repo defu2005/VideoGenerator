@@ -106,6 +106,7 @@ export const publications = sqliteTable("publications", {
   attempts: integer("attempts").notNull().default(0),
   lastError: text("last_error"),
   progress: integer("progress").notNull().default(0),
+  warnings: text("warnings", { mode: "json" }).$type<string[]>().notNull().default([]),
   createdAt: text("created_at").notNull(),
   updatedAt: text("updated_at").notNull(),
   publishedAt: text("published_at"),

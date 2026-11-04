@@ -5,11 +5,13 @@ import type { PublishService } from "./publishService.js";
 import type { PublisherRegistry } from "./registry.js";
 import type { PublishTicker } from "./ticker.js";
 import type { TokenVault } from "./tokenVault.js";
+import type { YouTubePublisher } from "./youtubePublisher.js";
 
 declare module "fastify" {
   interface FastifyInstance {
     vgPublish: {
       mock: MockPublisher | null;
+      youtube: YouTubePublisher;
       service: PublishService;
       vault: TokenVault;
       ticker: PublishTicker;

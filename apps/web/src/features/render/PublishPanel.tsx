@@ -201,7 +201,14 @@ function PublicationStatusList({
                   {item.guardrailReason}
                 </p>
               )}
-              {item.lastError && item.status === "FAILED" && (
+              {(item.warnings ?? []).length > 0 && (
+                <ul className="field-hint" aria-label="Cảnh báo đăng" style={{ margin: "0.35rem 0 0", paddingLeft: "1.1rem" }}>
+                  {item.warnings.map((warning) => (
+                    <li key={warning}>{warning}</li>
+                  ))}
+                </ul>
+              )}
+              {item.lastError && (item.status === "FAILED" || item.status === "SCHEDULED") && (
                 <p className="request-error" role="status" style={{ margin: "0.35rem 0 0" }}>
                   {item.lastError}
                 </p>

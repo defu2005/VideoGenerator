@@ -166,6 +166,8 @@ const ConfigSchema = z.object({
   /** OAuth app credentials — fallback when the account vault has none (real publishers in later tasks). */
   YOUTUBE_CLIENT_ID: z.string().optional(),
   YOUTUBE_CLIENT_SECRET: z.string().optional(),
+  /** App-level daily YouTube Data API quota budget (units). Resets at midnight Pacific Time. */
+  YOUTUBE_DAILY_QUOTA: z.coerce.number().int().positive().default(10_000),
   TIKTOK_CLIENT_KEY: z.string().optional(),
   TIKTOK_CLIENT_SECRET: z.string().optional(),
   META_APP_ID: z.string().optional(),
@@ -285,6 +287,7 @@ export type AppConfig = {
   TOKEN_ENCRYPTION_KEY?: string;
   YOUTUBE_CLIENT_ID?: string;
   YOUTUBE_CLIENT_SECRET?: string;
+  YOUTUBE_DAILY_QUOTA: number;
   TIKTOK_CLIENT_KEY?: string;
   TIKTOK_CLIENT_SECRET?: string;
   META_APP_ID?: string;

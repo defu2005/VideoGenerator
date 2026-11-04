@@ -2,6 +2,8 @@ import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { Link, Navigate, useParams } from "react-router-dom";
 import {
   ProfileDefaultBriefSchema,
+  YOUTUBE_PLAYLIST_SCOPE_NOTE_VI,
+  YOUTUBE_SETUP_HELP_VI,
   recommendBrief,
   type AccountConnectionDetail,
   type BriefSettings,
@@ -458,6 +460,26 @@ function AccountCard({
               Sao chép
             </button>
           </p>
+          {account.platform === "youtube" && (
+            <details style={{ marginTop: 8 }}>
+              <summary style={{ cursor: "pointer", fontWeight: 600 }}>Hướng dẫn kết nối YouTube</summary>
+              <pre
+                className="page-subtitle"
+                style={{
+                  whiteSpace: "pre-wrap",
+                  margin: "0.5rem 0 0",
+                  fontFamily: "inherit",
+                  fontSize: 13,
+                  lineHeight: 1.45,
+                }}
+              >
+                {YOUTUBE_SETUP_HELP_VI}
+              </pre>
+            </details>
+          )}
+          {account.platform === "youtube" && account.publishSettings.playlistId && (
+            <p className="field-hint" style={{ margin: "0.5rem 0 0" }}>{YOUTUBE_PLAYLIST_SCOPE_NOTE_VI}</p>
+          )}
         </div>
         <div className="account-row-actions">
           {connected ? (
@@ -571,13 +593,24 @@ function AccountsTab({ profile }: { profile: ProfileDetail }) {
   const [format, setFormat] = useState<"landscape" | "vertical" | "">("");
   const [visibility, setVisibility] = useState<"public" | "unlisted" | "private">("public");
   const [autoPublish, setAutoPublish] = useState(false);
+  const [categoryId, setCategoryId] = useState("");
+  const [playlistId, setPlaylistId] = useState("");
   const [error, setError] = useState("");
   const [editing, setEditing] = useState<PlatformAccount | null>(null);
+
+  const formPlatform = editing?.platform ?? platform;
+  const showYoutubePublishExtras = formPlatform === "youtube";
 
   async function submit(event: FormEvent) {
     event.preventDefault();
     setError("");
     try {
+      const youtubeExtras = showYoutubePublishExtras
+        ? {
+          categoryId: categoryId.trim(),
+          playlistId: playlistId.trim(),
+        }
+        : {};
       if (editing) {
         await update.mutateAsync({
           profileId: profile.id,
@@ -586,7 +619,7 @@ function AccountsTab({ profile }: { profile: ProfileDetail }) {
             displayName,
             handle: handle.trim() || null,
             ...(format ? { format } : {}),
-            publishSettings: { visibility, autoPublish },
+            publishSettings: { visibility, autoPublish, ...youtubeExtras },
           },
         });
         setEditing(null);
@@ -598,7 +631,7 @@ function AccountsTab({ profile }: { profile: ProfileDetail }) {
             displayName,
             handle: handle.trim() || null,
             ...(format ? { format } : {}),
-            publishSettings: { visibility, autoPublish },
+            publishSettings: { visibility, autoPublish, ...youtubeExtras },
           },
         });
       }
@@ -607,6 +640,8 @@ function AccountsTab({ profile }: { profile: ProfileDetail }) {
       setFormat("");
       setVisibility("public");
       setAutoPublish(false);
+      setCategoryId("");
+      setPlaylistId("");
     } catch (err) {
       setError(err instanceof ApiRequestError || err instanceof Error ? err.message : "Thao tác thất bại");
     }
@@ -620,6 +655,8 @@ function AccountsTab({ profile }: { profile: ProfileDetail }) {
     setFormat(account.format);
     setVisibility(account.publishSettings.visibility);
     setAutoPublish(account.publishSettings.autoPublish);
+    setCategoryId(account.publishSettings.categoryId ?? "");
+    setPlaylistId(account.publishSettings.playlistId ?? "");
   }
 
   return (
@@ -687,6 +724,33 @@ function AccountsTab({ profile }: { profile: ProfileDetail }) {
             Tự đăng
           </label>
         </div>
+        {showYoutubePublishExtras && (
+          <>
+            <div className="form-row">
+              <label className="form-field">
+                <span>Category ID (YouTube)</span>
+                <input
+                  value={categoryId}
+                  placeholder="27 (Education)"
+                  maxLength={20}
+                  onChange={(event) => setCategoryId(event.target.value)}
+                />
+              </label>
+              <label className="form-field">
+                <span>Playlist ID (YouTube)</span>
+                <input
+                  value={playlistId}
+                  placeholder="PL…"
+                  maxLength={200}
+                  onChange={(event) => setPlaylistId(event.target.value)}
+                />
+              </label>
+            </div>
+            {playlistId.trim() && (
+              <p className="field-hint">{YOUTUBE_PLAYLIST_SCOPE_NOTE_VI}</p>
+            )}
+          </>
+        )}
         <div className="dialog-actions">
           {editing && (
             <button className="button button-secondary" type="button" onClick={() => setEditing(null)}>Hủy sửa</button>

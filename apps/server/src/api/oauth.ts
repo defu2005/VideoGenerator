@@ -70,6 +70,7 @@ export function registerOAuthRoutes(
         code: query.code,
         redirectUri: pending.redirectUri,
         codeVerifier: pending.codeVerifier,
+        accountId: pending.accountId,
       },
       AbortSignal.timeout(30_000),
     );

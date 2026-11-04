@@ -12,6 +12,7 @@ export * from "./schemas/llm.js";
 export * from "./schemas/project.js";
 export * from "./schemas/profile.js";
 export * from "./schemas/publication.js";
+export * from "./publishing/youtubeHelp.js";
 export * from "./schemas/script.js";
 export * from "./schemas/scene.js";
 export * from "./schemas/visual.js";

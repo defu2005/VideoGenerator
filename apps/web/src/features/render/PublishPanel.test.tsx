@@ -105,6 +105,7 @@ describe("PublishPanel", () => {
             attempts: 0,
             lastError: null,
             progress: 0,
+            warnings: [],
             createdAt: project.createdAt,
             updatedAt: project.updatedAt,
             publishedAt: null,
@@ -128,6 +129,44 @@ describe("PublishPanel", () => {
         return String(call[0]).includes("/publications") && init?.method === "POST";
       })).toBe(true);
     });
+  });
+
+  it("shows publication warnings", async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes(`/profiles/${profileId}`) && !url.includes("publications")) {
+        return jsonResponse(profile);
+      }
+      if (url.includes(`/projects/${projectId}/publications`)) {
+        return jsonResponse({
+          items: [{
+            id: "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
+            projectId,
+            renderId: "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+            accountId,
+            status: "PUBLISHED",
+            visibilityRequested: "public",
+            visibilityUsed: "private",
+            guardrailReason: null,
+            scheduledFor: null,
+            externalId: "vid1",
+            externalUrl: "https://www.youtube.com/watch?v=vid1",
+            attempts: 1,
+            lastError: null,
+            progress: 100,
+            warnings: ["YouTube đã đặt video thành riêng tư (project API chưa xác minh)."],
+            createdAt: project.createdAt,
+            updatedAt: project.updatedAt,
+            publishedAt: project.updatedAt,
+          }],
+        });
+      }
+      return jsonResponse({ error: { code: "NOT_FOUND", message: url } }, 404);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    renderWithProviders(<PublishPanel project={project} />);
+    expect(await screen.findByLabelText("Cảnh báo đăng")).toBeInTheDocument();
+    expect(screen.getByText(/project API chưa xác minh/)).toBeInTheDocument();
   });
 });
 

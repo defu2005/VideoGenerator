@@ -1,6 +1,7 @@
 import type { PlatformId } from "@vg/shared";
 import { MockPublisher } from "./mockPublisher.js";
 import type { Publisher } from "./types.js";
+import type { YouTubePublisher } from "./youtubePublisher.js";
 
 export class PublisherRegistry {
   private readonly publishers = new Map<PlatformId, Publisher>();
@@ -30,12 +31,18 @@ export class PublisherRegistry {
   }
 }
 
-export function createPublisherRegistry(options: { enableMock: boolean }): {
+export function createPublisherRegistry(options: {
+  enableMock: boolean;
+  youtube?: YouTubePublisher;
+}): {
   registry: PublisherRegistry;
   mock: MockPublisher | null;
 } {
   const registry = new PublisherRegistry();
   let mock: MockPublisher | null = null;
+  if (options.youtube) {
+    registry.register(options.youtube);
+  }
   if (options.enableMock) {
     mock = new MockPublisher();
     registry.register(mock);

@@ -214,4 +214,28 @@ describe("ProfileDetailPage accounts tab", () => {
     renderAccountsTab();
     expect(await screen.findByText("Sắp hết hạn")).toBeInTheDocument();
   });
+
+  it("shows YouTube setup help and playlist scope note", async () => {
+    const withPlaylist: PlatformAccount = {
+      ...account,
+      publishSettings: { visibility: "public", autoPublish: false, playlistId: "PLabc" },
+    };
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.endsWith(`/profiles/${profileId}`) && (!init || !init.method || init.method === "GET")) {
+        return jsonResponse({ ...profile, accounts: [withPlaylist] });
+      }
+      if (url.includes(`/accounts/${accountId}/connection`)) {
+        return jsonResponse(connectionDetail());
+      }
+      return jsonResponse({ error: { code: "NOT_FOUND", message: url } }, 404);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    renderAccountsTab();
+    expect(await screen.findByText("Hướng dẫn kết nối YouTube")).toBeInTheDocument();
+    fireEvent.click(screen.getByText("Hướng dẫn kết nối YouTube"));
+    expect(await screen.findByText(/YouTube Data API v3/)).toBeInTheDocument();
+    expect(screen.getByText(/xin quyền đầy đủ youtube/i)).toBeInTheDocument();
+  });
 });

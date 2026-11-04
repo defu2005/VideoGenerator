@@ -54,10 +54,11 @@ export class MockPublisher implements Publisher {
     },
 
     exchangeCode: async (
-      input: { code: string; redirectUri: string; codeVerifier: string },
+      input: { code: string; redirectUri: string; codeVerifier: string; accountId: string },
       _signal: AbortSignal,
     ): Promise<TokenSet> => {
       void _signal;
+      void input.accountId;
       if (!input.code || input.code === "bad") {
         throw Object.assign(new Error("Invalid authorization code"), { status: 400 });
       }
@@ -71,8 +72,9 @@ export class MockPublisher implements Publisher {
       };
     },
 
-    refresh: async (tokens: TokenSet, _signal: AbortSignal): Promise<TokenSet> => {
+    refresh: async (tokens: TokenSet, _signal: AbortSignal, _accountId?: string): Promise<TokenSet> => {
       void _signal;
+      void _accountId;
       if (this.behavior.refreshFail) {
         throw Object.assign(new Error("refresh failed"), { status: 401 });
       }
@@ -88,9 +90,10 @@ export class MockPublisher implements Publisher {
       };
     },
 
-    revoke: async (_tokens: TokenSet, _signal: AbortSignal): Promise<void> => {
+    revoke: async (_tokens: TokenSet, _signal: AbortSignal, _accountId?: string): Promise<void> => {
       void _tokens;
       void _signal;
+      void _accountId;
       this.behavior.revokeCalled = true;
     },
 
@@ -142,6 +145,7 @@ export class MockPublisher implements Publisher {
     return {
       externalId,
       externalUrl: `https://mock.local/watch/${externalId}?title=${encodeURIComponent(input.title.slice(0, 40))}`,
+      warnings: [],
     };
   }
 }

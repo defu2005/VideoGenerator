@@ -1,0 +1,1 @@
+ALTER TABLE `publications` ADD `warnings` text DEFAULT '[]' NOT NULL;

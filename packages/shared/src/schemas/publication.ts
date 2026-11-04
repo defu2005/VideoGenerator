@@ -26,6 +26,8 @@ export const PublicationSchema = z.object({
   attempts: z.number().int().nonnegative(),
   lastError: z.string().nullable(),
   progress: z.number().min(0).max(100),
+  /** Soft warnings from the publisher (privacy downgrade, thumbnail 403, Shorts, …). */
+  warnings: z.array(z.string()).default([]),
   createdAt: z.string().datetime({ offset: true }),
   updatedAt: z.string().datetime({ offset: true }),
   publishedAt: z.string().datetime({ offset: true }).nullable(),
@@ -78,12 +80,21 @@ export const PublishInputSchema = z.object({
   language: z.string(),
   madeForKids: z.literal(false),
   aiDisclosure: z.boolean(),
+  /** YouTube category id (default 27 Education when omitted). */
+  categoryId: z.string().optional(),
+  /** YouTube playlist id — requires the broader `youtube` OAuth scope. */
+  playlistId: z.string().optional(),
+  /** Known duration of the file; used for Shorts rules. */
+  durationSec: z.number().nonnegative().optional(),
 }).strict();
 export type PublishInput = z.infer<typeof PublishInputSchema>;
 
 export const PublishResultSchema = z.object({
   externalId: z.string().min(1),
   externalUrl: z.string().min(1),
+  warnings: z.array(z.string()).default([]),
+  /** Privacy YouTube actually applied, when it differs from the request. */
+  visibilityUsed: PublishVisibilitySchema.optional(),
 }).strict();
 export type PublishResult = z.infer<typeof PublishResultSchema>;
 

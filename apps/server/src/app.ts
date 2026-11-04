@@ -67,6 +67,7 @@ import { createPublisherRegistry } from "./publishing/registry.js";
 import { OAuthStateStore } from "./publishing/oauthState.js";
 import { PublishService } from "./publishing/publishService.js";
 import { PublishTicker } from "./publishing/ticker.js";
+import { YouTubePublisher } from "./publishing/youtubePublisher.js";
 import { PublishExecutor } from "./stages/publish/publishExecutor.js";
 import { registerOAuthRoutes } from "./api/oauth.js";
 import { registerPublicationRoutes } from "./api/publications.js";
@@ -163,8 +164,14 @@ export function buildApp({ config }: { config: AppConfig }) {
     metadataService,
   );
   const tokenVault = new TokenVault(database.sqlite, config.DATA_DIR, config.TOKEN_ENCRYPTION_KEY);
+  const youtubePublisher = new YouTubePublisher({
+    config,
+    vault: tokenVault,
+    sqlite: database.sqlite,
+  });
   const { registry: publisherRegistry, mock: mockPublisher } = createPublisherRegistry({
     enableMock: config.LLM_ENABLE_MOCK,
+    youtube: youtubePublisher,
   });
   const oauthState = new OAuthStateStore();
   const publishService = new PublishService(
@@ -199,6 +206,7 @@ export function buildApp({ config }: { config: AppConfig }) {
   );
   server.decorate("vgPublish", {
     mock: mockPublisher,
+    youtube: youtubePublisher,
     service: publishService,
     vault: tokenVault,
     ticker: publishTicker,

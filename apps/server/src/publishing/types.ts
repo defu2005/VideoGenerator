@@ -24,11 +24,11 @@ export type PublisherOAuth = {
     codeChallenge: string;
   }): string;
   exchangeCode(
-    input: { code: string; redirectUri: string; codeVerifier: string },
+    input: { code: string; redirectUri: string; codeVerifier: string; accountId: string },
     signal: AbortSignal,
   ): Promise<TokenSet>;
-  refresh(tokens: TokenSet, signal: AbortSignal): Promise<TokenSet>;
-  revoke?(tokens: TokenSet, signal: AbortSignal): Promise<void>;
+  refresh(tokens: TokenSet, signal: AbortSignal, accountId?: string): Promise<TokenSet>;
+  revoke?(tokens: TokenSet, signal: AbortSignal, accountId?: string): Promise<void>;
   fetchIdentity(tokens: TokenSet, signal: AbortSignal): Promise<PublisherIdentity>;
 };
 

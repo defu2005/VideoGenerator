@@ -3,7 +3,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
-import type { PlatformAccount, ProfileDetail, Project, Publication } from "@vg/shared";
+import { type PlatformAccount, type ProfileDetail, type Project, type Publication } from "@vg/shared";
 import { buildApp } from "../src/app.js";
 import { parseConfig, type AppConfig } from "../src/lib/config.js";
 
@@ -231,12 +231,12 @@ describe("canConnect / connectBlockedReason", () => {
     expect(body.connectBlockedReason).toBeNull();
   });
 
-  it("blocks real platforms until a publisher is registered", async () => {
+  it("blocks platforms that still lack a publisher (e.g. TikTok)", async () => {
     const profile = await createProfile();
     const created = await app.inject({
       method: "POST",
       url: `/api/profiles/${profile.id}/accounts`,
-      payload: { platform: "youtube", displayName: "YT" },
+      payload: { platform: "tiktok", displayName: "TT" },
     });
     expect(created.statusCode).toBe(201);
     const account = created.json<PlatformAccount>();
@@ -251,7 +251,7 @@ describe("canConnect / connectBlockedReason", () => {
     expect(body.connectBlockedReason).toBe("Nền tảng này chưa được hỗ trợ đăng tự động");
   });
 
-  it("blocks when publisher exists but app credentials are missing", async () => {
+  it("blocks YouTube when publisher exists but app credentials are missing", async () => {
     const profile = await createProfile();
     const created = await app.inject({
       method: "POST",
@@ -260,32 +260,12 @@ describe("canConnect / connectBlockedReason", () => {
     });
     const account = created.json<PlatformAccount>();
 
-    app.vgPublish.registry.register({
-      platform: "youtube",
-      oauth: {
-        buildAuthUrl: () => "https://example.invalid/auth",
-        exchangeCode: async () => ({ accessToken: "x", scopes: [] }),
-        refresh: async (tokens) => tokens,
-        fetchIdentity: async () => ({ displayName: "YT", externalId: "1" }),
-      },
-      upload: async () => ({ externalId: "1", externalUrl: "https://example.invalid" }),
-      limits: {
-        maxDurationSec: 60,
-        maxTitleChars: 100,
-        maxDescriptionChars: 500,
-        maxTags: 5,
-        supportsScheduledPublishAt: false,
-      },
-    });
-
     const detail = await app.inject({
       method: "GET",
       url: `/api/profiles/${profile.id}/accounts/${account.id}/connection`,
     });
     expect(detail.json().canConnect).toBe(false);
-    expect(detail.json().connectBlockedReason).toBe(
-      "Chưa có thông tin ứng dụng (nhập ở mục Thông tin ứng dụng hoặc đặt trong .env)",
-    );
+    expect(detail.json().connectBlockedReason).toContain("Chưa có thông tin ứng dụng");
 
     const saved = await app.inject({
       method: "PUT",
@@ -345,7 +325,7 @@ describe("canConnect / connectBlockedReason", () => {
           refresh: async (tokens) => tokens,
           fetchIdentity: async () => ({ displayName: "YT", externalId: "1" }),
         },
-        upload: async () => ({ externalId: "1", externalUrl: "https://example.invalid" }),
+        upload: async () => ({ externalId: "1", externalUrl: "https://example.invalid", warnings: [] }),
         limits: {
           maxDurationSec: 60,
           maxTitleChars: 100,

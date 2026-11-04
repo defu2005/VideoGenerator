@@ -16,6 +16,7 @@ import {
   type PublicationListResponse,
   type PublicationStatus,
   type PublishInput,
+  type PublishResult,
   type PublishVisibility,
 } from "@vg/shared";
 import type { AppConfig } from "../lib/config.js";
@@ -62,6 +63,7 @@ type PublicationRow = {
   attempts: number;
   last_error: string | null;
   progress: number;
+  warnings: string | string[] | null;
   created_at: string;
   updated_at: string;
   published_at: string | null;
@@ -193,9 +195,9 @@ export class PublishService {
         `INSERT INTO publications (
           id, project_id, render_id, account_id, status,
           visibility_requested, visibility_used, guardrail_reason, scheduled_for,
-          external_id, external_url, attempts, last_error, progress,
+          external_id, external_url, attempts, last_error, progress, warnings,
           created_at, updated_at, published_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, 0, NULL, 0, ?, ?, NULL)`,
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, 0, NULL, 0, ?, ?, ?, NULL)`,
       ).run(
         id,
         projectId,
@@ -206,6 +208,7 @@ export class PublishService {
         visibilityUsed,
         guardrail.reason,
         scheduledFor,
+        "[]",
         nowIso,
         nowIso,
       );
@@ -417,13 +420,21 @@ export class PublishService {
     }
 
     const render = this.sqlite.prepare(
-      "SELECT id, output_path, status FROM renders WHERE id = ?",
-    ).get(publication.renderId) as { id: string; output_path: string; status: string } | undefined;
+      "SELECT id, output_path, status, duration_sec FROM renders WHERE id = ?",
+    ).get(publication.renderId) as {
+      id: string;
+      output_path: string;
+      status: string;
+      duration_sec: number | null;
+    } | undefined;
     if (!render || render.status !== "DONE") {
       throw Object.assign(new Error("Render không sẵn sàng"), { status: 409, retryable: true });
     }
 
-    const project = this.sqlite.prepare("SELECT * FROM projects WHERE id = ?").get(publication.projectId) as ProjectRow;
+    const project = this.sqlite.prepare("SELECT * FROM projects WHERE id = ?").get(publication.projectId) as ProjectRow & {
+      thumbnail_path?: string | null;
+      duration_sec?: number | null;
+    };
     const settings = typeof project.settings === "string"
       ? JSON.parse(project.settings) as { language?: string }
       : project.settings as { language?: string };
@@ -453,6 +464,13 @@ export class PublishService {
     const videoPath = isAbsolute(render.output_path)
       ? render.output_path
       : join(this.config.DATA_DIR, render.output_path);
+    const publishSettings = this.parseFullPublishSettings(account.publish_settings);
+    const thumbnailPath = project.thumbnail_path
+      ? (isAbsolute(project.thumbnail_path)
+        ? project.thumbnail_path
+        : join(this.config.DATA_DIR, project.thumbnail_path))
+      : undefined;
+    const durationSec = render.duration_sec ?? project.duration_sec ?? undefined;
     const input: PublishInput = {
       videoPath,
       format: account.format,
@@ -464,6 +482,10 @@ export class PublishService {
       language: settings.language ?? "vi",
       madeForKids: false,
       aiDisclosure: true,
+      ...(publishSettings.categoryId ? { categoryId: publishSettings.categoryId } : {}),
+      ...(publishSettings.playlistId ? { playlistId: publishSettings.playlistId } : {}),
+      ...(durationSec != null ? { durationSec: Number(durationSec) } : {}),
+      ...(thumbnailPath ? { thumbnailPath } : {}),
     };
 
     return { publication, input, tokens, publisher };
@@ -482,18 +504,43 @@ export class PublishService {
     ).run(Math.max(0, Math.min(100, progress)), this.now().toISOString(), publicationId);
   }
 
-  markPublished(publicationId: string, result: { externalId: string; externalUrl: string }): void {
+  markPublished(publicationId: string, result: PublishResult): void {
     const nowIso = this.now().toISOString();
+    const warnings = JSON.stringify(result.warnings ?? []);
+    if (result.visibilityUsed) {
+      this.sqlite.prepare(
+        `UPDATE publications SET status = 'PUBLISHED', progress = 100, external_id = ?, external_url = ?,
+         published_at = ?, last_error = NULL, warnings = ?, visibility_used = ?, updated_at = ? WHERE id = ?`,
+      ).run(
+        result.externalId,
+        result.externalUrl,
+        nowIso,
+        warnings,
+        result.visibilityUsed,
+        nowIso,
+        publicationId,
+      );
+      return;
+    }
     this.sqlite.prepare(
       `UPDATE publications SET status = 'PUBLISHED', progress = 100, external_id = ?, external_url = ?,
-       published_at = ?, last_error = NULL, updated_at = ? WHERE id = ?`,
-    ).run(result.externalId, result.externalUrl, nowIso, nowIso, publicationId);
+       published_at = ?, last_error = NULL, warnings = ?, updated_at = ? WHERE id = ?`,
+    ).run(result.externalId, result.externalUrl, nowIso, warnings, nowIso, publicationId);
   }
 
   markFailed(publicationId: string, message: string): void {
     this.sqlite.prepare(
       `UPDATE publications SET status = 'FAILED', last_error = ?, updated_at = ? WHERE id = ?`,
     ).run(message, this.now().toISOString(), publicationId);
+  }
+
+  /** Quota exhausted: keep the publication and retry after Pacific midnight. */
+  rescheduleForQuota(publicationId: string, scheduledFor: string, message: string): void {
+    const nowIso = this.now().toISOString();
+    this.sqlite.prepare(
+      `UPDATE publications SET status = 'SCHEDULED', scheduled_for = ?, last_error = ?, progress = 0, updated_at = ?
+       WHERE id = ?`,
+    ).run(scheduledFor, message, nowIso, publicationId);
   }
 
   private enqueuePublishJob(projectId: string, publicationId: string): void {
@@ -520,7 +567,7 @@ export class PublishService {
     if (Number.isNaN(expiresAt) || expiresAt - this.now().getTime() > REFRESH_SKEW_MS) {
       return tokens;
     }
-    const refreshed = await publisher.oauth.refresh(tokens, signal);
+    const refreshed = await publisher.oauth.refresh(tokens, signal, accountId);
     this.vault.storeTokens(accountId, refreshed, refreshed.scopes);
     return refreshed;
   }
@@ -595,10 +642,29 @@ export class PublishService {
   }
 
   private parsePublishSettings(raw: string): { visibility: PublishVisibility; autoPublish: boolean } {
+    const parsed = this.parseFullPublishSettings(raw);
+    return {
+      visibility: parsed.visibility,
+      autoPublish: parsed.autoPublish,
+    };
+  }
+
+  private parseFullPublishSettings(raw: string): {
+    visibility: PublishVisibility;
+    autoPublish: boolean;
+    categoryId?: string;
+    playlistId?: string;
+  } {
     const parsed = typeof raw === "string" ? JSON.parse(raw) as Record<string, unknown> : raw;
     return {
       visibility: (parsed.visibility as PublishVisibility) ?? "public",
       autoPublish: Boolean(parsed.autoPublish),
+      ...(typeof parsed.categoryId === "string" && parsed.categoryId.trim()
+        ? { categoryId: parsed.categoryId.trim() }
+        : {}),
+      ...(typeof parsed.playlistId === "string" && parsed.playlistId.trim()
+        ? { playlistId: parsed.playlistId.trim() }
+        : {}),
     };
   }
 
@@ -638,6 +704,11 @@ export class PublishService {
   }
 
   private toPublication(row: PublicationRow): Publication {
+    const warnings = Array.isArray(row.warnings)
+      ? row.warnings
+      : typeof row.warnings === "string" && row.warnings
+        ? JSON.parse(row.warnings) as string[]
+        : [];
     return PublicationSchema.parse({
       id: row.id,
       projectId: row.project_id,
@@ -653,6 +724,7 @@ export class PublishService {
       attempts: row.attempts,
       lastError: row.last_error,
       progress: row.progress,
+      warnings,
       createdAt: row.created_at,
       updatedAt: row.updated_at,
       publishedAt: row.published_at,
