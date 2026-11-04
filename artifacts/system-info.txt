@@ -1,0 +1,49 @@
+Captured: 2026-11-04 11:21 Asia/Bangkok (UTC+7) / 2026-11-04 04:21 UTC
+Host: Cursor Cloud Agent VM
+
+OS: Ubuntu 24.04.5 LTS (Noble Numbat)
+Kernel: Linux 6.12.94+ #1 SMP PREEMPT_DYNAMIC x86_64
+Architecture: x86_64
+Hypervisor: KVM
+Init: tini (PID 1); systemd is not the init process
+
+CPU:
+  Model: Intel(R) Xeon(R) Processor (family 6, model 207)
+  Cores online: 4
+  Threads per core: 1
+  Sockets: 1
+  Virtualization flags: VT-x (guest)
+  SIMD: AVX2, AVX-512 (guest reported)
+
+Memory:
+  MemTotal: 16387280 kB (~15.6 GiB)
+  MemAvailable at inspect: ~5072624 kB (~4.8 GiB)
+  MemFree at inspect: ~3963960 kB (~3.8 GiB)
+  Swap: none
+  Hypervisor balloon: balloon_inflate 2621440 pages, balloon_deflate 0
+    => about 10 GiB currently held by the balloon (4 KiB pages)
+  free(1) at inspect: total 15 GiB, used 10 GiB, available 4.8 GiB
+
+Disk:
+  Filesystem /dev/vdc ext4 on /
+  Size 254G, used ~7.5G, available ~246G (3%)
+  /workspace is on the same root filesystem (not a separate persistent volume)
+  /cursor/stores is a FUSE agent store, separate from the git workspace
+
+GPU:
+  nvidia-smi: not installed
+  /dev/nvidia*: absent
+  Inference will be CPU-only
+
+Network:
+  ip(8) not installed; interface list not collected
+  HTTPS egress: curl https://ollama.com returned HTTP/2 200
+  Cursor environment egress.restricted: false (allow-all)
+  Inbound public ports are not assumed open; Ollama must not bind publicly
+
+Resource decision:
+  llama3.2:1b is about 1.3 GB on disk and roughly 1.5-2.5 GB RAM at runtime.
+  Disk headroom (~246 GB) is sufficient.
+  RAM headroom (~4.8 GB available) is sufficient for a single 1B CPU inference,
+  with limited room for concurrent requests.
+  Larger models were not downloaded.
