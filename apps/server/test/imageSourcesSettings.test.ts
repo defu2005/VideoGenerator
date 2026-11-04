@@ -4,6 +4,7 @@ import { parseConfig } from "../src/lib/config.js";
 import {
   getImageSourcesSettingsStatus,
   isImageSourceEnabledInSettings,
+  recordImageSourceBlocked,
   saveImageSourcesSettings,
 } from "../src/settings/imageSources.js";
 
@@ -52,5 +53,17 @@ describe("image sources settings", () => {
 
     saveImageSourcesSettings(sqlite, { enabled: { ...status.enabled, wikimedia: true } });
     expect(isImageSourceEnabledInSettings(sqlite, "wikimedia")).toBe(true);
+  });
+
+  it("exposes lastBlockedAt from imageSourcesHealth without disabling the source", () => {
+    const sqlite = memoryDb();
+    const config = parseConfig({ WORKER_ENABLED: "false", IMAGE_PROVIDERS: "mock" });
+    const blockedAt = "2026-11-04T12:00:00.000Z";
+    recordImageSourceBlocked(sqlite, "loc", blockedAt);
+    const status = getImageSourcesSettingsStatus(sqlite, config);
+    const loc = status.sources.find((row) => row.id === "loc");
+    expect(loc).toMatchObject({ lastBlockedAt: blockedAt, enabled: true });
+    expect(isImageSourceEnabledInSettings(sqlite, "loc")).toBe(true);
+    expect(status.sources.find((row) => row.id === "nasa")?.lastBlockedAt).toBeNull();
   });
 });

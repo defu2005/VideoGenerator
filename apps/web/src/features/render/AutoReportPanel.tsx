@@ -9,6 +9,7 @@ const CODE_LABEL: Record<AutoReportCode, string> = {
   VISUAL_UNVERIFIED_LICENSE: "License chưa xác minh",
   VISUAL_REUSED_NEIGHBOUR: "Tái sử dụng scene lân cận",
   VISUAL_SKIPPED: "Bỏ qua scene",
+  VISUAL_DOWNLOAD_FAILED: "Tải ảnh thất bại",
   MUSIC_AUTO_PICKED: "Tự chọn nhạc",
   MUSIC_NONE: "Không dùng nhạc",
   RENDER_VISION_ISSUE: "Lỗi vision sau render",

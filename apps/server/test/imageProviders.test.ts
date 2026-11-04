@@ -16,7 +16,7 @@ import { SmithsonianImageProvider } from "../src/providers/images/smithsonian.js
 import { UnsplashImageProvider } from "../src/providers/images/unsplash.js";
 import { TokenBucketRateLimiter } from "../src/providers/images/rateLimiter.js";
 import { WikimediaImageProvider } from "../src/providers/images/wikimedia.js";
-import { fetchJsonWithRetry } from "../src/providers/images/http.js";
+import { fetchJsonWithRetry, ImageProviderBlockedError } from "../src/providers/images/http.js";
 
 const fixtures = join(process.cwd(), "test", "fixtures");
 const config = parseConfig({ WORKER_ENABLED: "false", IMAGE_PROVIDERS: "mock" });
@@ -252,6 +252,20 @@ describe("provider rate limiter", () => {
 });
 
 describe("provider HTTP retry policy", () => {
+  it("raises ImageProviderBlockedError for Cloudflare challenge without retrying", async () => {
+    const challengeFetch = vi.fn(async () => new Response(
+      "<html><script src=\"https://challenges.cloudflare.com/turnstile\"></script></html>",
+      { status: 403, headers: { "cf-mitigated": "challenge", "content-type": "text/html" } },
+    ));
+    await expect(fetchJsonWithRetry({
+      url: new URL("https://www.loc.gov/photos/?fo=json"),
+      config,
+      fetchImpl: challengeFetch,
+      signal,
+    })).rejects.toBeInstanceOf(ImageProviderBlockedError);
+    expect(challengeFetch).toHaveBeenCalledTimes(1);
+  });
+
   it("retries 429 after Retry-After and retries a timed-out request once", async () => {
     vi.useFakeTimers();
     try {

@@ -24,8 +24,17 @@ export const ImageSourceStatusRowSchema = z.object({
   keyRequired: z.boolean(),
   keyConfigured: z.boolean(),
   requestsPerMinute: z.number().int().positive(),
+  /** ISO timestamp of the last Cloudflare/HTTP block observed for this source; null if never blocked. */
+  lastBlockedAt: z.string().nullable(),
 }).strict();
 export type ImageSourceStatusRow = z.infer<typeof ImageSourceStatusRowSchema>;
+
+export const ImageSourcesHealthSchema = z.object({
+  providers: z.record(z.string(), z.object({
+    lastBlockedAt: z.string().min(1),
+  }).strict()),
+}).strict();
+export type ImageSourcesHealth = z.infer<typeof ImageSourcesHealthSchema>;
 
 export const ImageSourcesSettingsStatusSchema = z.object({
   enabled: z.record(StockProviderSchema, z.boolean()),

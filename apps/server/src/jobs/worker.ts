@@ -1,13 +1,42 @@
 import type { FastifyBaseLogger } from "fastify";
 import type { Job, JobError, PipelineStage } from "@vg/shared";
 import type { AppConfig } from "../lib/config.js";
+import { AppError } from "../lib/errors.js";
 import { StageError } from "../pipeline/stageExecutor.js";
 import type { StageExecutor } from "../pipeline/stageExecutor.js";
+import { ImageDownloadError } from "../services/imageStore.js";
+import { isRetryableDownloadError } from "../services/visualService.js";
 import { JobRepository } from "./jobRepository.js";
 import { PipelineOrchestrator } from "../pipeline/orchestrator.js";
 
 type Clock = () => Date;
 type RunningTask = { controller: AbortController; promise: Promise<void> };
+
+/** Map thrown stage errors to JobError; 401/403/404/410 image downloads are never retryable. */
+export function jobErrorFromCaught(error: unknown): JobError {
+  if (error instanceof StageError) {
+    return { code: error.code, message: error.message, retryable: error.retryable };
+  }
+  if (error instanceof AppError && error.code === "IMAGE_DOWNLOAD_FAILED") {
+    return {
+      code: error.code,
+      message: error.message,
+      retryable: isRetryableDownloadError(error),
+    };
+  }
+  if (error instanceof ImageDownloadError) {
+    return {
+      code: "IMAGE_DOWNLOAD_FAILED",
+      message: error.message,
+      retryable: isRetryableDownloadError(error),
+    };
+  }
+  return {
+    code: "STAGE_EXECUTION_FAILED",
+    message: error instanceof Error ? error.message : String(error),
+    retryable: true,
+  };
+}
 
 export class JobWorker {
   private readonly running = new Map<string, RunningTask>();
@@ -143,10 +172,7 @@ export class JobWorker {
           retryable: true,
         });
       } else {
-        const jobError: JobError = error instanceof StageError
-          ? { code: error.code, message: error.message, retryable: error.retryable }
-          : { code: "STAGE_EXECUTION_FAILED", message: error instanceof Error ? error.message : String(error), retryable: true };
-        this.orchestrator.failJob(job.id, jobError);
+        this.orchestrator.failJob(job.id, jobErrorFromCaught(error));
       }
     } finally {
       if (timeoutHandle) clearTimeout(timeoutHandle);

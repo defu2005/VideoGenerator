@@ -35,7 +35,7 @@ import { ImageDownloadError, ImageStore, isVisualFileName, parseImage, type Stor
 import { projectDir } from "../storage/paths.js";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { ImageProviderError } from "../providers/images/http.js";
+import { ImageProviderBlockedError, ImageProviderError } from "../providers/images/http.js";
 import { TokenBucketRateLimiter } from "../providers/images/rateLimiter.js";
 import type {
   ImageOrientation,
@@ -61,7 +61,7 @@ import {
   WEB_IMAGE_GROUNDING_BATCH_SIZE,
 } from "../providers/images/webGrounding.js";
 import { getWebImageSettings } from "../settings/webImage.js";
-import { isImageSourceEnabledInSettings } from "../settings/imageSources.js";
+import { isImageSourceEnabledInSettings, recordImageSourceBlocked } from "../settings/imageSources.js";
 import { UnsplashImageProvider } from "../providers/images/unsplash.js";
 import { markStaleFrom } from "../pipeline/invalidation.js";
 import { StageError, type StageContext, type StageResult } from "../pipeline/stageExecutor.js";
@@ -107,6 +107,9 @@ type SearchStats = {
   cacheHits: number;
   failures: number;
   unavailableFailures: number;
+  /** Providers skipped for the rest of this stage run (Cloudflare / repeated 403). */
+  blockedProviders: Set<string>;
+  consecutive403ByProvider: Record<string, number>;
 };
 
 type SceneSearchData = {
@@ -667,6 +670,7 @@ export class VisualService {
   /**
    * AUTO-only: force every scene to READY_FOR_RENDER or SKIPPED so the visual gate can pass.
    * Does not change approveAll rules for ASSISTED/MANUAL.
+   * Never throws because of one scene's image download — only abort or programming errors escape.
    */
   async autoResolve(projectId: string, signal?: AbortSignal): Promise<void> {
     this.requireProject(projectId);
@@ -681,13 +685,16 @@ export class VisualService {
       const visionMeta = this.getVisionMeta(scene.id);
       const verified = candidates.filter((candidate) => !isUnverifiedWebCandidate(candidate));
       const unverifiedOnly = candidates.length > 0 && verified.length === 0;
+      const pool = verified.length > 0 ? verified : candidates;
 
       if (visionMeta?.needsAttention || status === "NEEDS_ATTENTION") {
-        const pick = this.bestCandidate(verified.length > 0 ? verified : candidates);
-        if (pick) {
-          await this.forceApproveCandidate(projectId, scene.id, pick, signal);
+        const { approved, downloadFailures } = await this.tryApproveCandidatesInOrder(
+          projectId, scene.id, pool, signal,
+        );
+        this.reportDownloadFailures(projectId, scene.id, downloadFailures);
+        if (approved) {
           this.clearNeedsAttention(scene.id);
-          const fit = pick.visionCheck?.fit ?? null;
+          const fit = approved.visionCheck?.fit ?? null;
           this.autoReport?.add(projectId, {
             stage: "VISUAL_REVIEW",
             sceneId: scene.id,
@@ -696,16 +703,16 @@ export class VisualService {
             message: fit == null
               ? `Scene đã duyệt ảnh xếp hạng cao nhất dù AI chưa đạt ngưỡng.`
               : `Scene đã duyệt ảnh fit ${fit}/10 (dưới ngưỡng).`,
-            data: { fit, reason: visionMeta?.reason ?? null, candidateId: pick.id },
+            data: { fit, reason: visionMeta?.reason ?? null, candidateId: approved.id },
           });
           continue;
         }
-      }
-
-      if (unverifiedOnly) {
-        const pick = this.bestCandidate(candidates);
-        if (pick) {
-          await this.forceApproveCandidate(projectId, scene.id, pick, signal);
+      } else if (unverifiedOnly) {
+        const { approved, downloadFailures } = await this.tryApproveCandidatesInOrder(
+          projectId, scene.id, candidates, signal,
+        );
+        this.reportDownloadFailures(projectId, scene.id, downloadFailures);
+        if (approved) {
           this.clearNeedsAttention(scene.id);
           this.autoReport?.add(projectId, {
             stage: "VISUAL_REVIEW",
@@ -714,18 +721,28 @@ export class VisualService {
             severity: "WARN",
             message: "Đã dùng ảnh web chưa xác minh license (không còn ứng viên đã xác minh).",
             data: {
-              candidateId: pick.id,
-              sourcePageUrl: pick.sourcePageUrl ?? pick.sourceUrl,
-              provider: pick.provider,
+              candidateId: approved.id,
+              sourcePageUrl: approved.sourcePageUrl ?? approved.sourceUrl,
+              provider: approved.provider,
             },
           });
           continue;
         }
+      } else if (candidates.length > 0) {
+        const { approved, downloadFailures } = await this.tryApproveCandidatesInOrder(
+          projectId, scene.id, pool, signal,
+        );
+        this.reportDownloadFailures(projectId, scene.id, downloadFailures);
+        if (approved) {
+          this.clearNeedsAttention(scene.id);
+          continue;
+        }
       }
 
-      if (candidates.length === 0) {
-        const neighbour = this.findNeighbourWithImage(scenes, scene);
-        if (neighbour) {
+      // No usable candidate (none, or all downloads failed): reuse neighbour or skip.
+      const neighbour = this.findNeighbourWithImage(scenes, scene);
+      if (neighbour) {
+        try {
           const cloned = this.cloneCandidateToScene(projectId, scene.id, neighbour.candidate);
           await this.forceApproveCandidate(projectId, scene.id, cloned, signal);
           this.clearNeedsAttention(scene.id);
@@ -738,35 +755,23 @@ export class VisualService {
             data: { fromSceneId: neighbour.scene.id, candidateId: cloned.id },
           });
           continue;
+        } catch (error) {
+          if (signal?.aborted) throw signal.reason ?? error;
+          if (!isImageDownloadFailedError(error)) throw error;
+          // Neighbour clone download failed — fall through to skip.
         }
-        this.removeSceneVisual(projectId, scene.id);
-        this.autoReport?.add(projectId, {
-          stage: "VISUAL_REVIEW",
-          sceneId: scene.id,
-          code: "VISUAL_SKIPPED",
-          severity: "WARN",
-          message: "Không có ảnh cho scene này — đã bỏ qua (placeholder).",
-          data: null,
-        });
-        continue;
       }
-
-      // Remaining REVIEW_REQUIRED / NO_VISUAL with candidates: pick best verified (or any).
-      const pick = this.bestCandidate(verified.length > 0 ? verified : candidates);
-      if (pick) {
-        await this.forceApproveCandidate(projectId, scene.id, pick, signal);
-        this.clearNeedsAttention(scene.id);
-      } else {
-        this.removeSceneVisual(projectId, scene.id);
-        this.autoReport?.add(projectId, {
-          stage: "VISUAL_REVIEW",
-          sceneId: scene.id,
-          code: "VISUAL_SKIPPED",
-          severity: "WARN",
-          message: "Không duyệt được ảnh — đã bỏ qua scene (placeholder).",
-          data: null,
-        });
-      }
+      this.removeSceneVisual(projectId, scene.id);
+      this.autoReport?.add(projectId, {
+        stage: "VISUAL_REVIEW",
+        sceneId: scene.id,
+        code: "VISUAL_SKIPPED",
+        severity: "WARN",
+        message: candidates.length === 0
+          ? "Không có ảnh cho scene này — đã bỏ qua (placeholder)."
+          : "Không duyệt được ảnh — đã bỏ qua scene (placeholder).",
+        data: null,
+      });
     }
   }
 
@@ -777,17 +782,79 @@ export class VisualService {
     return rows.map((row) => this.candidateFromRow(row));
   }
 
+  /** Ranked candidates excluding ones that already failed to download. */
+  private rankedCandidates(candidates: VisualCandidate[]): VisualCandidate[] {
+    return [...candidates]
+      .filter((candidate) => !candidate.downloadError)
+      .sort((left, right) => {
+        const leftFit = left.visionCheck?.fit;
+        const rightFit = right.visionCheck?.fit;
+        if (leftFit != null && rightFit != null && leftFit !== rightFit) return rightFit - leftFit;
+        if (leftFit != null && rightFit == null) return -1;
+        if (leftFit == null && rightFit != null) return 1;
+        if (right.relevanceScore !== left.relevanceScore) return right.relevanceScore - left.relevanceScore;
+        return left.rank - right.rank;
+      });
+  }
+
   private bestCandidate(candidates: VisualCandidate[]): VisualCandidate | null {
-    if (candidates.length === 0) return null;
-    return [...candidates].sort((left, right) => {
-      const leftFit = left.visionCheck?.fit;
-      const rightFit = right.visionCheck?.fit;
-      if (leftFit != null && rightFit != null && leftFit !== rightFit) return rightFit - leftFit;
-      if (leftFit != null && rightFit == null) return -1;
-      if (leftFit == null && rightFit != null) return 1;
-      if (right.relevanceScore !== left.relevanceScore) return right.relevanceScore - left.relevanceScore;
-      return left.rank - right.rank;
-    })[0] ?? null;
+    return this.rankedCandidates(candidates)[0] ?? null;
+  }
+
+  /**
+   * Try candidates in bestCandidate order (verified-first when the caller passes that pool).
+   * On download failure, skip that candidate and try the next (cap 5). Never throws for download errors.
+   */
+  private async tryApproveCandidatesInOrder(
+    projectId: string,
+    sceneId: string,
+    candidates: VisualCandidate[],
+    signal?: AbortSignal,
+    maxAttempts = 5,
+  ): Promise<{
+    approved: VisualCandidate | null;
+    downloadFailures: { id: string; host: string | null; status: number | null }[];
+  }> {
+    const ordered = this.rankedCandidates(candidates).slice(0, maxAttempts);
+    const downloadFailures: { id: string; host: string | null; status: number | null }[] = [];
+    for (const pick of ordered) {
+      if (signal?.aborted) throw signal.reason ?? new Error("Visual auto-resolve was aborted");
+      try {
+        await this.forceApproveCandidate(projectId, sceneId, pick, signal);
+        return { approved: pick, downloadFailures };
+      } catch (error) {
+        if (signal?.aborted) throw signal.reason ?? error;
+        if (!isImageDownloadFailedError(error)) throw error;
+        downloadFailures.push({
+          id: pick.id,
+          host: candidateHost(pick),
+          status: downloadFailureStatus(error),
+        });
+      }
+    }
+    return { approved: null, downloadFailures };
+  }
+
+  private reportDownloadFailures(
+    projectId: string,
+    sceneId: string,
+    failures: { id: string; host: string | null; status: number | null }[],
+  ): void {
+    if (failures.length === 0) return;
+    this.autoReport?.add(projectId, {
+      stage: "VISUAL_REVIEW",
+      sceneId,
+      code: "VISUAL_DOWNLOAD_FAILED",
+      severity: "WARN",
+      message: `Không tải được ${failures.length} ảnh ứng viên — đã thử ảnh khác hoặc bỏ qua.`,
+      data: {
+        failed: failures.map((item) => ({
+          candidateId: item.id,
+          host: item.host,
+          status: item.status,
+        })),
+      },
+    });
   }
 
   private async forceApproveCandidate(
@@ -930,8 +997,12 @@ export class VisualService {
       const reason = error instanceof Error ? error.message : String(error);
       this.sqlite.prepare("UPDATE visual_candidates SET download_error = ? WHERE id = ?").run(reason, candidate.id);
       this.repository.emitVisualUpdated(projectId, sceneId, "download-failed");
+      const status = error instanceof ImageDownloadError ? error.status : undefined;
+      const host = error instanceof ImageDownloadError ? error.host : undefined;
       throw new AppError(422, "IMAGE_DOWNLOAD_FAILED", reason, {
-        retryable: error instanceof ImageDownloadError && error.retryable,
+        retryable: error instanceof ImageDownloadError && error.retryable && !isNonRetryableHttpStatus(status),
+        ...(status !== undefined ? { status } : {}),
+        ...(host ? { host } : {}),
       });
     }
     const now = new Date().toISOString();
@@ -1573,12 +1644,16 @@ export class VisualService {
       const selectedCandidate = currentSelection && (item.unchanged || item.protectedSelection)
         ? this.findCandidate(currentSelection.candidateId)
         : null;
-      // AUTO preselect must skip unverified web candidates (user reviews license).
+      // AUTO preselect must skip unverified web candidates (user reviews license)
+      // and candidates that already failed to download.
       return {
         sceneId: item.scene.id,
         order: item.scene.order,
-        candidates: ranked.filter((candidate) => !isUnverifiedWebCandidate(candidate)),
-        ...(selectedCandidate ? { lockedCandidate: fromStoredCandidate(selectedCandidate) } : {}),
+        candidates: ranked.filter((candidate) =>
+          !isUnverifiedWebCandidate(candidate) && !candidate.downloadError),
+        ...(selectedCandidate && !selectedCandidate.downloadError
+          ? { lockedCandidate: fromStoredCandidate(selectedCandidate) }
+          : {}),
       };
     }));
     let candidateCount = 0;
@@ -1675,9 +1750,13 @@ export class VisualService {
     const relevantSelections = projectVisuals.scenes.filter((scene) => scene.selectedCandidate
       && scene.selectedCandidate.scoreBreakdown.lowRelevance !== true).length;
     const elapsedSeconds = Math.round((Date.now() - startedAt) / 1_000);
-    const requestSummary = enabledProviders.map((provider) =>
-      `${provider.id === "wikimedia" ? "W" : provider.id === "openverse" ? "O" : provider.id === "pexels" ? "P" : provider.id} ${stats.requestsByProvider[provider.id] ?? 0}`,
-    ).join(" / ");
+    const requestSummary = enabledProviders.map((provider) => {
+      if (stats.blockedProviders.has(provider.id)) {
+        return `${provider.id}: bị chặn (Cloudflare)`;
+      }
+      const short = provider.id === "wikimedia" ? "W" : provider.id === "openverse" ? "O" : provider.id === "pexels" ? "P" : provider.id;
+      return `${short} ${stats.requestsByProvider[provider.id] ?? 0}`;
+    }).join(" / ");
     const message = `${scenes.length} scenes · ${relevantSelections} relevant · ${candidateCount} candidates · requests ${requestSummary} · cache ${cacheHits} · LLM calls ${llmCalls} · ${elapsedSeconds} s`;
     context.reportProgress(100, message);
     return {
@@ -1763,6 +1842,7 @@ export class VisualService {
   ): Promise<NormalizedImageResult[]> {
     const providerResults = await Promise.all(providers.map(async (provider) => {
       if (signal?.aborted) throw signal.reason ?? new Error("Visual search was aborted");
+      if (stats.blockedProviders.has(provider.id)) return [];
       const perPage = limits?.[provider.id] ?? 10;
       const cacheKey = createHash("sha256").update(JSON.stringify([
         provider.id,
@@ -1780,6 +1860,7 @@ export class VisualService {
       try {
         await this.limiter.acquire(provider.id, signal);
         const found = await provider.search({ query, perPage, orientation, signal });
+        stats.consecutive403ByProvider[provider.id] = 0;
         const filtered = found.filter((item) =>
           item.width >= 1 && item.height >= 1 && Math.min(item.width, item.height) >= 320
           && (item.fileType.toLowerCase() === "svg"
@@ -1792,7 +1873,7 @@ export class VisualService {
         if (!(error instanceof ImageProviderError) || error.retryable || error.status === undefined || error.status >= 500) {
           stats.unavailableFailures += 1;
         }
-        this.logger?.warn({ err: error, provider: provider.id, query }, "Image provider search failed");
+        this.noteProviderSearchFailure(provider.id, error, stats);
         return [];
       }
     }));
@@ -1802,6 +1883,37 @@ export class VisualService {
         searchQuery: query,
         providerPosition: item.providerPosition ?? Math.max(0, 1 - index / 10),
       })));
+  }
+
+  /** Per-run circuit breaker: one Cloudflare block or two consecutive HTTP 403s → skip provider. */
+  private noteProviderSearchFailure(providerId: string, error: unknown, stats: SearchStats): void {
+    if (error instanceof ImageProviderBlockedError) {
+      this.blockProviderForRun(providerId, stats);
+      return;
+    }
+    if (error instanceof ImageProviderError && error.status === 403) {
+      const count = (stats.consecutive403ByProvider[providerId] ?? 0) + 1;
+      stats.consecutive403ByProvider[providerId] = count;
+      if (count >= 2) {
+        this.blockProviderForRun(providerId, stats);
+        return;
+      }
+      this.logger?.warn({ err: error, provider: providerId }, "Image provider search failed");
+      return;
+    }
+    stats.consecutive403ByProvider[providerId] = 0;
+    this.logger?.warn({ err: error, provider: providerId }, "Image provider search failed");
+  }
+
+  private blockProviderForRun(providerId: string, stats: SearchStats): void {
+    if (stats.blockedProviders.has(providerId)) return;
+    stats.blockedProviders.add(providerId);
+    try {
+      recordImageSourceBlocked(this.sqlite, providerId);
+    } catch (error) {
+      this.logger?.warn({ err: error, provider: providerId }, "Failed to persist image source block health");
+    }
+    this.logger?.warn({ provider: providerId }, "Image provider blocked for rest of stage run");
   }
 
   private resolveProviders(
@@ -2372,6 +2484,7 @@ function fromStoredCandidate(candidate: VisualCandidate): NormalizedImageResult 
     licenseVerified: candidate.licenseVerified,
     ...(candidate.why ? { why: candidate.why } : {}),
     ...(downloadLocation ? { downloadLocation } : {}),
+    ...(candidate.downloadError ? { downloadError: candidate.downloadError } : {}),
   };
 }
 
@@ -2382,6 +2495,8 @@ function createSearchStats(): SearchStats {
     cacheHits: 0,
     failures: 0,
     unavailableFailures: 0,
+    blockedProviders: new Set(),
+    consecutive403ByProvider: {},
   };
 }
 
@@ -2421,10 +2536,43 @@ function downloadError(error: unknown): AppError {
   return new AppError(422, "IMAGE_DOWNLOAD_FAILED", reason);
 }
 
-function isRetryableDownloadError(error: unknown): boolean {
-  if (error instanceof ImageDownloadError) return error.retryable;
+const NON_RETRYABLE_DOWNLOAD_STATUSES = new Set([401, 403, 404, 410]);
+
+function isNonRetryableHttpStatus(status: number | undefined): boolean {
+  return status != null && NON_RETRYABLE_DOWNLOAD_STATUSES.has(status);
+}
+
+export function isRetryableDownloadError(error: unknown): boolean {
+  if (error instanceof ImageDownloadError) {
+    if (isNonRetryableHttpStatus(error.status)) return false;
+    return error.retryable;
+  }
   if (error instanceof AppError && error.code === "IMAGE_DOWNLOAD_FAILED") {
-    return (error.details as { retryable?: boolean } | undefined)?.retryable === true;
+    const details = error.details as { retryable?: boolean; status?: number } | undefined;
+    if (isNonRetryableHttpStatus(details?.status)) return false;
+    return details?.retryable === true;
   }
   return false;
+}
+
+function isImageDownloadFailedError(error: unknown): boolean {
+  if (error instanceof ImageDownloadError) return true;
+  return error instanceof AppError && error.code === "IMAGE_DOWNLOAD_FAILED";
+}
+
+function downloadFailureStatus(error: unknown): number | null {
+  if (error instanceof ImageDownloadError) return error.status ?? null;
+  if (error instanceof AppError && error.code === "IMAGE_DOWNLOAD_FAILED") {
+    const status = (error.details as { status?: number } | undefined)?.status;
+    return status ?? null;
+  }
+  return null;
+}
+
+function candidateHost(candidate: VisualCandidate): string | null {
+  try {
+    return new URL(downloadUrl(candidate)).hostname;
+  } catch {
+    return null;
+  }
 }

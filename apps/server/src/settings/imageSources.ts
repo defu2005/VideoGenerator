@@ -3,9 +3,11 @@ import {
   defaultImageSourcesEnabled,
   IMAGE_SOURCE_KEY_REQUIRED,
   IMAGE_SOURCE_LABELS,
+  ImageSourcesHealthSchema,
   ImageSourcesSettingsSchema,
   ImageSourcesSettingsStatusSchema,
   STOCK_IMAGE_PROVIDERS,
+  type ImageSourcesHealth,
   type ImageSourcesSettings,
   type ImageSourcesSettingsStatus,
   type StockImageProvider,
@@ -13,6 +15,7 @@ import {
 import type { AppConfig } from "../lib/config.js";
 
 const SETTINGS_KEY = "imageSources";
+const HEALTH_KEY = "imageSourcesHealth";
 
 function perMinute(config: AppConfig, id: StockImageProvider): number {
   const map: Record<StockImageProvider, number> = {
@@ -69,11 +72,42 @@ export function saveImageSourcesSettings(
   return parsed;
 }
 
+export function getImageSourcesHealth(sqlite: Database.Database): ImageSourcesHealth {
+  const row = sqlite.prepare("SELECT value FROM app_settings WHERE key = ?").get(HEALTH_KEY) as { value: string } | undefined;
+  if (!row) return { providers: {} };
+  try {
+    const value = typeof row.value === "string" ? JSON.parse(row.value) as unknown : row.value;
+    const parsed = ImageSourcesHealthSchema.safeParse(value);
+    return parsed.success ? parsed.data : { providers: {} };
+  } catch {
+    return { providers: {} };
+  }
+}
+
+/** Record that a provider was blocked (Cloudflare / repeated 403). Does not disable the source. */
+export function recordImageSourceBlocked(
+  sqlite: Database.Database,
+  providerId: string,
+  at: string = new Date().toISOString(),
+): void {
+  const current = getImageSourcesHealth(sqlite);
+  const next: ImageSourcesHealth = ImageSourcesHealthSchema.parse({
+    providers: {
+      ...current.providers,
+      [providerId]: { lastBlockedAt: at },
+    },
+  });
+  sqlite.prepare(
+    "INSERT INTO app_settings (key, value, updated_at) VALUES (?, ?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at",
+  ).run(HEALTH_KEY, JSON.stringify(next), at);
+}
+
 export function getImageSourcesSettingsStatus(
   sqlite: Database.Database,
   config: AppConfig,
 ): ImageSourcesSettingsStatus {
   const settings = getImageSourcesSettings(sqlite);
+  const health = getImageSourcesHealth(sqlite);
   return ImageSourcesSettingsStatusSchema.parse({
     enabled: settings.enabled,
     sources: STOCK_IMAGE_PROVIDERS.map((id) => ({
@@ -83,6 +117,7 @@ export function getImageSourcesSettingsStatus(
       keyRequired: IMAGE_SOURCE_KEY_REQUIRED[id],
       keyConfigured: keyConfigured(config, id),
       requestsPerMinute: perMinute(config, id),
+      lastBlockedAt: health.providers[id]?.lastBlockedAt ?? null,
     })),
   });
 }

@@ -79,6 +79,14 @@ export function ImageSourcesSettingsPage() {
                   : "không cần key"}
                 {" · "}
                 {source.requestsPerMinute} lượt/phút
+                {source.lastBlockedAt ? (
+                  <>
+                    {" · "}
+                    Bị chặn lần gần nhất:{" "}
+                    {new Intl.DateTimeFormat("vi-VN", { dateStyle: "short", timeStyle: "short" })
+                      .format(new Date(source.lastBlockedAt))}
+                  </>
+                ) : null}
               </small>
             </li>
           ))}

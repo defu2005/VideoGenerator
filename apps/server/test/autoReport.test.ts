@@ -1,7 +1,8 @@
 import { randomUUID } from "node:crypto";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import Database from "better-sqlite3";
 import { afterAll, afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { Project } from "@vg/shared";
@@ -13,11 +14,16 @@ import { VisualService } from "../src/services/visualService.js";
 import { AutoReportService } from "../src/services/autoReportService.js";
 import { MusicService } from "../src/services/musicService.js";
 import { AudioStore } from "../src/services/audioStore.js";
+import { ImageStore } from "../src/services/imageStore.js";
+import { HostDownloadRateLimiter } from "../src/providers/images/rateLimiter.js";
 import { createMusicProviders } from "../src/providers/music/registry.js";
 import { probeDurationSec } from "../src/media/ffmpeg.js";
 import { projectDir } from "../src/storage/paths.js";
 import { GuidelineService } from "../src/guidelines/service.js";
 import { createPipelineHarness, drainUntilGate } from "./pipelineFixtures.js";
+import { AppError } from "../src/lib/errors.js";
+
+const pngFixture = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "fixtures", "images", "tiny.png"));
 
 const root = mkdtempSync(join(tmpdir(), "vg-auto-report-"));
 let dataDir: string;
@@ -91,32 +97,42 @@ function insertCandidate(opts: {
   visionFit?: number;
   relevance?: number;
   rank?: number;
+  imageUrl?: string;
 }): string {
   const id = randomUUID();
   const now = new Date().toISOString();
   const provider = opts.provider ?? "mock";
+  const imageUrl = opts.imageUrl ?? `http://x/${id}/i`;
   let localPath: string | null = null;
   let sha256: string | null = null;
+  let actualW: number | null = 1920;
+  let actualH: number | null = 1080;
   if (opts.withFile !== false) {
     const dir = projectDir(config.DATA_DIR, project.id);
     mkdirSync(join(dir, "visuals"), { recursive: true });
     writeFileSync(join(dir, `visuals/${id}.jpg`), "img");
     localPath = `visuals/${id}.jpg`;
     sha256 = "b".repeat(64);
+  } else {
+    actualW = null;
+    actualH = null;
   }
   sqlite.prepare(
     `INSERT INTO visual_candidates (id, project_id, scene_id, origin, provider, provider_item_id, query, title, description,
       tags, preview_url, image_url, source_url, source_page_url, source_site, width, height, aspect_ratio, file_type, watermark,
       relevance_score, score_breakdown, license, license_verified, rank, local_path, sha256, actual_width, actual_height,
       vision_check, created_at, search_hash)
-     VALUES (?, ?, ?, 'SEARCH', ?, ?, 'q', 'Title', 'd', '[]', 'http://x/p', 'http://x/i', 'http://x/s', ?, 'site',
-      1920, 1080, 1.78, 'jpg', 'NONE', ?, '{}', ?, ?, ?, ?, ?, 1920, 1080, ?, ?, 'h')`,
+     VALUES (?, ?, ?, 'SEARCH', ?, ?, 'q', 'Title', 'd', '[]', ?, ?, ?, ?, 'site',
+      1920, 1080, 1.78, 'jpg', 'NONE', ?, '{}', ?, ?, ?, ?, ?, ?, ?, ?, ?, 'h')`,
   ).run(
     id,
     project.id,
     opts.sceneId,
     provider,
     id,
+    imageUrl,
+    imageUrl,
+    imageUrl,
     opts.sourcePageUrl ?? null,
     opts.relevance ?? 0.5,
     JSON.stringify({ kind: "UNKNOWN", name: "", url: null, author: null, authorUrl: null, attributionRequired: false, attributionText: "", evidence: "none" }),
@@ -124,6 +140,8 @@ function insertCandidate(opts: {
     opts.rank ?? 0,
     localPath,
     sha256,
+    actualW,
+    actualH,
     opts.visionFit == null ? null : JSON.stringify({
       fit: opts.visionFit,
       depicts: "subject",
@@ -235,6 +253,100 @@ describe("AUTO report and autoResolve", () => {
     await visuals.autoResolve(project.id);
     expect(visuals.getProjectVisuals(project.id).scenes[0].status).toBe("SKIPPED");
     expect(autoReport.list(project.id).some((entry) => entry.code === "VISUAL_SKIPPED" && entry.sceneId === alone)).toBe(true);
+  });
+
+  it("autoResolve skips a 403 download and approves the next candidate", async () => {
+    const sceneId = insertScene(0, "dl-fallback");
+    const failUrl = "https://images.example.test/fail.jpg";
+    const okUrl = "https://images.example.test/ok.jpg";
+    const first = insertCandidate({
+      sceneId, relevance: 0.99, rank: 0, withFile: false, imageUrl: failUrl,
+    });
+    const second = insertCandidate({
+      sceneId, relevance: 0.5, rank: 1, withFile: false, imageUrl: okUrl,
+    });
+    selectCandidate(sceneId, first);
+
+    const fetchImpl = async (input: string | URL) => {
+      const url = String(input);
+      if (url === failUrl) return new Response(null, { status: 403 });
+      if (url === okUrl) return new Response(pngFixture, { status: 200, headers: { "content-type": "image/png" } });
+      return new Response(null, { status: 404 });
+    };
+    const imageStore = new ImageStore(config.DATA_DIR, "test-agent", {
+      fetchImpl: fetchImpl as typeof fetch,
+      resolveHost: async () => ["203.0.113.10"],
+      hostRateLimiter: new HostDownloadRateLimiter(0, Date.now, async () => undefined),
+    });
+    const repository = new JobRepository(sqlite, new PipelineEventBus());
+    repository.updateStage(project.id, "VISUAL_SEARCH", {
+      state: "DONE", progress: 100, message: null, jobId: null, error: null,
+    });
+    const autoReport = new AutoReportService(sqlite);
+    const visuals = new VisualService(sqlite, repository, config, undefined, { autoReport, imageStore });
+
+    await expect(visuals.autoResolve(project.id)).resolves.toBeUndefined();
+    const scene = visuals.getProjectVisuals(project.id).scenes[0];
+    expect(scene.status).toBe("READY_FOR_RENDER");
+    expect(scene.selectedCandidate?.id).toBe(second);
+    expect(sqlite.prepare("SELECT download_error FROM visual_candidates WHERE id = ?")
+      .get(first)).toMatchObject({ download_error: expect.stringContaining("403") });
+    const downloadEntry = autoReport.list(project.id).find((entry) => entry.code === "VISUAL_DOWNLOAD_FAILED");
+    expect(downloadEntry).toBeTruthy();
+    expect(downloadEntry?.data).toMatchObject({
+      failed: expect.arrayContaining([
+        expect.objectContaining({ candidateId: first, status: 403, host: "images.example.test" }),
+      ]),
+    });
+  });
+
+  it("autoResolve reuses a neighbour when every candidate download fails", async () => {
+    const neighbour = insertScene(0, "neighbour-ok");
+    const target = insertScene(1, "all-fail");
+    const good = insertCandidate({ sceneId: neighbour, withFile: true });
+    selectCandidate(neighbour, good, "APPROVED");
+    const failUrl = "https://images.example.test/blocked.jpg";
+    insertCandidate({ sceneId: target, withFile: false, imageUrl: failUrl, relevance: 0.9 });
+    insertCandidate({ sceneId: target, withFile: false, imageUrl: failUrl, relevance: 0.8, rank: 1 });
+
+    const imageStore = new ImageStore(config.DATA_DIR, "test-agent", {
+      fetchImpl: (async () => new Response(null, { status: 403 })) as typeof fetch,
+      resolveHost: async () => ["203.0.113.10"],
+      hostRateLimiter: new HostDownloadRateLimiter(0, Date.now, async () => undefined),
+    });
+    const repository = new JobRepository(sqlite, new PipelineEventBus());
+    repository.updateStage(project.id, "VISUAL_SEARCH", {
+      state: "DONE", progress: 100, message: null, jobId: null, error: null,
+    });
+    const autoReport = new AutoReportService(sqlite);
+    const visuals = new VisualService(sqlite, repository, config, undefined, { autoReport, imageStore });
+
+    await expect(visuals.autoResolve(project.id)).resolves.toBeUndefined();
+    const byLabel = Object.fromEntries(
+      visuals.getProjectVisuals(project.id).scenes.map((scene) => [scene.sceneId, scene]),
+    );
+    expect(byLabel[target].status).toBe("READY_FOR_RENDER");
+    expect(byLabel[target].selectedCandidate?.scoreBreakdown.reusedNeighbour).toBe(true);
+    expect(autoReport.list(project.id).some((entry) => entry.code === "VISUAL_DOWNLOAD_FAILED")).toBe(true);
+    expect(autoReport.list(project.id).some((entry) => entry.code === "VISUAL_REUSED_NEIGHBOUR")).toBe(true);
+  });
+
+  it("ASSISTED manual approve still returns 422 when download fails", async () => {
+    const sceneId = insertScene(0, "manual-fail");
+    const failUrl = "https://images.example.test/manual-fail.jpg";
+    const candidateId = insertCandidate({ sceneId, withFile: false, imageUrl: failUrl });
+    selectCandidate(sceneId, candidateId);
+    const imageStore = new ImageStore(config.DATA_DIR, "test-agent", {
+      fetchImpl: (async () => new Response(null, { status: 403 })) as typeof fetch,
+      resolveHost: async () => ["203.0.113.10"],
+      hostRateLimiter: new HostDownloadRateLimiter(0, Date.now, async () => undefined),
+    });
+    const repository = new JobRepository(sqlite, new PipelineEventBus());
+    const visuals = new VisualService(sqlite, repository, config, undefined, { imageStore });
+    await expect(visuals.approveScene(project.id, sceneId)).rejects.toMatchObject({
+      statusCode: 422,
+      code: "IMAGE_DOWNLOAD_FAILED",
+    } satisfies Partial<AppError>);
   });
 
   it("logs MUSIC_AUTO_PICKED and MUSIC_NONE", async () => {

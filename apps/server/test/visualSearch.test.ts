@@ -14,11 +14,14 @@ import { LlmProviderRegistry } from "../src/providers/llm/registry.js";
 import type { ImageSearchProvider, NormalizedImageResult } from "../src/providers/images/types.js";
 import { StageError } from "../src/pipeline/stageExecutor.js";
 import { HostDownloadRateLimiter, TokenBucketRateLimiter } from "../src/providers/images/rateLimiter.js";
+import { ImageProviderBlockedError } from "../src/providers/images/http.js";
 import { ImageStore } from "../src/services/imageStore.js";
+import { getImageSourcesSettingsStatus } from "../src/settings/imageSources.js";
 import { readFileSync } from "node:fs";
 import { dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { StageContext } from "../src/pipeline/stageExecutor.js";
+import type { VisualProvider } from "@vg/shared";
 
 const root = mkdtempSync(join(tmpdir(), "vg-visual-search-"));
 let dataDir: string;
@@ -369,6 +372,93 @@ describe("visual search executor", () => {
       .rejects.toMatchObject<Partial<StageError>>({ code: "IMAGE_SEARCH_UNAVAILABLE", retryable: true });
   });
 
+
+  it("circuit-breaks a Cloudflare-blocked provider for the rest of the stage run", async () => {
+    config = parseConfig({
+      DATA_DIR: dataDir,
+      DATABASE_PATH: join(dataDir, "app.db"),
+      WORKER_ENABLED: "false",
+      LOG_LEVEL: "silent",
+      IMAGE_PROVIDERS: "loc,nasa",
+      LLM_ENABLE_MOCK: "true",
+      LLM_DEFAULT_PROVIDER: "mock",
+    });
+    // Distinct queries so cache does not collapse provider calls across scenes.
+    const now = new Date().toISOString();
+    sceneIds.forEach((id, order) => {
+      sqlite.prepare("UPDATE scenes SET visual_queries = ?, updated_at = ? WHERE id = ?").run(
+        JSON.stringify({
+          primary: order === 0 ? "river sunrise landscape" : "mountain lake dusk",
+          alternatives: [],
+          queryVariant: false,
+        }),
+        now,
+        id,
+      );
+    });
+    let locCalls = 0;
+    let nasaCalls = 0;
+    const sample = (provider: VisualProvider, id: string): NormalizedImageResult => ({
+      provider,
+      providerItemId: id,
+      title: `${provider} ${id}`,
+      description: "river sunrise",
+      tags: ["river", "sunrise"],
+      previewUrl: `https://images.test/${provider}/${id}.jpg`,
+      imageUrl: `https://images.test/${provider}/${id}-full.jpg`,
+      sourceUrl: `https://source.test/${provider}/${id}`,
+      sourceSite: provider,
+      width: 1920,
+      height: 1080,
+      fileType: "jpg",
+      watermark: "NONE",
+      license: {
+        kind: "CC0",
+        name: "CC0",
+        url: null,
+        author: null,
+        authorUrl: null,
+        attributionRequired: false,
+        attributionText: "",
+        evidence: "api",
+      },
+    });
+    const locProvider: ImageSearchProvider = {
+      id: "loc",
+      enabled: () => true,
+      search: async () => {
+        locCalls += 1;
+        throw new ImageProviderBlockedError("Image provider blocked by Cloudflare (HTTP 403)", 403);
+      },
+    };
+    const nasaProvider: ImageSearchProvider = {
+      id: "nasa",
+      enabled: () => true,
+      search: async ({ query }) => {
+        nasaCalls += 1;
+        return [sample("nasa", query.slice(0, 24) || "river")];
+      },
+    };
+    const limiter = new TokenBucketRateLimiter(
+      { loc: 60_000, nasa: 60_000 },
+      () => 0,
+      async () => undefined,
+    );
+    visuals = new VisualService(
+      sqlite,
+      new JobRepository(sqlite, new PipelineEventBus()),
+      config,
+      app.log,
+      { providers: [locProvider, nasaProvider], limiter },
+    );
+    const result = await visuals.executeStage(context([]), new LlmProviderRegistry(config));
+    expect(locCalls).toBe(1);
+    expect(nasaCalls).toBeGreaterThan(1);
+    expect(result.message).toContain("loc: bị chặn (Cloudflare)");
+    const status = getImageSourcesSettingsStatus(sqlite, config);
+    expect(status.sources.find((row) => row.id === "loc")?.lastBlockedAt).toBeTruthy();
+    expect(status.sources.find((row) => row.id === "loc")?.enabled).toBe(true);
+  });
 
   it("approve-all keeps other scenes approved when one hits 429 and retries only that scene later", async () => {
     await visuals.executeStage(context([]), new LlmProviderRegistry(config));

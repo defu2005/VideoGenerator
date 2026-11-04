@@ -29,6 +29,7 @@ describe("ImageSourcesSettingsPage", () => {
           keyRequired: false,
           keyConfigured: true,
           requestsPerMinute: 60,
+          lastBlockedAt: null,
         },
         {
           id: "pixabay" as const,
@@ -37,6 +38,16 @@ describe("ImageSourcesSettingsPage", () => {
           keyRequired: true,
           keyConfigured: false,
           requestsPerMinute: 100,
+          lastBlockedAt: null,
+        },
+        {
+          id: "loc" as const,
+          label: "Library of Congress",
+          enabled: true,
+          keyRequired: false,
+          keyConfigured: true,
+          requestsPerMinute: 20,
+          lastBlockedAt: "2026-11-04T12:00:00.000Z",
         },
       ],
     };
@@ -61,7 +72,8 @@ describe("ImageSourcesSettingsPage", () => {
     renderWithProviders(<ImageSourcesSettingsPage />);
     expect(await screen.findByRole("heading", { name: "Nguồn ảnh" })).toBeInTheDocument();
     expect(screen.getAllByText(/thiếu key/).length).toBeGreaterThan(0);
-    expect(screen.getByText(/không cần key/)).toBeInTheDocument();
+    expect(screen.getAllByText(/không cần key/).length).toBeGreaterThan(0);
+    expect(screen.getByText(/Bị chặn lần gần nhất:/)).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("checkbox", { name: /Bật NASA Image Library/i }));
     fireEvent.click(screen.getByRole("button", { name: "Lưu" }));

@@ -22,11 +22,10 @@ export async function fetchJsonWithRetry(input: {
         signal: controller.signal,
       });
       if (response.ok) return await response.json() as unknown;
-      if (!retryableStatus(response.status) || attempt === 1) {
-        throw new ImageProviderError(`Image provider returned HTTP ${response.status}`, response.status, false);
-      }
+      const providerError = await errorFromFailedResponse(response);
+      if (!providerError.retryable || attempt === 1) throw providerError;
       await sleepWithAbort(parseRetryDelay(response.headers.get("retry-after")) || 250, input.signal);
-      lastError = new ImageProviderError(`Image provider returned HTTP ${response.status}`, response.status, true);
+      lastError = providerError;
     } catch (error) {
       if (input.signal?.aborted) throw input.signal.reason ?? error;
       const timedOut = error instanceof DOMException
@@ -56,6 +55,34 @@ export class ImageProviderError extends Error {
     super(message);
     this.name = "ImageProviderError";
   }
+}
+
+/** Cloudflare (or similar) bot challenge — non-retryable; caller should circuit-break the provider. */
+export class ImageProviderBlockedError extends ImageProviderError {
+  constructor(message: string, status: number | undefined = 403) {
+    super(message, status, false);
+    this.name = "ImageProviderBlockedError";
+  }
+}
+
+async function errorFromFailedResponse(response: Response): Promise<ImageProviderError> {
+  const cfMitigated = Boolean(response.headers.get("cf-mitigated"));
+  let bodyText = "";
+  try {
+    bodyText = await response.text();
+  } catch {
+    bodyText = "";
+  }
+  const cloudflareChallenge = (response.status === 403 || response.status === 429)
+    && (cfMitigated || bodyText.includes("challenges.cloudflare.com"));
+  if (cloudflareChallenge) {
+    return new ImageProviderBlockedError(
+      `Image provider blocked by Cloudflare (HTTP ${response.status})`,
+      response.status,
+    );
+  }
+  const retryable = retryableStatus(response.status);
+  return new ImageProviderError(`Image provider returned HTTP ${response.status}`, response.status, retryable);
 }
 
 function retryableStatus(status: number): boolean {
