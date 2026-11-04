@@ -21,6 +21,7 @@
 | 6 | [TASK-020](TASK-020.md) | AUTO never pauses (auto decisions + AUTO report) + realistic token estimate | (guide only) |
 | 7 | [TASK-007B](TASK-007B.md) | More image/video sources | docs/tasks/TASK-007B.md |
 | 8 | [TASK-021](TASK-021.md) | Fixes from the first live AUTO run (download fallback, blocked-source circuit breaker) | (guide only) |
+| 8b | [TASK-021B](TASK-021B.md) | Fixes from live run 2: sturdier edge-tts retry, NASA image URLs from the listed sizes | (guide only) |
 | 9 | [TASK-022](TASK-022.md) | Profiles (Hồ sơ) with their own direction + platform accounts | (guide only) |
 | 10 | [TASK-023](TASK-023.md) | Render variants 16:9 / 9:16 from one project | (guide only) |
 | 11 | [TASK-024](TASK-024.md) | Publishing framework: encrypted token vault, OAuth, publish jobs + schedule, mock publisher | (guide only) |
