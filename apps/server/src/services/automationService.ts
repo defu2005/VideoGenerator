@@ -92,6 +92,21 @@ function markCooldown(profileId: string, kind: CooldownKind, now: Date): void {
   cooldownUntilMs.set(cooldownKey(profileId, kind), now.getTime() + COOLDOWN_MS);
 }
 
+type AutomationNotify = (event: {
+  kind: "automation_warning";
+  profileId?: string | null;
+  profile: string;
+  message: string;
+  logId?: string;
+}) => void;
+
+let automationNotify: AutomationNotify | null = null;
+
+/** Wire notification service after construction (avoids circular init). */
+export function setAutomationNotify(handler: AutomationNotify | null): void {
+  automationNotify = handler;
+}
+
 export function writeAutomationLog(
   sqlite: Database.Database,
   entry: {
@@ -103,10 +118,11 @@ export function writeAutomationLog(
   },
 ): void {
   const at = (entry.at ?? new Date()).toISOString();
+  const id = randomUUID();
   sqlite.prepare(
     `INSERT INTO automation_log (id, profile_id, at, level, message, data) VALUES (?, ?, ?, ?, ?, ?)`,
   ).run(
-    randomUUID(),
+    id,
     entry.profileId ?? null,
     at,
     entry.level,
@@ -114,6 +130,26 @@ export function writeAutomationLog(
     entry.data ? JSON.stringify(entry.data) : null,
   );
   pruneAutomationLog(sqlite, entry.at ?? new Date());
+  if ((entry.level === "warn" || entry.level === "error") && automationNotify) {
+    let profileName = entry.profileId ?? "app";
+    if (entry.profileId) {
+      const row = sqlite.prepare("SELECT name FROM profiles WHERE id = ?").get(entry.profileId) as
+        | { name: string }
+        | undefined;
+      if (row) profileName = row.name;
+    }
+    try {
+      automationNotify({
+        kind: "automation_warning",
+        profileId: entry.profileId ?? null,
+        profile: profileName,
+        message: entry.message,
+        logId: id,
+      });
+    } catch {
+      // never break automation for notifications
+    }
+  }
 }
 
 export function pruneAutomationLog(sqlite: Database.Database, now = new Date()): void {

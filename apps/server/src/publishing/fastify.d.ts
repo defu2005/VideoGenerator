@@ -11,6 +11,8 @@ import type { TikTokPublisher } from "./tiktokPublisher.js";
 import type { YouTubePublisher } from "./youtubePublisher.js";
 import type { AutomationService } from "../services/automationService.js";
 import type { TopicService } from "../services/topicService.js";
+import type { NotificationService } from "../notifications/notificationService.js";
+import type { TelegramPoller } from "../notifications/telegram.js";
 
 declare module "fastify" {
   interface FastifyInstance {
@@ -30,6 +32,10 @@ declare module "fastify" {
     vgAutomation: {
       service: AutomationService;
       topics: TopicService;
+    };
+    vgNotifications: {
+      service: NotificationService;
+      poller: TelegramPoller;
     };
   }
 }

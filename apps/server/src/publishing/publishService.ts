@@ -16,6 +16,7 @@ import {
   type PublicationListItem,
   type PublicationListResponse,
   type PublicationStatus,
+  type NotificationEvent,
   type PublishInput,
   type PublishResult,
   type PublishVisibility,
@@ -24,6 +25,7 @@ import type { AppConfig } from "../lib/config.js";
 import { AppError } from "../lib/errors.js";
 import { JobRepository } from "../jobs/jobRepository.js";
 import type { RenderService } from "../services/renderService.js";
+import { safeNotify, type NotificationService } from "../notifications/notificationService.js";
 import { hasEnvAppCredentials } from "./envAppCredentials.js";
 import type { FacebookReelsPublisher } from "./facebookReelsPublisher.js";
 import { evaluatePublishGuardrail } from "./guardrail.js";
@@ -82,6 +84,8 @@ type ProjectRow = {
 };
 
 export class PublishService {
+  private notifications: NotificationService | null = null;
+
   constructor(
     private readonly sqlite: Database.Database,
     private readonly config: AppConfig,
@@ -91,6 +95,10 @@ export class PublishService {
     private readonly renders: RenderService,
     private readonly now: () => Date = () => new Date(),
   ) {}
+
+  setNotificationService(service: NotificationService | null): void {
+    this.notifications = service;
+  }
 
   oauthRedirectUri(platform: string): string {
     return `http://127.0.0.1:${this.config.PORT}/api/oauth/${platform}/callback`;
@@ -609,18 +617,72 @@ export class PublishService {
         nowIso,
         publicationId,
       );
-      return;
+    } else {
+      this.sqlite.prepare(
+        `UPDATE publications SET status = 'PUBLISHED', progress = 100, external_id = ?, external_url = ?,
+         published_at = ?, last_error = NULL, warnings = ?, updated_at = ? WHERE id = ?`,
+      ).run(result.externalId, result.externalUrl, nowIso, warnings, nowIso, publicationId);
     }
-    this.sqlite.prepare(
-      `UPDATE publications SET status = 'PUBLISHED', progress = 100, external_id = ?, external_url = ?,
-       published_at = ?, last_error = NULL, warnings = ?, updated_at = ? WHERE id = ?`,
-    ).run(result.externalId, result.externalUrl, nowIso, warnings, nowIso, publicationId);
+    this.emitPublishNotification(publicationId, "publish_succeeded", result.externalUrl);
   }
 
   markFailed(publicationId: string, message: string): void {
     this.sqlite.prepare(
       `UPDATE publications SET status = 'FAILED', last_error = ?, updated_at = ? WHERE id = ?`,
     ).run(message, this.now().toISOString(), publicationId);
+    this.emitPublishNotification(publicationId, "publish_failed", undefined, message);
+  }
+
+  private emitPublishNotification(
+    publicationId: string,
+    kind: "publish_succeeded" | "publish_failed",
+    url?: string,
+    error?: string,
+  ): void {
+    try {
+      const row = this.sqlite.prepare(
+        `SELECT pub.id, pub.external_url, pr.title AS project_title, a.platform, a.display_name, a.handle,
+                p.name AS profile_name
+         FROM publications pub
+         JOIN platform_accounts a ON a.id = pub.account_id
+         JOIN profiles p ON p.id = a.profile_id
+         JOIN projects pr ON pr.id = pub.project_id
+         WHERE pub.id = ?`,
+      ).get(publicationId) as {
+        id: string;
+        external_url: string | null;
+        project_title: string;
+        platform: string;
+        display_name: string;
+        handle: string | null;
+        profile_name: string;
+      } | undefined;
+      if (!row) return;
+      const account = row.display_name || row.handle || row.platform;
+      const title = row.project_title || "Video";
+      const event: NotificationEvent = kind === "publish_succeeded"
+        ? {
+          kind: "publish_succeeded",
+          publicationId,
+          profile: row.profile_name,
+          account,
+          platform: row.platform,
+          title,
+          url: url ?? row.external_url ?? "",
+        }
+        : {
+          kind: "publish_failed",
+          publicationId,
+          profile: row.profile_name,
+          account,
+          platform: row.platform,
+          title,
+          error: error ?? "Unknown error",
+        };
+      safeNotify(this.notifications, event);
+    } catch {
+      // Never break publishing for notification failures.
+    }
   }
 
   /** Quota exhausted: keep the publication and retry after Pacific midnight. */
@@ -772,6 +834,22 @@ export class PublishService {
     this.sqlite.prepare(
       "UPDATE platform_accounts SET connection = ?, connection_error = ?, updated_at = ? WHERE id = ?",
     ).run(connection, error, this.now().toISOString(), accountId);
+    if ((connection === "ERROR" || connection === "EXPIRED") && error) {
+      try {
+        const account = this.sqlite.prepare(
+          "SELECT display_name, handle FROM platform_accounts WHERE id = ?",
+        ).get(accountId) as { display_name: string; handle: string | null } | undefined;
+        const label = account?.display_name || account?.handle || accountId;
+        safeNotify(this.notifications, {
+          kind: "account_error",
+          accountId,
+          account: label,
+          error,
+        });
+      } catch {
+        // ignore
+      }
+    }
   }
 
   applyOAuthSuccess(input: {

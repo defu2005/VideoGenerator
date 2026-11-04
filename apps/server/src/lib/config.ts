@@ -52,6 +52,8 @@ const ConfigSchema = z.object({
   DATABASE_PATH: z.string().min(1).optional(),
   LOG_LEVEL: z.enum(["fatal", "error", "warn", "info", "debug", "trace", "silent"]).default("info"),
   CORS_ORIGIN: z.string().url().default("http://localhost:5173"),
+  /** Public web UI base URL for links in notifications (Telegram, etc.). */
+  WEB_BASE_URL: z.string().url().default("http://localhost:5180"),
   WORKER_ENABLED: z.stringbool().default(true),
   WORKER_CONCURRENCY: z.coerce.number().int().positive().max(32).default(1),
   STAGE_TIMEOUT_MS: z.coerce.number().int().positive().default(600_000),
@@ -189,6 +191,7 @@ export type AppConfig = {
   DATABASE_PATH: string;
   LOG_LEVEL: z.infer<typeof ConfigSchema>["LOG_LEVEL"];
   CORS_ORIGIN: string;
+  WEB_BASE_URL: string;
   WORKER_ENABLED: boolean;
   WORKER_CONCURRENCY: number;
   STAGE_TIMEOUT_MS: number;

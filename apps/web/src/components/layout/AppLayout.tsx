@@ -18,6 +18,7 @@ export function AppLayout() {
           <NavLink to="/settings/render">Render</NavLink>
           <NavLink to="/settings/image-sources">Nguồn ảnh</NavLink>
           <NavLink to="/settings/web-image">Nguồn ảnh web</NavLink>
+          <NavLink to="/settings/notifications">Thông báo</NavLink>
           <NavLink to="/settings/guidelines">Định hướng nội dung</NavLink>
           <NavLink to="/usage">Mức dùng</NavLink>
         </nav>

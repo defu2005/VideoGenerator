@@ -76,8 +76,12 @@ import { PublishExecutor } from "./stages/publish/publishExecutor.js";
 import { registerOAuthRoutes } from "./api/oauth.js";
 import { registerPublicationRoutes } from "./api/publications.js";
 import { createTopicService } from "./services/topicService.js";
-import { createAutomationService } from "./services/automationService.js";
+import { createAutomationService, setAutomationNotify } from "./services/automationService.js";
+import { getAutomationPaused, setAutomationPausedNotify } from "./services/automationSettings.js";
 import { registerAutomationRoutes } from "./api/automation.js";
+import { NotificationService } from "./notifications/notificationService.js";
+import { TelegramPoller } from "./notifications/telegram.js";
+import { registerNotificationRoutes } from "./api/notifications.js";
 
 export function buildApp({ config }: { config: AppConfig }) {
   const server = Fastify({
@@ -222,6 +226,41 @@ export function buildApp({ config }: { config: AppConfig }) {
     logger: server.log,
   });
   publishTicker.setAutomation(automationService);
+  const notificationService = new NotificationService({
+    sqlite: database.sqlite,
+    vault: tokenVault,
+    config,
+    logger: server.log,
+    usage: usageService,
+  });
+  const telegramPoller = new TelegramPoller({
+    sqlite: database.sqlite,
+    vault: tokenVault,
+    logger: server.log,
+    workerEnabled: config.WORKER_ENABLED,
+    getAutomationStatusText: async () => {
+      const status = await automationService.getStatus();
+      const paused = getAutomationPaused(database.sqlite);
+      const lines = [
+        `<b>Tự động hoá</b>: ${paused ? "⏸ tạm dừng" : "đang chạy"}`,
+        ...status.profiles.slice(0, 8).map((p) =>
+          `• ${p.profileName}: ${p.enabled ? "bật" : "tắt"} · hôm nay ${p.todayCount}`
+        ),
+      ];
+      if (status.profiles.length === 0) lines.push("— chưa có hồ sơ");
+      return lines.join("\n");
+    },
+  });
+  telegramPoller.installDefaultHandlers();
+  publishService.setNotificationService(notificationService);
+  orchestrator.setNotificationService(notificationService);
+  publishTicker.setNotifications(notificationService);
+  setAutomationNotify((event) => {
+    void notificationService.notify(event);
+  });
+  setAutomationPausedNotify(() => {
+    void notificationService.notify({ kind: "automation_paused" });
+  });
   const worker = new JobWorker(
     jobRepository,
     orchestrator,
@@ -260,6 +299,10 @@ export function buildApp({ config }: { config: AppConfig }) {
     service: automationService,
     topics: topicService,
   });
+  server.decorate("vgNotifications", {
+    service: notificationService,
+    poller: telegramPoller,
+  });
 
   server.register(cors, { origin: config.CORS_ORIGIN });
   registerHealthRoutes(server, database.sqlite);
@@ -284,6 +327,12 @@ export function buildApp({ config }: { config: AppConfig }) {
   registerVisualRoutes(server, visualService, jobRepository, llmProviders);
   registerWebImageSettingsRoutes(server, database.sqlite, config);
   registerImageSourcesSettingsRoutes(server, database.sqlite, config);
+  registerNotificationRoutes(server, {
+    sqlite: database.sqlite,
+    vault: tokenVault,
+    notifications: notificationService,
+    poller: telegramPoller,
+  });
   registerVoiceRoutes(server, ttsProviders, database.sqlite, projectService, jobRepository, config);
   registerSubtitleRoutes(server, database.sqlite, jobRepository, config);
   registerMusicRoutes(server, musicService, projectService, jobRepository);
@@ -295,9 +344,13 @@ export function buildApp({ config }: { config: AppConfig }) {
 
   server.addHook("onReady", async () => {
     await worker.start();
-    if (config.WORKER_ENABLED) publishTicker.start();
+    if (config.WORKER_ENABLED) {
+      publishTicker.start();
+      telegramPoller.start();
+    }
   });
   server.addHook("onClose", async () => {
+    await telegramPoller.stop();
     await publishTicker.stop();
     await worker.stop();
     database.sqlite.close();

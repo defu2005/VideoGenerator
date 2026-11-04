@@ -20,6 +20,7 @@ import type { FastifyBaseLogger } from "fastify";
 import type { AppConfig } from "../lib/config.js";
 import { AppError } from "../lib/errors.js";
 import { JobRepository } from "../jobs/jobRepository.js";
+import { safeNotify, type NotificationService } from "../notifications/notificationService.js";
 import { markStaleFrom } from "./invalidation.js";
 
 export type ApprovalCheck = (project: Project, gate: PipelineStage) => { allowed: true } | { allowed: false; message: string };
@@ -53,6 +54,7 @@ export function deriveProjectStatus(input: {
 export class PipelineOrchestrator {
   private abortJob: (jobId: string) => void = () => undefined;
   private wakeWorker: () => void = () => undefined;
+  private notifications: NotificationService | null = null;
 
   constructor(
     readonly repository: JobRepository,
@@ -69,6 +71,14 @@ export class PipelineOrchestrator {
 
   setWakeHandler(handler: () => void): void {
     this.wakeWorker = handler;
+  }
+
+  setNotificationService(service: NotificationService | null): void {
+    this.notifications = service;
+  }
+
+  private webBaseUrl(): string {
+    return (this.config.WEB_BASE_URL || this.config.CORS_ORIGIN || "http://localhost:5180").replace(/\/$/, "");
   }
 
   getPipeline(projectId: string): PipelineState {
@@ -442,6 +452,25 @@ export class PipelineOrchestrator {
         stage: job.stage,
       });
       this.logger.error({ jobId, projectId: job.projectId, stage: job.stage, attempt: job.attempt, durationMs, error }, "Pipeline job failed");
+      const project = this.repository.getProject(job.projectId);
+      if (project) {
+        if (job.stage === "RENDER") {
+          safeNotify(this.notifications, {
+            kind: "render_failed",
+            projectId: job.projectId,
+            project: project.title,
+            error: error.message,
+          });
+        } else {
+          safeNotify(this.notifications, {
+            kind: "stage_failed",
+            projectId: job.projectId,
+            project: project.title,
+            stage: job.stage,
+            error: error.message,
+          });
+        }
+      }
     });
   }
 
@@ -595,6 +624,7 @@ export class PipelineOrchestrator {
         error: null,
       });
       this.repository.updateProject(projectId, { stage: next, status: "REVIEW" });
+      this.emitWaitingApproval(project, next);
       return;
     }
     this.enqueue(projectId, next);
@@ -610,6 +640,35 @@ export class PipelineOrchestrator {
       error: null,
     });
     this.repository.updateProject(projectId, { stage, status: "REVIEW" });
+    const project = this.repository.getProject(projectId);
+    if (project) this.emitWaitingApproval(project, stage);
+  }
+
+  /**
+   * waiting_approval only when a person must act.
+   * AUTO / automation projects: no approval notify; unexpected stuck gate → attention.
+   */
+  private emitWaitingApproval(project: Project, gate: PipelineStage): void {
+    const link = `${this.webBaseUrl()}/projects/${project.id}`;
+    const isAuto = project.mode === "AUTO" || Boolean(project.settings.autoRender);
+    if (isAuto) {
+      safeNotify(this.notifications, {
+        kind: "waiting_approval",
+        projectId: project.id,
+        project: project.title,
+        gate,
+        link,
+        unexpectedAutoStop: true,
+      });
+      return;
+    }
+    safeNotify(this.notifications, {
+      kind: "waiting_approval",
+      projectId: project.id,
+      project: project.title,
+      gate,
+      link,
+    });
   }
 
   private hasAllUserVoiceTracks(projectId: string): boolean {

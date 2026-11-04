@@ -8,6 +8,7 @@ import { AiSettingsPage } from "./features/settings/AiSettingsPage";
 import { RenderSettingsPage } from "./features/settings/RenderSettingsPage";
 import { WebImageSettingsPage } from "./features/settings/WebImageSettingsPage";
 import { ImageSourcesSettingsPage } from "./features/settings/ImageSourcesSettingsPage";
+import { NotificationsPage } from "./features/settings/NotificationsPage";
 import { GuidelineSettingsPage } from "./features/guidelines/GuidelineSettingsPage";
 import { ProfileDetailPage } from "./features/profiles/ProfileDetailPage";
 import { ProfileListPage } from "./features/profiles/ProfileListPage";
@@ -41,6 +42,7 @@ export function App() {
             <Route path="settings/render" element={<RenderSettingsPage />} />
             <Route path="settings/image-sources" element={<ImageSourcesSettingsPage />} />
             <Route path="settings/web-image" element={<WebImageSettingsPage />} />
+            <Route path="settings/notifications" element={<NotificationsPage />} />
             <Route path="settings/guidelines" element={<GuidelineSettingsPage />} />
             <Route path="usage" element={<UsagePage />} />
             <Route path="projects/:id" element={<Navigate replace to="overview" />} />

@@ -1,6 +1,7 @@
 import type { FastifyBaseLogger } from "fastify";
 import type { PublishService } from "./publishService.js";
 import type { AutomationService } from "../services/automationService.js";
+import type { NotificationService } from "../notifications/notificationService.js";
 
 const INTERVAL_MS = 60_000;
 
@@ -16,6 +17,7 @@ export class PublishTicker {
   private readonly controller = new AbortController();
   private lastDailyCheckDay = "";
   private automation: AutomationService | undefined;
+  private notifications: NotificationService | undefined;
 
   constructor(
     private readonly publish: PublishService,
@@ -27,6 +29,10 @@ export class PublishTicker {
   /** Wire automation after construction (avoids circular init in buildApp). */
   setAutomation(automation: AutomationService): void {
     this.automation = automation;
+  }
+
+  setNotifications(service: NotificationService): void {
+    this.notifications = service;
   }
 
   start(): void {
@@ -61,6 +67,9 @@ export class PublishTicker {
       }
       if (this.automation) {
         await this.automation.tick();
+      }
+      if (this.notifications) {
+        await this.notifications.tick();
       }
     } catch (error) {
       this.logger.warn({ err: error }, "Publish ticker tick failed");

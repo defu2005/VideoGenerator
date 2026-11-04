@@ -191,6 +191,33 @@ export const appSettings = sqliteTable("app_settings", {
   updatedAt: text("updated_at").notNull(),
 });
 
+/** Generic encrypted secrets (bot tokens, etc.) — only TokenVault reads/writes. */
+export const appSecrets = sqliteTable("app_secrets", {
+  key: text("key").primaryKey(),
+  ciphertext: text("ciphertext").notNull(),
+  iv: text("iv").notNull(),
+  authTag: text("auth_tag").notNull(),
+  updatedAt: text("updated_at").notNull(),
+});
+
+export type AppSecretRow = typeof appSecrets.$inferSelect;
+
+export const notificationLog = sqliteTable("notification_log", {
+  id: text("id").primaryKey(),
+  at: text("at").notNull(),
+  kind: text("kind").notNull(),
+  subjectKey: text("subject_key").notNull(),
+  channel: text("channel").notNull(),
+  status: text("status").notNull(),
+  message: text("message").notNull(),
+  error: text("error"),
+}, (table) => [
+  index("notification_log_at_idx").on(table.at),
+  index("notification_log_subject_idx").on(table.subjectKey),
+]);
+
+export type NotificationLogRow = typeof notificationLog.$inferSelect;
+
 export const jobs = sqliteTable("jobs", {
   id: text("id").primaryKey(),
   projectId: text("project_id").notNull().references(() => projects.id, { onDelete: "cascade" }),

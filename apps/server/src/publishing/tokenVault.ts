@@ -134,6 +134,40 @@ export class TokenVault {
     this.sqlite.prepare("DELETE FROM platform_app_credentials WHERE account_id = ?").run(accountId);
   }
 
+  /** Encrypt and store a generic app secret (e.g. telegram.botToken). Never logs plaintext. */
+  storeSecret(key: string, value: string): void {
+    const { ciphertext, iv, authTag } = this.encrypt(value);
+    const now = new Date().toISOString();
+    this.sqlite.prepare(
+      `INSERT INTO app_secrets (key, ciphertext, iv, auth_tag, updated_at)
+       VALUES (?, ?, ?, ?, ?)
+       ON CONFLICT(key) DO UPDATE SET
+         ciphertext = excluded.ciphertext,
+         iv = excluded.iv,
+         auth_tag = excluded.auth_tag,
+         updated_at = excluded.updated_at`,
+    ).run(key, ciphertext, iv, authTag, now);
+  }
+
+  loadSecret(key: string): string | null {
+    const row = this.sqlite.prepare(
+      "SELECT ciphertext, iv, auth_tag FROM app_secrets WHERE key = ?",
+    ).get(key) as { ciphertext: string; iv: string; auth_tag: string } | undefined;
+    if (!row) return null;
+    return this.decrypt(row.ciphertext, row.iv, row.auth_tag);
+  }
+
+  deleteSecret(key: string): void {
+    this.sqlite.prepare("DELETE FROM app_secrets WHERE key = ?").run(key);
+  }
+
+  hasSecret(key: string): boolean {
+    const row = this.sqlite.prepare("SELECT 1 AS ok FROM app_secrets WHERE key = ?").get(key) as
+      | { ok: number }
+      | undefined;
+    return Boolean(row);
+  }
+
   private encrypt(plaintext: string): { ciphertext: string; iv: string; authTag: string } {
     const iv = randomBytes(12);
     const cipher = createCipheriv(ALGO, this.getKey(), iv);
