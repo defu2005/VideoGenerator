@@ -196,6 +196,17 @@ function PublicationStatusList({
                   <a href={item.externalUrl} target="_blank" rel="noreferrer">Xem video</a>
                 </>
               )}
+              {item.latestMetrics && (item.latestMetrics.views != null || item.latestMetrics.likes != null) && (
+                <p className="field-hint" style={{ margin: "0.35rem 0 0" }}>
+                  {item.latestMetrics.views != null && (
+                    <>Lượt xem: {new Intl.NumberFormat("vi-VN").format(item.latestMetrics.views)}</>
+                  )}
+                  {item.latestMetrics.views != null && item.latestMetrics.likes != null && " · "}
+                  {item.latestMetrics.likes != null && (
+                    <>Thích: {new Intl.NumberFormat("vi-VN").format(item.latestMetrics.likes)}</>
+                  )}
+                </p>
+              )}
               {item.guardrailReason && (
                 <p className="request-error" role="status" style={{ margin: "0.35rem 0 0" }}>
                   {item.guardrailReason}

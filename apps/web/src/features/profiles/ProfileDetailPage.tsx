@@ -611,6 +611,22 @@ function AccountCard({
         <div className="account-row-actions">
           {connected ? (
             <>
+              {detail?.analyticsStatus === "needs_reconnect" && (
+                <div style={{ display: "grid", gap: 4 }}>
+                  <p className="field-hint" style={{ margin: 0, maxWidth: 220 }}>
+                    Kết nối lại để bật thống kê
+                  </p>
+                  <button
+                    className="button button-secondary"
+                    type="button"
+                    disabled={!canConnect || connectionQuery.isPending}
+                    title={connectBlockedReason ?? undefined}
+                    onClick={() => openConnect()}
+                  >
+                    Kết nối lại
+                  </button>
+                </div>
+              )}
               <button
                 className="button button-secondary"
                 type="button"

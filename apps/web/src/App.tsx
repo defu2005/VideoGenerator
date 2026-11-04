@@ -15,6 +15,7 @@ import { ProfileListPage } from "./features/profiles/ProfileListPage";
 import { PublishCalendarPage } from "./features/publish/PublishCalendarPage";
 import { UsagePage } from "./features/usage/UsagePage";
 import { AssistantPage } from "./features/assistant/AssistantPage";
+import { AnalyticsPage } from "./features/analytics/AnalyticsPage";
 import { queryRetryDelay, shouldRetryQuery } from "./services/queryRetry";
 
 const queryClient = new QueryClient({
@@ -40,6 +41,7 @@ export function App() {
             <Route path="profiles/:id" element={<Navigate replace to="direction" />} />
             <Route path="profiles/:id/:tab" element={<ProfileDetailPage />} />
             <Route path="publish/calendar" element={<PublishCalendarPage />} />
+            <Route path="analytics" element={<AnalyticsPage />} />
             <Route path="settings/ai" element={<AiSettingsPage />} />
             <Route path="settings/render" element={<RenderSettingsPage />} />
             <Route path="settings/image-sources" element={<ImageSourcesSettingsPage />} />

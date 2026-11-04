@@ -70,6 +70,8 @@ type PublicationRow = {
   last_error: string | null;
   progress: number;
   warnings: string | string[] | null;
+  latest_metrics?: string | Record<string, unknown> | null;
+  metrics_synced_at?: string | null;
   created_at: string;
   updated_at: string;
   published_at: string | null;
@@ -367,6 +369,18 @@ export class PublishService {
       account.platform,
       appCredentials.configured,
     );
+    const accountExtras = this.sqlite.prepare(
+      `SELECT analytics_status, analytics_last_error, analytics_synced_at
+       FROM platform_accounts WHERE id = ?`,
+    ).get(accountId) as {
+      analytics_status: string | null;
+      analytics_last_error: string | null;
+      analytics_synced_at: string | null;
+    } | undefined;
+    const analyticsStatus =
+      accountExtras?.analytics_status === "ok" || accountExtras?.analytics_status === "needs_reconnect"
+        ? accountExtras.analytics_status
+        : null;
     const detail: AccountConnectionDetail = {
       connection: account.connection as AccountConnectionDetail["connection"],
       connectionError: account.connection_error,
@@ -380,6 +394,9 @@ export class PublishService {
       redirectUri: this.oauthRedirectUri(account.platform),
       canConnect,
       connectBlockedReason,
+      analyticsStatus,
+      analyticsLastError: accountExtras?.analytics_last_error ?? null,
+      analyticsSyncedAt: accountExtras?.analytics_synced_at ?? null,
     };
 
     if (isMetaPlatform(account.platform) && needsMetaTargetPicker(account.external_id)) {
@@ -891,6 +908,18 @@ export class PublishService {
       : typeof row.warnings === "string" && row.warnings
         ? JSON.parse(row.warnings) as string[]
         : [];
+    let latestMetrics: Record<string, unknown> | null = null;
+    if (row.latest_metrics != null) {
+      if (typeof row.latest_metrics === "string") {
+        try {
+          latestMetrics = JSON.parse(row.latest_metrics) as Record<string, unknown>;
+        } catch {
+          latestMetrics = null;
+        }
+      } else {
+        latestMetrics = row.latest_metrics;
+      }
+    }
     return PublicationSchema.parse({
       id: row.id,
       projectId: row.project_id,
@@ -907,6 +936,8 @@ export class PublishService {
       lastError: row.last_error,
       progress: row.progress,
       warnings,
+      latestMetrics,
+      metricsSyncedAt: row.metrics_synced_at ?? null,
       createdAt: row.created_at,
       updatedAt: row.updated_at,
       publishedAt: row.published_at,

@@ -940,3 +940,22 @@ button:disabled { cursor: not-allowed; opacity: .58; }
 .assistant-page .field-checkbox { font-size: 13px; color: #38445a; }
 .assistant-page .field-checkbox input { width: 16px; height: 16px; margin: 0; }
 .assistant-chat { min-height: 320px; }
+
+/* Analytics page */
+.analytics-page .analytics-range-presets { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.analytics-page .analytics-range-presets .button.is-active { border-color: #8398eb; background: #eef2ff; color: #3347a0; }
+.analytics-sync-strip { padding: 16px; }
+.analytics-sync-strip h2 { margin: 4px 0 12px; color: #27334a; font-size: 16px; }
+.analytics-sync-row { align-items: flex-start; justify-content: space-between; gap: 12px; }
+.analytics-chart { display: block; width: 100%; max-width: 100%; height: auto; }
+.analytics-chart-grid { stroke: #eef0f5; stroke-width: 1; }
+.analytics-chart-label { fill: #8993a5; font-size: 10px; }
+.analytics-legend { display: flex; flex-wrap: wrap; gap: 12px; margin-bottom: 10px; color: #59657b; font-size: 11px; }
+.analytics-legend i { display: inline-block; width: 10px; height: 10px; margin-right: 6px; border-radius: 2px; vertical-align: middle; }
+.analytics-delta-up { color: #1a7f37; }
+.analytics-delta-down { color: #b42318; }
+.analytics-sort-btn, .analytics-link-btn {
+  border: 0; background: transparent; padding: 0; color: inherit; font: inherit; font-weight: 650; text-align: left; cursor: pointer;
+}
+.analytics-link-btn { color: #3d5fd5; }
+.analytics-sort-btn:hover, .analytics-link-btn:hover { text-decoration: underline; }

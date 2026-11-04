@@ -15,6 +15,7 @@ export * from "./schemas/profile.js";
 export * from "./schemas/automation.js";
 export * from "./automation/slots.js";
 export * from "./schemas/publication.js";
+export * from "./schemas/analytics.js";
 export * from "./publishing/youtubeHelp.js";
 export * from "./publishing/tiktokHelp.js";
 export * from "./publishing/metaHelp.js";

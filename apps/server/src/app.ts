@@ -85,6 +85,9 @@ import { registerNotificationRoutes } from "./api/notifications.js";
 import { AssistantService } from "./assistant/service.js";
 import { installAssistantTelegramHandlers } from "./assistant/telegramBridge.js";
 import { registerAssistantRoutes } from "./api/assistant.js";
+import { createFetchers } from "./analytics/registry.js";
+import { AnalyticsSyncService } from "./analytics/syncService.js";
+import { registerAnalyticsRoutes } from "./api/analytics.js";
 
 export function buildApp({ config }: { config: AppConfig }) {
   const server = Fastify({
@@ -294,6 +297,21 @@ export function buildApp({ config }: { config: AppConfig }) {
   publishService.setNotificationService(notificationService);
   orchestrator.setNotificationService(notificationService);
   publishTicker.setNotifications(notificationService);
+  const analyticsFetchers = createFetchers({
+    youtubeQuota: youtubePublisher.quota,
+    logger: server.log,
+  });
+  const analyticsSyncService = new AnalyticsSyncService({
+    sqlite: database.sqlite,
+    vault: tokenVault,
+    registry: publisherRegistry,
+    fetchers: analyticsFetchers,
+    logger: server.log,
+    notifications: notificationService,
+    youtubeQuota: youtubePublisher.quota,
+  });
+  publishTicker.setAnalytics(analyticsSyncService);
+  assistantService.setAnalytics(analyticsSyncService);
   setAutomationNotify((event) => {
     void notificationService.notify(event);
   });
@@ -357,6 +375,7 @@ export function buildApp({ config }: { config: AppConfig }) {
   });
   registerOAuthRoutes(server, { publish: publishService, registry: publisherRegistry, oauthState });
   registerPublicationRoutes(server, { publish: publishService, vault: tokenVault });
+  registerAnalyticsRoutes(server, { analytics: analyticsSyncService });
   registerRecommendationRoutes(server);
   registerBudgetRoutes(server, projectService, jobRepository, config, llmProviders);
   registerDashboardRoutes(server, projectService, automationService);

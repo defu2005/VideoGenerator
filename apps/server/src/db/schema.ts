@@ -49,6 +49,10 @@ export const platformAccounts = sqliteTable("platform_accounts", {
   connection: text("connection").$type<AccountConnection>().notNull().default("NOT_CONNECTED"),
   connectionError: text("connection_error"),
   lastCheckedAt: text("last_checked_at"),
+  /** Analytics OAuth readiness: ok | needs_reconnect (null = never checked). */
+  analyticsStatus: text("analytics_status"),
+  analyticsLastError: text("analytics_last_error"),
+  analyticsSyncedAt: text("analytics_synced_at"),
   publishSettings: text("publish_settings", { mode: "json" }).$type<PublishSettings>().notNull(),
   createdAt: text("created_at").notNull(),
   updatedAt: text("updated_at").notNull(),
@@ -147,6 +151,9 @@ export const publications = sqliteTable("publications", {
   lastError: text("last_error"),
   progress: integer("progress").notNull().default(0),
   warnings: text("warnings", { mode: "json" }).$type<string[]>().notNull().default([]),
+  /** Denormalized latest metrics for fast lists (TASK-033). */
+  latestMetrics: text("latest_metrics", { mode: "json" }).$type<Record<string, unknown> | null>(),
+  metricsSyncedAt: text("metrics_synced_at"),
   createdAt: text("created_at").notNull(),
   updatedAt: text("updated_at").notNull(),
   publishedAt: text("published_at"),
@@ -158,6 +165,42 @@ export const publications = sqliteTable("publications", {
 ]);
 
 export type PublicationRow = typeof publications.$inferSelect;
+
+/** One metrics snapshot per publication per sync (TASK-033). */
+export const publicationMetricsSnapshots = sqliteTable("publication_metrics_snapshots", {
+  id: text("id").primaryKey(),
+  publicationId: text("publication_id").notNull().references(() => publications.id, { onDelete: "cascade" }),
+  fetchedAt: text("fetched_at").notNull(),
+  views: integer("views"),
+  likes: integer("likes"),
+  comments: integer("comments"),
+  shares: integer("shares"),
+  saves: integer("saves"),
+  watchTimeSec: real("watch_time_sec"),
+  avgViewDurationSec: real("avg_view_duration_sec"),
+  avgViewPct: real("avg_view_pct"),
+  subscribersGained: integer("subscribers_gained"),
+  reach: integer("reach"),
+  raw: text("raw", { mode: "json" }).$type<Record<string, unknown>>().notNull().default({}),
+}, (table) => [
+  index("publication_metrics_snapshots_pub_fetched_idx").on(table.publicationId, table.fetchedAt),
+]);
+
+export type PublicationMetricsSnapshotRow = typeof publicationMetricsSnapshots.$inferSelect;
+
+/** Daily channel-level metrics per platform account (TASK-033). */
+export const channelMetricsDaily = sqliteTable("channel_metrics_daily", {
+  accountId: text("account_id").notNull().references(() => platformAccounts.id, { onDelete: "cascade" }),
+  date: text("date").notNull(),
+  followers: integer("followers"),
+  views: integer("views"),
+  watchTimeSec: real("watch_time_sec"),
+  fetchedAt: text("fetched_at").notNull(),
+}, (table) => [
+  primaryKey({ columns: [table.accountId, table.date] }),
+]);
+
+export type ChannelMetricsDailyRow = typeof channelMetricsDaily.$inferSelect;
 
 export const projects = sqliteTable("projects", {
   id: text("id").primaryKey(),

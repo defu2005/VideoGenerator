@@ -8,6 +8,7 @@ import {
   ModelAdvisorProposeBodySchema,
   NotificationSettingsSchema,
   PipelineStageSchema,
+  PlatformIdSchema,
   ProfileAutomationInputSchema,
   ProfileListQuerySchema,
   ProfileTopicInputSchema,
@@ -44,6 +45,7 @@ import {
   getNotificationSettings,
   saveNotificationSettings,
 } from "../settings/notifications.js";
+import type { AnalyticsSyncService } from "../analytics/syncService.js";
 
 const emptyObject = z.object({}).strict();
 
@@ -60,6 +62,7 @@ export type AssistantToolContext = {
   usage: UsageService;
   registry: LlmProviderRegistry;
   scenes: SceneService;
+  analytics?: AnalyticsSyncService;
   signal?: AbortSignal;
 };
 
@@ -117,6 +120,16 @@ const publishCalendarArgs = z.object({
 const usageSummaryArgs = z.object({
   period: z.enum(["today", "7d", "30d"]).default("7d"),
   groupBy: z.enum(["day", "provider", "model", "project"]).default("provider"),
+}).strict();
+
+const analyticsOverviewArgs = z.object({
+  period: z.enum(["7d", "28d", "90d"]).default("7d"),
+  profileId: z.string().uuid().optional(),
+  platform: PlatformIdSchema.optional(),
+}).strict();
+
+const videoMetricsArgs = z.object({
+  publicationId: z.string().uuid(),
 }).strict();
 
 const listAccountsArgs = z.object({ profileId: z.string().uuid() }).strict();
@@ -385,6 +398,44 @@ const toolDefs: AssistantToolDef[] = [
     execute: async (_args, ctx) => {
       const stats = await ctx.projects.dashboardStats();
       return { ...stats, automation: ctx.automation.dashboardCard() };
+    },
+  }),
+  defineTool({
+    name: "analytics_overview",
+    description: "Thống kê nền tảng (lượt xem, tương tác, top/bottom video) theo khoảng thời gian.",
+    risk: "read",
+    argsSchema: analyticsOverviewArgs,
+    summarize: (args) => {
+      const parsed = analyticsOverviewArgs.parse(args);
+      return `Xem thống kê ${parsed.period}`;
+    },
+    execute: async (args, ctx) => {
+      if (!ctx.analytics) throw new AppError(503, "ANALYTICS_UNAVAILABLE", "Thống kê chưa sẵn sàng");
+      const parsed = analyticsOverviewArgs.parse(args);
+      const days = parsed.period === "90d" ? 89 : parsed.period === "28d" ? 27 : 6;
+      const to = localDateString(new Date(), "Asia/Ho_Chi_Minh");
+      const end = new Date(`${to}T12:00:00.000Z`);
+      const start = new Date(end);
+      start.setUTCDate(start.getUTCDate() - days);
+      const from = localDateString(start, "Asia/Ho_Chi_Minh");
+      return ctx.analytics.getOverview({
+        from,
+        to,
+        profileId: parsed.profileId,
+        platform: parsed.platform,
+      });
+    },
+  }),
+  defineTool({
+    name: "video_metrics",
+    description: "Chuỗi số liệu theo thời gian của một publication đã đăng.",
+    risk: "read",
+    argsSchema: videoMetricsArgs,
+    summarize: () => "Xem số liệu video",
+    execute: async (args, ctx) => {
+      if (!ctx.analytics) throw new AppError(503, "ANALYTICS_UNAVAILABLE", "Thống kê chưa sẵn sàng");
+      const { publicationId } = videoMetricsArgs.parse(args);
+      return ctx.analytics.getPublicationSeries(publicationId);
     },
   }),
   defineTool({

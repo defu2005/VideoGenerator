@@ -11,12 +11,14 @@ export const META_SETUP_HELP_VI = `Cách kết nối Facebook Reels / Instagram 
 3. Điền App ID / App Secret vào "Thông tin ứng dụng" ở đây, hoặc đặt META_APP_ID và META_APP_SECRET trong file .env.
 4. Trong chế độ Development, app chỉ hoạt động với tài khoản có vai trò trong app — đủ để dùng Page và Instagram của chính bạn.
 5. Sau khi đăng nhập Facebook, chọn Trang (Facebook Reels) hoặc tài khoản Instagram chuyên nghiệp liên kết với Page (Instagram Reels).
+6. Quyền thống kê: instagram_manage_insights (Instagram Reels) và read_insights (Facebook Reels / Page) — dùng để đồng bộ lượt xem, tiếp cận, thời gian xem.
 
 Lưu ý:
 • Token dài hạn hết hạn khoảng 60 ngày — ứng dụng cảnh báo trước 7 ngày ("Cần kết nối lại").
 • Chỉ đăng bản render dọc (9:16).
 • Facebook Reels: 3–90 giây, tối đa ~1 GB; Instagram Reels: 3 giây–15 phút, tối đa 300 MB.
-• Instagram không hỗ trợ lên lịch gốc qua API — job SCHEDULED giữ đến giờ rồi mới tải lên (ticker TASK-024).`;
+• Instagram không hỗ trợ lên lịch gốc qua API — job SCHEDULED giữ đến giờ rồi mới tải lên (ticker TASK-024).
+• Tài khoản đã kết nối trước khi bật thống kê cần "Kết nối lại để bật thống kê" để cấp quyền insights.`;
 
 export const META_SCOPES = [
   "pages_show_list",
@@ -26,6 +28,8 @@ export const META_SCOPES = [
   "instagram_basic",
   "instagram_content_publish",
   "business_management",
+  "instagram_manage_insights",
+  "read_insights",
 ] as const;
 
 export const META_OAUTH_SCOPES = META_SCOPES.join(",");

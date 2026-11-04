@@ -2,6 +2,7 @@ import type { FastifyBaseLogger } from "fastify";
 import type { PublishService } from "./publishService.js";
 import type { AutomationService } from "../services/automationService.js";
 import type { NotificationService } from "../notifications/notificationService.js";
+import type { AnalyticsSyncService } from "../analytics/syncService.js";
 
 const INTERVAL_MS = 60_000;
 
@@ -18,6 +19,8 @@ export class PublishTicker {
   private lastDailyCheckDay = "";
   private automation: AutomationService | undefined;
   private notifications: NotificationService | undefined;
+  private analytics: AnalyticsSyncService | undefined;
+  private analyticsRunning = false;
 
   constructor(
     private readonly publish: PublishService,
@@ -33,6 +36,10 @@ export class PublishTicker {
 
   setNotifications(service: NotificationService): void {
     this.notifications = service;
+  }
+
+  setAnalytics(service: AnalyticsSyncService): void {
+    this.analytics = service;
   }
 
   start(): void {
@@ -70,6 +77,13 @@ export class PublishTicker {
       }
       if (this.notifications) {
         await this.notifications.tick();
+      }
+      // Analytics runs on its own so a slow platform API never delays publishing.
+      if (this.analytics && !this.analyticsRunning) {
+        this.analyticsRunning = true;
+        void this.analytics.tick(this.controller.signal)
+          .catch((error) => this.logger.warn({ err: error }, "Analytics tick failed"))
+          .finally(() => { this.analyticsRunning = false; });
       }
     } catch (error) {
       this.logger.warn({ err: error }, "Publish ticker tick failed");

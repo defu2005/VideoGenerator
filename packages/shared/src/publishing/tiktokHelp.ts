@@ -4,13 +4,15 @@ export const TIKTOK_SETUP_HELP_VI = `Cách kết nối TikTok (dùng app trên d
 1. Tạo ứng dụng trên developers.tiktok.com, bật Login Kit và Content Posting API.
 2. Thêm redirect URI đúng như ô "Redirect URI" bên dưới (mặc định http://127.0.0.1:3001/api/oauth/tiktok/callback). TikTok có thể yêu cầu HTTPS hoặc domain đã đăng ký — nếu console từ chối localhost/HTTP, làm theo hướng dẫn hiện tại trên trang TikTok for Developers (ứng dụng không bịa workaround).
 3. Điền Client Key / Client Secret vào "Thông tin ứng dụng" ở đây, hoặc đặt TIKTOK_CLIENT_KEY và TIKTOK_CLIENT_SECRET trong file .env.
-4. Xin các quyền: user.info.basic, video.publish, video.upload.
+4. Xin các quyền: user.info.basic, video.publish, video.upload, video.list, user.info.stats.
+5. Quyền video.list và user.info.stats dùng để đồng bộ thống kê (lượt xem, thích, bình luận, chia sẻ, số follower). Hai scope này cần được TikTok duyệt trên developer portal trước khi dùng được ngoài sandbox.
 
 Lưu ý quan trọng:
 • Cho đến khi app TikTok của bạn được TikTok duyệt (audit), Direct Post chỉ được đăng ở chế độ riêng tư (SELF_ONLY). Nếu bạn chọn công khai, ứng dụng sẽ hạ xuống riêng tư và ghi cảnh báo.
 • Chế độ "Gửi vào hộp thư nháp" tải video vào inbox TikTok (scope video.upload); bạn hoàn tất đăng trong app TikTok.
 • TikTok API không hỗ trợ lên lịch đăng gốc — job SCHEDULED sẽ giữ đến giờ rồi mới tải lên.
-• Chỉ đăng được bản render dọc (9:16).`;
+• Chỉ đăng được bản render dọc (9:16).
+• Tài khoản đã kết nối trước khi bật thống kê cần "Kết nối lại để bật thống kê" sau khi TikTok duyệt scope video.list / user.info.stats.`;
 
 export const TIKTOK_AUDIT_PRIVATE_WARNING_VI =
   "Ứng dụng TikTok chưa được duyệt: video đăng ở chế độ riêng tư";
@@ -22,6 +24,8 @@ export const TIKTOK_SCOPES = [
   "user.info.basic",
   "video.publish",
   "video.upload",
+  "video.list",
+  "user.info.stats",
 ] as const;
 
 /** Caption / title limit in UTF-16 code units (TikTok docs). */

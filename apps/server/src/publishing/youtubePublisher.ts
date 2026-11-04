@@ -2,6 +2,7 @@ import { statSync } from "node:fs";
 import { open as openFile } from "node:fs/promises";
 import type Database from "better-sqlite3";
 import {
+  YOUTUBE_ANALYTICS_READONLY_SCOPE,
   YOUTUBE_DEFAULT_CATEGORY_ID,
   YOUTUBE_FULL_SCOPE,
   YOUTUBE_PLAYLIST_ITEM_QUOTA_COST,
@@ -111,6 +112,7 @@ export class YouTubePublisher implements Publisher {
     return [
       YOUTUBE_UPLOAD_SCOPE,
       playlistId ? YOUTUBE_FULL_SCOPE : YOUTUBE_READONLY_SCOPE,
+      YOUTUBE_ANALYTICS_READONLY_SCOPE,
     ];
   }
 

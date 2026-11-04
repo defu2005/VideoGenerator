@@ -27,6 +27,7 @@ import type { UsageService } from "../services/usageService.js";
 import type { PipelineOrchestrator } from "../pipeline/orchestrator.js";
 import type { PublishService } from "../publishing/publishService.js";
 import type { SceneService } from "../services/sceneService.js";
+import type { AnalyticsSyncService } from "../analytics/syncService.js";
 import { getAssistantSettings, saveAssistantSettings } from "../settings/assistant.js";
 import { runAssistantLoop } from "./loop.js";
 import { getToolRisk, runTool, summarizeTool, type AssistantToolContext } from "./tools.js";
@@ -77,7 +78,15 @@ export class AssistantService {
     private readonly usage: UsageService,
     private readonly scenes: SceneService,
     private readonly now: () => Date = () => new Date(),
-  ) {}
+  ) {
+    this.analytics = undefined;
+  }
+
+  private analytics: AnalyticsSyncService | undefined;
+
+  setAnalytics(service: AnalyticsSyncService): void {
+    this.analytics = service;
+  }
 
   getSettings(): AssistantSettings {
     return getAssistantSettings(this.sqlite);
@@ -435,6 +444,7 @@ export class AssistantService {
       usage: this.usage,
       registry: this.registry,
       scenes: this.scenes,
+      analytics: this.analytics,
       signal,
     };
   }

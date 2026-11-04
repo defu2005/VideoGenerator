@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { PlatformIdSchema, PublishVisibilitySchema } from "./profile.js";
+import { AnalyticsStatusSchema, PublicationLatestMetricsSchema } from "./analytics.js";
 
 export const PublicationStatusSchema = z.enum([
   "QUEUED",
@@ -28,6 +29,9 @@ export const PublicationSchema = z.object({
   progress: z.number().min(0).max(100),
   /** Soft warnings from the publisher (privacy downgrade, thumbnail 403, Shorts, …). */
   warnings: z.array(z.string()).default([]),
+  /** Denormalized latest platform metrics (TASK-033). */
+  latestMetrics: PublicationLatestMetricsSchema.nullable().optional(),
+  metricsSyncedAt: z.string().datetime({ offset: true }).nullable().optional(),
   createdAt: z.string().datetime({ offset: true }),
   updatedAt: z.string().datetime({ offset: true }),
   publishedAt: z.string().datetime({ offset: true }).nullable(),
@@ -152,6 +156,10 @@ export const AccountConnectionDetailSchema = z.object({
    * (instagram_reels). Empty/omitted when not applicable.
    */
   metaTargets: z.array(MetaTargetPublicSchema).optional(),
+  /** Analytics readiness — needs_reconnect when OAuth grant lacks insight scopes. */
+  analyticsStatus: AnalyticsStatusSchema.nullable().optional(),
+  analyticsLastError: z.string().nullable().optional(),
+  analyticsSyncedAt: z.string().datetime({ offset: true }).nullable().optional(),
 }).strict();
 export type AccountConnectionDetail = z.infer<typeof AccountConnectionDetailSchema>;
 
