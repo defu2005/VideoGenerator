@@ -733,6 +733,14 @@ button:disabled { cursor: not-allowed; opacity: .58; }
 .render-report ul { margin: 6px 0 0; padding-left: 18px; font-size: 11px; }
 .render-report li.error { color: #b42318; }
 .render-report li.warn { color: #a45c17; }
+.auto-report { padding: 12px 15px; }
+.auto-report h3 { margin: 0 0 6px; font-size: 13px; }
+.auto-report-stage { margin-top: 8px; }
+.auto-report-stage h4 { margin: 0 0 4px; color: #59667d; font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; }
+.auto-report ul { margin: 0; padding-left: 18px; font-size: 11px; }
+.auto-report li.warn { color: #a45c17; }
+.auto-report li.info { color: #405ac5; }
+.auto-warn-badge { display: inline-flex; padding: 1px 8px; border-radius: 999px; background: #fff4e5; color: #a45c17; font-size: 11px; font-weight: 700; text-decoration: none; }
 .render-thumbs { display: flex; gap: 10px; overflow-x: auto; padding: 12px 15px; }
 .render-thumbs figure { flex: 0 0 auto; width: 160px; margin: 0; }
 .render-thumbs img { display: block; width: 100%; border-radius: 4px; background: #eef1f7; }

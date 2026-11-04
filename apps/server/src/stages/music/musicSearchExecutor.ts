@@ -18,6 +18,7 @@ import { getAppLlmSettings } from "../../providers/llm/settings.js";
 import { LlmError } from "../../providers/llm/types.js";
 import { AudioDownloadError } from "../../services/audioStore.js";
 import type { MusicService } from "../../services/musicService.js";
+import type { AutoReportService } from "../../services/autoReportService.js";
 import { musicAssistPrompt } from "./musicAssistPrompt.js";
 
 function errorCode(error: unknown): string {
@@ -33,6 +34,7 @@ export class MusicSearchExecutor implements StageExecutor {
     private readonly sqlite: Database.Database,
     private readonly registry: LlmProviderRegistry,
     private readonly config: AppConfig,
+    private readonly autoReport?: AutoReportService,
   ) {
     this.cache = new LlmCache(sqlite, config.LLM_CACHE_ENABLED);
   }
@@ -181,20 +183,42 @@ export class MusicSearchExecutor implements StageExecutor {
 
     let approvedNote = "";
     if (project.mode === "AUTO" && !userDecided) {
+      this.autoReport?.clearStage(project.id, "MUSIC_REVIEW");
       const current = this.music.selectionRow(project.id);
       if (current?.candidate_id) {
         try {
           await this.music.select(project, current.candidate_id, "AGENT", context.signal);
           approvedNote = " · đã tự chọn bản đầu";
+          this.autoReport?.add(project.id, {
+            stage: "MUSIC_REVIEW",
+            code: "MUSIC_AUTO_PICKED",
+            severity: "INFO",
+            message: "AUTO đã chọn bản nhạc xếp hạng cao nhất.",
+            data: { candidateId: current.candidate_id },
+          });
         } catch (error) {
           if (!(error instanceof AppError)) throw error;
           context.logger.warn(`Auto music download failed: ${error.message}`);
           this.music.selectNone(project, "AGENT");
           approvedNote = " · tải nhạc lỗi, bỏ nhạc nền";
+          this.autoReport?.add(project.id, {
+            stage: "MUSIC_REVIEW",
+            code: "MUSIC_NONE",
+            severity: "WARN",
+            message: "Không dùng nhạc — tải bản chọn thất bại.",
+            data: { reason: error.message },
+          });
         }
       } else {
         this.music.selectNone(project, "AGENT");
         approvedNote = " · không có bản phù hợp, bỏ nhạc nền";
+        this.autoReport?.add(project.id, {
+          stage: "MUSIC_REVIEW",
+          code: "MUSIC_NONE",
+          severity: "WARN",
+          message: "Không dùng nhạc — không có bản ứng viên phù hợp.",
+          data: null,
+        });
       }
     }
 

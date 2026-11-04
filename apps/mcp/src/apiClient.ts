@@ -165,6 +165,14 @@ export class VideoAgentApiClient {
     return this.request(`/api/projects/${encodeURIComponent(projectId)}/metadata`);
   }
 
+  getAutoReport(projectId: string): Promise<{
+    projectId: string;
+    warnCount: number;
+    groups: { stage: string; entries: unknown[] }[];
+  }> {
+    return this.request(`/api/projects/${encodeURIComponent(projectId)}/auto-report`);
+  }
+
   listRenders(projectId: string): Promise<{ renders: unknown[] }> {
     return this.request(`/api/projects/${encodeURIComponent(projectId)}/renders`);
   }

@@ -207,13 +207,32 @@ describe("guideline prompts and script checks", () => {
     expect(ecoGenerate.mock.calls.some((call) => call[0].schemaName === "GuidelineCheck")).toBe(false);
   });
 
-  it("stops AUTO on an open MUST finding and continues after it is dismissed", async () => {
-    let gateSqlite: import("better-sqlite3").Database | undefined;
+  it("AUTO continues past an open MUST finding without pausing at the gate", async () => {
     const harness = createPipelineHarness({
       mode: "AUTO",
-      autoBlock: (project) => gateSqlite && new GuidelineService(gateSqlite).openMustCount(project.id) > 0 ? "blocked by MUST" : null,
+      // TASK-020: content autoBlock returns null (MUST is logged elsewhere in the real app).
+      autoBlock: () => null,
     });
-    gateSqlite = harness.sqlite;
+    harnesses.push(harness);
+    new GuidelineService(harness.sqlite).replaceFindings(harness.projectId, "SCRIPT", "CODE", [{
+      ruleId: "youtube.no_misleading",
+      severity: "MUST",
+      sceneId: "scene-1",
+      text: "Cần nguồn",
+      quote: null,
+      suggestion: null,
+    }]);
+    expect(new GuidelineService(harness.sqlite).openMustCount(harness.projectId)).toBe(1);
+    harness.orchestrator.runAll(harness.projectId);
+    await drainUntilGate(harness);
+    const state = harness.orchestrator.getPipeline(harness.projectId);
+    expect(state.stages.find((stage) => stage.stage === "VISUAL_REVIEW")?.state).toBe("DONE");
+    expect(state.stages.find((stage) => stage.stage === "VISUAL_REVIEW")?.message).toBe("Auto-approved (AUTO mode)");
+    expect(state.currentStage).toBe("FINAL_APPROVAL");
+  });
+
+  it("ASSISTED still pauses at VISUAL_REVIEW even with an open MUST finding", async () => {
+    const harness = createPipelineHarness({ mode: "ASSISTED" });
     harnesses.push(harness);
     new GuidelineService(harness.sqlite).replaceFindings(harness.projectId, "SCRIPT", "CODE", [{
       ruleId: "youtube.no_misleading",
@@ -225,18 +244,9 @@ describe("guideline prompts and script checks", () => {
     }]);
     harness.orchestrator.runAll(harness.projectId);
     await drainUntilGate(harness);
-    let state = harness.orchestrator.getPipeline(harness.projectId);
+    const state = harness.orchestrator.getPipeline(harness.projectId);
     expect(state.currentStage).toBe("VISUAL_REVIEW");
     expect(state.stages.find((stage) => stage.stage === "VISUAL_REVIEW")?.state).toBe("WAITING_USER");
-    expect(state.stages.find((stage) => stage.stage === "VISUAL_REVIEW")?.message).toContain("blocked by MUST");
-
-    const finding = harness.sqlite.prepare("SELECT id FROM guideline_findings WHERE project_id = ?").get(harness.projectId) as { id: string };
-    new GuidelineService(harness.sqlite).dismiss(harness.projectId, finding.id, "đã xem");
-    harness.orchestrator.approveGate(harness.projectId, "VISUAL_REVIEW");
-    await drainUntilGate(harness);
-    state = harness.orchestrator.getPipeline(harness.projectId);
-    expect(state.stages.find((stage) => stage.stage === "MUSIC_REVIEW")?.state).toBe("DONE");
-    expect(state.currentStage).toBe("FINAL_APPROVAL");
   });
 });
 

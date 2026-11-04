@@ -232,6 +232,9 @@ export function registerVideoAgentTools(
   server.tool("get_video_metadata", "Read publishing metadata (titles, description, tags) for a project.", projectIdShape, ({ projectId }) =>
     invoke(() => api.getVideoMetadata(projectId)));
 
+  server.tool("get_auto_report", "Read AUTO-mode decision report entries (grouped by stage) for a project.", projectIdShape, ({ projectId }) =>
+    invoke(() => api.getAutoReport(projectId)));
+
   server.tool("list_renders", "List render versions for a project (newest first), including deleted ones.", projectIdShape, ({ projectId }) =>
     invoke(() => api.listRenders(projectId)));
 

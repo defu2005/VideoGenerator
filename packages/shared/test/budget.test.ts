@@ -183,4 +183,33 @@ describe("budget modes", () => {
       source: "recommended",
     });
   });
+
+  it("estimates realistic input tokens for a 10-minute Vietnamese video", () => {
+    const base = {
+      topic: "Lịch sử cà phê Việt Nam từ Buôn Ma Thuột đến xuất khẩu toàn cầu",
+      description: "Video dài kể hành trình cà phê Việt.",
+      settings: {
+        language: "vi",
+        targetDurationSec: 600,
+        wordsPerMinute: 150,
+        userSet: [] as string[],
+      },
+    };
+    const balanced = estimateBudget({
+      ...base,
+      settings: { ...base.settings, budget: { mode: "BALANCED" as const } },
+    }, "mock").tokens!.input;
+    const quality = estimateBudget({
+      ...base,
+      settings: { ...base.settings, budget: { mode: "QUALITY" as const } },
+    }, "mock").tokens!.input;
+    const max = estimateBudget({
+      ...base,
+      settings: { ...base.settings, budget: { mode: "MAX" as const } },
+    }, "mock").tokens!.input;
+    expect(balanced).toBeGreaterThanOrEqual(15_000);
+    expect(balanced).toBeLessThanOrEqual(80_000);
+    expect(quality).toBeGreaterThan(balanced);
+    expect(max).toBeGreaterThan(quality);
+  });
 });

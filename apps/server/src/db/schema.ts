@@ -335,6 +335,21 @@ export const guidelineFindings = sqliteTable("guideline_findings", {
   index("guideline_findings_project_idx").on(table.projectId),
 ]);
 
+export const autoReportEntries = sqliteTable("auto_report_entries", {
+  id: text("id").primaryKey(),
+  projectId: text("project_id").notNull().references(() => projects.id, { onDelete: "cascade" }),
+  stage: text("stage").notNull(),
+  sceneId: text("scene_id"),
+  code: text("code").notNull(),
+  severity: text("severity", { enum: ["INFO", "WARN"] }).notNull(),
+  message: text("message").notNull(),
+  data: text("data", { mode: "json" }).$type<Record<string, unknown> | null>(),
+  createdAt: text("created_at").notNull(),
+}, (table) => [
+  index("auto_report_entries_project_idx").on(table.projectId),
+  index("auto_report_entries_project_stage_idx").on(table.projectId, table.stage),
+]);
+
 export const renders = sqliteTable("renders", {
   id: text("id").primaryKey(),
   projectId: text("project_id").notNull().references(() => projects.id, { onDelete: "cascade" }),

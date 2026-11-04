@@ -67,8 +67,12 @@ function stubProjectFetch(value: Project) {
     })),
     activeJob: null,
   };
-  vi.stubGlobal("fetch", vi.fn((input: RequestInfo | URL) =>
-    jsonResponse(String(input).endsWith("/pipeline") ? pipeline : value)));
+  vi.stubGlobal("fetch", vi.fn((input: RequestInfo | URL) => {
+    const url = String(input);
+    if (url.endsWith("/pipeline")) return jsonResponse(pipeline);
+    if (url.includes("/auto-report")) return jsonResponse({ projectId: value.id, warnCount: 0, groups: [] });
+    return jsonResponse(value);
+  }));
 }
 
 describe("ProjectDetailPage", () => {
@@ -202,6 +206,7 @@ describe("ProjectDetailPage", () => {
       const url = String(input);
       if (url.endsWith("/pipeline")) return jsonResponse(pipeline);
       if (url.endsWith("/usage")) return jsonResponse(usage);
+      if (url.includes("/auto-report")) return jsonResponse({ projectId: project.id, warnCount: 0, groups: [] });
       if (url.endsWith("/budget-estimate")) return jsonResponse({
         mode: "BALANCED",
         features: {

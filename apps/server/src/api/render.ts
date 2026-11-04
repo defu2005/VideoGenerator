@@ -16,6 +16,7 @@ import { AppError } from "../lib/errors.js";
 import { createZipStream } from "../lib/zip.js";
 import { getRenderSettings, saveRenderSettings } from "../settings/render.js";
 import type { RenderService } from "../services/renderService.js";
+import type { AutoReportService } from "../services/autoReportService.js";
 import { parseRangeHeader } from "./music.js";
 
 const ProjectParams = z.object({ id: z.string().uuid() }).strict();
@@ -28,6 +29,7 @@ export function registerRenderRoutes(
   renders: RenderService,
   projectService: { getProject: (id: string) => Promise<Project | undefined> },
   sqlite?: Database.Database,
+  autoReport?: AutoReportService,
 ): void {
   async function project(request: FastifyRequest): Promise<Project> {
     const { id } = ProjectParams.parse(request.params);
@@ -149,12 +151,20 @@ export function registerRenderRoutes(
     const reportPath = join(staging, "render-report.json");
     writeFileSync(metadataPath, renders.metadataTextForExport(id, renderId, found.title), "utf8");
     writeFileSync(reportPath, JSON.stringify(paths.report, null, 2), "utf8");
+    const autoReportPayload = autoReport?.responseFor(id);
+    const autoReportPath = autoReportPayload && autoReportPayload.groups.length > 0
+      ? join(staging, "auto-report.json")
+      : null;
+    if (autoReportPath && autoReportPayload) {
+      writeFileSync(autoReportPath, JSON.stringify(autoReportPayload, null, 2), "utf8");
+    }
     const entries = [
       { name: `${title}.mp4`, path: paths.video },
       ...(paths.subtitles ? [{ name: `${title}.srt`, path: paths.subtitles }] : []),
       ...(paths.credits ? [{ name: "credits.txt", path: paths.credits }] : []),
       { name: "metadata.txt", path: metadataPath },
       { name: "render-report.json", path: reportPath },
+      ...(autoReportPath ? [{ name: "auto-report.json", path: autoReportPath }] : []),
     ];
     const zipName = `${title} - v${paths.version}.zip`;
     reply.header("Content-Type", "application/zip");

@@ -135,6 +135,7 @@ export class RenderService {
     private readonly tools: MediaTools = defaultMediaTools,
     private readonly now: () => Date = () => new Date(),
     private readonly llmProviders?: LlmProviderRegistry,
+    private readonly autoReport?: import("./autoReportService.js").AutoReportService,
   ) {}
 
   private ensureBackfill(): void {
@@ -721,6 +722,21 @@ export class RenderService {
 
     if (project && resolveBudget(project).renderVerify && this.llmProviders && thumbnails.length) {
       await this.runRenderVision(project, timeline, thumbsDir, thumbnails, issues, signal);
+    }
+
+    if (project?.mode === "AUTO" && this.autoReport) {
+      this.autoReport.clearStage(project.id, "RENDER");
+      for (const issue of issues) {
+        if (issue.code !== "FRAME_MISMATCH" && issue.code !== "SUBTITLE_ILLEGIBLE") continue;
+        this.autoReport.add(project.id, {
+          stage: "RENDER",
+          sceneId: issue.sceneId,
+          code: "RENDER_VISION_ISSUE",
+          severity: "WARN",
+          message: issue.message,
+          data: { code: issue.code },
+        });
+      }
     }
 
     return {

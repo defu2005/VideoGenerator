@@ -21,7 +21,7 @@ export function GuidelineFindings({ project, stage }: { project: Project; stage:
     onSuccess: (data) => queryClient.setQueryData(["guideline-findings", project.id], data),
   });
   const open = (findings.data?.findings ?? []).filter((finding) => finding.status === "OPEN" && finding.stage === stage);
-  const paused = project.mode === "AUTO" && (findings.data?.findings ?? []).some((finding) => finding.status === "OPEN" && finding.severity === "MUST");
+  const openMust = (findings.data?.findings ?? []).some((finding) => finding.status === "OPEN" && finding.severity === "MUST");
   const attention = new Set(findings.data?.needsAttentionSceneIds ?? []);
 
   return (
@@ -32,7 +32,11 @@ export function GuidelineFindings({ project, stage }: { project: Project; stage:
           {recheck.isPending ? "Đang kiểm tra…" : "Kiểm tra lại"}
         </button>
       </header>
-      {paused && <p className="request-error" role="status">AUTO đang tạm dừng vì còn phát hiện mức MUST. Bạn có thể sửa nội dung hoặc bỏ qua.</p>}
+      {project.mode === "AUTO" && openMust && (
+        <p className="field-hint" role="status">
+          AUTO tiếp tục chạy dù còn phát hiện mức MUST — xem Báo cáo AUTO trên tab Render.
+        </p>
+      )}
       {findings.isError && <p className="field-error">Không tải được danh sách phát hiện.</p>}
       {open.length === 0 && !findings.isPending && <p className="field-hint">Không có phát hiện đang mở.</p>}
       {ORDER.map((severity) => {

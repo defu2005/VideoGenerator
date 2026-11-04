@@ -393,9 +393,6 @@ export function estimateBudget(
   const routes = isRouteMap(provider) ? provider : undefined;
   const providerIds = Array.isArray(provider) ? provider : typeof provider === "string" ? [provider] : Object.values(routes ?? {}).flatMap((route) => route?.provider ? [route.provider] : []);
   const requestsOnly = providerIds.some((id) => id === "copilot-cli" || id === "claude-cli");
-  const tokens = providerIds.length > 0 && !requestsOnly
-    ? estimateBudgetTokens(project, perStage, storyMode, features, sceneCount)
-    : undefined;
   const taskCalls: Record<string, { min: number; max: number }> = {
     research: { min: researchCalls, max: researchCalls * (1 + repairs) },
     script: { min: scriptBaseCalls, max: scriptBaseCalls * (1 + repairs) },
@@ -437,6 +434,9 @@ export function estimateBudget(
       };
     });
   }
+  const tokens = providerIds.length > 0 && !requestsOnly
+    ? estimateBudgetTokens(project, perStage, storyMode, features, sceneCount, imagesPerCall)
+    : undefined;
   return {
     mode,
     features,
@@ -452,38 +452,75 @@ function isRouteMap(
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
+/** Average system + fixed instruction overhead per LLM call (from stage prompt builders). */
+const SYSTEM_PROMPT_OVERHEAD_TOKENS = 1_200;
+/** Estimated research-notes JSON when research is on (matches researchOutput). */
+const RESEARCH_CONTEXT_TOKENS = 900;
+/** Extra per-scene narration/description tokens beyond the script share. */
+const VISUAL_SCENE_EXTRA_TOKENS = 300;
+/** Rerank candidate list tokens (id + caption + score) per candidate. */
+const RERANK_TOKENS_PER_CANDIDATE = 60;
+/** Small brief/context for research, music, and non-script stages. */
+const SMALL_CONTEXT_TOKENS = 300;
+
 function estimateBudgetTokens(
   project: BudgetEstimateInput,
   stages: BudgetEstimateStage[],
   storyMode: "merged" | "separate" | "off",
   features: BudgetFeatures,
   sceneCount: number,
+  imagesPerCall: number,
 ): { input: number; output: number } {
-  const text = [
-    project.topic,
-    project.description ?? "",
-    project.settings.language,
-    String(project.settings.targetDurationSec),
-    String(project.settings.wordsPerMinute),
-  ].join("\n");
-  const calls = stages.reduce((total, stage) => total + stage.calls.max, 0);
-  const perCallInput = estimateTextTokens(text, true);
   const scriptOutput = Math.ceil(
     project.settings.targetDurationSec / 60 * project.settings.wordsPerMinute
       * (project.settings.language.toLowerCase().startsWith("vi") ? 2.5 : 1.4) + 400,
   );
-  const researchOutput = 900;
-  const researchCalls = stages.find((stage) => stage.stage === "RESEARCH")?.calls.max ?? 0;
-  const scriptCalls = stages.find((stage) => stage.stage === "SCRIPT")?.calls.max ?? 0;
-  const scenePlanCalls = stages.find((stage) => stage.stage === "SCENE_PLAN")?.calls.max ?? 0;
+  const researchOutput = RESEARCH_CONTEXT_TOKENS;
+  const researchOn = storyMode !== "off";
+  const researchContext = researchOn ? RESEARCH_CONTEXT_TOKENS : 0;
+  const scriptContext = scriptOutput + researchContext;
+  const scenes = Math.max(1, sceneCount);
+  const sceneTextTokens = Math.ceil(scriptOutput / scenes);
+  const maxCalls = (task: string) =>
+    stages.flatMap((stage) => stage.tasks ?? [])
+      .filter((item) => item.task === task)
+      .reduce((total, item) => total + item.calls.max, 0);
+
+  const researchCalls = maxCalls("research");
+  const scriptCalls = maxCalls("script") + maxCalls("scriptReview") + maxCalls("factCheck") + maxCalls("guidelineCheck");
+  const scenePlanCalls = maxCalls("sceneQueries");
+  const metadataCalls = maxCalls("metadata");
+  const visualAltCalls = maxCalls("visualAltQueries");
+  const visualRerankCalls = maxCalls("visualRerank");
+  const visionResearchCalls = maxCalls("visionResearch");
+  const webGroundingCalls = maxCalls("webImageGrounding");
+  // visionCheck.max already includes consistency batches; do not also add visionConsistency.
+  const visionCheckCalls = maxCalls("visionCheck");
+  const renderVisionCalls = maxCalls("renderVision");
+  const musicSearchCalls = maxCalls("musicAssist");
   const visualSearchCalls = stages.find((stage) => stage.stage === "VISUAL_SEARCH")?.calls.max ?? 0;
-  const musicSearchCalls = stages.find((stage) => stage.stage === "MUSIC_SEARCH")?.calls.max ?? 0;
   const timelineCalls = stages.find((stage) => stage.stage === "TIMELINE")?.calls.max ?? 0;
   const renderCalls = stages.find((stage) => stage.stage === "RENDER")?.calls.max ?? 0;
-  // Each vision-bearing call attaches up to 5 images at ~1k tokens each (see VISION_IMAGE_TOKEN_ESTIMATE).
-  const visionCallCount = (features.visionCheck ? visualSearchCalls : 0) + renderCalls;
-  const visionInput = visionCallCount * 5 * VISION_IMAGE_TOKEN_ESTIMATE;
-  void sceneCount;
+
+  // Text-call input: overhead + stage context (script/research for script-like stages).
+  let input = 0;
+  input += researchCalls * (SYSTEM_PROMPT_OVERHEAD_TOKENS + SMALL_CONTEXT_TOKENS);
+  input += scriptCalls * (SYSTEM_PROMPT_OVERHEAD_TOKENS + scriptContext);
+  input += scenePlanCalls * (SYSTEM_PROMPT_OVERHEAD_TOKENS + scriptContext);
+  input += metadataCalls * (SYSTEM_PROMPT_OVERHEAD_TOKENS + scriptContext);
+  // VISUAL_SEARCH text: scene share + ~300 extra per scene in the batch (batches of imagesPerCall).
+  const visualTextBatchScenes = Math.min(scenes, imagesPerCall);
+  const visualTextContext = sceneTextTokens + VISUAL_SCENE_EXTRA_TOKENS * visualTextBatchScenes;
+  input += (visualAltCalls + visionResearchCalls + webGroundingCalls)
+    * (SYSTEM_PROMPT_OVERHEAD_TOKENS + visualTextContext);
+  input += visualRerankCalls * (
+    SYSTEM_PROMPT_OVERHEAD_TOKENS + sceneTextTokens + RERANK_TOKENS_PER_CANDIDATE * features.visualSearchBreadth
+  );
+  // Vision image tokens (keep VISION_IMAGE_TOKEN_ESTIMATE per attached image).
+  input += (visionCheckCalls + renderVisionCalls)
+    * (SYSTEM_PROMPT_OVERHEAD_TOKENS + imagesPerCall * VISION_IMAGE_TOKEN_ESTIMATE);
+  input += musicSearchCalls * (SYSTEM_PROMPT_OVERHEAD_TOKENS + SMALL_CONTEXT_TOKENS);
+
   const output = researchCalls * (storyMode === "merged" ? scriptOutput + researchOutput : researchOutput)
     + scriptCalls * scriptOutput
     + scenePlanCalls * 500
@@ -491,7 +528,7 @@ function estimateBudgetTokens(
     + musicSearchCalls * 200
     + timelineCalls * 400
     + renderCalls * 300;
-  return { input: calls * perCallInput + visionInput, output };
+  return { input, output };
 }
 
 export function estimateTextTokens(text: string, json = false): number {

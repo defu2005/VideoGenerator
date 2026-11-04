@@ -12,7 +12,10 @@ export class VisualSearchExecutor implements StageExecutor {
 
   async run(context: StageContext): Promise<StageResult> {
     const result = await this.visuals.executeStage(context, this.llmProviders);
-    if (context.project.mode === "AUTO") await this.visuals.approveAll(context.project.id, context.signal);
+    if (context.project.mode === "AUTO") {
+      await this.visuals.approveAll(context.project.id, context.signal);
+      await this.visuals.autoResolve(context.project.id, context.signal);
+    }
     return result;
   }
 }

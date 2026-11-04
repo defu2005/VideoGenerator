@@ -72,7 +72,7 @@ describe("GuidelineFindings", () => {
     }));
     renderWithProviders(<GuidelineFindings project={project} stage="SCRIPT" />);
     expect(await screen.findByText("Thiếu nguồn.")).toBeInTheDocument();
-    expect(screen.getByText(/AUTO đang tạm dừng/)).toBeInTheDocument();
+    expect(screen.getByText(/AUTO tiếp tục chạy dù còn phát hiện mức MUST/)).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Bỏ qua" }));
     await waitFor(() => expect(calls.some((call) => call.method === "POST" && call.url.includes("/dismiss"))).toBe(true));
     expect(await screen.findByText("Không có phát hiện đang mở.")).toBeInTheDocument();

@@ -57,6 +57,8 @@ import { createMusicProviders } from "./providers/music/registry.js";
 import { probeDurationSec } from "./media/ffmpeg.js";
 import { GuidelineService } from "./guidelines/service.js";
 import { registerGuidelineRoutes } from "./api/guidelines.js";
+import { AutoReportService } from "./services/autoReportService.js";
+import { registerAutoReportRoutes } from "./api/autoReport.js";
 
 export function buildApp({ config }: { config: AppConfig }) {
   const server = Fastify({
@@ -83,10 +85,13 @@ export function buildApp({ config }: { config: AppConfig }) {
   }
   const projectService = createProjectService(database.db, config, server.log, database.sqlite);
   const guidelineService = new GuidelineService(database.sqlite);
+  const autoReportService = new AutoReportService(database.sqlite);
   const events = new PipelineEventBus();
   const jobRepository = new JobRepository(database.sqlite, events);
   const usageService = new UsageService(database.sqlite, config.USD_VND_RATE);
-  const visualService = new VisualService(database.sqlite, jobRepository, config, server.log);
+  const visualService = new VisualService(database.sqlite, jobRepository, config, server.log, {
+    autoReport: autoReportService,
+  });
   const musicService = new MusicService(
     database.sqlite,
     config,
@@ -96,7 +101,7 @@ export function buildApp({ config }: { config: AppConfig }) {
   );
   const timelineService = new TimelineService(database.sqlite, config);
   const llmProviders = new LlmProviderRegistry(config);
-  const renderService = new RenderService(database.sqlite, config, timelineService, undefined, undefined, llmProviders);
+  const renderService = new RenderService(database.sqlite, config, timelineService, undefined, undefined, llmProviders, autoReportService);
   const metadataService = new MetadataService(database.sqlite, config, llmProviders, timelineService, renderService);
   const orchestrator = new PipelineOrchestrator(
     jobRepository,
@@ -111,16 +116,22 @@ export function buildApp({ config }: { config: AppConfig }) {
           ? timelineService.canApproveFinal(project.id)
           : { allowed: true },
     (project, gate) => {
-      if (guidelineService.openMustCount(project.id) > 0) {
-        return "Có phát hiện MUST đang mở. AUTO tạm dừng để bạn xem định hướng nội dung.";
-      }
-      if (gate === "VISUAL_REVIEW") {
-        const visuals = visualService.getProjectVisuals(project.id);
-        const needsAttention = visuals.scenes.filter((scene) => scene.status === "NEEDS_ATTENTION").length;
-        if (needsAttention > 0) {
-          return `${needsAttention} scene cần bạn xem (AI nhìn chưa đạt ngưỡng). AUTO tạm dừng tại VISUAL_REVIEW.`;
+      // AUTO never pauses for content issues — record decisions and continue.
+      if (project.mode === "AUTO" && guidelineService.openMustCount(project.id) > 0) {
+        autoReportService.clearStage(project.id, "SCRIPT");
+        for (const finding of guidelineService.listFindings(project.id)) {
+          if (finding.status !== "OPEN" || finding.severity !== "MUST") continue;
+          autoReportService.add(project.id, {
+            stage: "SCRIPT",
+            sceneId: finding.sceneId,
+            code: "MUST_FINDING_OPEN",
+            severity: "WARN",
+            message: `MUST còn mở (${finding.ruleId}): ${finding.text}`,
+            data: { ruleId: finding.ruleId, text: finding.text },
+          });
         }
       }
+      void gate;
       return null;
     },
   );
@@ -151,7 +162,7 @@ export function buildApp({ config }: { config: AppConfig }) {
         VISUAL_SEARCH: new VisualSearchExecutor(visualService, llmProviders),
         VOICE: new VoiceExecutor(database.sqlite, ttsProviders, config),
         SUBTITLE: new SubtitleExecutor(database.sqlite, config),
-        MUSIC_SEARCH: new MusicSearchExecutor(musicService, database.sqlite, llmProviders, config),
+        MUSIC_SEARCH: new MusicSearchExecutor(musicService, database.sqlite, llmProviders, config, autoReportService),
         TIMELINE: new TimelineExecutor(timelineService, guidelineService, metadataService),
         RENDER: new RenderExecutor(renderService),
       },
@@ -178,8 +189,9 @@ export function buildApp({ config }: { config: AppConfig }) {
   registerSubtitleRoutes(server, database.sqlite, jobRepository, config);
   registerMusicRoutes(server, musicService, projectService, jobRepository);
   registerTimelineRoutes(server, timelineService, projectService);
-  registerRenderRoutes(server, renderService, projectService, database.sqlite);
+  registerRenderRoutes(server, renderService, projectService, database.sqlite, autoReportService);
   registerMetadataRoutes(server, metadataService, projectService);
+  registerAutoReportRoutes(server, autoReportService, projectService);
   registerReviewRoutes(server, reviewService, projectService);
 
   server.addHook("onReady", async () => worker.start());

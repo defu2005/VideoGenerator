@@ -1,4 +1,5 @@
 import { recommendBrief, type Project } from "@vg/shared";
+import { useQuery } from "@tanstack/react-query";
 import { Link, Navigate, NavLink, useNavigate, useParams } from "react-router-dom";
 import { useState } from "react";
 import { ConfirmDialog } from "../../components/ConfirmDialog";
@@ -7,6 +8,7 @@ import { Spinner } from "../../components/Spinner";
 import { StatusBadge } from "../../components/StatusBadge";
 import { useDeleteProject, useDuplicateProject, useProject, useSetProjectArchived } from "../../hooks/useProjects";
 import { ApiRequestError } from "../../services/apiClient";
+import { getAutoReport } from "../../services/autoReportApi";
 import { EditProjectDialog } from "./EditProjectDialog";
 import { PipelinePanel } from "../pipeline/PipelinePanel";
 import { ScriptTab } from "../script/ScriptTab";
@@ -79,6 +81,11 @@ export function ProjectDetailPage() {
   const { id = "", tab = "" } = useParams();
   const navigate = useNavigate();
   const projectQuery = useProject(id);
+  const autoReport = useQuery({
+    queryKey: ["auto-report", id],
+    queryFn: () => getAutoReport(id),
+    enabled: Boolean(id),
+  });
   const archive = useSetProjectArchived();
   const duplicate = useDuplicateProject();
   const remove = useDeleteProject();
@@ -96,6 +103,7 @@ export function ProjectDetailPage() {
   }
 
   const project = projectQuery.data;
+  const autoWarnCount = autoReport.data?.warnCount ?? 0;
   async function duplicateCurrent() {
     setActionError("");
     try {
@@ -133,7 +141,14 @@ export function ProjectDetailPage() {
           <StatusBadge status={project.status} />
         </div>
         <div className="detail-subtitle">
-          <span>{project.stage.replaceAll("_", " ")}</span><span>{project.mode}</span><span>Updated {formatUpdated(project.updatedAt)}</span>
+          <span>{project.stage.replaceAll("_", " ")}</span>
+          <span>{project.mode}</span>
+          {autoWarnCount > 0 && (
+            <Link className="auto-warn-badge" to={`/projects/${project.id}/render`} title="Xem báo cáo AUTO">
+              AUTO: {autoWarnCount} cảnh báo
+            </Link>
+          )}
+          <span>Updated {formatUpdated(project.updatedAt)}</span>
         </div>
         <div className="detail-actions">
           <button className="button button-secondary" type="button" onClick={() => setEditing(true)}>Edit</button>

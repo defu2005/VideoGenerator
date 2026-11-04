@@ -77,6 +77,7 @@ import {
   verifySceneVision,
   type VisionCandidateInput,
 } from "./visionVerify.js";
+import type { AutoReportService } from "./autoReportService.js";
 
 /** Tiny valid JPEG used when a preview cannot be downloaded (mock URLs in tests). */
 const PLACEHOLDER_JPEG = Buffer.from(
@@ -121,6 +122,8 @@ export class VisualService {
   private readonly registry: ImageProviderRegistry;
   private readonly imageStore: ImageStore;
 
+  private readonly autoReport: AutoReportService | null;
+
   constructor(
     private readonly sqlite: Database.Database,
     private readonly repository: JobRepository,
@@ -130,6 +133,7 @@ export class VisualService {
       providers?: ImageSearchProvider[];
       limiter?: TokenBucketRateLimiter;
       imageStore?: ImageStore;
+      autoReport?: AutoReportService;
     } = {},
   ) {
     this.registry = new ImageProviderRegistry(config, dependencies.providers);
@@ -140,6 +144,7 @@ export class VisualService {
       brave: config.WEB_IMAGE_SEARCH_PER_MINUTE,
     });
     this.imageStore = dependencies.imageStore ?? new ImageStore(config.DATA_DIR, config.IMAGE_SEARCH_USER_AGENT, { minIntervalMs: config.IMAGE_DOWNLOAD_MIN_INTERVAL_MS });
+    this.autoReport = dependencies.autoReport ?? null;
   }
 
   getProjectVisuals(projectId: string) {
@@ -637,6 +642,233 @@ export class VisualService {
     return needsAttention === 0
       ? { allowed: true }
       : { allowed: false, message: `${needsAttention} scene${needsAttention === 1 ? "" : "s"} need attention before visual review can be approved.` };
+  }
+
+  /**
+   * AUTO-only: force every scene to READY_FOR_RENDER or SKIPPED so the visual gate can pass.
+   * Does not change approveAll rules for ASSISTED/MANUAL.
+   */
+  async autoResolve(projectId: string, signal?: AbortSignal): Promise<void> {
+    this.requireProject(projectId);
+    this.autoReport?.clearStage(projectId, "VISUAL_REVIEW");
+    const scenes = this.loadScenes(projectId);
+    for (const scene of scenes) {
+      if (signal?.aborted) throw signal.reason ?? new Error("Visual auto-resolve was aborted");
+      const status = this.getSceneVisuals(projectId, scene.id).status;
+      if (status === "READY_FOR_RENDER" || status === "SKIPPED") continue;
+
+      const candidates = this.listActiveCandidates(projectId, scene.id);
+      const visionMeta = this.getVisionMeta(scene.id);
+      const verified = candidates.filter((candidate) => !isUnverifiedWebCandidate(candidate));
+      const unverifiedOnly = candidates.length > 0 && verified.length === 0;
+
+      if (visionMeta?.needsAttention || status === "NEEDS_ATTENTION") {
+        const pick = this.bestCandidate(verified.length > 0 ? verified : candidates);
+        if (pick) {
+          await this.forceApproveCandidate(projectId, scene.id, pick, signal);
+          this.clearNeedsAttention(scene.id);
+          const fit = pick.visionCheck?.fit ?? null;
+          this.autoReport?.add(projectId, {
+            stage: "VISUAL_REVIEW",
+            sceneId: scene.id,
+            code: "VISUAL_LOW_FIT",
+            severity: "WARN",
+            message: fit == null
+              ? `Scene đã duyệt ảnh xếp hạng cao nhất dù AI chưa đạt ngưỡng.`
+              : `Scene đã duyệt ảnh fit ${fit}/10 (dưới ngưỡng).`,
+            data: { fit, reason: visionMeta?.reason ?? null, candidateId: pick.id },
+          });
+          continue;
+        }
+      }
+
+      if (unverifiedOnly) {
+        const pick = this.bestCandidate(candidates);
+        if (pick) {
+          await this.forceApproveCandidate(projectId, scene.id, pick, signal);
+          this.clearNeedsAttention(scene.id);
+          this.autoReport?.add(projectId, {
+            stage: "VISUAL_REVIEW",
+            sceneId: scene.id,
+            code: "VISUAL_UNVERIFIED_LICENSE",
+            severity: "WARN",
+            message: "Đã dùng ảnh web chưa xác minh license (không còn ứng viên đã xác minh).",
+            data: {
+              candidateId: pick.id,
+              sourcePageUrl: pick.sourcePageUrl ?? pick.sourceUrl,
+              provider: pick.provider,
+            },
+          });
+          continue;
+        }
+      }
+
+      if (candidates.length === 0) {
+        const neighbour = this.findNeighbourWithImage(scenes, scene);
+        if (neighbour) {
+          const cloned = this.cloneCandidateToScene(projectId, scene.id, neighbour.candidate);
+          await this.forceApproveCandidate(projectId, scene.id, cloned, signal);
+          this.clearNeedsAttention(scene.id);
+          this.autoReport?.add(projectId, {
+            stage: "VISUAL_REVIEW",
+            sceneId: scene.id,
+            code: "VISUAL_REUSED_NEIGHBOUR",
+            severity: "WARN",
+            message: `Không có ảnh — đã tái sử dụng ảnh từ scene lân cận (thứ tự ${neighbour.scene.order + 1}).`,
+            data: { fromSceneId: neighbour.scene.id, candidateId: cloned.id },
+          });
+          continue;
+        }
+        this.removeSceneVisual(projectId, scene.id);
+        this.autoReport?.add(projectId, {
+          stage: "VISUAL_REVIEW",
+          sceneId: scene.id,
+          code: "VISUAL_SKIPPED",
+          severity: "WARN",
+          message: "Không có ảnh cho scene này — đã bỏ qua (placeholder).",
+          data: null,
+        });
+        continue;
+      }
+
+      // Remaining REVIEW_REQUIRED / NO_VISUAL with candidates: pick best verified (or any).
+      const pick = this.bestCandidate(verified.length > 0 ? verified : candidates);
+      if (pick) {
+        await this.forceApproveCandidate(projectId, scene.id, pick, signal);
+        this.clearNeedsAttention(scene.id);
+      } else {
+        this.removeSceneVisual(projectId, scene.id);
+        this.autoReport?.add(projectId, {
+          stage: "VISUAL_REVIEW",
+          sceneId: scene.id,
+          code: "VISUAL_SKIPPED",
+          severity: "WARN",
+          message: "Không duyệt được ảnh — đã bỏ qua scene (placeholder).",
+          data: null,
+        });
+      }
+    }
+  }
+
+  private listActiveCandidates(projectId: string, sceneId: string): VisualCandidate[] {
+    const rows = this.sqlite.prepare(
+      "SELECT * FROM visual_candidates WHERE project_id = ? AND scene_id = ? AND discarded_at IS NULL ORDER BY rank, created_at",
+    ).all(projectId, sceneId) as Record<string, unknown>[];
+    return rows.map((row) => this.candidateFromRow(row));
+  }
+
+  private bestCandidate(candidates: VisualCandidate[]): VisualCandidate | null {
+    if (candidates.length === 0) return null;
+    return [...candidates].sort((left, right) => {
+      const leftFit = left.visionCheck?.fit;
+      const rightFit = right.visionCheck?.fit;
+      if (leftFit != null && rightFit != null && leftFit !== rightFit) return rightFit - leftFit;
+      if (leftFit != null && rightFit == null) return -1;
+      if (leftFit == null && rightFit != null) return 1;
+      if (right.relevanceScore !== left.relevanceScore) return right.relevanceScore - left.relevanceScore;
+      return left.rank - right.rank;
+    })[0] ?? null;
+  }
+
+  private async forceApproveCandidate(
+    projectId: string,
+    sceneId: string,
+    candidate: VisualCandidate,
+    signal?: AbortSignal,
+  ): Promise<void> {
+    const now = new Date().toISOString();
+    const existing = this.getSelection(projectId, sceneId);
+    const selection = VisualSelectionSchema.parse({
+      id: existing?.id ?? randomUUID(),
+      projectId,
+      sceneId,
+      slot: 0,
+      candidateId: candidate.id,
+      status: "DISCOVERED",
+      selectedBy: "AGENT",
+      motion: existing?.motion ?? null,
+      reviewedAt: null,
+      createdAt: existing?.createdAt ?? now,
+      updatedAt: now,
+    });
+    this.repository.atomic(() => {
+      this.upsertSelection(selection);
+      this.sqlite.prepare("UPDATE scenes SET no_visual = 0 WHERE project_id = ? AND id = ?").run(projectId, sceneId);
+    });
+    await this.approveSelected(projectId, sceneId, selection, candidate, signal);
+  }
+
+  private clearNeedsAttention(sceneId: string): void {
+    const meta = this.getVisionMeta(sceneId);
+    if (!meta?.needsAttention) return;
+    const next = { ...meta, needsAttention: false };
+    const updated = this.sqlite.prepare(
+      "UPDATE visual_search_state SET vision_meta = ?, updated_at = ? WHERE scene_id = ?",
+    ).run(JSON.stringify(next), new Date().toISOString(), sceneId);
+    if (updated.changes > 0) return;
+    const project = this.sqlite.prepare("SELECT project_id FROM scenes WHERE id = ?")
+      .get(sceneId) as { project_id: string } | undefined;
+    if (!project) return;
+    this.sqlite.prepare(
+      `INSERT INTO visual_search_state (scene_id, project_id, search_hash, vision_meta, updated_at)
+       VALUES (?, ?, '', ?, ?)`,
+    ).run(sceneId, project.project_id, JSON.stringify(next), new Date().toISOString());
+  }
+
+  private findNeighbourWithImage(
+    scenes: Scene[],
+    target: Scene,
+  ): { scene: Scene; candidate: VisualCandidate } | null {
+    const ordered = [...scenes].sort((a, b) => a.order - b.order);
+    const index = ordered.findIndex((scene) => scene.id === target.id);
+    if (index < 0) return null;
+    const tryScene = (scene: Scene | undefined) => {
+      if (!scene || scene.id === target.id) return null;
+      const selection = this.getSelection(scene.projectId, scene.id);
+      if (!selection) return null;
+      const candidate = this.findCandidate(selection.candidateId);
+      if (!candidate?.localPath || !candidate.sha256) return null;
+      if (selection.status !== "APPROVED" && selection.status !== "CUSTOM" && selection.status !== "REPLACED") {
+        // Allow neighbour that is already ready or at least downloaded.
+        if (!candidate.localPath) return null;
+      }
+      return { scene, candidate };
+    };
+    for (let offset = 1; offset < ordered.length; offset += 1) {
+      const prev = tryScene(ordered[index - offset]);
+      if (prev) return prev;
+      const next = tryScene(ordered[index + offset]);
+      if (next) return next;
+    }
+    return null;
+  }
+
+  private cloneCandidateToScene(
+    projectId: string,
+    sceneId: string,
+    source: VisualCandidate,
+  ): VisualCandidate {
+    const now = new Date().toISOString();
+    const cloned = VisualCandidateSchema.parse({
+      ...source,
+      id: randomUUID(),
+      projectId,
+      sceneId,
+      providerItemId: `reuse:${source.id}`,
+      scoreBreakdown: {
+        ...source.scoreBreakdown,
+        reusedNeighbour: true,
+        reusedFromSceneId: source.sceneId,
+      },
+      why: source.why ?? "Tái sử dụng ảnh scene lân cận (AUTO)",
+      rank: 0,
+      discardedAt: null,
+      createdAt: now,
+      searchHash: source.searchHash ?? "",
+      downloadError: null,
+    });
+    this.saveCandidate(cloned);
+    return this.findCandidate(cloned.id) ?? cloned;
   }
 
   assertSceneExists(projectId: string, sceneId: string): void {

@@ -8,6 +8,7 @@ import { pipelineKeys, usePipeline } from "../../hooks/usePipeline";
 import { runPipeline } from "../../services/pipelineApi";
 import { getProjectRender, listProjectRenders, renderFileUrl, renderThumbUrl } from "../../services/renderApi";
 import { getProjectTimeline } from "../../services/timelineApi";
+import { AutoReportPanel } from "./AutoReportPanel";
 import { MetadataPanel } from "./MetadataPanel";
 import { RenderHistory, renderHistoryKeys } from "./RenderHistory";
 
@@ -151,6 +152,7 @@ export function RenderPanel({ project }: { project: Project }) {
             onSelect={setSelectedId}
           />
           <MetadataPanel project={project} />
+          <AutoReportPanel project={project} />
           <section className={`panel render-report${data.report.ok ? "" : " has-errors"}`} aria-label="Kiểm tra video">
             <h3>
               {data.report.ok ? "Kiểm tra: đạt" : "Kiểm tra: có lỗi"}
@@ -195,7 +197,12 @@ export function RenderPanel({ project }: { project: Project }) {
         </>
       )}
 
-      {!data && <MetadataPanel project={project} />}
+      {!data && (
+        <>
+          <MetadataPanel project={project} />
+          <AutoReportPanel project={project} />
+        </>
+      )}
     </div>
   );
 }

@@ -4,6 +4,7 @@ export * from "./brief/detectLanguage.js";
 export * from "./brief/presets.js";
 export * from "./brief/recommend.js";
 export * from "./pipeline.js";
+export * from "./schemas/autoReport.js";
 export * from "./schemas/dashboard.js";
 export * from "./schemas/errors.js";
 export * from "./schemas/job.js";
