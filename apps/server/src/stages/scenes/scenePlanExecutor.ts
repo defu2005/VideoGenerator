@@ -21,6 +21,7 @@ import { LlmError } from "../../providers/llm/types.js";
 import { estimateTokens } from "../../providers/llm/tokenEstimate.js";
 import { sceneQueryPrompt } from "./sceneQueryPrompt.js";
 import { getAppLlmSettings } from "../../providers/llm/settings.js";
+import { GuidelineService } from "../../guidelines/service.js";
 
 type ScriptRow = { data: string };
 const SYSTEM_PROMPT = "You are an image-search query editor. Return only JSON matching the requested schema.";
@@ -78,7 +79,7 @@ export class ScenePlanExecutor implements StageExecutor {
         selected = this.registry.resolveTask("sceneQueries", context.project, getAppLlmSettings(this.sqlite));
         const maxOutputTokens = Math.max(256, splitScenes.length * 100);
         const maxInput = selected.provider.limits?.maxInputTokens;
-        const prompt = sceneQueryPrompt(splitScenes);
+        const prompt = sceneQueryPrompt(splitScenes, new GuidelineService(this.sqlite).guidanceFor(context.project, ["visuals"]));
         if (maxInput !== undefined && estimateTokens(`${SYSTEM_PROMPT}\n${prompt}`, true) > maxInput) {
           throw new LlmError("Scene query prompt exceeds the provider input limit.", "LLM_LIMIT_TOO_SMALL", false);
         }

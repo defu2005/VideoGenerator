@@ -17,7 +17,7 @@ const project: Project = {
     platform: "youtube", style: "documentary", tone: "neutral", audience: "general",
     wordsPerMinute: 150, sceneDurationSec: 7, visualStyle: "mixed",
     subtitles: { enabled: true, maxCharsPerLine: 42 }, music: { enabled: true, volume: 0.15 },
-    userSet: [], stageExecutors: {}, autoRender: false,
+    userSet: [], stageExecutors: {}, autoRender: false, guidelines: { platformPack: "auto", customRules: [] },
   },
   status: "REVIEW", stage: "RENDER", thumbnailPath: null, durationSec: 4, version: 1,
   createdAt: "2026-11-04T00:00:00.000Z", updatedAt: "2026-11-04T00:00:00.000Z", archivedAt: null,

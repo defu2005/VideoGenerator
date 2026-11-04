@@ -1,4 +1,5 @@
 import type { BudgetFeatures, Project } from "@vg/shared";
+import { appendGuidelineGuidance } from "../../guidelines/promptText.js";
 
 const factTargets: Record<BudgetFeatures["researchDepth"], { target: number; max: number }> = {
   light: { target: 6, max: 8 },
@@ -6,7 +7,7 @@ const factTargets: Record<BudgetFeatures["researchDepth"], { target: number; max
   deep: { target: 14, max: 16 },
 };
 
-export function researchPrompt(project: Project, depth: BudgetFeatures["researchDepth"] = "standard"): { system: string; prompt: string } {
+export function researchPrompt(project: Project, depth: BudgetFeatures["researchDepth"] = "standard", guidance?: string): { system: string; prompt: string } {
   const { target, max } = factTargets[depth];
   return {
     system: [
@@ -15,7 +16,7 @@ export function researchPrompt(project: Project, depth: BudgetFeatures["research
       "Never invent URLs. Use a short free-text sourceHint or null.",
       "Return only a JSON object matching the requested ResearchNotes schema.",
     ].join(" "),
-    prompt: [
+    prompt: appendGuidelineGuidance([
       `Topic: ${project.topic}`,
       `Description: ${project.description || "(none)"}`,
       `Target language: ${project.settings.language}`,
@@ -23,6 +24,6 @@ export function researchPrompt(project: Project, depth: BudgetFeatures["research
       `Return ${target}-${max} keyFacts, at most 10 timeline items, 3-8 outline sections, at most 6 angles and 6 cautions.`,
       "Use the requested language for all readable content.",
       "Compact JSON shape: summary, keyFacts[{fact,confidence,sourceHint}], timeline[{date,event}], angles, outline[{section,purpose,points}], cautions.",
-    ].join("\n"),
+    ].join("\n"), guidance),
   };
 }

@@ -1,4 +1,4 @@
-import { PipelineStageSchema, ProjectStatusSchema } from "@vg/shared";
+import { GUIDELINE_DISCLAIMER, PipelineStageSchema, ProjectStatusSchema, activeGuidelines, guidelinePromptBlock } from "@vg/shared";
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { VideoAgentApiClient, VideoAgentApiError } from "./apiClient.js";
@@ -102,6 +102,17 @@ export function registerVideoAgentTools(
           status: pipeline.status,
           stages: pipeline.stages.map(({ stage, state, progress, message }) => ({ stage, state, progress, message })),
         },
+      };
+    },
+  ));
+
+  server.tool("get_guidelines", "Read the active content-guideline reminders for a project, plus the disclaimer. This does not call an LLM.", projectIdShape, ({ projectId }) => invoke(
+    async () => {
+      const [project, packs] = await Promise.all([api.getProject(projectId), api.getGuidelinePacks()]);
+      const targets = ["script", "visuals", "music", "subtitles", "metadata"] as const;
+      return {
+        text: guidelinePromptBlock(activeGuidelines(project, packs.custom), targets),
+        disclaimer: GUIDELINE_DISCLAIMER,
       };
     },
   ));

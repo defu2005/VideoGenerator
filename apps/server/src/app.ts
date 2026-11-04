@@ -50,6 +50,8 @@ import { registerRenderRoutes } from "./api/render.js";
 import { AudioStore, MAX_AUDIO_BYTES } from "./services/audioStore.js";
 import { createMusicProviders } from "./providers/music/registry.js";
 import { probeDurationSec } from "./media/ffmpeg.js";
+import { GuidelineService } from "./guidelines/service.js";
+import { registerGuidelineRoutes } from "./api/guidelines.js";
 
 export function buildApp({ config }: { config: AppConfig }) {
   const server = Fastify({
@@ -74,7 +76,8 @@ export function buildApp({ config }: { config: AppConfig }) {
     database.sqlite.close();
     throw error;
   }
-  const projectService = createProjectService(database.db, config, server.log);
+  const projectService = createProjectService(database.db, config, server.log, database.sqlite);
+  const guidelineService = new GuidelineService(database.sqlite);
   const events = new PipelineEventBus();
   const jobRepository = new JobRepository(database.sqlite, events);
   const usageService = new UsageService(database.sqlite, config.USD_VND_RATE);
@@ -100,6 +103,9 @@ export function buildApp({ config }: { config: AppConfig }) {
         : gate === "FINAL_APPROVAL"
           ? timelineService.canApproveFinal(project.id)
           : { allowed: true },
+    (_project, _gate) => guidelineService.openMustCount(_project.id) > 0
+      ? "Có phát hiện MUST đang mở. AUTO tạm dừng để bạn xem định hướng nội dung."
+      : null,
   );
   const llmProviders = new LlmProviderRegistry(config);
   const ttsProviders = new TtsProviderRegistry(config);
@@ -118,7 +124,7 @@ export function buildApp({ config }: { config: AppConfig }) {
         VOICE: new VoiceExecutor(database.sqlite, ttsProviders, config),
         SUBTITLE: new SubtitleExecutor(database.sqlite, config),
         MUSIC_SEARCH: new MusicSearchExecutor(musicService),
-        TIMELINE: new TimelineExecutor(timelineService),
+        TIMELINE: new TimelineExecutor(timelineService, guidelineService),
         RENDER: new RenderExecutor(renderService),
       },
     ),
@@ -135,7 +141,8 @@ export function buildApp({ config }: { config: AppConfig }) {
   registerUsageRoutes(server, usageService, projectService);
   registerPipelineRoutes(server, projectService, jobRepository, orchestrator, events, sceneService);
   registerLlmRoutes(server, llmProviders, database.sqlite, projectService);
-  registerScriptRoutes(server, scriptService, projectService, config);
+  registerScriptRoutes(server, scriptService, projectService, config, guidelineService);
+  registerGuidelineRoutes(server, database.sqlite, projectService, guidelineService, llmProviders, config);
   registerSceneRoutes(server, sceneService);
   registerVisualRoutes(server, visualService, jobRepository);
   registerVoiceRoutes(server, ttsProviders, database.sqlite, projectService, jobRepository, config);

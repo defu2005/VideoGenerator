@@ -35,7 +35,7 @@ const project: Project = {
     music: { enabled: true, volume: 0.15 },
     userSet: [],
     stageExecutors: {},
-    autoRender: false,
+    autoRender: false, guidelines: { platformPack: "auto", customRules: [] },
   },
   status: "DRAFT",
   stage: "SCRIPT",

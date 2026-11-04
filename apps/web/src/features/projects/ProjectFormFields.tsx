@@ -4,6 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { ModelField } from "../llm/ModelField";
 import { getLlmProviders, getProjectLlmRoutes, getProviderModels } from "../../services/llmApi";
 import { getTtsVoices } from "../../services/voiceApi";
+import { GuidelineFieldset, type GuidelineDraft } from "./GuidelineFieldset";
 
 export type ProjectDraft = {
   title: string;
@@ -85,6 +86,9 @@ export function ProjectFormFields({
   projectId,
   llmTasks,
   onLlmTasksChange,
+  guidelineDraft,
+  onGuidelineDraftChange,
+  guidelineBrief,
 }: {
   draft: ProjectDraft;
   errors: Record<string, string>;
@@ -95,6 +99,9 @@ export function ProjectFormFields({
   projectId?: string;
   llmTasks?: NonNullable<ProjectSettings["llm"]>["tasks"];
   onLlmTasksChange?: (tasks: NonNullable<ProjectSettings["llm"]>["tasks"]) => void;
+  guidelineDraft?: GuidelineDraft;
+  onGuidelineDraftChange?: (draft: GuidelineDraft) => void;
+  guidelineBrief?: Pick<ProjectSettings, "platform" | "style" | "tone" | "audience">;
 }) {
   const providers = useQuery({ queryKey: ["llm-providers"], queryFn: getLlmProviders });
   const providerModels = useQuery({
@@ -128,6 +135,9 @@ export function ProjectFormFields({
   const selectedProvider = availableProviders.find((provider) => provider.id === draft.llmProvider);
   return (
     <>
+      {guidelineDraft && onGuidelineDraftChange && guidelineBrief && (
+        <GuidelineFieldset draft={guidelineDraft} brief={guidelineBrief} onChange={onGuidelineDraftChange} />
+      )}
       {!advancedOnly && (
         <>
       <label className="form-field">

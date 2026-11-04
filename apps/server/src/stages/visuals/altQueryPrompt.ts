@@ -1,5 +1,6 @@
 import { z } from "zod";
 import type { Scene } from "@vg/shared";
+import { appendGuidelineGuidance } from "../../guidelines/promptText.js";
 
 export const AltQueryResponseSchema = z.object({
   scenes: z.array(z.object({
@@ -13,10 +14,10 @@ export function buildAltQueryPrompt(scenes: {
   visualNotes: string;
   narration: string;
   queries: Pick<Scene["visualQueries"], "primary" | "alternatives">;
-}[]) {
+}[], guidance?: string) {
   return {
     system: "Generate concrete, searchable English image-search queries. Preserve proper nouns. Return only JSON matching the schema. Do not suggest URLs.",
-    prompt: JSON.stringify({
+    prompt: appendGuidelineGuidance(JSON.stringify({
       scenes: scenes.map((scene) => ({
         sceneId: scene.sceneId,
         visualNotes: scene.visualNotes,
@@ -24,6 +25,6 @@ export function buildAltQueryPrompt(scenes: {
         existingQueries: [scene.queries.primary, ...scene.queries.alternatives],
       })),
       requestedOutput: { scenes: [{ sceneId: "uuid", queries: ["up to 3 queries"] }] },
-    }),
+    }), guidance),
   };
 }

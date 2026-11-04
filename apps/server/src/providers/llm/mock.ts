@@ -94,6 +94,9 @@ export class MockLlmProvider implements LlmProvider {
     if (req.schemaName === "ResearchNotes") return response(research, req.model);
     if (req.schemaName === "MergedStory") return response({ research, script: scriptFixture }, req.model);
     if (req.schemaName === "Script") return response(scriptFixture, req.model);
+    if (req.schemaName === "GuidelineCheck") {
+      return response({ findings: [] }, req.model);
+    }
     if (req.schemaName === "ScriptReview") {
       const sourceScript = prompt.match(/^Script:\s*(\{.*\})\s*$/mi)?.[1];
       const revisedScript = sourceScript ? JSON.parse(sourceScript) as { title?: string } : scriptFixture;

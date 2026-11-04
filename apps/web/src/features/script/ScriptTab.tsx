@@ -9,6 +9,7 @@ import { ErrorState } from "../../components/ErrorState";
 import { ApiRequestError } from "../../services/apiClient";
 import { ResearchPanel } from "./ResearchPanel";
 import { ScriptEditor } from "./ScriptEditor";
+import { GuidelineFindings } from "../guidelines/GuidelineFindings";
 
 function emptyScript(title: string): Script {
   return {
@@ -192,6 +193,7 @@ export function ScriptTab({ project }: { project: Project }) {
           />
         </>
       )}
+      <GuidelineFindings project={project} stage="SCRIPT" />
       <section className="panel script-usage">
         <p className="eyebrow">LATEST STAGE USAGE</p>
         <span>{runUsageLabel(lastResearchJob, lastScriptJob)}</span>

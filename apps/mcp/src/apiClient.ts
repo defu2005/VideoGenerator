@@ -12,6 +12,7 @@ import type {
   LlmRoute,
   LlmTaskId,
   ProjectUsage,
+  GuidelinePack,
 } from "@vg/shared";
 
 const SERVER_DOWN_GUIDANCE = "Start it with `npm run dev`.";
@@ -41,6 +42,10 @@ export class VideoAgentApiClient {
     if (query.q) params.set("q", query.q);
     if (query.status) params.set("status", query.status);
     return this.request(`/api/projects?${params.toString()}`);
+  }
+
+  getGuidelinePacks(): Promise<{ builtIn: GuidelinePack[]; custom: GuidelinePack[]; disclaimer: string }> {
+    return this.request("/api/guidelines/packs");
   }
 
   getProject(projectId: string): Promise<Project> {

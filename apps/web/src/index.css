@@ -711,3 +711,21 @@ button:disabled { cursor: not-allowed; opacity: .58; }
 .render-thumbs figure { flex: 0 0 auto; width: 160px; margin: 0; }
 .render-thumbs img { display: block; width: 100%; border-radius: 4px; background: #eef1f7; }
 .render-thumbs figcaption { margin-top: 4px; overflow: hidden; color: #59667d; font-size: 10px; white-space: nowrap; text-overflow: ellipsis; }
+
+.guideline-fieldset { margin: 12px 0; padding: 12px; border: 1px solid #e8ebf2; border-radius: 11px; }
+.guideline-fieldset legend { padding: 0 6px; font-size: 12px; font-weight: 700; }
+.guideline-channels { display: flex; flex-wrap: wrap; gap: 8px 14px; margin-bottom: 12px; }
+.guideline-rules section { margin-top: 8px; }
+.guideline-rules h3 { margin: 0 0 4px; font-size: 12px; }
+.guideline-rules ul { margin: 0; padding-left: 18px; }
+.severity-badge { display: inline-block; margin-right: 6px; padding: 1px 6px; border-radius: 999px; font-size: 10px; font-weight: 700; }
+.severity-MUST { background: #fde8ea; color: #b42318; }
+.severity-SHOULD { background: #fff4e5; color: #a45c17; }
+.severity-TIP { background: #eef3ff; color: #405ac5; }
+.guideline-findings { padding: 14px 16px; }
+.guideline-findings-head, .guideline-settings header { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; }
+.guideline-findings h2, .guideline-settings h1 { margin: 0; font-size: 16px; }
+.guideline-settings { display: grid; gap: 14px; }
+.guideline-pack-list, .guideline-profiles, .guideline-pack-editor { padding: 14px; }
+.guideline-rule-editor { display: grid; gap: 6px; margin: 8px 0; }
+.guideline-params { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }

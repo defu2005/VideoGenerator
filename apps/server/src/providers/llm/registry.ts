@@ -40,6 +40,11 @@ export class LlmProviderRegistry {
     if (config.OPENROUTER_API_KEY) this.addCompatible("openrouter", "OpenRouter", "https://openrouter.ai/api/v1", config.OPENROUTER_API_KEY, config.OPENROUTER_MODEL);
     if (config.DEEPSEEK_API_KEY) this.addCompatible("deepseek", "DeepSeek", "https://api.deepseek.com/v1", config.DEEPSEEK_API_KEY, config.DEEPSEEK_MODEL);
     if (config.GROQ_API_KEY) this.addCompatible("groq", "Groq", "https://api.groq.com/openai/v1", config.GROQ_API_KEY, config.GROQ_MODEL);
+    // OmniRoute is a local gateway (default port 20128); setting its URL or key turns it on.
+    if (config.OMNIROUTE_BASE_URL || config.OMNIROUTE_API_KEY) {
+      this.addCompatible("omniroute", "OmniRoute", omniRouteBaseUrl(config), config.OMNIROUTE_API_KEY, config.OMNIROUTE_MODEL);
+    }
+    if (config.OPENCODE_API_KEY) this.addCompatible("opencode", "OpenCode Zen", config.OPENCODE_BASE_URL, config.OPENCODE_API_KEY, config.OPENCODE_MODEL);
     if (config.CUSTOM_LLM_BASE_URL) {
       this.addCompatible("custom", "Custom OpenAI-compatible", config.CUSTOM_LLM_BASE_URL, config.CUSTOM_LLM_API_KEY, config.CUSTOM_LLM_MODEL);
     }
@@ -94,6 +99,9 @@ export class LlmProviderRegistry {
       openrouter: [],
       deepseek: ["deepseek-chat", "deepseek-reasoner"],
       groq: ["llama-3.3-70b-versatile", "openai/gpt-oss-120b"],
+      // OmniRoute names models "provider/model" or a combo you build in its dashboard.
+      omniroute: [],
+      opencode: [],
       custom: [],
       mock: ["mock"],
       // Claude Code has no list command; it takes the same model ids plus short aliases.
@@ -148,6 +156,8 @@ export class LlmProviderRegistry {
         : id === "openrouter" ? "https://openrouter.ai/api/v1"
           : id === "deepseek" ? "https://api.deepseek.com/v1"
             : id === "groq" ? "https://api.groq.com/openai/v1"
+              : id === "omniroute" && this.providers.has("omniroute") ? omniRouteBaseUrl(this.config)
+              : id === "opencode" ? this.config.OPENCODE_BASE_URL
               : id === "custom" ? this.config.CUSTOM_LLM_BASE_URL
                 : undefined;
     if (!baseUrl) return [];
@@ -155,6 +165,8 @@ export class LlmProviderRegistry {
       : id === "openrouter" ? this.config.OPENROUTER_API_KEY
         : id === "deepseek" ? this.config.DEEPSEEK_API_KEY
           : id === "groq" ? this.config.GROQ_API_KEY
+          : id === "omniroute" ? this.config.OMNIROUTE_API_KEY
+          : id === "opencode" ? this.config.OPENCODE_API_KEY
             : id === "custom" ? this.config.CUSTOM_LLM_API_KEY
               : undefined;
     const controller = new AbortController();
@@ -181,6 +193,8 @@ export class LlmProviderRegistry {
       openrouter: "OpenRouter",
       deepseek: "DeepSeek",
       groq: "Groq",
+      omniroute: "OmniRoute (gateway cục bộ)",
+      opencode: "OpenCode Zen",
       custom: "OpenAI-compatible tùy chỉnh",
       mock: "Mock (development)",
       "claude-cli": "Claude Code CLI",
@@ -195,6 +209,8 @@ export class LlmProviderRegistry {
       openrouter: "Set OPENROUTER_API_KEY to configure OpenRouter.",
       deepseek: "Set DEEPSEEK_API_KEY to configure DeepSeek.",
       groq: "Set GROQ_API_KEY to configure Groq.",
+      omniroute: "Chạy OmniRoute (mặc định http://127.0.0.1:20128/v1), tạo endpoint key trong dashboard rồi đặt OMNIROUTE_API_KEY (và OMNIROUTE_BASE_URL nếu khác cổng).",
+      opencode: "Tạo API key trong OpenCode Zen console rồi đặt OPENCODE_API_KEY (OPENCODE_BASE_URL=https://opencode.ai/zen/go/v1 cho gói Go).",
       custom: "Set CUSTOM_LLM_BASE_URL to configure a compatible provider.",
       mock: "Set LLM_ENABLE_MOCK=true to enable the mock provider.",
       "claude-cli": "Enable CLAUDE_CLI_ENABLED and install/sign in to Claude Code CLI.",
@@ -421,6 +437,10 @@ export function resolveLlmRoute(
     throw createNotConfiguredError("No LLM provider is selected. Choose a provider in project or app settings, or set LLM_DEFAULT_PROVIDER.");
   }
   return selected as { route: LlmRoute; source: LlmRouteSource };
+}
+
+export function omniRouteBaseUrl(config: Pick<AppConfig, "OMNIROUTE_BASE_URL">): string {
+  return config.OMNIROUTE_BASE_URL || "http://127.0.0.1:20128/v1";
 }
 
 function createNotConfiguredError(message: string): LlmError {

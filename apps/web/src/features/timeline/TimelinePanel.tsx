@@ -6,6 +6,7 @@ import { Spinner } from "../../components/Spinner";
 import { pipelineKeys, usePipeline } from "../../hooks/usePipeline";
 import { approvePipelineGate, runPipeline } from "../../services/pipelineApi";
 import { getProjectTimeline } from "../../services/timelineApi";
+import { GuidelineFindings } from "../guidelines/GuidelineFindings";
 
 const timelineKeys = { project: (projectId: string) => ["timeline", projectId] as const };
 
@@ -160,6 +161,7 @@ export function TimelinePanel({ project }: { project: Project }) {
           {licenses.length > 0 && (
             <p className="timeline-licenses">License: {licenses.map(([kind, count]) => `${kind} ×${count}`).join(" · ")}</p>
           )}
+          <GuidelineFindings project={project} stage="TIMELINE" />
           <Tracks timeline={data} />
           <section className="panel timeline-scenes">
             <table>

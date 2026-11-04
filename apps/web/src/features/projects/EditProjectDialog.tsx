@@ -4,6 +4,7 @@ import { ApiRequestError } from "../../services/apiClient";
 import { useUpdateProject } from "../../hooks/useProjects";
 import { ProjectFormFields, type ProjectDraft } from "./ProjectFormFields";
 import { BriefFields } from "./BriefFields";
+import { guidelineDraftFromSettings, guidelineSettingsFromDraft, type GuidelineDraft } from "./GuidelineFieldset";
 
 function draftFromProject(project: Project): ProjectDraft {
   return {
@@ -56,6 +57,7 @@ export function EditProjectDialog({
   const [briefUserSet, setBriefUserSet] = useState<string[]>(project.settings.userSet);
   const [briefChanges, setBriefChanges] = useState<string[]>([]);
   const [briefResets, setBriefResets] = useState<string[]>([]);
+  const [guidelineDraft, setGuidelineDraft] = useState<GuidelineDraft>(() => guidelineDraftFromSettings(project.settings));
 
   useEffect(() => {
     const dialog = dialogRef.current;
@@ -75,6 +77,7 @@ export function EditProjectDialog({
       setBriefUserSet(project.settings.userSet);
       setBriefChanges([]);
       setBriefResets([]);
+      setGuidelineDraft(guidelineDraftFromSettings(project.settings));
       setErrors({});
       setRequestError("");
       mutation.reset();
@@ -215,6 +218,11 @@ export function EditProjectDialog({
       }
       settings.llm = llm;
     }
+    const guidelines = guidelineSettingsFromDraft(guidelineDraft);
+    const currentGuidelines = guidelineSettingsFromDraft(guidelineDraftFromSettings(project.settings));
+    if (JSON.stringify(guidelines ?? null) !== JSON.stringify(currentGuidelines ?? null) && guidelines) {
+      settings.guidelines = guidelines;
+    }
     if (Object.keys(settings).length) patch.settings = settings;
     if (briefResets.length) patch.resetToRecommended = briefResets;
 
@@ -267,6 +275,9 @@ export function EditProjectDialog({
             projectId={project.id}
             llmTasks={llmTasks}
             onLlmTasksChange={setLlmTasks}
+            guidelineDraft={guidelineDraft}
+            onGuidelineDraftChange={setGuidelineDraft}
+            guidelineBrief={briefSettings}
           />
           <BriefFields
             topic={draft.topic}

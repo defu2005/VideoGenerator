@@ -22,6 +22,8 @@ import { jobs, projects, type ProjectRow } from "../db/schema.js";
 import type { AppConfig } from "../lib/config.js";
 import { AppError } from "../lib/errors.js";
 import { createProjectDir, removeProjectDir } from "../storage/paths.js";
+import type Database from "better-sqlite3";
+import { getGuidelineProfiles, normalizeGuidelineSettings } from "../guidelines/settings.js";
 
 const toProject = (row: ProjectRow): Project => ProjectSchema.parse(row);
 const BRIEF_SETTING_FIELDS = new Set([
@@ -65,6 +67,12 @@ function normalizeLlmSettings(settings: ProjectSettingsInput["llm"]): ProjectSet
   });
 }
 
+function defaultGuidelineSettings(sqlite: Database.Database): ProjectSettings["guidelines"] {
+  const profiles = getGuidelineProfiles(sqlite);
+  return profiles.profiles.find((profile) => profile.id === profiles.defaultProfileId)?.guidelines
+    ?? { platformPack: "auto", customRules: [] };
+}
+
 function mergeSettings(current: ProjectSettings, update: ProjectSettingsInput): ProjectSettings {
   return {
     ...current,
@@ -106,10 +114,13 @@ function mergeSettings(current: ProjectSettings, update: ProjectSettingsInput): 
         });
       })()
       : current.llm,
+    guidelines: update.guidelines
+      ? normalizeGuidelineSettings(update.guidelines, current.guidelines)
+      : current.guidelines ?? { platformPack: "auto", customRules: [] },
   };
 }
 
-export function createProjectService(db: AppDatabase, config: AppConfig, logger: FastifyBaseLogger) {
+export function createProjectService(db: AppDatabase, config: AppConfig, logger: FastifyBaseLogger, sqlite: Database.Database) {
   async function getProject(id: string): Promise<Project | undefined> {
     const row = await db.select().from(projects).where(eq(projects.id, id)).get();
     return row ? toProject(row) : undefined;
@@ -136,12 +147,14 @@ export function createProjectService(db: AppDatabase, config: AppConfig, logger:
       ...explicitBriefFields,
       ...nestedBriefFields,
     ])];
+    const { guidelines: ignoredGuidelines, ...briefInput } = inputSettings;
+    void ignoredGuidelines;
     const resolved = recommendBrief({
       topic: input.topic,
       title: input.title,
       description: input.description ?? "",
       mode: input.mode ?? "ASSISTED",
-      settings: { ...inputSettings, userSet },
+      settings: { ...briefInput, userSet },
     });
     const settings: ProjectSettings = {
       language: resolved.values.settings.language,
@@ -163,6 +176,9 @@ export function createProjectService(db: AppDatabase, config: AppConfig, logger:
       voice: inputSettings.voice,
       llm: normalizeLlmSettings(inputSettings.llm),
       autoRender: inputSettings.autoRender ?? false,
+      guidelines: inputSettings.guidelines
+        ? normalizeGuidelineSettings(inputSettings.guidelines)
+        : defaultGuidelineSettings(sqlite),
     };
     const project: Project = {
       id,

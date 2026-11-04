@@ -28,7 +28,7 @@ const project: Project = {
     music: { enabled: true, volume: 0.15 },
     userSet: [],
     stageExecutors: {},
-    autoRender: false,
+    autoRender: false, guidelines: { platformPack: "auto", customRules: [] },
   },
   status: "REVIEW",
   stage: "VISUAL_REVIEW",
@@ -132,7 +132,7 @@ describe("ProjectDetailPage", () => {
     expect(await screen.findByText("WAITING USER")).toBeInTheDocument();
     expect(screen.getAllByText("VISUAL REVIEW")).toHaveLength(2);
     expect(screen.getByRole("heading", { name: "Production stages" })).toBeInTheDocument();
-    expect(await screen.findByText("Ước tính: ~5–9 lượt gọi AI (BALANCED)")).toBeInTheDocument();
+    expect(await screen.findByText("Ước tính: ~6–11 lượt gọi AI (BALANCED)")).toBeInTheDocument();
   });
 
   it("renders token totals, stage-specific tasks, runs, and the budget comparison", async () => {
@@ -216,6 +216,7 @@ describe("ProjectDetailPage", () => {
           visionCheck: false,
           musicAssist: true,
           metadata: true,
+          guidelineCheck: "check",
           outputHeadroom: 1.5,
         },
         perStage: [],

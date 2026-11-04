@@ -53,6 +53,7 @@ describe("Video Agent MCP tools", () => {
     expect(tools.tools.map((tool) => tool.name).sort()).toEqual([
       "approve_scene_visual",
       "create_project",
+      "get_guidelines",
       "get_llm_routes",
       "get_pipeline",
       "get_project",
@@ -75,6 +76,46 @@ describe("Video Agent MCP tools", () => {
       "write_script",
       "write_story",
     ]);
+  });
+
+  it("returns active guideline reminders and the disclaimer", async () => {
+    const fetchImpl = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.endsWith("/guidelines/packs")) return jsonResponse({ builtIn: [], custom: [], disclaimer: "ignored" });
+      return jsonResponse({
+        id: projectId,
+        title: "Test project",
+        description: "",
+        topic: "Cats",
+        mode: "ASSISTED",
+        status: "DRAFT",
+        stage: "TOPIC",
+        settings: {
+          language: "vi",
+          targetDurationSec: 120,
+          aspectRatio: "16:9",
+          platform: "youtube",
+          style: "storytelling",
+          tone: "dramatic",
+          audience: "general",
+          budget: { mode: "BALANCED" },
+          wordsPerMinute: 150,
+          sceneDurationSec: 7,
+          visualStyle: "mixed",
+          subtitles: { enabled: true, maxCharsPerLine: 42 },
+          music: { enabled: true, volume: 0.15 },
+          userSet: [],
+          stageExecutors: {},
+          autoRender: false,
+          guidelines: { platformPack: "auto", channelPacks: ["storytelling"], customRules: [] },
+        },
+      });
+    }) as typeof fetch;
+    const client = await connect(fetchImpl);
+    const result = await client.callTool({ name: "get_guidelines", arguments: { projectId } });
+    const body = JSON.parse(resultText(result)) as { text: string; disclaimer: string };
+    expect(body.text).toContain("(rule: storytelling.arc)");
+    expect(body.disclaimer).toContain("không thay thế chính sách chính thức");
   });
 
   it("reads resolved task routes for a project", async () => {

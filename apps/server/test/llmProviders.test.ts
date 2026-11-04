@@ -381,4 +381,40 @@ describe("LLM registry", () => {
       vi.useRealTimers();
     }
   });
+
+  it("adds OmniRoute (local gateway) and OpenCode Zen as OpenAI-compatible providers", async () => {
+    const off = new LlmProviderRegistry(parseConfig({ LLM_ENABLE_MOCK: "false" }));
+    expect(off.list().find((item) => item.id === "omniroute")?.configured).toBe(false);
+    expect(off.list().find((item) => item.id === "opencode")?.hint).toContain("OPENCODE_API_KEY");
+
+    const registry = new LlmProviderRegistry(parseConfig({
+      LLM_ENABLE_MOCK: "false",
+      OMNIROUTE_API_KEY: "omni-key",
+      OMNIROUTE_MODEL: "my-combo",
+      OPENCODE_API_KEY: "zen-key",
+    }));
+    const list = registry.list();
+    expect(list.find((item) => item.id === "omniroute")).toMatchObject({ configured: true, defaultModel: "my-combo" });
+    expect(list.find((item) => item.id === "opencode")).toMatchObject({ configured: true, label: "OpenCode Zen" });
+
+    const urls: string[] = [];
+    const fetchImpl = vi.fn(async (url: string | URL, init?: RequestInit) => {
+      urls.push(`${String(url)} ${new Headers(init?.headers).get("authorization")}`);
+      return jsonResponse({ data: [{ id: "cc/claude-sonnet" }, { id: "my-combo" }] });
+    }) as typeof fetch;
+    expect(await registry.suggestModels("omniroute", fetchImpl)).toEqual(["my-combo", "cc/claude-sonnet"]);
+    await registry.suggestModels("opencode", fetchImpl);
+    expect(urls).toEqual([
+      "http://127.0.0.1:20128/v1/models Bearer omni-key",
+      "https://opencode.ai/zen/v1/models Bearer zen-key",
+    ]);
+
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse({ choices: [{ message: { content: "hi" }, finish_reason: "stop" }], usage: {} }));
+    vi.stubGlobal("fetch", fetchMock);
+    const project = { settings: { llm: { default: { provider: "omniroute" } } } } as never;
+    const route = registry.resolveTask("script", project);
+    await route.provider.generate({ ...request, model: route.model }, new AbortController().signal);
+    expect(fetchMock.mock.calls[0]?.[0]).toBe("http://127.0.0.1:20128/v1/chat/completions");
+    expect(JSON.parse(String((fetchMock.mock.calls[0]?.[1] as RequestInit).body)).model).toBe("my-combo");
+  });
 });

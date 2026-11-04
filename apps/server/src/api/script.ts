@@ -16,6 +16,7 @@ import { researchPrompt } from "../stages/research/prompt.js";
 import { mergedStoryPrompt } from "../stages/script/mergedStoryPrompt.js";
 import { scriptPrompt } from "../stages/script/prompt.js";
 import type { AppConfig } from "../lib/config.js";
+import type { GuidelineService } from "../guidelines/service.js";
 
 const ParamsSchema = z.object({ id: z.string().uuid() }).strict();
 const PromptParamsSchema = z.object({
@@ -36,6 +37,7 @@ export function registerScriptRoutes(
   service: ScriptService,
   projects: ProjectService,
   config: AppConfig,
+  guidelines: GuidelineService,
 ): void {
   app.get("/api/projects/:id/script", {
     schema: {
@@ -80,13 +82,14 @@ export function registerScriptRoutes(
     const data = stage === "SCRIPT" ? service.get(id) : undefined;
     const researchMode = storyModeForProject(project);
     const research = researchMode !== "off" ? data?.research?.data : undefined;
+    const storyGuidance = guidelines.guidanceFor(project, ["script", "subtitles"]);
     const prompt = stage === "STORY"
-      ? mergedStoryPrompt(project, config.SPEECH_WORDS_PER_MINUTE)
+      ? mergedStoryPrompt(project, config.SPEECH_WORDS_PER_MINUTE, "standard", storyGuidance)
       : stage === "RESEARCH" && researchMode === "merged"
-        ? mergedStoryPrompt(project, config.SPEECH_WORDS_PER_MINUTE)
+        ? mergedStoryPrompt(project, config.SPEECH_WORDS_PER_MINUTE, "standard", storyGuidance)
         : stage === "RESEARCH"
-          ? researchPrompt(project)
-          : scriptPrompt(project, research, config.SPEECH_WORDS_PER_MINUTE);
+          ? researchPrompt(project, "standard", guidelines.guidanceFor(project, ["script"]))
+          : scriptPrompt(project, research, config.SPEECH_WORDS_PER_MINUTE, storyGuidance);
     const schema = stage === "STORY"
       ? MergedStorySchema
       : stage === "RESEARCH" && researchMode === "merged"

@@ -33,13 +33,15 @@ export function registerRecommendationRoutes(app: FastifyInstance): void {
     const userSet = [...new Set([
       ...(supplied.userSet ?? []),
       ...(input.title === undefined ? [] : ["title"]),
-      ...Object.keys(supplied).filter((field) => field !== "userSet" && field !== "subtitles" && field !== "music"),
+      ...Object.keys(supplied).filter((field) => field !== "userSet" && field !== "subtitles" && field !== "music" && field !== "guidelines"),
       ...Object.keys(supplied.subtitles ?? {}).map((field) => `subtitles.${field}`),
       ...Object.keys(supplied.music ?? {}).map((field) => `music.${field}`),
     ])];
+    const { guidelines: ignoredGuidelines, ...briefSupplied } = supplied;
+    void ignoredGuidelines;
     return recommendBrief({
       ...input,
-      settings: { ...supplied, userSet },
+      settings: { ...briefSupplied, userSet },
     });
   });
 }

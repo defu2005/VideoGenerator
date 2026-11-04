@@ -62,6 +62,7 @@ export function BriefFields({
       scriptReviewPasses: "Script review passes",
       visionCheck: "Vision check (available in a later step)",
       musicAssist: "Music assist (available in a later step)",
+      guidelineCheck: "Kiểm tra định hướng nội dung bằng AI",
     };
     const label = labels[key] ?? key;
     if (typeof value === "boolean") {
@@ -79,7 +80,7 @@ export function BriefFields({
         path,
         key === "repairAttempts" || key === "scriptReviewPasses" ? Number(event.target.value) : event.target.value,
       )}>
-        {(key === "storyMode" ? ["merged", "separate"] : ["0", "1", "2"]).map((choice) => (
+        {(key === "storyMode" ? ["merged", "separate"] : key === "guidelineCheck" ? ["off", "check", "checkAndFix"] : ["0", "1", "2"]).map((choice) => (
           <option key={choice} value={choice}>{choice}</option>
         ))}
       </select>
@@ -120,6 +121,7 @@ export function BriefFields({
           {customFeature("semanticImageRerank", budgetFeatures.semanticImageRerank)}
           {customFeature("visionCheck", budgetFeatures.visionCheck)}
           {customFeature("musicAssist", budgetFeatures.musicAssist)}
+          {customFeature("guidelineCheck", budgetFeatures.guidelineCheck)}
         </fieldset>
       )}
       {select("platform", "Platform", ["youtube", "youtube_shorts", "tiktok", "facebook_reels", "custom"])}

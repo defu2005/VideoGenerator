@@ -11,6 +11,7 @@ import {
   BudgetSettingsInputSchema,
   BudgetSettingsSchema,
 } from "../budget/modes.js";
+import { GuidelineSettingsInputSchema, GuidelineSettingsSchema } from "../guidelines/schema.js";
 
 export const VideoBriefSettingsSchema = z.object({
   budget: BudgetSettingsSchema.default({ mode: "BALANCED" }),
@@ -79,6 +80,8 @@ export const ProjectSettingsSchema = z.object({
   }).strict().optional(),
   llm: LlmSettingsSchema.optional(),
   autoRender: z.boolean().default(false),
+  /** Content guideline packs (TASK-017). */
+  guidelines: GuidelineSettingsSchema.default({ platformPack: "auto", customRules: [] }),
 }).extend({
   budget: VideoBriefSettingsSchema.shape.budget,
   platform: VideoBriefSettingsSchema.shape.platform,
@@ -111,6 +114,7 @@ export const ProjectSettingsInputSchema = z.object({
   }).strict().optional(),
   llm: LlmSettingsInputSchema.optional(),
   autoRender: z.boolean().optional(),
+  guidelines: GuidelineSettingsInputSchema.optional(),
   ...VideoBriefSettingsInputSchema.shape,
 }).strict();
 export type ProjectSettingsInput = z.infer<typeof ProjectSettingsInputSchema>;

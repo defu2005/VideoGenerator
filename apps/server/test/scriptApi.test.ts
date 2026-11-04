@@ -7,7 +7,7 @@ import { afterAll, afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { Project } from "@vg/shared";
 import { buildApp } from "../src/app.js";
 import { parseConfig, type AppConfig } from "../src/lib/config.js";
-import { MergedStorySchema, ResearchNotesSchema } from "@vg/shared";
+import { MergedStorySchema, ResearchNotesSchema, activeGuidelines, guidelinePromptBlock } from "@vg/shared";
 import { mergedStoryPrompt } from "../src/stages/script/mergedStoryPrompt.js";
 import { scriptPrompt } from "../src/stages/script/prompt.js";
 import { z } from "zod";
@@ -139,12 +139,13 @@ describe("script API", () => {
       url: `/api/projects/${project.id}/research`,
       payload: researchNotes,
     });
+    const storyGuidance = guidelinePromptBlock(activeGuidelines(project), ["script", "subtitles"]);
     const story = await app.inject({ method: "GET", url: `/api/projects/${project.id}/prompts/STORY` });
     expect(story.statusCode).toBe(200);
     expect(story.json()).toMatchObject({
       stage: "STORY",
-      system: mergedStoryPrompt(project, config.SPEECH_WORDS_PER_MINUTE).system,
-      user: mergedStoryPrompt(project, config.SPEECH_WORDS_PER_MINUTE).prompt,
+      system: mergedStoryPrompt(project, config.SPEECH_WORDS_PER_MINUTE, "standard", storyGuidance).system,
+      user: mergedStoryPrompt(project, config.SPEECH_WORDS_PER_MINUTE, "standard", storyGuidance).prompt,
       jsonSchema: z.toJSONSchema(MergedStorySchema),
       language: project.settings.language,
       targetDurationSec: project.settings.targetDurationSec,
@@ -156,8 +157,8 @@ describe("script API", () => {
 
     const script = await app.inject({ method: "GET", url: `/api/projects/${project.id}/prompts/SCRIPT` });
     expect(script.statusCode).toBe(200);
-    expect(script.json().system).toBe(scriptPrompt(project, ResearchNotesSchema.parse(researchNotes), config.SPEECH_WORDS_PER_MINUTE).system);
-    expect(script.json().user).toBe(scriptPrompt(project, ResearchNotesSchema.parse(researchNotes), config.SPEECH_WORDS_PER_MINUTE).prompt);
+    expect(script.json().system).toBe(scriptPrompt(project, ResearchNotesSchema.parse(researchNotes), config.SPEECH_WORDS_PER_MINUTE, storyGuidance).system);
+    expect(script.json().user).toBe(scriptPrompt(project, ResearchNotesSchema.parse(researchNotes), config.SPEECH_WORDS_PER_MINUTE, storyGuidance).prompt);
   });
 
   it("includes the compact resolved brief line in the existing story prompt", async () => {

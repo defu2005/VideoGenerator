@@ -5,6 +5,7 @@ import { ApiRequestError } from "../../services/apiClient";
 import { useCreateProject } from "../../hooks/useProjects";
 import { ProjectFormFields, DEFAULT_PROJECT_DRAFT, type ProjectDraft } from "./ProjectFormFields";
 import { BriefFields } from "./BriefFields";
+import { DEFAULT_GUIDELINE_DRAFT, GuidelineFieldset, guidelineSettingsFromDraft, type GuidelineDraft } from "./GuidelineFieldset";
 
 function validationMessages(details: unknown): Record<string, string> {
   if (!Array.isArray(details)) return {};
@@ -78,6 +79,7 @@ export function CreateProjectDialog({ open, onClose }: { open: boolean; onClose:
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [requestError, setRequestError] = useState("");
   const [customize, setCustomize] = useState(false);
+  const [guidelineDraft, setGuidelineDraft] = useState<GuidelineDraft>(DEFAULT_GUIDELINE_DRAFT);
   const [advanced, setAdvanced] = useState(false);
 
   useEffect(() => {
@@ -106,6 +108,7 @@ export function CreateProjectDialog({ open, onClose }: { open: boolean; onClose:
       setRequestError("");
       setCustomize(false);
       setAdvanced(false);
+      setGuidelineDraft(DEFAULT_GUIDELINE_DRAFT);
       mutation.reset();
     }
   }, [open]);
@@ -188,6 +191,12 @@ export function CreateProjectDialog({ open, onClose }: { open: boolean; onClose:
       if (draft.autoRender) settings.autoRender = true;
       if (Object.keys(settings).length) payload.settings = settings;
     }
+    const guidelines = guidelineSettingsFromDraft(guidelineDraft);
+    if (guidelines) {
+      const settings = (payload.settings as Record<string, unknown> | undefined) ?? {};
+      settings.guidelines = guidelines;
+      payload.settings = settings;
+    }
     const result = CreateProjectInputSchema.safeParse(payload);
     if (!result.success) {
       const nextErrors: Record<string, string> = {};
@@ -244,6 +253,7 @@ export function CreateProjectDialog({ open, onClose }: { open: boolean; onClose:
             {errors.topic && <small className="field-error">{errors.topic}</small>}
           </label>
           {debouncedTopic.trim() && <p className="brief-summary">{summaryText(previewSettings)}</p>}
+          <GuidelineFieldset draft={guidelineDraft} brief={previewSettings} onChange={setGuidelineDraft} />
           <button className="text-button advanced-toggle" type="button" aria-expanded={customize} onClick={() => setCustomize((value) => !value)}>
             {customize ? "− Hide customization" : "+ Tùy chỉnh / Customize"}
           </button>

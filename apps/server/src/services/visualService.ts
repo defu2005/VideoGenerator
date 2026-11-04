@@ -42,6 +42,7 @@ import { LlmCache } from "../providers/llm/cache.js";
 import { generateRoutedStructured } from "../providers/llm/structured.js";
 import { LlmError } from "../providers/llm/types.js";
 import { getAppLlmSettings } from "../providers/llm/settings.js";
+import { GuidelineService } from "../guidelines/service.js";
 import { buildAltQueryPrompt, AltQueryResponseSchema } from "../stages/visuals/altQueryPrompt.js";
 import { buildRerankPrompt, RerankResponseSchema } from "../stages/visuals/rerankPrompt.js";
 
@@ -673,7 +674,7 @@ export class VisualService {
               : "",
             narration: item.scene.narration,
             queries: item.scene.visualQueries,
-          }))),
+          })), new GuidelineService(this.sqlite).guidanceFor(project, ["visuals"])),
           schema: AltQueryResponseSchema,
           schemaName: "visual-alt-queries",
           schemaVersion: "1",

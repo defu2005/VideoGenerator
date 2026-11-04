@@ -104,6 +104,12 @@ const ConfigSchema = z.object({
   DEEPSEEK_MODEL: z.string().optional(),
   GROQ_API_KEY: z.string().optional(),
   GROQ_MODEL: z.string().optional(),
+  OMNIROUTE_BASE_URL: z.string().optional(),
+  OMNIROUTE_API_KEY: z.string().optional(),
+  OMNIROUTE_MODEL: z.string().optional(),
+  OPENCODE_API_KEY: z.string().optional(),
+  OPENCODE_BASE_URL: z.string().default("https://opencode.ai/zen/v1"),
+  OPENCODE_MODEL: z.string().optional(),
   CUSTOM_LLM_BASE_URL: z.string().optional(),
   CUSTOM_LLM_API_KEY: z.string().optional(),
   CUSTOM_LLM_MODEL: z.string().optional(),
@@ -190,6 +196,12 @@ export type AppConfig = {
   DEEPSEEK_MODEL?: string;
   GROQ_API_KEY?: string;
   GROQ_MODEL?: string;
+  OMNIROUTE_BASE_URL?: string;
+  OMNIROUTE_API_KEY?: string;
+  OMNIROUTE_MODEL?: string;
+  OPENCODE_API_KEY?: string;
+  OPENCODE_BASE_URL: string;
+  OPENCODE_MODEL?: string;
   CUSTOM_LLM_BASE_URL?: string;
   CUSTOM_LLM_API_KEY?: string;
   CUSTOM_LLM_MODEL?: string;
@@ -229,6 +241,8 @@ const providerLimitPrefixes: Partial<Record<LlmProviderId, string>> = {
   openrouter: "OPENROUTER",
   deepseek: "DEEPSEEK",
   groq: "GROQ",
+  omniroute: "OMNIROUTE",
+  opencode: "OPENCODE",
   custom: "CUSTOM_LLM",
   mock: "MOCK",
   "claude-cli": "CLAUDE_CLI",

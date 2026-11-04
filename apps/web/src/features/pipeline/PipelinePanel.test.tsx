@@ -116,7 +116,7 @@ describe("PipelinePanel", () => {
         music: { enabled: true, volume: 0.15 },
         userSet: [],
         stageExecutors: {},
-        autoRender: false,
+        autoRender: false, guidelines: { platformPack: "auto", customRules: [] },
       },
       status: "DRAFT",
       stage: "TOPIC",
@@ -132,7 +132,7 @@ describe("PipelinePanel", () => {
 
     renderWithProviders(<PipelinePanel projectId={projectId} project={project} />);
 
-    expect(await screen.findByText(/Ước tính: ~5–9 lượt gọi AI/)).toBeInTheDocument();
+    expect(await screen.findByText(/Ước tính: ~6–11 lượt gọi AI/)).toBeInTheDocument();
     expect(screen.getByText("research: mock · research-model · 1–2 calls")).toBeInTheDocument();
     expect(screen.getByText("scriptReview: mock · review-model · 1–2 calls")).toBeInTheDocument();
     expect(screen.getByText("sceneQueries: mock · scene-model · 1 calls")).toBeInTheDocument();
@@ -163,7 +163,7 @@ describe("PipelinePanel", () => {
         music: { enabled: true, volume: 0.15 },
         userSet: [],
         stageExecutors: {},
-        autoRender: false,
+        autoRender: false, guidelines: { platformPack: "auto", customRules: [] },
       },
       status: "COMPLETED",
       stage: "DONE",
@@ -274,7 +274,7 @@ describe("PipelinePanel", () => {
           music: { enabled: true, volume: 0.15 },
           userSet: [],
           stageExecutors: {},
-          autoRender: false,
+          autoRender: false, guidelines: { platformPack: "auto", customRules: [] },
         },
         status: "REVIEW",
         stage: "VISUAL_REVIEW",

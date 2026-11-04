@@ -18,17 +18,17 @@ describe("budget modes", () => {
     ["ECO", {
       storyMode: "merged", repairAttempts: 0, scriptReview: false, scriptReviewPasses: 0,
       researchDepth: "light", altQueryAssist: false, sceneQueryAssist: false,
-      semanticImageRerank: false, visionCheck: false, musicAssist: false, metadata: false, outputHeadroom: 1,
+      semanticImageRerank: false, visionCheck: false, musicAssist: false, metadata: false, guidelineCheck: "off", outputHeadroom: 1,
     }],
     ["BALANCED", {
       storyMode: "separate", repairAttempts: 1, scriptReview: true, scriptReviewPasses: 1,
       researchDepth: "standard", altQueryAssist: true, sceneQueryAssist: true,
-      semanticImageRerank: true, visionCheck: false, musicAssist: true, metadata: true, outputHeadroom: 1.5,
+      semanticImageRerank: true, visionCheck: false, musicAssist: true, metadata: true, guidelineCheck: "check", outputHeadroom: 1.5,
     }],
     ["QUALITY", {
       storyMode: "separate", repairAttempts: 2, scriptReview: true, scriptReviewPasses: 2,
       researchDepth: "deep", altQueryAssist: true, sceneQueryAssist: true,
-      semanticImageRerank: true, visionCheck: false, musicAssist: true, metadata: true, outputHeadroom: 2,
+      semanticImageRerank: true, visionCheck: false, musicAssist: true, metadata: true, guidelineCheck: "checkAndFix", outputHeadroom: 2,
     }],
   ] as const)("resolves the %s feature preset", (mode, expected) => {
     expect(resolveBudget(mode)).toEqual(expected);
@@ -44,8 +44,8 @@ describe("budget modes", () => {
 
   it.each([
     ["ECO", 1, 1],
-    ["BALANCED", 5, 9],
-    ["QUALITY", 6, 15],
+    ["BALANCED", 6, 11],
+    ["QUALITY", 7, 24],
   ] as const)("estimates %s LLM call bounds", (mode, min, max) => {
     expect(estimateBudget(project(mode), "mock").total).toEqual({ min, max });
     expect(estimateBudget(project(mode), "mock").tokens).toBeDefined();
@@ -53,8 +53,8 @@ describe("budget modes", () => {
 
   it.each([
     ["ECO", { RESEARCH: { min: 1, max: 1 }, VISUAL_SEARCH: { min: 0, max: 0 }, SCRIPT: { min: 0, max: 0 }, SCENE_PLAN: { min: 0, max: 0 } }],
-    ["BALANCED", { RESEARCH: { min: 1, max: 2 }, VISUAL_SEARCH: { min: 1, max: 2 }, SCRIPT: { min: 2, max: 4 }, SCENE_PLAN: { min: 1, max: 1 } }],
-    ["QUALITY", { RESEARCH: { min: 1, max: 3 }, VISUAL_SEARCH: { min: 1, max: 2 }, SCRIPT: { min: 3, max: 9 }, SCENE_PLAN: { min: 1, max: 1 } }],
+    ["BALANCED", { RESEARCH: { min: 1, max: 2 }, VISUAL_SEARCH: { min: 1, max: 2 }, SCRIPT: { min: 3, max: 6 }, SCENE_PLAN: { min: 1, max: 1 } }],
+    ["QUALITY", { RESEARCH: { min: 1, max: 3 }, VISUAL_SEARCH: { min: 1, max: 2 }, SCRIPT: { min: 4, max: 18 }, SCENE_PLAN: { min: 1, max: 1 } }],
   ] as const)("estimates per-stage calls for %s", (mode, expected) => {
     const estimate = estimateBudget(project(mode));
     expect(Object.fromEntries(estimate.perStage.map((stage) => [stage.stage, stage.calls]))).toEqual(expected);
@@ -63,12 +63,12 @@ describe("budget modes", () => {
   it("estimates merged CUSTOM review and a user-set legacy research-off mode", () => {
     const custom = project("CUSTOM");
     custom.settings.budget.features = { storyMode: "merged", scriptReview: true };
-    expect(estimateBudget(custom).total).toEqual({ min: 4, max: 7 });
+    expect(estimateBudget(custom).total).toEqual({ min: 5, max: 9 });
 
     const off = project("BALANCED");
     off.settings.researchMode = "off";
     off.settings.userSet = ["researchMode"];
-    expect(estimateBudget(off).total).toEqual({ min: 4, max: 7 });
+    expect(estimateBudget(off).total).toEqual({ min: 5, max: 9 });
   });
 
   it("reports zero for completed stages and hides token estimates for CLI requests", () => {

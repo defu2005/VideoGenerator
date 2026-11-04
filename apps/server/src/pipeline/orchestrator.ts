@@ -56,6 +56,7 @@ export class PipelineOrchestrator {
     private readonly logger: FastifyBaseLogger,
     private readonly now: Clock = () => new Date(),
     private readonly canApprove: ApprovalCheck = () => ({ allowed: true }),
+    private readonly autoBlock: (project: Project, gate: PipelineStage) => string | null = () => null,
   ) {}
 
   setAbortJobHandler(handler: (jobId: string) => void): void {
@@ -513,7 +514,11 @@ export class PipelineOrchestrator {
       const autoApprove = project.mode === "AUTO"
         && (next !== "FINAL_APPROVAL" || project.settings.autoRender);
       const approval = this.canApprove(project, next);
-      if (autoApprove && approval.allowed) {
+      const blockReason = autoApprove && approval.allowed ? this.autoBlock(project, next) : null;
+      if (blockReason) {
+        this.logger.warn({ projectId, gate: next, reason: blockReason }, "AUTO approval paused");
+      }
+      if (autoApprove && approval.allowed && !blockReason) {
         this.repository.updateStage(projectId, next, {
           state: "DONE",
           progress: 100,
@@ -528,7 +533,7 @@ export class PipelineOrchestrator {
       this.repository.updateStage(projectId, next, {
         state: "WAITING_USER",
         progress: 0,
-        message: approval.allowed ? "Waiting for your approval" : approval.message,
+        message: blockReason ?? (approval.allowed ? "Waiting for your approval" : approval.message),
         jobId: null,
         error: null,
       });

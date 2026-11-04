@@ -15,6 +15,7 @@ import { researchPrompt } from "./prompt.js";
 import { mergedStoryPrompt } from "../script/mergedStoryPrompt.js";
 import { z } from "zod";
 import { getAppLlmSettings } from "../../providers/llm/settings.js";
+import { GuidelineService } from "../../guidelines/service.js";
 
 type ExistingScript = { data: string; version: number; input_hash: string; review_notes: string | null };
 
@@ -48,9 +49,10 @@ export class ResearchExecutor implements StageExecutor {
       const inputHash = researchInputHash(project);
       let effectiveMode = mode;
       usageFeature = mode === "merged" ? "story" : "research";
+      const guidelines = new GuidelineService(this.sqlite);
       let promptInput = mode === "merged"
-        ? mergedStoryPrompt(project, this.config.SPEECH_WORDS_PER_MINUTE, budget.researchDepth)
-        : researchPrompt(project, budget.researchDepth);
+        ? mergedStoryPrompt(project, this.config.SPEECH_WORDS_PER_MINUTE, budget.researchDepth, guidelines.guidanceFor(project, ["script", "subtitles"]))
+        : researchPrompt(project, budget.researchDepth, guidelines.guidanceFor(project, ["script"]));
       const desiredOutputTokens = Math.ceil(
         maxOutputTokensForDuration(project.settings.targetDurationSec, this.config.SPEECH_WORDS_PER_MINUTE)
           * budget.outputHeadroom,
@@ -69,7 +71,7 @@ export class ResearchExecutor implements StageExecutor {
         limitMessage = check.message;
         effectiveMode = "separate";
         usageFeature = "research";
-        promptInput = researchPrompt(project, budget.researchDepth);
+        promptInput = researchPrompt(project, budget.researchDepth, new GuidelineService(this.sqlite).guidanceFor(project, ["script"]));
         check = preflight({
           provider: selected.provider,
           mode: "separate",

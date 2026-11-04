@@ -1,4 +1,4 @@
-import { ResearchNotesSchema, resolveBudget, ScriptSchema, storyModeForProject, type LlmCallUsage, type Script } from "@vg/shared";
+import { ResearchNotesSchema, resolveBudget, ScriptSchema, guidelineRulesFor, storyModeForProject, type GuidelineFindingDraft, type LlmCallUsage, type Script } from "@vg/shared";
 import type Database from "better-sqlite3";
 import { z } from "zod";
 import type { AppConfig } from "../../lib/config.js";
@@ -14,6 +14,8 @@ import { scriptPrompt } from "./prompt.js";
 import { checkScriptDuration, computeSectionDurations, maxOutputTokensForDuration, researchInputHash, scriptContentHash, scriptInputHash } from "./scriptUtils.js";
 import { scriptReviewPrompt } from "./reviewPrompt.js";
 import { getAppLlmSettings } from "../../providers/llm/settings.js";
+import { GuidelineService } from "../../guidelines/service.js";
+import { runGuidelineLlmCheck } from "../../guidelines/llmCheck.js";
 
 type ResearchRow = { input_hash: string; data: string; provider: string; model: string };
 type ExistingScript = {
@@ -72,7 +74,31 @@ export class ScriptExecutor implements StageExecutor {
         const data = computeSectionDurations(parsed, this.config.SPEECH_WORDS_PER_MINUTE);
         this.sqlite.prepare("UPDATE scripts SET data = ?, updated_at = ? WHERE project_id = ?")
           .run(JSON.stringify(data), new Date().toISOString(), project.id);
-        context.recordUsage({ llmCalls: 0, inputTokens: 0, outputTokens: 0, costUsd: 0 });
+        const mergedSpent = { llmCalls: 0, inputTokens: 0, outputTokens: 0, tokensUnknown: false, calls: [] as LlmCallUsage[] };
+        const mergedFeatures: Record<string, number> = {};
+        let mergedCost = 0;
+        const guidedEarly = await this.applyScriptGuidelines({
+          context,
+          project,
+          research: researchRow ? ResearchNotesSchema.parse(JSON.parse(researchRow.data) as unknown) : undefined,
+          script: data,
+          budget,
+          reviewNotes: existing?.review_notes ? JSON.parse(existing.review_notes) as string[] : null,
+          spent: mergedSpent,
+          features: mergedFeatures,
+          addCost: (value) => { mergedCost += value; },
+        });
+        if (JSON.stringify(guidedEarly.script) !== JSON.stringify(data)) {
+          this.sqlite.prepare("UPDATE scripts SET data = ?, version = version + 1, updated_at = ? WHERE project_id = ?")
+            .run(JSON.stringify(guidedEarly.script), new Date().toISOString(), project.id);
+        }
+        this.persistGuidelineResults(project, guidedEarly);
+        context.recordUsage({
+          ...mergedSpent,
+          costUsd: mergedCost,
+          ...(Object.keys(mergedFeatures).length ? { features: mergedFeatures } : {}),
+          calls: mergedSpent.calls,
+        });
         const mergedMessage = durationCheck.warning
           ? `Script from merged call (0 tokens); ${durationCheck.warning}`
           : "Script from merged call (0 tokens)";
@@ -101,6 +127,7 @@ export class ScriptExecutor implements StageExecutor {
       let mergedCall = false;
       let provider: string;
       let model: string;
+      const scriptGuidance = new GuidelineService(this.sqlite).guidanceFor(project, ["script", "subtitles"]);
       if (mergedSource) {
         script = ScriptSchema.parse(JSON.parse(existing!.data) as unknown);
         const durationCheck = checkScriptDuration(script, project.settings.targetDurationSec, this.config.SPEECH_WORDS_PER_MINUTE);
@@ -113,7 +140,7 @@ export class ScriptExecutor implements StageExecutor {
       } else {
         selected = this.registry.resolveTask("script", project, appRouting);
         const inputHash = scriptInputHash(project, applicableResearch?.input_hash);
-        const initialPrompt = scriptPrompt(project, research, this.config.SPEECH_WORDS_PER_MINUTE);
+        const initialPrompt = scriptPrompt(project, research, this.config.SPEECH_WORDS_PER_MINUTE, scriptGuidance);
         const check = preflight({
           provider: selected.provider,
           mode: "off",
@@ -126,7 +153,7 @@ export class ScriptExecutor implements StageExecutor {
           input: initialPrompt,
           ...(research ? {
             research,
-            rebuildInput: (trimmedResearch) => scriptPrompt(project, trimmedResearch, this.config.SPEECH_WORDS_PER_MINUTE),
+            rebuildInput: (trimmedResearch) => scriptPrompt(project, trimmedResearch, this.config.SPEECH_WORDS_PER_MINUTE, scriptGuidance),
           } : {}),
         });
         if (check.decision === "reject") throw check.error;
@@ -189,6 +216,7 @@ export class ScriptExecutor implements StageExecutor {
             this.config.SPEECH_WORDS_PER_MINUTE,
             pass,
             priorNotes,
+            scriptGuidance,
           );
           const reviewHash = `${scriptInputHash(project, applicableResearch?.input_hash)}:${scriptContentHash(finalData)}:${JSON.stringify(research ?? null)}:${pass}:${JSON.stringify(priorNotes)}`;
           context.reportProgress(70, `Reviewing and revising script (${pass}/${budget.scriptReviewPasses})`);
@@ -242,6 +270,26 @@ export class ScriptExecutor implements StageExecutor {
         if (JSON.stringify(finalData) !== JSON.stringify(baseData)) version += 1;
       }
 
+      const beforeGuidelines = JSON.stringify(finalData);
+      const guided = await this.applyScriptGuidelines({
+        context,
+        project,
+        research,
+        script: finalData,
+        budget,
+        reviewNotes,
+        spent: spentUsage,
+        features,
+        addCost: (value) => { spentCost += value; },
+      });
+      finalData = guided.script;
+      reviewNotes = guided.reviewNotes;
+      if (guided.provider) {
+        provider = guided.provider;
+        model = guided.model || model;
+      }
+      if (JSON.stringify(finalData) !== beforeGuidelines) version += 1;
+
       context.reportProgress(85, "Saving script");
       const serializedData = JSON.stringify(finalData);
       if (existing?.data === serializedData) version = existing.version;
@@ -261,6 +309,7 @@ export class ScriptExecutor implements StageExecutor {
         mergedCall ? 1 : 0,
         reviewNotes === null ? null : JSON.stringify(reviewNotes),
       );
+      this.persistGuidelineResults(project, guided);
       context.recordUsage({
         ...spentUsage,
         costUsd: spentCost,
@@ -279,6 +328,138 @@ export class ScriptExecutor implements StageExecutor {
     } catch (error) {
       if (!usageRecorded) recordFailureUsage(error, context, spentUsage, features, activeFeature, spentCost, selected?.provider.id, selected?.model);
       throw asStageError(error);
+    }
+  }
+
+  private persistGuidelineResults(project: StageContext["project"], guided: { findings: GuidelineFindingDraft[] | null; strictness: "REMIND" | "FILTER" }): void {
+    const service = new GuidelineService(this.sqlite);
+    if (guided.findings) service.replaceFindings(project.id, "SCRIPT", "LLM", guided.findings);
+    if (guided.strictness === "FILTER") service.runCodeChecks(project, "SCRIPT");
+  }
+
+  private async applyScriptGuidelines(input: {
+    context: StageContext;
+    project: StageContext["project"];
+    research: ReturnType<typeof ResearchNotesSchema.parse> | undefined;
+    script: Script;
+    budget: ReturnType<typeof resolveBudget>;
+    reviewNotes: string[] | null;
+    spent: { llmCalls: number; inputTokens: number; outputTokens: number; tokensUnknown: boolean; calls: LlmCallUsage[] };
+    features: Record<string, number>;
+    addCost: (value: number) => void;
+  }): Promise<{ script: Script; reviewNotes: string[] | null; findings: GuidelineFindingDraft[] | null; strictness: "REMIND" | "FILTER"; provider?: string; model?: string }> {
+    const service = new GuidelineService(this.sqlite);
+    const active = service.activeFor(input.project);
+    let script = input.script;
+    let reviewNotes = input.reviewNotes;
+    let provider: string | undefined;
+    let model: string | undefined;
+    if (active.strictness !== "FILTER" || input.budget.guidelineCheck === "off") {
+      return { script, reviewNotes, findings: null, strictness: active.strictness };
+    }
+    const rules = guidelineRulesFor(active, ["script", "subtitles", "metadata"]);
+    if (!rules.length) return { script, reviewNotes, findings: [], strictness: active.strictness };
+    const checkOnce = async (value: Script) => {
+      try {
+        const checked = await runGuidelineLlmCheck({
+          sqlite: this.sqlite,
+          registry: this.registry,
+          config: this.config,
+          project: input.project,
+          script: value,
+          active,
+          signal: input.context.signal,
+          logger: input.context.logger,
+          cache: this.cache,
+        });
+        addUsage(input.spent, input.features, "guidelineCheck", checked.usage);
+        if (checked.provider) {
+          input.addCost(estimateLlmCost(this.config, checked.provider, checked.model, checked.usage));
+          provider = checked.provider;
+          model = checked.model;
+        }
+        return checked.drafts;
+      } catch (error) {
+        if (error instanceof LlmError && error.usage) {
+          addUsage(input.spent, input.features, "guidelineCheck", error.usage);
+          input.addCost(estimateLlmCost(this.config, provider ?? "mock", model ?? "mock", error.usage));
+        }
+        throw error;
+      }
+    };
+    try {
+      let findings = await checkOnce(script);
+      if (input.budget.guidelineCheck === "checkAndFix" && findings.some((finding) => finding.severity === "MUST")) {
+        try {
+          const guidance = [
+            service.guidanceFor(input.project, ["script", "subtitles"]),
+            "Fix these content-guideline findings. Keep every section id and the section order.",
+            ...findings.map((finding) => `- ${finding.ruleId} [${finding.severity}] scene ${finding.sceneId ?? "null"}: ${finding.text}${finding.suggestion ? ` Suggestion: ${finding.suggestion}` : ""}`),
+          ].filter(Boolean).join("\n");
+          const reviewRoute = this.registry.resolveTask("scriptReview", input.project, getAppLlmSettings(this.sqlite));
+          const reviewSchema = z.object({
+            revisedScript: ScriptSchema,
+            notes: z.array(z.string()).max(8),
+          }).strict().superRefine(({ revisedScript }, ctx) => {
+            const expectedIds = script.sections.map((section) => section.id);
+            const actualIds = revisedScript.sections.map((section) => section.id);
+            if (JSON.stringify(actualIds) !== JSON.stringify(expectedIds)) {
+              ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["revisedScript", "sections"], message: "Review must preserve section ids and order." });
+            }
+            const { reject } = checkScriptDuration(revisedScript, input.project.settings.targetDurationSec, this.config.SPEECH_WORDS_PER_MINUTE);
+            if (reject) ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["revisedScript"], message: reject });
+          });
+          const reviewedResult = await generateRoutedStructured({
+            registry: this.registry,
+            route: reviewRoute,
+            task: "scriptReview",
+            ...scriptReviewPrompt(
+              input.project,
+              input.research,
+              script,
+              this.config.SPEECH_WORDS_PER_MINUTE,
+              input.budget.scriptReviewPasses + 1,
+              reviewNotes ?? [],
+              guidance,
+            ),
+            schema: reviewSchema,
+            schemaName: "ScriptReview",
+            schemaVersion: "2",
+            maxOutputTokens: Math.ceil(maxOutputTokensForDuration(
+              input.project.settings.targetDurationSec,
+              this.config.SPEECH_WORDS_PER_MINUTE,
+            ) * input.budget.outputHeadroom),
+            repairAttempts: input.budget.repairAttempts,
+            signal: input.context.signal,
+            cache: this.cache,
+            cacheKeyExtra: `guideline-fix:${scriptContentHash(script)}:${findings.map((finding) => finding.ruleId).join(",")}`,
+            logger: input.context.logger,
+          });
+          addUsage(input.spent, input.features, "review", reviewedResult.usage);
+          input.addCost(estimateLlmCost(this.config, reviewedResult.provider, reviewedResult.model, reviewedResult.usage));
+          provider = reviewedResult.provider;
+          model = reviewedResult.model;
+          const revised = computeSectionDurations(reviewedResult.value.revisedScript, this.config.SPEECH_WORDS_PER_MINUTE);
+          reviewNotes = [...(reviewNotes ?? []), ...reviewedResult.value.notes].slice(0, 8);
+          let nextFindings = findings;
+          try {
+            nextFindings = await checkOnce(revised);
+          } catch (error) {
+            input.context.logger.warn({ err: error }, "guidelineCheck after the fix pass failed");
+          }
+          script = revised;
+          findings = nextFindings;
+        } catch (error) {
+          input.context.logger.warn({ err: error }, "Guideline fix pass skipped");
+          if (error instanceof LlmError && error.usage) {
+            addUsage(input.spent, input.features, "review", error.usage);
+          }
+        }
+      }
+      return { script, reviewNotes, findings, strictness: active.strictness, ...(provider ? { provider, model } : {}) };
+    } catch (error) {
+      input.context.logger.warn({ err: error }, "guidelineCheck failed; continuing without LLM findings");
+      return { script, reviewNotes, findings: null, strictness: active.strictness };
     }
   }
 }

@@ -171,8 +171,8 @@ describe("research and script stages", () => {
 
   it.each([
     ["ECO", 1],
-    ["BALANCED", 3],
-    ["QUALITY", 4],
+    ["BALANCED", 4],
+    ["QUALITY", 5],
   ] as const)("uses %s mode with %i provider calls through SCRIPT and caches its rerun", async (mode, expectedCalls) => {
     const harness = makeHarness({
       LLM_DEFAULT_PROVIDER: "mock",
@@ -203,7 +203,7 @@ describe("research and script stages", () => {
     const scriptJob = jobs.find((job) => job.stage === "SCRIPT");
     expect(researchJob?.usage?.features).toEqual({ [mode === "ECO" ? "story" : "research"]: 1 });
     expect(scriptJob?.usage?.features).toEqual(
-      mode === "ECO" ? undefined : mode === "QUALITY" ? { script: 1, review: 2 } : { script: 1, review: 1 },
+      mode === "ECO" ? undefined : mode === "QUALITY" ? { script: 1, review: 2, guidelineCheck: 1 } : { script: 1, review: 1, guidelineCheck: 1 },
     );
 
     await new ResearchExecutor(harness.sqlite, registry, harness.config).run(contextFor(harness, "RESEARCH").context);
@@ -236,11 +236,11 @@ describe("research and script stages", () => {
       "Tightened the opening for clarity.",
     ]);
     expect(saved.version).toBe(2);
-    expect(generate).toHaveBeenCalledTimes(4);
+    expect(generate).toHaveBeenCalledTimes(5);
     const scriptJob = harness.repository.listJobs(harness.projectId, 20).find((job) => job.stage === "SCRIPT");
     expect(scriptJob?.usage).toMatchObject({
-      llmCalls: 3,
-      features: { script: 1, review: 2 },
+      llmCalls: 4,
+      features: { script: 1, review: 2, guidelineCheck: 1 },
     });
   });
 
@@ -285,11 +285,11 @@ describe("research and script stages", () => {
       .get(harness.projectId) as { data: string; review_notes: string | null };
     expect(JSON.parse(saved.data)).toMatchObject({ title: "Testing pipeline behavior: A Carefully Told Story" });
     expect(saved.review_notes).toBeNull();
-    expect(generate).toHaveBeenCalledTimes(5);
+    expect(generate).toHaveBeenCalledTimes(6);
     const scriptJob = harness.repository.listJobs(harness.projectId, 20).find((job) => job.stage === "SCRIPT");
     expect(scriptJob?.usage).toMatchObject({
-      llmCalls: 4,
-      features: { script: 1, review: 3 },
+      llmCalls: 5,
+      features: { script: 1, review: 3, guidelineCheck: 1 },
     });
   });
 
@@ -343,7 +343,7 @@ describe("research and script stages", () => {
     harness.orchestrator.runAll(harness.projectId);
     await drainUntilGate(harness);
 
-    expect(generate).toHaveBeenCalledTimes(2);
+    expect(generate).toHaveBeenCalledTimes(3);
     const script = harness.sqlite.prepare("SELECT review_notes, version FROM scripts WHERE project_id = ?")
       .get(harness.projectId) as { review_notes: string; version: number };
     expect(JSON.parse(script.review_notes)).toEqual(["Tightened the opening for clarity."]);
@@ -373,7 +373,7 @@ describe("research and script stages", () => {
 
     expect(harness.orchestrator.getPipeline(harness.projectId).stages.find((stage) => stage.stage === "RESEARCH")?.state)
       .toBe("SKIPPED");
-    expect(generate).toHaveBeenCalledTimes(2);
+    expect(generate).toHaveBeenCalledTimes(3);
     expect(generate.mock.calls[0][0].messages[0]?.content).toContain("No research notes are available");
   });
 
@@ -394,7 +394,7 @@ describe("research and script stages", () => {
     harness.executors.set("SCRIPT", new ScriptExecutor(harness.sqlite, registry, harness.config));
     harness.orchestrator.runAll(harness.projectId);
     await drainUntilGate(harness);
-    expect(generate).toHaveBeenCalledTimes(2);
+    expect(generate).toHaveBeenCalledTimes(3);
 
     const legacy = ScriptSchema.parse({
       title: "Legacy",
@@ -518,9 +518,9 @@ describe("research and script stages", () => {
     const scriptCall = contextFor(harness, "SCRIPT");
     await scriptExecutor.run(scriptCall.context);
 
-    expect(generate).toHaveBeenCalledTimes(3);
+    expect(generate).toHaveBeenCalledTimes(4);
     expect(generate.mock.calls[1][0].messages[0]?.content).toContain("Research notes");
-    expect(scriptCall.usage[0]).toMatchObject({ llmCalls: 2, inputTokens: 20, outputTokens: 40 });
+    expect(scriptCall.usage[0]).toMatchObject({ llmCalls: 3, inputTokens: 30, outputTokens: 60 });
   });
 
   it("uses preflight to keep short stories merged, split medium stories, and reject oversized stories", async () => {

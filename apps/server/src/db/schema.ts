@@ -300,6 +300,25 @@ export const timelines = sqliteTable("timelines", {
   updatedAt: text("updated_at").notNull(),
 });
 
+export const guidelineFindings = sqliteTable("guideline_findings", {
+  id: text("id").primaryKey(),
+  projectId: text("project_id").notNull().references(() => projects.id, { onDelete: "cascade" }),
+  stage: text("stage", { enum: ["SCRIPT", "TIMELINE"] }).notNull(),
+  source: text("source", { enum: ["CODE", "LLM"] }).notNull(),
+  ruleId: text("rule_id").notNull(),
+  severity: text("severity", { enum: ["MUST", "SHOULD", "TIP"] }).notNull(),
+  sceneId: text("scene_id"),
+  text: text("text").notNull(),
+  quote: text("quote"),
+  suggestion: text("suggestion"),
+  status: text("status", { enum: ["OPEN", "FIXED", "DISMISSED"] }).notNull().default("OPEN"),
+  dismissedBy: text("dismissed_by"),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+}, (table) => [
+  index("guideline_findings_project_idx").on(table.projectId),
+]);
+
 export const renders = sqliteTable("renders", {
   id: text("id").primaryKey(),
   projectId: text("project_id").notNull().references(() => projects.id, { onDelete: "cascade" }),

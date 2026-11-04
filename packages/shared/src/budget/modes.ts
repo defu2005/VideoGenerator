@@ -15,6 +15,8 @@ export const BudgetFeaturesSchema = z.object({
   visionCheck: z.boolean(),
   musicAssist: z.boolean(),
   metadata: z.boolean(),
+  /** LLM check against guideline packs after the script review; checkAndFix adds one fix pass. */
+  guidelineCheck: z.enum(["off", "check", "checkAndFix"]),
   outputHeadroom: z.union([z.literal(1), z.literal(1.5), z.literal(2)]),
 }).strict();
 export type BudgetFeatures = z.infer<typeof BudgetFeaturesSchema>;
@@ -44,6 +46,7 @@ const PRESETS: Record<Exclude<BudgetMode, "CUSTOM">, BudgetFeatures> = {
     visionCheck: false,
     musicAssist: false,
     metadata: false,
+    guidelineCheck: "off",
     outputHeadroom: 1,
   },
   BALANCED: {
@@ -58,6 +61,7 @@ const PRESETS: Record<Exclude<BudgetMode, "CUSTOM">, BudgetFeatures> = {
     visionCheck: false,
     musicAssist: true,
     metadata: true,
+    guidelineCheck: "check",
     outputHeadroom: 1.5,
   },
   QUALITY: {
@@ -72,6 +76,7 @@ const PRESETS: Record<Exclude<BudgetMode, "CUSTOM">, BudgetFeatures> = {
     visionCheck: false,
     musicAssist: true,
     metadata: true,
+    guidelineCheck: "checkAndFix",
     outputHeadroom: 2,
   },
 };
@@ -208,11 +213,14 @@ export function estimateBudget(
     ? 0
     : scriptDone ? 0 : 1;
   const reviewCalls = scriptDone ? 0 : features.scriptReviewPasses;
-  const scriptMin = scriptBaseCalls + reviewCalls;
-  const repairableCalls = scriptBaseCalls + reviewCalls;
+  const guidelineMin = scriptDone || features.guidelineCheck === "off" ? 0 : 1;
+  // checkAndFix: check, then one fix review and one re-check when the check finds problems.
+  const guidelineMax = guidelineMin && features.guidelineCheck === "checkAndFix" ? 3 : guidelineMin;
+  const scriptMin = scriptBaseCalls + reviewCalls + guidelineMin;
+  const repairableCalls = scriptBaseCalls + reviewCalls + guidelineMax;
   perStage.push({
     stage: "SCRIPT",
-    calls: { min: scriptMin, max: scriptMin + repairableCalls * repairs },
+    calls: { min: scriptMin, max: scriptMin + (guidelineMax - guidelineMin) + repairableCalls * repairs },
     reason: scriptDone
       ? "Script is already complete and unchanged."
       : features.scriptReview
@@ -248,13 +256,14 @@ export function estimateBudget(
     research: { min: researchCalls, max: researchCalls * (1 + repairs) },
     script: { min: scriptBaseCalls, max: scriptBaseCalls * (1 + repairs) },
     scriptReview: { min: reviewCalls, max: reviewCalls * (1 + repairs) },
+    guidelineCheck: { min: guidelineMin, max: guidelineMax * (1 + repairs) },
     sceneQueries: { min: sceneAssistCalls, max: sceneAssistCalls },
     visualAltQueries: { min: 0, max: visualAssistMax },
     visualRerank: { min: rerankCalls, max: rerankCalls },
   };
   for (const stage of perStage) {
     const taskIds = stage.stage === "RESEARCH" ? ["research"]
-      : stage.stage === "SCRIPT" ? ["script", "scriptReview"]
+      : stage.stage === "SCRIPT" ? ["script", "scriptReview", "guidelineCheck"]
         : stage.stage === "SCENE_PLAN" ? ["sceneQueries"]
           : ["visualAltQueries", "visualRerank"];
     stage.tasks = taskIds.map((task) => {

@@ -12,7 +12,7 @@ import { JobWorker } from "../src/jobs/worker.js";
 import { createExecutorRegistry } from "../src/pipeline/executorRegistry.js";
 import type { FakeFailure } from "../src/pipeline/fakeExecutor.js";
 import { PipelineOrchestrator, type ApprovalCheck } from "../src/pipeline/orchestrator.js";
-import type { PipelineStage } from "@vg/shared";
+import type { PipelineStage, Project } from "@vg/shared";
 
 type HarnessOptions = {
   config?: Partial<AppConfig>;
@@ -20,6 +20,7 @@ type HarnessOptions = {
   mode?: "AUTO" | "ASSISTED" | "MANUAL";
   autoRender?: boolean;
   canApprove?: ApprovalCheck;
+  autoBlock?: (project: Project, gate: PipelineStage) => string | null;
 };
 
 export function createPipelineHarness(options: HarnessOptions = {}) {
@@ -40,7 +41,7 @@ export function createPipelineHarness(options: HarnessOptions = {}) {
   const events = new PipelineEventBus();
   const repository = new JobRepository(database.sqlite, events, clock);
   const logger = Fastify({ logger: { level: "silent" } }).log;
-  const orchestrator = new PipelineOrchestrator(repository, config, logger, clock, options.canApprove);
+  const orchestrator = new PipelineOrchestrator(repository, config, logger, clock, options.canApprove, options.autoBlock);
   const executors = createExecutorRegistry({ delayMs: config.FAKE_STAGE_DELAY_MS, failures: options.failures });
   const worker = new JobWorker(
     repository,

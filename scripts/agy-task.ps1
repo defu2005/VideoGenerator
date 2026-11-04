@@ -28,6 +28,8 @@ $name = [IO.Path]::GetFileNameWithoutExtension($PromptFile)
 $log = Join-Path $logDir "$name-$stamp.jsonl"
 
 # Snapshot uncommitted work.
+# git prints warnings (e.g. CRLF) on stderr; they must not stop the script.
+$ErrorActionPreference = "Continue"
 $stash = (git stash create "agy-backup $stamp") 2>$null
 if ($stash) { git update-ref "refs/agy-backup/$stamp" $stash; Write-Host "backup: refs/agy-backup/$stamp ($stash)" }
 $untracked = @(git ls-files -o --exclude-standard)
@@ -36,6 +38,8 @@ if ($untracked.Count -gt 0) {
   Compress-Archive -Path $untracked -DestinationPath $zip -Force
   Write-Host "backup: $zip ($($untracked.Count) untracked files)"
 }
+
+$ErrorActionPreference = "Stop"
 
 # agy self-updates in the background; the exe can briefly disappear, so wait up to 60 s.
 $agy = Join-Path $env:LOCALAPPDATA "agy\bin\agy.exe"

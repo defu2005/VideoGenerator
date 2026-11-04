@@ -1,4 +1,5 @@
 import type { Project, ResearchNotes, Script } from "@vg/shared";
+import { appendGuidelineGuidance } from "../../guidelines/promptText.js";
 
 export function scriptReviewPrompt(
   project: Project,
@@ -7,13 +8,14 @@ export function scriptReviewPrompt(
   wordsPerMinute = 150,
   pass = 1,
   priorNotes: string[] = [],
+  guidance?: string,
 ): { system: string; prompt: string } {
   const pace = project.settings.wordsPerMinute ?? wordsPerMinute;
   return {
     system: pass === 1
       ? "You are a concise script editor. Return only valid JSON with revisedScript and notes."
       : "You are polishing a reviewed video script. Return only valid JSON with revisedScript and notes.",
-    prompt: [
+    prompt: appendGuidelineGuidance([
       `${pass === 1 ? "Review and revise" : "Polish"} this ${project.settings.language} narration for a ${project.settings.targetDurationSec}-second video.`,
       `Target duration: ${project.settings.targetDurationSec} seconds`,
       `Speaking pace: ${pace} words per minute`,
@@ -23,6 +25,6 @@ export function scriptReviewPrompt(
       `Research summary: ${research?.summary ?? "No research summary available."}`,
       `Script: ${JSON.stringify(script)}`,
       'Output: {"revisedScript": <Script>, "notes": ["..."]}',
-    ].join("\n"),
+    ].join("\n"), guidance),
   };
 }
