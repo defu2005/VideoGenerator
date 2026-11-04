@@ -3,7 +3,7 @@
 ## Cách dùng (cho bạn)
 1. Mở repo trong Cursor, bật Agent mode.
 2. Làm **lần lượt từng task** theo bảng bên dưới. Mỗi lần dán vào Cursor đúng một dòng:
-   > Read docs/cursor/README.md and docs/cursor/TASK-017.md, then implement that task.
+   > Read docs/cursor/README.md and docs/cursor/TASK-019.md, then implement that task.
 3. Cursor làm xong khi có file `docs/tasks/TASK-XXX.report.md` và `docs/tasks/TASK-XXX.done`.
 4. Đừng cho Cursor commit. Gọi Claude review rồi commit (hoặc tự kiểm tra theo "Done checklist" bên dưới).
 5. Chỉ chuyển task kế tiếp khi task trước đã review và commit xong.
@@ -12,15 +12,15 @@
 
 | # | Guide | What | Spec |
 |---|---|---|---|
-| 1 | [TASK-017](TASK-017.md) | Content guideline packs: server, web, tests (the shared layer is done) | docs/tasks/TASK-017.md |
-| 2 | [TASK-019](TASK-019.md) | Video metadata (title/description/tags) + music assist LLM | docs/tasks/TASK-019.md |
-| 3 | [TASK-018](TASK-018.md) | Optional pre-render review chat with the LLM | docs/tasks/TASK-018.md |
-| 4 | [TASK-013](TASK-013.md) | Render versions, history, export/download | docs/tasks/TASK-013.md |
-| 5 | [TASK-004G](TASK-004G.md) | MAX mode: vision-checked images + vision check of rendered frames | docs/tasks/TASK-004G.md |
-| 6 | [TASK-007C](TASK-007C.md) | "Nhờ AI tìm ảnh": LLM web search for images | docs/tasks/TASK-007C.md |
-| 7 | [TASK-007B](TASK-007B.md) | More image/video sources | docs/tasks/TASK-007B.md |
+| ✅ | [TASK-017](TASK-017.md) | Content guideline packs (**done**, commit 3739833) | docs/tasks/TASK-017.md |
+| 1 | [TASK-019](TASK-019.md) | Video metadata (title/description/tags) + music assist LLM | docs/tasks/TASK-019.md |
+| 2 | [TASK-018](TASK-018.md) | Optional pre-render review chat with the LLM | docs/tasks/TASK-018.md |
+| 3 | [TASK-013](TASK-013.md) | Render versions, history, export/download | docs/tasks/TASK-013.md |
+| 4 | [TASK-004G](TASK-004G.md) | MAX mode: vision-checked images + vision check of rendered frames | docs/tasks/TASK-004G.md |
+| 5 | [TASK-007C](TASK-007C.md) | "Nhờ AI tìm ảnh": LLM web search for images | docs/tasks/TASK-007C.md |
+| 6 | [TASK-007B](TASK-007B.md) | More image/video sources | docs/tasks/TASK-007B.md |
 
-The spec in `docs/tasks/` is the requirement. The guide in `docs/cursor/` gives the current code state, the file map and the steps. When they disagree, the guide wins (it is newer).
+The spec in `docs/tasks/` is the requirement. The guide in `docs/cursor/` gives the current code state, the file map and the steps. When they disagree, the guide wins (it is newer). Each task depends on the ones above it; don't skip ahead.
 
 ---
 
@@ -64,7 +64,7 @@ cd apps/server && npx drizzle-kit generate
 - Run `drizzle-kit generate` a second time. It must print "No schema changes".
 - Dev servers: `npm run dev` (API on 3001, web on 5180).
 
-Test counts at the last commit: shared 150, mcp 10, server 291, web 68. The counts must not go down.
+Test counts after TASK-017: shared 156, mcp 11, server 295, web 70. The counts must not go down.
 
 ## Done checklist (every task)
 

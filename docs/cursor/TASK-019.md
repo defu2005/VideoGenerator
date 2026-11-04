@@ -17,7 +17,7 @@ Read `docs/cursor/README.md` first. Spec: `docs/tasks/TASK-019.md` (read it full
   - `apps/server/src/services/renderService.ts`, which builds the credits text: reuse it, don't duplicate it;
   - web: `apps/web/src/features/render/RenderPanel.tsx`.
 - **LLM calls:** follow `apps/server/src/stages/script/scriptExecutor.ts` (`generateRoutedStructured`, usage accounting) and the mock provider `apps/server/src/providers/llm/mock.ts`.
-- **Guideline text:** the helper added in TASK-017 (`guidanceFor(project, ["music"])` / `["metadata"]`).
+- **Guideline text:** `GuidelineService.guidanceFor(project, ["music"])` / `["metadata"]` in `apps/server/src/guidelines/service.ts`, appended with `appendGuidelineGuidance` (`apps/server/src/guidelines/promptText.ts`), the same way `stages/script/prompt.ts` does it.
 - **MCP:** `apps/mcp/src/tools.ts`.
 
 ## Steps
