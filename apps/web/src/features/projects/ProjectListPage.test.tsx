@@ -68,9 +68,17 @@ function usageResponse() {
 }
 
 describe("ProjectListPage", () => {
+  function mockListFetch(items: Project[] = [project]) {
+    return vi.fn((input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes("/usage")) return Promise.resolve(usageResponse());
+      if (url.includes("/profiles")) return Promise.resolve(jsonResponse({ items: [] }));
+      return Promise.resolve(jsonResponse(listResponse(items)));
+    });
+  }
+
   it("renders projects and writes the debounced search into the URL", async () => {
-    const fetchMock = vi.fn((input: RequestInfo | URL) =>
-      String(input).includes("/usage") ? Promise.resolve(usageResponse()) : Promise.resolve(jsonResponse(listResponse([project]))));
+    const fetchMock = mockListFetch();
     vi.stubGlobal("fetch", fetchMock);
     renderWithProviders(<ProjectListPage />, ["/projects"]);
 
@@ -81,8 +89,7 @@ describe("ProjectListPage", () => {
   });
 
   it("shows the empty state when no project matches", async () => {
-    vi.stubGlobal("fetch", vi.fn((input: RequestInfo | URL) =>
-      String(input).includes("/usage") ? Promise.resolve(usageResponse()) : Promise.resolve(jsonResponse(listResponse([])))));
+    vi.stubGlobal("fetch", mockListFetch([]));
     renderWithProviders(<ProjectListPage />, ["/projects"]);
     expect(await screen.findByRole("heading", { name: "No projects yet" })).toBeInTheDocument();
   });
@@ -90,7 +97,9 @@ describe("ProjectListPage", () => {
   it("retries after an API error", async () => {
     let listRequests = 0;
     const fetchMock = vi.fn((input: RequestInfo | URL) => {
-      if (String(input).includes("/usage")) return Promise.resolve(usageResponse());
+      const url = String(input);
+      if (url.includes("/usage")) return Promise.resolve(usageResponse());
+      if (url.includes("/profiles")) return Promise.resolve(jsonResponse({ items: [] }));
       listRequests += 1;
       return Promise.resolve(listRequests === 1
         ? jsonResponse({ error: { code: "INTERNAL_ERROR", message: "Temporary failure" } }, 500)
@@ -106,7 +115,9 @@ describe("ProjectListPage", () => {
 
   it("confirms project deletion and displays a 409 API message", async () => {
     const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
-      if (String(input).includes("/usage")) return Promise.resolve(usageResponse());
+      const url = String(input);
+      if (url.includes("/usage")) return Promise.resolve(usageResponse());
+      if (url.includes("/profiles")) return Promise.resolve(jsonResponse({ items: [] }));
       if (init?.method === "DELETE") {
         return Promise.resolve(jsonResponse({ error: { code: "PROJECT_BUSY", message: "Project is currently running" } }, 409));
       }
@@ -141,8 +152,13 @@ describe("CreateProjectDialog", () => {
   });
 
   it("requires a topic and creates with only the topic in quick-create mode", async () => {
-    const fetchMock = vi.fn(async (input: RequestInfo | URL, _init?: RequestInit) =>
-      String(input) === "/api/llm/providers" ? jsonResponse([]) : jsonResponse(project, 201));
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.includes("/profiles")) return jsonResponse({ items: [] });
+      if (url === "/api/llm/providers") return jsonResponse([]);
+      if (url === "/api/projects" && init?.method === "POST") return jsonResponse(project, 201);
+      return jsonResponse([]);
+    });
     vi.stubGlobal("fetch", fetchMock);
     renderWithProviders(<CreateProjectDialog open onClose={vi.fn()} />);
     fireEvent.click(screen.getByRole("button", { name: "Tạo" }));
@@ -160,9 +176,81 @@ describe("CreateProjectDialog", () => {
     expect(JSON.parse(String(request.body))).toEqual({ topic: "Lịch sử đại dương" });
   });
 
+  it("fills the form from a selected profile", async () => {
+    const profileId = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+    const profileDetail = {
+      id: profileId,
+      name: "Kênh lịch sử",
+      description: "",
+      direction: "Góc nhìn dân gian",
+      language: "vi",
+      defaultBrief: {
+        budget: { mode: "QUALITY" },
+        language: "vi",
+        targetDurationSec: 240,
+        aspectRatio: "16:9",
+        platform: "youtube",
+        style: "documentary",
+        tone: "serious",
+        audience: "students",
+        wordsPerMinute: 150,
+        sceneDurationSec: 7,
+        visualStyle: "mixed",
+        subtitles: { enabled: true, maxCharsPerLine: 42 },
+        music: { enabled: true, volume: 0.15 },
+        userSet: [],
+        mode: "AUTO",
+        autoRender: false,
+      },
+      voice: { voice: "vi-VN-HoaiMyNeural", rate: "+0%" },
+      guidelines: { platformPack: "youtube", customRules: [] },
+      llm: null,
+      avatarPath: null,
+      color: "#C45C26",
+      archivedAt: null,
+      createdAt: createdAt,
+      updatedAt: createdAt,
+      accounts: [],
+    };
+    const listItem = {
+      id: profileId,
+      name: "Kênh lịch sử",
+      description: "",
+      direction: "",
+      language: "vi",
+      color: "#C45C26",
+      avatarPath: null,
+      archivedAt: null,
+      createdAt,
+      updatedAt: createdAt,
+      accountCount: 0,
+      projectCount: 0,
+      accounts: [],
+    };
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.startsWith(`/api/profiles/${profileId}`)) return jsonResponse(profileDetail);
+      if (url.startsWith("/api/profiles")) return jsonResponse({ items: [listItem] });
+      if (url.includes("/guidelines/packs")) {
+        return jsonResponse({ builtIn: [], custom: [], disclaimer: "test" });
+      }
+      if (url === "/api/llm/providers") return jsonResponse([]);
+      return jsonResponse([]);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    renderWithProviders(<CreateProjectDialog open onClose={vi.fn()} />);
+    expect(await screen.findByRole("option", { name: "Kênh lịch sử" })).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText("Hồ sơ"), { target: { value: profileId } });
+    await waitFor(() => expect(screen.getByRole("button", { name: /Hide customization/ })).toBeInTheDocument());
+    expect(await screen.findByLabelText("Platform")).toHaveValue("youtube");
+    expect(screen.getByLabelText("Style")).toHaveValue("documentary");
+    expect(screen.getByLabelText("Tone")).toHaveValue("serious");
+  });
+
   it("sends per-task model settings in the create payload", async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
+      if (url.includes("/profiles")) return jsonResponse({ items: [] });
       if (url === "/api/llm/providers") {
         return jsonResponse([
           { id: "mock", label: "Mock", configured: true, defaultModel: "mock-v1" },
@@ -207,6 +295,7 @@ describe("CreateProjectDialog", () => {
   it("omits the llm key when no project or task model is set", async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
+      if (url.includes("/profiles")) return jsonResponse({ items: [] });
       if (url === "/api/llm/providers") return jsonResponse([]);
       if (url === "/api/projects" && init?.method === "POST") return jsonResponse(project, 201);
       return jsonResponse([]);
@@ -228,7 +317,8 @@ describe("CreateProjectDialog", () => {
   });
 
   it("shows recommendations and lets a user reset a customized field", () => {
-    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse([])));
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) =>
+      String(input).includes("/profiles") ? jsonResponse({ items: [] }) : jsonResponse([])));
     renderWithProviders(<CreateProjectDialog open onClose={vi.fn()} />);
     fireEvent.change(screen.getByLabelText(/Topic/), { target: { value: "Ocean life" } });
     fireEvent.click(screen.getByRole("button", { name: /Customize/ }));
@@ -243,7 +333,8 @@ describe("CreateProjectDialog", () => {
   });
 
   it("previews budget modes live and exposes the CUSTOM feature toggles", () => {
-    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse([])));
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) =>
+      String(input).includes("/profiles") ? jsonResponse({ items: [] }) : jsonResponse([])));
     renderWithProviders(<CreateProjectDialog open onClose={vi.fn()} />);
     fireEvent.click(screen.getByRole("button", { name: /Customize/ }));
     const mode = screen.getByLabelText("Chế độ AI / Budget mode");

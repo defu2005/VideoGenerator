@@ -17,6 +17,8 @@ import { mergedStoryPrompt } from "../stages/script/mergedStoryPrompt.js";
 import { scriptPrompt } from "../stages/script/prompt.js";
 import type { AppConfig } from "../lib/config.js";
 import type { GuidelineService } from "../guidelines/service.js";
+import { getProfileDirection } from "../services/profileService.js";
+import type Database from "better-sqlite3";
 
 const ParamsSchema = z.object({ id: z.string().uuid() }).strict();
 const PromptParamsSchema = z.object({
@@ -38,6 +40,7 @@ export function registerScriptRoutes(
   projects: ProjectService,
   config: AppConfig,
   guidelines: GuidelineService,
+  sqlite?: Database.Database,
 ): void {
   app.get("/api/projects/:id/script", {
     schema: {
@@ -83,13 +86,14 @@ export function registerScriptRoutes(
     const researchMode = storyModeForProject(project);
     const research = researchMode !== "off" ? data?.research?.data : undefined;
     const storyGuidance = guidelines.guidanceFor(project, ["script", "subtitles"]);
+    const channelDirection = sqlite ? getProfileDirection(sqlite, project.profileId) : undefined;
     const prompt = stage === "STORY"
-      ? mergedStoryPrompt(project, config.SPEECH_WORDS_PER_MINUTE, "standard", storyGuidance)
+      ? mergedStoryPrompt(project, config.SPEECH_WORDS_PER_MINUTE, "standard", storyGuidance, channelDirection)
       : stage === "RESEARCH" && researchMode === "merged"
-        ? mergedStoryPrompt(project, config.SPEECH_WORDS_PER_MINUTE, "standard", storyGuidance)
+        ? mergedStoryPrompt(project, config.SPEECH_WORDS_PER_MINUTE, "standard", storyGuidance, channelDirection)
         : stage === "RESEARCH"
-          ? researchPrompt(project, "standard", guidelines.guidanceFor(project, ["script"]))
-          : scriptPrompt(project, research, config.SPEECH_WORDS_PER_MINUTE, storyGuidance);
+          ? researchPrompt(project, "standard", guidelines.guidanceFor(project, ["script"]), channelDirection)
+          : scriptPrompt(project, research, config.SPEECH_WORDS_PER_MINUTE, storyGuidance, channelDirection);
     const schema = stage === "STORY"
       ? MergedStorySchema
       : stage === "RESEARCH" && researchMode === "merged"

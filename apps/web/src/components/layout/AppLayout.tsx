@@ -12,6 +12,7 @@ export function AppLayout() {
         <nav className="primary-nav" aria-label="Main navigation">
           <NavLink to="/" end>Dashboard</NavLink>
           <NavLink to="/projects">Projects</NavLink>
+          <NavLink to="/profiles">Hồ sơ</NavLink>
           <NavLink to="/settings/ai">Mô hình AI</NavLink>
           <NavLink to="/settings/render">Render</NavLink>
           <NavLink to="/settings/image-sources">Nguồn ảnh</NavLink>

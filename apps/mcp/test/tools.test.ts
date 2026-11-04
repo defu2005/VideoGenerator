@@ -68,6 +68,7 @@ describe("Video Agent MCP tools", () => {
       "get_script",
       "get_video_metadata",
       "get_writing_brief",
+      "list_profiles",
       "list_projects",
       "list_renders",
       "recommend_brief",

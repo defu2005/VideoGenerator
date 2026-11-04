@@ -3,6 +3,7 @@ import type {
   CreateProjectResponse,
   ProjectListResponse,
   Project,
+  ProfileListResponse,
   RecommendBriefResponse,
   ResearchNotes,
   Script,
@@ -42,6 +43,13 @@ export class VideoAgentApiClient {
     if (query.q) params.set("q", query.q);
     if (query.status) params.set("status", query.status);
     return this.request(`/api/projects?${params.toString()}`);
+  }
+
+  listProfiles(query: { includeArchived?: boolean } = {}): Promise<ProfileListResponse> {
+    const params = new URLSearchParams();
+    if (query.includeArchived) params.set("includeArchived", "true");
+    const qs = params.toString();
+    return this.request(`/api/profiles${qs ? `?${qs}` : ""}`);
   }
 
   getGuidelinePacks(): Promise<{ builtIn: GuidelinePack[]; custom: GuidelinePack[]; disclaimer: string }> {

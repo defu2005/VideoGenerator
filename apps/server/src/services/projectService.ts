@@ -6,6 +6,7 @@ import {
   LlmSettingsSchema,
   PipelineStageSchema,
   ProjectStatusSchema,
+  mainAspectFromFormats,
   recommendBrief,
   type CreateProjectInput,
   type DashboardStats,
@@ -24,8 +25,12 @@ import { AppError } from "../lib/errors.js";
 import { createProjectDir, removeProjectDir } from "../storage/paths.js";
 import type Database from "better-sqlite3";
 import { getGuidelineProfiles, normalizeGuidelineSettings } from "../guidelines/settings.js";
+import type { ProfileService } from "./profileService.js";
 
-const toProject = (row: ProjectRow): Project => ProjectSchema.parse(row);
+const toProject = (row: ProjectRow): Project => ProjectSchema.parse({
+  ...row,
+  profileId: row.profileId ?? null,
+});
 const BRIEF_SETTING_FIELDS = new Set([
   "budget",
   "platform",
@@ -120,7 +125,13 @@ function mergeSettings(current: ProjectSettings, update: ProjectSettingsInput): 
   };
 }
 
-export function createProjectService(db: AppDatabase, config: AppConfig, logger: FastifyBaseLogger, sqlite: Database.Database) {
+export function createProjectService(
+  db: AppDatabase,
+  config: AppConfig,
+  logger: FastifyBaseLogger,
+  sqlite: Database.Database,
+  profiles?: ProfileService,
+) {
   async function getProject(id: string): Promise<Project | undefined> {
     const row = await db.select().from(projects).where(eq(projects.id, id)).get();
     return row ? toProject(row) : undefined;
@@ -129,10 +140,57 @@ export function createProjectService(db: AppDatabase, config: AppConfig, logger:
   async function createProject(input: CreateProjectInput): Promise<Project> {
     const now = new Date().toISOString();
     const id = randomUUID();
-    const inputSettings: ProjectSettingsInput = {
+
+    let profileSeed: ProjectSettingsInput = {};
+    let profileMode: CreateProjectInput["mode"];
+    let profileFormats: Array<"landscape" | "vertical"> = [];
+    if (input.profileId) {
+      if (!profiles) throw new AppError(500, "INTERNAL_ERROR", "Profile service unavailable");
+      const seed = await profiles.settingsSeedFromProfile(input.profileId);
+      profileSeed = seed.settings;
+      profileMode = seed.mode;
+      profileFormats = seed.formats;
+    }
+
+    const requestSettings: ProjectSettingsInput = {
       ...briefSettingsFromInput(input),
       ...input.settings,
     };
+    const inputSettings: ProjectSettingsInput = {
+      ...profileSeed,
+      ...requestSettings,
+      subtitles: {
+        ...profileSeed.subtitles,
+        ...requestSettings.subtitles,
+      },
+      music: {
+        ...profileSeed.music,
+        ...requestSettings.music,
+      },
+      budget: {
+        ...profileSeed.budget,
+        ...requestSettings.budget,
+        features: {
+          ...profileSeed.budget?.features,
+          ...requestSettings.budget?.features,
+        },
+      },
+      voice: requestSettings.voice
+        ? { ...profileSeed.voice, ...requestSettings.voice }
+        : profileSeed.voice,
+      llm: requestSettings.llm ?? profileSeed.llm,
+      guidelines: requestSettings.guidelines ?? profileSeed.guidelines,
+    };
+
+    // Aspect from profile main format unless the request set it.
+    const requestSetAspect = requestSettings.aspectRatio !== undefined
+      || (input.settings?.aspectRatio !== undefined)
+      || (input.aspectRatio !== undefined);
+    if (!requestSetAspect) {
+      const derived = mainAspectFromFormats(profileFormats);
+      if (derived) inputSettings.aspectRatio = derived;
+    }
+
     const explicitBriefFields = Object.keys(inputSettings).filter((field) => BRIEF_SETTING_FIELDS.has(field));
     const nestedBriefFields = [
       ...Object.keys(inputSettings.subtitles ?? {}).map((field) => `subtitles.${field}`),
@@ -141,25 +199,51 @@ export function createProjectService(db: AppDatabase, config: AppConfig, logger:
       ...Object.keys(inputSettings.budget?.features ?? {}).map((field) => `budget.features.${field}`),
       ...(inputSettings.researchMode === undefined ? [] : ["researchMode"]),
     ];
+    // Lock profile seed + request overrides so recommendBrief does not overwrite them.
+    const profileExplicit = Object.keys(profileSeed).filter((field) => BRIEF_SETTING_FIELDS.has(field));
+    const profileNested = [
+      ...Object.keys(profileSeed.subtitles ?? {}).map((field) => `subtitles.${field}`),
+      ...Object.keys(profileSeed.music ?? {}).map((field) => `music.${field}`),
+      ...(profileSeed.budget?.mode === undefined ? [] : ["budget.mode"]),
+      ...Object.keys(profileSeed.budget?.features ?? {}).map((field) => `budget.features.${field}`),
+    ];
+    const requestExplicit = Object.keys(requestSettings).filter((field) => BRIEF_SETTING_FIELDS.has(field));
+    const requestNested = [
+      ...Object.keys(requestSettings.subtitles ?? {}).map((field) => `subtitles.${field}`),
+      ...Object.keys(requestSettings.music ?? {}).map((field) => `music.${field}`),
+      ...(requestSettings.budget?.mode === undefined ? [] : ["budget.mode"]),
+      ...Object.keys(requestSettings.budget?.features ?? {}).map((field) => `budget.features.${field}`),
+      ...(requestSettings.researchMode === undefined ? [] : ["researchMode"]),
+    ];
     const userSet = [...new Set([
-      ...(inputSettings.userSet ?? []),
+      ...(requestSettings.userSet ?? []),
       ...(input.title === undefined ? [] : ["title"]),
-      ...explicitBriefFields,
-      ...nestedBriefFields,
+      ...profileExplicit,
+      ...profileNested,
+      ...requestExplicit,
+      ...requestNested,
     ])];
+    void explicitBriefFields;
     const { guidelines: ignoredGuidelines, ...briefInput } = inputSettings;
     void ignoredGuidelines;
+    const resolvedMode = input.mode ?? profileMode ?? "ASSISTED";
     const resolved = recommendBrief({
       topic: input.topic,
       title: input.title,
       description: input.description ?? "",
-      mode: input.mode ?? "ASSISTED",
+      mode: resolvedMode,
       settings: { ...briefInput, userSet },
     });
+    // If aspect came from profile format and recommendBrief may have overwritten it, restore when not user-set.
+    let aspectRatio = resolved.values.settings.aspectRatio;
+    if (!userSet.includes("aspectRatio") && !requestSetAspect) {
+      const derived = mainAspectFromFormats(profileFormats);
+      if (derived) aspectRatio = derived;
+    }
     const settings: ProjectSettings = {
       language: resolved.values.settings.language,
       targetDurationSec: resolved.values.settings.targetDurationSec,
-      aspectRatio: resolved.values.settings.aspectRatio,
+      aspectRatio,
       platform: resolved.values.settings.platform,
       style: resolved.values.settings.style,
       tone: resolved.values.settings.tone,
@@ -185,13 +269,14 @@ export function createProjectService(db: AppDatabase, config: AppConfig, logger:
       title: resolved.values.title,
       description: input.description ?? "",
       topic: input.topic,
-      mode: input.mode ?? "ASSISTED",
+      mode: resolvedMode,
       settings,
       status: "DRAFT",
       stage: "TOPIC",
       thumbnailPath: null,
       durationSec: null,
       version: 1,
+      profileId: input.profileId ?? null,
       createdAt: now,
       updatedAt: now,
       archivedAt: null,
@@ -294,6 +379,9 @@ export function createProjectService(db: AppDatabase, config: AppConfig, logger:
         OR ${projects.description} LIKE ${pattern} ESCAPE '\\' COLLATE NOCASE )`;
       conditions.push(containsQuery);
     }
+    if (query.profileId) {
+      conditions.push(eq(projects.profileId, query.profileId));
+    }
     const where = conditions.length ? and(...conditions) : undefined;
     const sortColumn = query.sort === "title"
       ? sql`lower(${projects.title})`
@@ -330,6 +418,7 @@ export function createProjectService(db: AppDatabase, config: AppConfig, logger:
       description: source.description,
       mode: source.mode,
       settings: source.settings,
+      ...(source.profileId ? { profileId: source.profileId } : {}),
     });
   }
 

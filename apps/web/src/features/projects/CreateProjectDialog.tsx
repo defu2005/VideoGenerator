@@ -1,11 +1,25 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
-import { CreateProjectInputSchema, recommendBrief, type BriefSettings, type ProjectSettings } from "@vg/shared";
+import {
+  CreateProjectInputSchema,
+  recommendBrief,
+  type BriefSettings,
+  type ProfileListItem,
+  type ProjectSettings,
+} from "@vg/shared";
 import { useNavigate } from "react-router-dom";
 import { ApiRequestError } from "../../services/apiClient";
 import { useCreateProject } from "../../hooks/useProjects";
+import { useProfiles } from "../../hooks/useProfiles";
 import { ProjectFormFields, DEFAULT_PROJECT_DRAFT, type ProjectDraft } from "./ProjectFormFields";
 import { BriefFields } from "./BriefFields";
-import { DEFAULT_GUIDELINE_DRAFT, GuidelineFieldset, guidelineSettingsFromDraft, type GuidelineDraft } from "./GuidelineFieldset";
+import {
+  DEFAULT_GUIDELINE_DRAFT,
+  GuidelineFieldset,
+  guidelineDraftFromSettings,
+  guidelineSettingsFromDraft,
+  type GuidelineDraft,
+} from "./GuidelineFieldset";
+import { getProfile } from "../../services/profilesApi";
 
 function validationMessages(details: unknown): Record<string, string> {
   if (!Array.isArray(details)) return {};
@@ -70,6 +84,7 @@ function summaryText(settings: BriefSettings): string {
 export function CreateProjectDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
   const navigate = useNavigate();
   const mutation = useCreateProject();
+  const profilesQuery = useProfiles({ includeArchived: false });
   const dialogRef = useRef<HTMLDialogElement>(null);
   const [draft, setDraft] = useState<ProjectDraft>(DEFAULT_PROJECT_DRAFT);
   const [llmTasks, setLlmTasks] = useState<NonNullable<ProjectSettings["llm"]>["tasks"]>({});
@@ -81,6 +96,7 @@ export function CreateProjectDialog({ open, onClose }: { open: boolean; onClose:
   const [customize, setCustomize] = useState(false);
   const [guidelineDraft, setGuidelineDraft] = useState<GuidelineDraft>(DEFAULT_GUIDELINE_DRAFT);
   const [advanced, setAdvanced] = useState(false);
+  const [profileId, setProfileId] = useState("");
 
   useEffect(() => {
     const dialog = dialogRef.current;
@@ -109,9 +125,38 @@ export function CreateProjectDialog({ open, onClose }: { open: boolean; onClose:
       setCustomize(false);
       setAdvanced(false);
       setGuidelineDraft(DEFAULT_GUIDELINE_DRAFT);
+      setProfileId("");
       mutation.reset();
     }
   }, [open]);
+
+  async function applyProfile(nextProfileId: string) {
+    setProfileId(nextProfileId);
+    setRequestError("");
+    if (!nextProfileId) return;
+    setCustomize(true);
+    try {
+      const profile = await getProfile(nextProfileId);
+      const { mode, autoRender, ...briefSettings } = profile.defaultBrief;
+      setBrief({ ...briefSettings, userSet: [] });
+      setBriefUserSet(Object.keys(briefSettings).filter((key) => [
+        "budget", "platform", "style", "tone", "audience", "language",
+        "targetDurationSec", "aspectRatio", "wordsPerMinute", "sceneDurationSec", "visualStyle",
+      ].includes(key)));
+      setDraft((current) => ({
+        ...current,
+        mode,
+        language: profile.language,
+        autoRender,
+        voice: profile.voice?.voice ?? "",
+        rate: profile.voice?.rate ?? "+0%",
+        aspectRatio: briefSettings.aspectRatio,
+      }));
+      setGuidelineDraft(guidelineDraftFromSettings({ guidelines: profile.guidelines }));
+    } catch (error) {
+      setRequestError(error instanceof Error ? error.message : "Không tải được hồ sơ");
+    }
+  }
 
   function change(field: keyof ProjectDraft, value: string | boolean) {
     setDraft((current) => ({ ...current, [field]: value }));
@@ -141,6 +186,7 @@ export function CreateProjectDialog({ open, onClose }: { open: boolean; onClose:
     setErrors({});
     setRequestError("");
     const payload: Record<string, unknown> = { topic: draft.topic };
+    if (profileId) payload.profileId = profileId;
     if (customize) {
       if (draft.title.trim()) payload.title = draft.title;
       if (draft.description) payload.description = draft.description;
@@ -240,6 +286,20 @@ export function CreateProjectDialog({ open, onClose }: { open: boolean; onClose:
         </div>
         <div className="dialog-form-body">
           {requestError && <p className="request-error" role="alert">{requestError}</p>}
+          <label className="form-field">
+            <span>Hồ sơ</span>
+            <select
+              aria-label="Hồ sơ"
+              value={profileId}
+              onChange={(event) => void applyProfile(event.target.value)}
+            >
+              <option value="">Không chọn</option>
+              {(profilesQuery.data?.items ?? []).map((profile: ProfileListItem) => (
+                <option key={profile.id} value={profile.id}>{profile.name}</option>
+              ))}
+            </select>
+            <small className="field-hint">Chọn hồ sơ để điền brief, giọng đọc và định hướng kênh.</small>
+          </label>
           <label className="form-field">
             <span>Chủ đề / Topic <b aria-hidden="true">*</b></span>
             <textarea

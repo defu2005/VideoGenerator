@@ -444,6 +444,24 @@ button:disabled { cursor: not-allowed; opacity: .58; }
 .tab-bar { display: flex; overflow-x: auto; gap: 5px; border-bottom: 1px solid #e5e8f0; }
 .tab-bar a { flex-shrink: 0; border-bottom: 2px solid transparent; padding: 11px 13px 10px; color: #8390a3; font-size: 11px; font-weight: 600; }
 .tab-bar a.active { border-bottom-color: #4567e4; color: #3f5fd1; }
+.profile-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 14px; padding: 16px; }
+.profile-card { display: flex; gap: 12px; border: 1px solid #e8ebf1; border-radius: 10px; padding: 14px; color: inherit; text-decoration: none; background: #fff; }
+.profile-card:hover { border-color: #c9d2ea; }
+.profile-color-dot { flex-shrink: 0; width: 12px; height: 12px; margin-top: 4px; border-radius: 50%; }
+.profile-card-body { min-width: 0; flex: 1; }
+.profile-card-body h2 { margin: 0; font-size: 14px; font-weight: 680; color: #2a354a; }
+.profile-card-desc { margin: 6px 0 0; color: #7a8496; font-size: 11px; line-height: 1.45; }
+.profile-card-meta { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 8px; color: #8a93a4; font-size: 10px; }
+.profile-platform-tags { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+.profile-platform-tag { border-radius: 6px; background: #f3f5f9; padding: 3px 7px; color: #5b6578; font-size: 10px; font-weight: 600; }
+.profile-chip { display: inline-flex; align-items: center; gap: 5px; border-radius: 999px; background: #f4f6fa; padding: 3px 8px; color: #4f5b70; font-size: 10px; font-weight: 600; }
+.profile-chip i { width: 7px; height: 7px; border-radius: 50%; }
+.form-panel { display: grid; gap: 14px; padding: 18px; }
+.form-row { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.account-list { display: grid; gap: 10px; margin: 0; padding: 0; list-style: none; }
+.account-row { display: flex; justify-content: space-between; gap: 12px; border: 1px solid #eef0f4; border-radius: 8px; padding: 12px; }
+.account-row-actions { display: flex; flex-wrap: wrap; gap: 6px; align-items: start; }
+.connection-badge { border-radius: 999px; background: #fff4df; padding: 2px 7px; color: #9a6a12; font-size: 9px; font-weight: 700; }
 .overview-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; align-items: start; }
 .overview-card, .pipeline-card { padding: 18px; }
 .overview-card h2, .pipeline-card h2 { margin: 7px 0 8px; font-size: 13px; }

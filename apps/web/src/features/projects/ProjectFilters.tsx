@@ -14,19 +14,25 @@ export function ProjectFilters({
   archiveView,
   sort,
   order,
+  profileId,
+  profiles,
   onStatusesChange,
   onArchiveViewChange,
   onSortChange,
   onOrderToggle,
+  onProfileChange,
 }: {
   statuses: ProjectStatus[];
   archiveView: "active" | "archived" | "all";
   sort: "updatedAt" | "createdAt" | "title";
   order: "asc" | "desc";
+  profileId?: string;
+  profiles?: Array<{ id: string; name: string }>;
   onStatusesChange: (statuses: ProjectStatus[]) => void;
   onArchiveViewChange: (view: "active" | "archived" | "all") => void;
   onSortChange: (sort: "updatedAt" | "createdAt" | "title") => void;
   onOrderToggle: () => void;
+  onProfileChange?: (profileId: string | undefined) => void;
 }) {
   return (
     <div className="filter-toolbar">
@@ -52,6 +58,21 @@ export function ProjectFilters({
           )}
         </div>
       </details>
+      {onProfileChange && (
+        <label className="filter-select">
+          <span>Hồ sơ</span>
+          <select
+            aria-label="Lọc theo hồ sơ"
+            value={profileId ?? ""}
+            onChange={(event) => onProfileChange(event.target.value || undefined)}
+          >
+            <option value="">Tất cả</option>
+            {(profiles ?? []).map((profile) => (
+              <option key={profile.id} value={profile.id}>{profile.name}</option>
+            ))}
+          </select>
+        </label>
+      )}
       <label className="filter-select">
         <span>Show</span>
         <select value={archiveView} onChange={(event) => onArchiveViewChange(event.target.value as "active" | "archived" | "all")}>

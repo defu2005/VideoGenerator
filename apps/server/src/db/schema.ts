@@ -1,5 +1,56 @@
 import { integer, index, primaryKey, real, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
-import type { ProjectSettings } from "@vg/shared";
+import type {
+  AccountConnection,
+  AccountFormat,
+  GuidelineSettings,
+  LlmSettings,
+  PlatformId,
+  ProfileDefaultBrief,
+  ProjectSettings,
+  PublishSettings,
+} from "@vg/shared";
+
+export const profiles = sqliteTable("profiles", {
+  id: text("id").primaryKey(),
+  name: text("name").notNull().unique(),
+  description: text("description").notNull().default(""),
+  direction: text("direction").notNull().default(""),
+  language: text("language").notNull().default("vi"),
+  defaultBrief: text("default_brief", { mode: "json" }).$type<ProfileDefaultBrief>().notNull(),
+  voice: text("voice", { mode: "json" }).$type<{ voice?: string; rate?: string } | null>(),
+  guidelines: text("guidelines", { mode: "json" }).$type<GuidelineSettings>().notNull(),
+  llm: text("llm", { mode: "json" }).$type<LlmSettings | null>(),
+  avatarPath: text("avatar_path"),
+  color: text("color").notNull().default("#3B82F6"),
+  archivedAt: text("archived_at"),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+}, (table) => [
+  index("profiles_archived_at_idx").on(table.archivedAt),
+  index("profiles_updated_at_idx").on(table.updatedAt),
+]);
+
+export type ProfileRow = typeof profiles.$inferSelect;
+
+export const platformAccounts = sqliteTable("platform_accounts", {
+  id: text("id").primaryKey(),
+  profileId: text("profile_id").notNull().references(() => profiles.id, { onDelete: "cascade" }),
+  platform: text("platform").$type<PlatformId>().notNull(),
+  displayName: text("display_name").notNull(),
+  handle: text("handle"),
+  format: text("format").$type<AccountFormat>().notNull(),
+  enabled: integer("enabled", { mode: "boolean" }).notNull().default(true),
+  connection: text("connection").$type<AccountConnection>().notNull().default("NOT_CONNECTED"),
+  connectionError: text("connection_error"),
+  publishSettings: text("publish_settings", { mode: "json" }).$type<PublishSettings>().notNull(),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+}, (table) => [
+  index("platform_accounts_profile_idx").on(table.profileId),
+  index("platform_accounts_platform_idx").on(table.platform),
+]);
+
+export type PlatformAccountRow = typeof platformAccounts.$inferSelect;
 
 export const projects = sqliteTable("projects", {
   id: text("id").primaryKey(),
@@ -14,6 +65,7 @@ export const projects = sqliteTable("projects", {
   thumbnailPath: text("thumbnail_path"),
   durationSec: integer("duration_sec"),
   version: integer("version").notNull().default(1),
+  profileId: text("profile_id").references(() => profiles.id, { onDelete: "set null" }),
   createdAt: text("created_at").notNull(),
   updatedAt: text("updated_at").notNull(),
   archivedAt: text("archived_at"),
@@ -21,6 +73,7 @@ export const projects = sqliteTable("projects", {
   index("projects_status_idx").on(table.status),
   index("projects_updated_at_idx").on(table.updatedAt),
   index("projects_archived_at_idx").on(table.archivedAt),
+  index("projects_profile_id_idx").on(table.profileId),
 ]);
 
 export type ProjectRow = typeof projects.$inferSelect;

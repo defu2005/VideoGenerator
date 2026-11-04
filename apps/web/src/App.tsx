@@ -9,6 +9,8 @@ import { RenderSettingsPage } from "./features/settings/RenderSettingsPage";
 import { WebImageSettingsPage } from "./features/settings/WebImageSettingsPage";
 import { ImageSourcesSettingsPage } from "./features/settings/ImageSourcesSettingsPage";
 import { GuidelineSettingsPage } from "./features/guidelines/GuidelineSettingsPage";
+import { ProfileDetailPage } from "./features/profiles/ProfileDetailPage";
+import { ProfileListPage } from "./features/profiles/ProfileListPage";
 import { UsagePage } from "./features/usage/UsagePage";
 import { queryRetryDelay, shouldRetryQuery } from "./services/queryRetry";
 
@@ -30,6 +32,9 @@ export function App() {
           <Route element={<AppLayout />}>
             <Route index element={<DashboardPage />} />
             <Route path="projects" element={<ProjectListPage />} />
+            <Route path="profiles" element={<ProfileListPage />} />
+            <Route path="profiles/:id" element={<Navigate replace to="direction" />} />
+            <Route path="profiles/:id/:tab" element={<ProfileDetailPage />} />
             <Route path="settings/ai" element={<AiSettingsPage />} />
             <Route path="settings/render" element={<RenderSettingsPage />} />
             <Route path="settings/image-sources" element={<ImageSourcesSettingsPage />} />

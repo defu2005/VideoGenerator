@@ -15,9 +15,13 @@ export function ProjectCard({
   onArchive,
   onDelete,
   usage,
+  profileName,
+  profileColor,
 }: {
   project: Project;
   usage?: UsageTotals;
+  profileName?: string | null;
+  profileColor?: string | null;
   onEdit: () => void;
   onDuplicate: () => void;
   onArchive: () => void;
@@ -30,6 +34,12 @@ export function ProjectCard({
         <div className="project-card-title">
           <Link to={`/projects/${project.id}/overview`}><h2>{project.title}</h2></Link>
           <StatusBadge status={project.status} />
+          {profileName && (
+            <span className="profile-chip" title={profileName}>
+              <i style={{ background: profileColor ?? "#3B82F6" }} aria-hidden="true" />
+              {profileName}
+            </span>
+          )}
         </div>
         <p className="project-topic" title={project.topic}>{project.topic}</p>
         <div className="project-meta">

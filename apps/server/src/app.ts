@@ -60,6 +60,8 @@ import { GuidelineService } from "./guidelines/service.js";
 import { registerGuidelineRoutes } from "./api/guidelines.js";
 import { AutoReportService } from "./services/autoReportService.js";
 import { registerAutoReportRoutes } from "./api/autoReport.js";
+import { createProfileService } from "./services/profileService.js";
+import { registerProfileRoutes } from "./api/profiles.js";
 
 export function buildApp({ config }: { config: AppConfig }) {
   const server = Fastify({
@@ -84,7 +86,8 @@ export function buildApp({ config }: { config: AppConfig }) {
     database.sqlite.close();
     throw error;
   }
-  const projectService = createProjectService(database.db, config, server.log, database.sqlite);
+  const profileService = createProfileService(database.db);
+  const projectService = createProjectService(database.db, config, server.log, database.sqlite, profileService);
   const guidelineService = new GuidelineService(database.sqlite);
   const autoReportService = new AutoReportService(database.sqlite);
   const events = new PipelineEventBus();
@@ -175,13 +178,14 @@ export function buildApp({ config }: { config: AppConfig }) {
   server.register(cors, { origin: config.CORS_ORIGIN });
   registerHealthRoutes(server, database.sqlite);
   registerProjectRoutes(server, projectService);
+  registerProfileRoutes(server, profileService);
   registerRecommendationRoutes(server);
   registerBudgetRoutes(server, projectService, jobRepository, config, llmProviders);
   registerDashboardRoutes(server, projectService);
   registerUsageRoutes(server, usageService, projectService);
   registerPipelineRoutes(server, projectService, jobRepository, orchestrator, events, sceneService);
   registerLlmRoutes(server, llmProviders, database.sqlite, projectService);
-  registerScriptRoutes(server, scriptService, projectService, config, guidelineService);
+  registerScriptRoutes(server, scriptService, projectService, config, guidelineService, database.sqlite);
   registerGuidelineRoutes(server, database.sqlite, projectService, guidelineService, llmProviders, config);
   registerSceneRoutes(server, sceneService);
   registerVisualRoutes(server, visualService, jobRepository, llmProviders);

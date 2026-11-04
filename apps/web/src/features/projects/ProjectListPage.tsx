@@ -13,6 +13,7 @@ import { EmptyState } from "../../components/EmptyState";
 import { ErrorState } from "../../components/ErrorState";
 import { Spinner } from "../../components/Spinner";
 import { useDeleteProject, useDuplicateProject, useProjects, useSetProjectArchived } from "../../hooks/useProjects";
+import { useProfiles } from "../../hooks/useProfiles";
 import { CreateProjectDialog } from "./CreateProjectDialog";
 import { EditProjectDialog } from "./EditProjectDialog";
 import { ProjectCard } from "./ProjectCard";
@@ -32,6 +33,7 @@ function queryFromParams(params: URLSearchParams): ProjectListQuery {
   const parsed = ProjectListQuerySchema.safeParse({
     q: params.get("q") || undefined,
     status: validStatuses?.length ? validStatuses : undefined,
+    profileId: params.get("profileId") || undefined,
     ...archiveView,
     sort: params.get("sort") || undefined,
     order: params.get("order") || undefined,
@@ -58,10 +60,12 @@ export function ProjectListPage() {
   const [deleteError, setDeleteError] = useState("");
   const [actionError, setActionError] = useState("");
   const projects = useProjects(query);
+  const profiles = useProfiles({ includeArchived: true });
   const projectUsage = useUsage({ groupBy: "project" });
   const duplicate = useDuplicateProject();
   const archive = useSetProjectArchived();
   const remove = useDeleteProject();
+  const profileById = new Map((profiles.data?.items ?? []).map((item) => [item.id, item]));
 
   useEffect(() => {
     setSearchText(query.q ?? "");
@@ -163,10 +167,13 @@ export function ProjectListPage() {
             archiveView={archiveView}
             sort={query.sort}
             order={query.order}
+            profileId={query.profileId}
+            profiles={(profiles.data?.items ?? []).map((item) => ({ id: item.id, name: item.name }))}
             onStatusesChange={setStatuses}
             onArchiveViewChange={setArchiveView}
             onSortChange={(sort) => updateParams({ sort, page: undefined })}
             onOrderToggle={() => updateParams({ order: query.order === "desc" ? "asc" : "desc" })}
+            onProfileChange={(profileId) => updateParams({ profileId, page: undefined })}
           />
         </div>
         {actionError && <p className="request-error action-error" role="alert">{actionError}</p>}
@@ -189,6 +196,8 @@ export function ProjectListPage() {
                   key={project.id}
                   project={project}
                   usage={projectUsage.data?.byGroup?.find((entry) => entry.key === project.id)}
+                  profileName={project.profileId ? profileById.get(project.profileId)?.name : undefined}
+                  profileColor={project.profileId ? profileById.get(project.profileId)?.color : undefined}
                   onEdit={() => setEditing(project)}
                   onDuplicate={() => void duplicateProject(project)}
                   onArchive={() => void archiveProject(project)}

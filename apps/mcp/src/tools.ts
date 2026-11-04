@@ -32,6 +32,7 @@ export function registerVideoAgentTools(
 ): void {
   const briefFields = {
     title: z.string().optional(),
+    profileId: z.string().uuid().optional(),
     platform: z.enum(["youtube", "youtube_shorts", "tiktok", "facebook_reels", "custom"]).optional(),
     targetDurationSec: z.number().int().min(30).max(1800).optional(),
     language: z.string().optional(),
@@ -43,6 +44,7 @@ export function registerVideoAgentTools(
   function briefInput(input: {
     topic: string;
     title?: string;
+    profileId?: string;
     platform?: "youtube" | "youtube_shorts" | "tiktok" | "facebook_reels" | "custom";
     targetDurationSec?: number;
     language?: string;
@@ -51,16 +53,34 @@ export function registerVideoAgentTools(
     audience?: "general" | "kids" | "students" | "professionals";
     aspectRatio?: "16:9" | "9:16" | "1:1";
   }) {
-    const { topic, title, ...fields } = input;
+    const { topic, title, profileId, ...fields } = input;
     const settings = Object.fromEntries(
       Object.entries(fields).filter(([, value]) => value !== undefined),
     );
     return {
       topic,
       ...(title === undefined ? {} : { title }),
+      ...(profileId === undefined ? {} : { profileId }),
       ...(Object.keys(settings).length ? { settings } : {}),
     };
   }
+
+  server.tool("list_profiles", "List Video Agent profiles (Hồ sơ) with account and project counts.", {
+    includeArchived: z.boolean().optional(),
+  }, ({ includeArchived }) => invoke(
+    () => api.listProfiles({ includeArchived }),
+    ({ items }) => ({
+      profiles: items.map(({ id, name, language, color, accountCount, projectCount, archivedAt }) => ({
+        id,
+        name,
+        language,
+        color,
+        accountCount,
+        projectCount,
+        archivedAt,
+      })),
+    }),
+  ));
 
   server.tool("create_project", "Create a Video Agent project with deterministic video-brief recommendations.", {
     topic: z.string().trim().min(1).max(2000),

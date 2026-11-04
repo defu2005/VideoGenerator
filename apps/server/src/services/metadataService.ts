@@ -28,6 +28,7 @@ import type { LlmProviderRegistry, ResolvedLlmRoute } from "../providers/llm/reg
 import { getAppLlmSettings } from "../providers/llm/settings.js";
 import { LlmError } from "../providers/llm/types.js";
 import { metadataPrompt } from "../stages/timeline/metadataPrompt.js";
+import { getProfileDirection } from "./profileService.js";
 import type { RenderService } from "./renderService.js";
 import type { TimelineService } from "./timelineService.js";
 
@@ -137,6 +138,7 @@ export class MetadataService {
           script?.outro ?? "",
         ].join("\n").replace(/\s+/g, " ").trim().slice(0, 1500);
         const guidance = new GuidelineService(this.sqlite).guidanceFor(project, ["metadata"]);
+        const channelDirection = getProfileDirection(this.sqlite, project.profileId);
         const prompt = metadataPrompt({
           project,
           scriptTitle: script?.title ?? project.title,
@@ -144,6 +146,7 @@ export class MetadataService {
           sectionHeadings: (script?.sections ?? []).map((section) => section.heading),
           narrationSummary,
           guidance,
+          channelDirection,
         });
         const cacheKeyExtra = createHash("sha256")
           .update(JSON.stringify({

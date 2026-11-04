@@ -131,6 +131,7 @@ export const ProjectSchema = z.object({
   thumbnailPath: z.string().nullable(),
   durationSec: z.number().nullable(),
   version: z.number().int().positive(),
+  profileId: z.string().uuid().nullable().optional(),
   createdAt: z.string().datetime({ offset: true }),
   updatedAt: z.string().datetime({ offset: true }),
   archivedAt: z.string().datetime({ offset: true }).nullable(),
@@ -142,6 +143,7 @@ export const CreateProjectInputSchema = z.object({
   topic: z.string().trim().min(1).max(2000),
   description: z.string().max(2000).optional(),
   mode: AutonomyModeSchema.optional(),
+  profileId: z.string().uuid().optional(),
   settings: ProjectSettingsInputSchema.optional(),
   ...DirectBriefInputFields,
 }).strict();
@@ -207,6 +209,7 @@ export const ProjectListQuerySchema = z.object({
   status: StatusQuerySchema,
   includeArchived: BooleanQuerySchema.default(false),
   archivedOnly: BooleanQuerySchema.default(false),
+  profileId: z.string().uuid().optional(),
   sort: z.enum(["updatedAt", "createdAt", "title"]).default("updatedAt"),
   order: z.enum(["asc", "desc"]).default("desc"),
   page: PositiveIntegerQuerySchema.default(1),

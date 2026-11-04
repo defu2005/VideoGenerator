@@ -1,4 +1,4 @@
-import type { BudgetFeatures, Project } from "@vg/shared";
+import { appendChannelDirection, type BudgetFeatures, type Project } from "@vg/shared";
 import { appendGuidelineGuidance } from "../../guidelines/promptText.js";
 
 export function mergedStoryPrompt(
@@ -6,6 +6,7 @@ export function mergedStoryPrompt(
   wordsPerMinute: number,
   depth: BudgetFeatures["researchDepth"] = "standard",
   guidance?: string,
+  channelDirection?: string | null,
 ): { system: string; prompt: string } {
   const pace = project.settings.wordsPerMinute ?? wordsPerMinute;
   const factTargets = { light: "6-8", standard: "10-12", deep: "14-16" } as const;
@@ -17,7 +18,7 @@ export function mergedStoryPrompt(
       "Write narration in the requested language. Keep image search terms in English and retain proper nouns.",
       "Return compact JSON only with research and script fields exactly as requested.",
     ].join(" "),
-    prompt: appendGuidelineGuidance([
+    prompt: appendGuidelineGuidance(appendChannelDirection([
       `Topic: ${project.topic}`,
       `Description: ${project.description || "(none)"}`,
       `Language: ${project.settings.language}`,
@@ -28,6 +29,6 @@ export function mergedStoryPrompt(
       `Research: ${factTargets[depth]} keyFacts[{fact,confidence,sourceHint|null}], at most 10 timeline[{date,event}] and 6 cautions[string]; outline 3-8 items [{section,purpose,points[string]}].`,
       "Script: narration within 20% of target; sections[{id,heading,narration,visualQueries:{primary,alternatives[]},visualNotes,musicMood,energy}]. Provide 0-3 visual-query alternatives per section; the server calculates duration. music:{mood,energy,keywords[]}.",
       "Enum values must be these English words exactly: confidence = high|medium|low; energy = low|medium|high. JSON keys stay in English.",
-    ].join("\n"), guidance),
+    ].join("\n"), channelDirection), guidance),
   };
 }

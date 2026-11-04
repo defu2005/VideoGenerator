@@ -98,21 +98,39 @@ export class JobRepository {
   getProject(projectId: string): Project | undefined {
     const row = this.sqlite.prepare("SELECT * FROM projects WHERE id = ?").get(projectId) as ProjectRow | undefined;
     if (!row) return undefined;
+    const raw = row as unknown as {
+      id: string;
+      title: string;
+      description: string;
+      topic: string;
+      mode: string;
+      settings: unknown;
+      status: string;
+      stage: string;
+      thumbnail_path: string | null;
+      duration_sec: number | null;
+      version: number;
+      profile_id: string | null;
+      created_at: string;
+      updated_at: string;
+      archived_at: string | null;
+    };
     return ProjectSchema.parse({
-      id: row.id,
-      title: row.title,
-      description: row.description,
-      topic: row.topic,
-      mode: row.mode,
-      settings: typeof row.settings === "string" ? JSON.parse(row.settings) as unknown : row.settings,
-      status: row.status,
-      stage: row.stage,
-      thumbnailPath: row.thumbnail_path,
-      durationSec: row.duration_sec,
-      version: row.version,
-      createdAt: row.created_at,
-      updatedAt: row.updated_at,
-      archivedAt: row.archived_at,
+      id: raw.id,
+      title: raw.title,
+      description: raw.description,
+      topic: raw.topic,
+      mode: raw.mode,
+      settings: typeof raw.settings === "string" ? JSON.parse(raw.settings) as unknown : raw.settings,
+      status: raw.status,
+      stage: raw.stage,
+      thumbnailPath: raw.thumbnail_path,
+      durationSec: raw.duration_sec,
+      version: raw.version,
+      profileId: raw.profile_id,
+      createdAt: raw.created_at,
+      updatedAt: raw.updated_at,
+      archivedAt: raw.archived_at,
     });
   }
 
