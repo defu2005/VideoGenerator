@@ -3,8 +3,11 @@ import { STOCK_IMAGE_PROVIDERS } from "./visual.js";
 
 const StockProviderSchema = z.enum(STOCK_IMAGE_PROVIDERS);
 
+/** The first image sources. Off by default (the user chose to use only the newer sources); can be turned back on in settings. */
+export const LEGACY_IMAGE_PROVIDERS: readonly (typeof STOCK_IMAGE_PROVIDERS)[number][] = ["wikimedia", "openverse", "pexels"];
+
 export const defaultImageSourcesEnabled = (): Record<(typeof STOCK_IMAGE_PROVIDERS)[number], boolean> =>
-  Object.fromEntries(STOCK_IMAGE_PROVIDERS.map((id) => [id, true])) as Record<
+  Object.fromEntries(STOCK_IMAGE_PROVIDERS.map((id) => [id, !LEGACY_IMAGE_PROVIDERS.includes(id)])) as Record<
     (typeof STOCK_IMAGE_PROVIDERS)[number],
     boolean
   >;

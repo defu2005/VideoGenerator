@@ -32,7 +32,10 @@ describe("image sources settings", () => {
     const pexels = status.sources.find((row) => row.id === "pexels");
     const pixabay = status.sources.find((row) => row.id === "pixabay");
     const nasa = status.sources.find((row) => row.id === "nasa");
-    expect(pexels).toMatchObject({ keyRequired: true, keyConfigured: true, enabled: true });
+    expect(pexels).toMatchObject({ keyRequired: true, keyConfigured: true, enabled: false });
+    expect(status.sources.find((row) => row.id === "wikimedia")?.enabled).toBe(false);
+    expect(status.sources.find((row) => row.id === "openverse")?.enabled).toBe(false);
+    expect(nasa?.enabled).toBe(true);
     expect(pixabay).toMatchObject({ keyRequired: true, keyConfigured: false });
     expect(nasa).toMatchObject({ keyRequired: false, keyConfigured: true });
     expect(JSON.stringify(status)).not.toContain("secret-pexels");
@@ -44,6 +47,10 @@ describe("image sources settings", () => {
       },
     });
     expect(isImageSourceEnabledInSettings(sqlite, "nasa")).toBe(false);
+    expect(isImageSourceEnabledInSettings(sqlite, "wikimedia")).toBe(false);
+    expect(isImageSourceEnabledInSettings(sqlite, "flickr")).toBe(true);
+
+    saveImageSourcesSettings(sqlite, { enabled: { ...status.enabled, wikimedia: true } });
     expect(isImageSourceEnabledInSettings(sqlite, "wikimedia")).toBe(true);
   });
 });
