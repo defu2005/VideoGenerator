@@ -2,7 +2,38 @@
 
 Tài liệu này mô tả cách máy Windows gửi yêu cầu HTTP tới model `llama3.2:1b` đang chạy trên Cursor Cloud Agent VM. Model trả lời trực tiếp qua Ollama. Các câu hỏi sau không đi qua Cursor Agent.
 
-Đo lần cuối trên VM: 11:29 sáng ngày 4 tháng 11 năm 2026 (Asia/Bangkok).
+Kiểm tra dịch vụ lần cuối: 11:58 sáng ngày 4 tháng 11 năm 2026 (Asia/Bangkok). Ollama, proxy và tunnel đều đang chạy. `POST /api/generate` trên URL công khai không token trả 401, có token trả 200. Máy Windows kết nối được cùng URL đó khi tunnel còn sống.
+
+## 0. Lần sau vào cloud, không cần agent
+
+Agent chỉ cần cho lần cài đầu. Các câu hỏi sau gửi thẳng tới Ollama. Khi VM đã mở, tự chạy một lệnh tại gốc repo:
+
+```bash
+bash artifacts/start-services.sh
+```
+
+Lệnh này bật `ollama serve` nếu cổng 11434 tắt, bật lại proxy cổng 11435, tạo tunnel mới và in URL. Token cũ được giữ nếu `.secrets/token` còn. Trên Windows chỉ cần đổi `OLLAMA_BASE_URL` theo URL vừa in, rồi gọi model từ máy local. Không gửi prompt cho Cursor Agent.
+
+Tắt dịch vụ, giữ file model:
+
+```bash
+bash artifacts/stop-services.sh
+```
+
+Máy Windows không bật được VM khi cloud đang tắt. Phải vào VM trước, rồi chạy script. VM ngủ hoặc bị thay thì endpoint tắt cho đến lúc đó.
+
+Nếu máy mới và chưa có `ollama` hoặc `cloudflared`:
+
+```bash
+sudo apt-get update
+sudo apt-get install -y zstd curl ca-certificates
+curl -fsSL https://ollama.com/install.sh | sh
+curl -fsSL -o /tmp/cloudflared https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64
+sudo install -m 755 /tmp/cloudflared /usr/local/bin/cloudflared
+bash artifacts/start-services.sh
+```
+
+Model nên dùng trên VM này vẫn là `llama3.2:1b`. Bản đang nạp chiếm khoảng 2,0 GB RAM. Còn khoảng 2,6 GiB available và không có swap, nên không chuyển sang model 3B hoặc lớn hơn.
 
 ## 1. Sơ đồ
 

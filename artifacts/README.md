@@ -1,6 +1,14 @@
 # Remote Ollama on a Cursor Cloud Agent VM
 
-Tài liệu kết nối đầy đủ, bằng tiếng Việt: [KET-NOI.md](KET-NOI.md). File đó gồm sơ đồ, biến môi trường Windows, Python, PowerShell, curl, hợp đồng `/api/generate` và `/api/chat`, mã lỗi, cách bật lại sau khi VM dừng, và phần dữ liệu nào còn sau khi máy bị thay.
+Tài liệu kết nối đầy đủ, bằng tiếng Việt: [KET-NOI.md](KET-NOI.md). File đó gồm sơ đồ, lệnh tự bật lại không cần agent, cách máy Windows kết nối, biến môi trường, Python, PowerShell, curl, hợp đồng `/api/generate` và `/api/chat`, mã lỗi, và phần dữ liệu nào còn sau khi máy bị thay.
+
+Lần sau, trên VM đã mở, tại gốc repo:
+
+```bash
+bash artifacts/start-services.sh
+```
+
+Rồi trên Windows đặt `OLLAMA_BASE_URL` bằng URL script vừa in và `OLLAMA_TOKEN` từ `.secrets/inference.env`.
 
 This directory is a small client and the scripts that keep a CPU copy of `llama3.2:1b` behind an authenticated HTTPS tunnel. Inference runs in Ollama on the VM. Later prompts do not go through the Cursor Agent.
 
