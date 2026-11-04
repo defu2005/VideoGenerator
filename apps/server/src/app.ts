@@ -62,6 +62,14 @@ import { AutoReportService } from "./services/autoReportService.js";
 import { registerAutoReportRoutes } from "./api/autoReport.js";
 import { createProfileService } from "./services/profileService.js";
 import { registerProfileRoutes } from "./api/profiles.js";
+import { TokenVault } from "./publishing/tokenVault.js";
+import { createPublisherRegistry } from "./publishing/registry.js";
+import { OAuthStateStore } from "./publishing/oauthState.js";
+import { PublishService } from "./publishing/publishService.js";
+import { PublishTicker } from "./publishing/ticker.js";
+import { PublishExecutor } from "./stages/publish/publishExecutor.js";
+import { registerOAuthRoutes } from "./api/oauth.js";
+import { registerPublicationRoutes } from "./api/publications.js";
 
 export function buildApp({ config }: { config: AppConfig }) {
   const server = Fastify({
@@ -154,6 +162,20 @@ export function buildApp({ config }: { config: AppConfig }) {
     guidelineService,
     metadataService,
   );
+  const tokenVault = new TokenVault(database.sqlite, config.DATA_DIR, config.TOKEN_ENCRYPTION_KEY);
+  const { registry: publisherRegistry, mock: mockPublisher } = createPublisherRegistry({
+    enableMock: config.LLM_ENABLE_MOCK,
+  });
+  const oauthState = new OAuthStateStore();
+  const publishService = new PublishService(
+    database.sqlite,
+    config,
+    tokenVault,
+    publisherRegistry,
+    jobRepository,
+    renderService,
+  );
+  const publishTicker = new PublishTicker(publishService, server.log);
   const worker = new JobWorker(
     jobRepository,
     orchestrator,
@@ -169,16 +191,28 @@ export function buildApp({ config }: { config: AppConfig }) {
         MUSIC_SEARCH: new MusicSearchExecutor(musicService, database.sqlite, llmProviders, config, autoReportService),
         TIMELINE: new TimelineExecutor(timelineService, guidelineService, metadataService),
         RENDER: new RenderExecutor(renderService),
+        PUBLISH: new PublishExecutor(publishService),
       },
     ),
     config,
     server.log,
   );
+  server.decorate("vgPublish", {
+    mock: mockPublisher,
+    service: publishService,
+    vault: tokenVault,
+    ticker: publishTicker,
+    oauthState,
+    worker,
+    registry: publisherRegistry,
+  });
 
   server.register(cors, { origin: config.CORS_ORIGIN });
   registerHealthRoutes(server, database.sqlite);
   registerProjectRoutes(server, projectService);
   registerProfileRoutes(server, profileService);
+  registerOAuthRoutes(server, { publish: publishService, registry: publisherRegistry, oauthState });
+  registerPublicationRoutes(server, { publish: publishService, vault: tokenVault });
   registerRecommendationRoutes(server);
   registerBudgetRoutes(server, projectService, jobRepository, config, llmProviders);
   registerDashboardRoutes(server, projectService);
@@ -200,8 +234,12 @@ export function buildApp({ config }: { config: AppConfig }) {
   registerAutoReportRoutes(server, autoReportService, projectService);
   registerReviewRoutes(server, reviewService, projectService);
 
-  server.addHook("onReady", async () => worker.start());
+  server.addHook("onReady", async () => {
+    await worker.start();
+    if (config.WORKER_ENABLED) publishTicker.start();
+  });
   server.addHook("onClose", async () => {
+    await publishTicker.stop();
     await worker.stop();
     database.sqlite.close();
   });

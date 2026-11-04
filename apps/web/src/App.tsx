@@ -11,6 +11,7 @@ import { ImageSourcesSettingsPage } from "./features/settings/ImageSourcesSettin
 import { GuidelineSettingsPage } from "./features/guidelines/GuidelineSettingsPage";
 import { ProfileDetailPage } from "./features/profiles/ProfileDetailPage";
 import { ProfileListPage } from "./features/profiles/ProfileListPage";
+import { PublishCalendarPage } from "./features/publish/PublishCalendarPage";
 import { UsagePage } from "./features/usage/UsagePage";
 import { queryRetryDelay, shouldRetryQuery } from "./services/queryRetry";
 
@@ -35,6 +36,7 @@ export function App() {
             <Route path="profiles" element={<ProfileListPage />} />
             <Route path="profiles/:id" element={<Navigate replace to="direction" />} />
             <Route path="profiles/:id/:tab" element={<ProfileDetailPage />} />
+            <Route path="publish/calendar" element={<PublishCalendarPage />} />
             <Route path="settings/ai" element={<AiSettingsPage />} />
             <Route path="settings/render" element={<RenderSettingsPage />} />
             <Route path="settings/image-sources" element={<ImageSourcesSettingsPage />} />

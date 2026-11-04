@@ -16,6 +16,7 @@ import {
 import { getProjectTimeline } from "../../services/timelineApi";
 import { AutoReportPanel } from "./AutoReportPanel";
 import { MetadataPanel } from "./MetadataPanel";
+import { PublishPanel } from "./PublishPanel";
 import { RenderHistory, renderHistoryKeys } from "./RenderHistory";
 
 const renderKeys = { project: (projectId: string) => ["render", projectId] as const };
@@ -219,6 +220,7 @@ export function RenderPanel({ project }: { project: Project }) {
             onSelect={setSelectedId}
           />
           <MetadataPanel project={project} />
+          <PublishPanel project={project} />
           <AutoReportPanel project={project} />
           <section className={`panel render-report${data.report.ok ? "" : " has-errors"}`} aria-label="Kiểm tra video">
             <h3>
@@ -267,6 +269,7 @@ export function RenderPanel({ project }: { project: Project }) {
       {!data && (
         <>
           <MetadataPanel project={project} />
+          <PublishPanel project={project} />
           <AutoReportPanel project={project} />
         </>
       )}

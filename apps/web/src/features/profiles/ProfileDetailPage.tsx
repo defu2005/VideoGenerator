@@ -3,15 +3,18 @@ import { Link, Navigate, useParams } from "react-router-dom";
 import {
   ProfileDefaultBriefSchema,
   recommendBrief,
+  type AccountConnectionDetail,
   type BriefSettings,
   type PlatformAccount,
   type PlatformId,
   type ProfileDetail,
 } from "@vg/shared";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ApiRequestError } from "../../services/apiClient";
 import { ErrorState } from "../../components/ErrorState";
 import { Spinner } from "../../components/Spinner";
 import {
+  profileKeys,
   useAddPlatformAccount,
   useDeletePlatformAccount,
   useProfile,
@@ -20,9 +23,17 @@ import {
   useUpdateProfile,
 } from "../../hooks/useProfiles";
 import { useProjects } from "../../hooks/useProjects";
+import {
+  accountConnectionKeys,
+  checkAccountConnection,
+  deleteAppCredentials,
+  disconnectAccount,
+  getAccountConnection,
+  oauthStartUrl,
+  saveAppCredentials,
+} from "../../services/publishApi";
 import { BriefFields } from "../projects/BriefFields";
 import {
-  DEFAULT_GUIDELINE_DRAFT,
   GuidelineFieldset,
   guidelineDraftFromSettings,
   guidelineSettingsFromDraft,
@@ -50,6 +61,29 @@ const CONNECTION_LABEL: Record<string, string> = {
   EXPIRED: "Hết hạn",
   ERROR: "Lỗi",
 };
+
+const EXPIRY_WARN_MS = 7 * 24 * 60 * 60 * 1000;
+
+function appCredentialLabels(platform: PlatformId): { id: string; secret: string } {
+  if (platform === "youtube") return { id: "Client ID", secret: "Client Secret" };
+  if (platform === "tiktok") return { id: "Client Key", secret: "Client Secret" };
+  return { id: "App ID", secret: "App Secret" };
+}
+
+function formatDateTime(value: string | null): string | null {
+  if (!value) return null;
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return date.toLocaleString("vi-VN");
+}
+
+function isExpiringSoon(tokenExpiresAt: string | null): boolean {
+  if (!tokenExpiresAt) return false;
+  const expires = new Date(tokenExpiresAt).getTime();
+  if (Number.isNaN(expires)) return false;
+  const remaining = expires - Date.now();
+  return remaining > 0 && remaining < EXPIRY_WARN_MS;
+}
 
 function briefFromProfile(profile: ProfileDetail): BriefSettings {
   const { mode: _mode, autoRender: _auto, ...rest } = profile.defaultBrief;
@@ -245,10 +279,292 @@ function BriefTab({ profile }: { profile: ProfileDetail }) {
   );
 }
 
+function AccountCard({
+  profileId,
+  account,
+  onEdit,
+  onDeleted,
+  onError,
+}: {
+  profileId: string;
+  account: PlatformAccount;
+  onEdit: (account: PlatformAccount) => void;
+  onDeleted: () => void;
+  onError: (message: string) => void;
+}) {
+  const queryClient = useQueryClient();
+  const remove = useDeletePlatformAccount();
+  const [clientId, setClientId] = useState("");
+  const [clientSecret, setClientSecret] = useState("");
+  const [credMessage, setCredMessage] = useState("");
+  const [checkMessage, setCheckMessage] = useState("");
+  const [busy, setBusy] = useState<"disconnect" | "check" | "saveCreds" | "deleteCreds" | null>(null);
+
+  const connectionQuery = useQuery({
+    queryKey: accountConnectionKeys.detail(profileId, account.id),
+    queryFn: () => getAccountConnection(profileId, account.id),
+  });
+
+  const detail: AccountConnectionDetail | undefined = connectionQuery.data;
+  const connection = detail?.connection ?? account.connection;
+  const displayName = detail?.displayName ?? account.displayName;
+  const handle = detail?.handle ?? account.handle;
+  const externalId = detail?.externalId ?? account.externalId;
+  const redirectUri = detail?.redirectUri
+    ?? oauthStartUrl(account.platform, account.id).replace(/\/start\?.*/, "/callback");
+  const labels = appCredentialLabels(account.platform);
+  const showAppCreds = account.platform !== "mock";
+  const canConnect = detail?.canConnect ?? false;
+  const connectBlockedReason = detail?.connectBlockedReason ?? null;
+  const reconnect = connection === "EXPIRED" || connection === "ERROR";
+  const connected = connection === "CONNECTED";
+  const expiringSoon = isExpiringSoon(detail?.tokenExpiresAt ?? null);
+
+  async function invalidateConnection() {
+    await queryClient.invalidateQueries({ queryKey: accountConnectionKeys.detail(profileId, account.id) });
+    await queryClient.invalidateQueries({ queryKey: profileKeys.detail(profileId) });
+  }
+
+  function openConnect() {
+    if (!canConnect) return;
+    window.open(oauthStartUrl(account.platform, account.id), "_blank", "noopener,noreferrer");
+    window.setTimeout(() => {
+      void invalidateConnection();
+    }, 1500);
+  }
+
+  async function onDisconnect() {
+    if (!window.confirm("Ngắt kết nối tài khoản này? Token đã lưu sẽ bị xóa.")) return;
+    setBusy("disconnect");
+    onError("");
+    try {
+      await disconnectAccount(profileId, account.id);
+      await invalidateConnection();
+    } catch (err) {
+      onError(err instanceof Error ? err.message : "Ngắt kết nối thất bại");
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function onCheck() {
+    setBusy("check");
+    setCheckMessage("");
+    onError("");
+    try {
+      const result = await checkAccountConnection(profileId, account.id);
+      queryClient.setQueryData(accountConnectionKeys.detail(profileId, account.id), result);
+      await queryClient.invalidateQueries({ queryKey: profileKeys.detail(profileId) });
+      setCheckMessage(
+        result.connection === "CONNECTED"
+          ? "Kết nối ổn."
+          : (result.connectionError ?? CONNECTION_LABEL[result.connection] ?? result.connection),
+      );
+    } catch (err) {
+      onError(err instanceof Error ? err.message : "Kiểm tra thất bại");
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function onSaveCredentials(event: FormEvent) {
+    event.preventDefault();
+    setBusy("saveCreds");
+    setCredMessage("");
+    onError("");
+    try {
+      const saved = await saveAppCredentials(profileId, account.id, {
+        clientId: clientId.trim(),
+        clientSecret: clientSecret.trim(),
+      });
+      setClientId("");
+      setClientSecret("");
+      setCredMessage(`Đã lưu (…${saved.idHint}).`);
+      await invalidateConnection();
+    } catch (err) {
+      onError(err instanceof Error ? err.message : "Lưu thông tin ứng dụng thất bại");
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function onDeleteCredentials() {
+    if (!window.confirm("Xóa thông tin ứng dụng đã lưu cho tài khoản này?")) return;
+    setBusy("deleteCreds");
+    setCredMessage("");
+    onError("");
+    try {
+      await deleteAppCredentials(profileId, account.id);
+      setCredMessage("Đã xóa thông tin ứng dụng.");
+      await invalidateConnection();
+    } catch (err) {
+      onError(err instanceof Error ? err.message : "Xóa thông tin ứng dụng thất bại");
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  return (
+    <li className="account-row" style={{ flexDirection: "column", alignItems: "stretch" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+        <div>
+          <strong>{displayName}</strong>
+          <div className="profile-card-meta">
+            <span>{PLATFORM_OPTIONS.find((item) => item.value === account.platform)?.label ?? account.platform}</span>
+            <span>{account.format === "vertical" ? "9:16" : "16:9"}</span>
+            {handle && <span>{handle}</span>}
+            {externalId && <span>ID: {externalId}</span>}
+            <span className={`connection-badge${connection === "EXPIRED" || connection === "ERROR" ? " is-error" : ""}`}>
+              {CONNECTION_LABEL[connection] ?? connection}
+            </span>
+          </div>
+          {(connection === "EXPIRED" || connection === "ERROR") && (detail?.connectionError || account.connectionError) && (
+            <p className="request-error" role="alert" style={{ margin: "0.35rem 0 0" }}>
+              {detail?.connectionError ?? account.connectionError}
+            </p>
+          )}
+          {detail && (
+            <div className="page-subtitle" style={{ margin: "0.45rem 0 0", display: "grid", gap: 4 }}>
+              {detail.tokenExpiresAt && (
+                <span>
+                  Token hết hạn: {formatDateTime(detail.tokenExpiresAt)}
+                  {expiringSoon && (
+                    <span style={{ color: "#b42318", fontWeight: 700, marginLeft: 8 }}>Sắp hết hạn</span>
+                  )}
+                </span>
+              )}
+              {detail.scopes.length > 0 && (
+                <span style={{ display: "flex", flexWrap: "wrap", gap: 4, alignItems: "center" }}>
+                  Quyền:
+                  {detail.scopes.map((scope) => (
+                    <span key={scope} className="connection-badge">{scope}</span>
+                  ))}
+                </span>
+              )}
+              {detail.lastCheckedAt && (
+                <span>Lần kiểm tra: {formatDateTime(detail.lastCheckedAt)}</span>
+              )}
+            </div>
+          )}
+          <p className="page-subtitle" style={{ margin: "0.35rem 0 0" }}>
+            Redirect URI:{" "}
+            <code>{redirectUri}</code>
+            {" "}
+            <button
+              className="button button-secondary"
+              type="button"
+              onClick={() => void navigator.clipboard.writeText(redirectUri)}
+            >
+              Sao chép
+            </button>
+          </p>
+        </div>
+        <div className="account-row-actions">
+          {connected ? (
+            <>
+              <button
+                className="button button-secondary"
+                type="button"
+                disabled={busy === "check"}
+                onClick={() => void onCheck()}
+              >
+                {busy === "check" ? "Đang kiểm tra…" : "Kiểm tra kết nối"}
+              </button>
+              <button
+                className="button button-secondary"
+                type="button"
+                disabled={busy === "disconnect"}
+                onClick={() => void onDisconnect()}
+              >
+                Ngắt kết nối
+              </button>
+            </>
+          ) : (
+            <div style={{ display: "grid", gap: 4 }}>
+              <button
+                className="button button-secondary"
+                type="button"
+                disabled={!canConnect || connectionQuery.isPending}
+                title={connectBlockedReason ?? undefined}
+                onClick={() => openConnect()}
+              >
+                {reconnect ? "Kết nối lại" : "Kết nối"}
+              </button>
+              {!canConnect && connectBlockedReason && (
+                <small className="field-hint" style={{ maxWidth: 220 }}>{connectBlockedReason}</small>
+              )}
+            </div>
+          )}
+          <button className="button button-secondary" type="button" onClick={() => onEdit(account)}>Sửa</button>
+          <button
+            className="button button-secondary"
+            type="button"
+            disabled={remove.isPending}
+            onClick={() => void remove.mutateAsync({ profileId, accountId: account.id }).then(onDeleted).catch((err) => {
+              onError(err instanceof Error ? err.message : "Xóa thất bại");
+            })}
+          >
+            Xóa
+          </button>
+        </div>
+      </div>
+      {checkMessage && <p className="field-hint" style={{ margin: "0.5rem 0 0" }}>{checkMessage}</p>}
+      {showAppCreds && (
+        <section style={{ marginTop: 12, borderTop: "1px solid #eef0f4", paddingTop: 12 }}>
+          <h3 style={{ margin: "0 0 0.35rem", fontSize: 14 }}>Thông tin ứng dụng</h3>
+          <p className="page-subtitle" style={{ margin: "0 0 0.75rem" }}>
+            {detail?.appCredentials.configured
+              ? `Đã cấu hình (…${detail.appCredentials.idHint ?? ""})`
+              : "Chưa cấu hình (dùng .env nếu có)"}
+          </p>
+          <form className="form-panel" style={{ padding: 0, boxShadow: "none", border: "none" }} onSubmit={(event) => void onSaveCredentials(event)}>
+            <div className="form-row">
+              <label className="form-field">
+                <span>{labels.id}</span>
+                <input
+                  value={clientId}
+                  autoComplete="off"
+                  required
+                  onChange={(event) => setClientId(event.target.value)}
+                />
+              </label>
+              <label className="form-field">
+                <span>{labels.secret}</span>
+                <input
+                  type="password"
+                  value={clientSecret}
+                  autoComplete="off"
+                  required
+                  onChange={(event) => setClientSecret(event.target.value)}
+                />
+              </label>
+            </div>
+            <div className="dialog-actions" style={{ justifyContent: "flex-start" }}>
+              <button className="button button-primary" type="submit" disabled={busy === "saveCreds"}>
+                {busy === "saveCreds" ? "Đang lưu…" : "Lưu thông tin ứng dụng"}
+              </button>
+              {detail?.appCredentials.configured && (
+                <button
+                  className="button button-secondary"
+                  type="button"
+                  disabled={busy === "deleteCreds"}
+                  onClick={() => void onDeleteCredentials()}
+                >
+                  Xóa thông tin ứng dụng
+                </button>
+              )}
+            </div>
+            {credMessage && <p className="field-hint">{credMessage}</p>}
+          </form>
+        </section>
+      )}
+    </li>
+  );
+}
+
 function AccountsTab({ profile }: { profile: ProfileDetail }) {
   const add = useAddPlatformAccount();
   const update = useUpdatePlatformAccount();
-  const remove = useDeletePlatformAccount();
   const [platform, setPlatform] = useState<PlatformId>("youtube");
   const [displayName, setDisplayName] = useState("");
   const [handle, setHandle] = useState("");
@@ -310,36 +626,20 @@ function AccountsTab({ profile }: { profile: ProfileDetail }) {
     <div className="page-stack">
       <section className="panel">
         <h2 style={{ marginTop: 0 }}>Tài khoản nền tảng</h2>
+        {error && <p className="request-error" role="alert">{error}</p>}
         {profile.accounts.length === 0 ? (
-          <p className="page-subtitle">Chưa có tài khoản. Thêm YouTube, TikTok… (kết nối OAuth ở task sau).</p>
+          <p className="page-subtitle">Chưa có tài khoản. Thêm YouTube, TikTok… rồi nhấn Kết nối.</p>
         ) : (
           <ul className="account-list">
             {profile.accounts.map((account) => (
-              <li key={account.id} className="account-row">
-                <div>
-                  <strong>{account.displayName}</strong>
-                  <div className="profile-card-meta">
-                    <span>{PLATFORM_OPTIONS.find((item) => item.value === account.platform)?.label ?? account.platform}</span>
-                    <span>{account.format === "vertical" ? "9:16" : "16:9"}</span>
-                    {account.handle && <span>{account.handle}</span>}
-                    <span className="connection-badge">{CONNECTION_LABEL[account.connection] ?? account.connection}</span>
-                  </div>
-                </div>
-                <div className="account-row-actions">
-                  <button className="button button-secondary" type="button" disabled title="Sẽ có ở TASK-024">Kết nối</button>
-                  <button className="button button-secondary" type="button" onClick={() => startEdit(account)}>Sửa</button>
-                  <button
-                    className="button button-secondary"
-                    type="button"
-                    disabled={remove.isPending}
-                    onClick={() => void remove.mutateAsync({ profileId: profile.id, accountId: account.id }).catch((err) => {
-                      setError(err instanceof Error ? err.message : "Xóa thất bại");
-                    })}
-                  >
-                    Xóa
-                  </button>
-                </div>
-              </li>
+              <AccountCard
+                key={account.id}
+                profileId={profile.id}
+                account={account}
+                onEdit={startEdit}
+                onDeleted={() => setError("")}
+                onError={setError}
+              />
             ))}
           </ul>
         )}

@@ -38,10 +38,12 @@ export const platformAccounts = sqliteTable("platform_accounts", {
   platform: text("platform").$type<PlatformId>().notNull(),
   displayName: text("display_name").notNull(),
   handle: text("handle"),
+  externalId: text("external_id"),
   format: text("format").$type<AccountFormat>().notNull(),
   enabled: integer("enabled", { mode: "boolean" }).notNull().default(true),
   connection: text("connection").$type<AccountConnection>().notNull().default("NOT_CONNECTED"),
   connectionError: text("connection_error"),
+  lastCheckedAt: text("last_checked_at"),
   publishSettings: text("publish_settings", { mode: "json" }).$type<PublishSettings>().notNull(),
   createdAt: text("created_at").notNull(),
   updatedAt: text("updated_at").notNull(),
@@ -51,6 +53,70 @@ export const platformAccounts = sqliteTable("platform_accounts", {
 ]);
 
 export type PlatformAccountRow = typeof platformAccounts.$inferSelect;
+
+/** OAuth tokens — only TokenVault reads/writes this table. */
+export const platformCredentials = sqliteTable("platform_credentials", {
+  accountId: text("account_id").primaryKey().references(() => platformAccounts.id, { onDelete: "cascade" }),
+  ciphertext: text("ciphertext").notNull(),
+  iv: text("iv").notNull(),
+  authTag: text("auth_tag").notNull(),
+  scopes: text("scopes", { mode: "json" }).$type<string[]>().notNull().default([]),
+  expiresAt: text("expires_at"),
+  updatedAt: text("updated_at").notNull(),
+});
+
+export type PlatformCredentialRow = typeof platformCredentials.$inferSelect;
+
+/**
+ * Developer-app credentials (client id/secret) encrypted in the vault.
+ * Either account_id (per channel) or profile_id+platform (shared by profile accounts).
+ */
+export const platformAppCredentials = sqliteTable("platform_app_credentials", {
+  id: text("id").primaryKey(),
+  accountId: text("account_id").references(() => platformAccounts.id, { onDelete: "cascade" }),
+  profileId: text("profile_id").references(() => profiles.id, { onDelete: "cascade" }),
+  platform: text("platform").$type<PlatformId>().notNull(),
+  ciphertext: text("ciphertext").notNull(),
+  iv: text("iv").notNull(),
+  authTag: text("auth_tag").notNull(),
+  /** Last 4 of public client/app id for UI (never the secret). */
+  idHint: text("id_hint"),
+  updatedAt: text("updated_at").notNull(),
+}, (table) => [
+  uniqueIndex("platform_app_credentials_account_uq").on(table.accountId),
+  index("platform_app_credentials_profile_platform_idx").on(table.profileId, table.platform),
+]);
+
+export type PlatformAppCredentialRow = typeof platformAppCredentials.$inferSelect;
+
+export const publications = sqliteTable("publications", {
+  id: text("id").primaryKey(),
+  projectId: text("project_id").notNull().references(() => projects.id, { onDelete: "cascade" }),
+  renderId: text("render_id").notNull().references(() => renders.id, { onDelete: "cascade" }),
+  accountId: text("account_id").notNull().references(() => platformAccounts.id, { onDelete: "cascade" }),
+  status: text("status", {
+    enum: ["QUEUED", "SCHEDULED", "UPLOADING", "PUBLISHED", "FAILED", "CANCELLED"],
+  }).notNull(),
+  visibilityRequested: text("visibility_requested").notNull(),
+  visibilityUsed: text("visibility_used").notNull(),
+  guardrailReason: text("guardrail_reason"),
+  scheduledFor: text("scheduled_for"),
+  externalId: text("external_id"),
+  externalUrl: text("external_url"),
+  attempts: integer("attempts").notNull().default(0),
+  lastError: text("last_error"),
+  progress: integer("progress").notNull().default(0),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+  publishedAt: text("published_at"),
+}, (table) => [
+  index("publications_project_idx").on(table.projectId),
+  index("publications_account_idx").on(table.accountId),
+  index("publications_status_scheduled_idx").on(table.status, table.scheduledFor),
+  index("publications_render_account_idx").on(table.renderId, table.accountId),
+]);
+
+export type PublicationRow = typeof publications.$inferSelect;
 
 export const projects = sqliteTable("projects", {
   id: text("id").primaryKey(),

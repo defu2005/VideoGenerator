@@ -16,5 +16,6 @@ export function createExecutorRegistry(
     if (GATES.includes(stage)) continue;
     registry.set(stage, overrides[stage] ?? new FakeExecutor(stage, options.delayMs, options.failures?.[stage]));
   }
+  if (overrides.PUBLISH) registry.set("PUBLISH", overrides.PUBLISH);
   return registry;
 }

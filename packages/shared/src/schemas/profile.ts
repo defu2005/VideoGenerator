@@ -4,8 +4,11 @@ import { GuidelineSettingsInputSchema, GuidelineSettingsSchema } from "../guidel
 import { LlmSettingsInputSchema, LlmSettingsSchema } from "./llm.js";
 import { VideoBriefSettingsInputSchema, VideoBriefSettingsSchema } from "./project.js";
 
-export const PlatformIdSchema = z.enum(["youtube", "tiktok", "facebook_reels", "instagram_reels"]);
+export const PlatformIdSchema = z.enum(["youtube", "tiktok", "facebook_reels", "instagram_reels", "mock"]);
 export type PlatformId = z.infer<typeof PlatformIdSchema>;
+
+/** Platforms shown in the "add account" UI (excludes test-only mock). */
+export const USER_FACING_PLATFORMS = ["youtube", "tiktok", "facebook_reels", "instagram_reels"] as const satisfies readonly PlatformId[];
 
 export const AccountFormatSchema = z.enum(["landscape", "vertical"]);
 export type AccountFormat = z.infer<typeof AccountFormatSchema>;
@@ -14,6 +17,7 @@ export const AccountConnectionSchema = z.enum(["NOT_CONNECTED", "CONNECTED", "EX
 export type AccountConnection = z.infer<typeof AccountConnectionSchema>;
 
 export const PublishVisibilitySchema = z.enum(["public", "unlisted", "private"]);
+export type PublishVisibility = z.infer<typeof PublishVisibilitySchema>;
 
 /** Loose publish settings; platform-specific keys may appear. */
 export const PublishSettingsSchema = z.object({
@@ -34,7 +38,7 @@ export const PublishSettingsInputSchema = z.object({
 }).passthrough();
 
 export function defaultFormatForPlatform(platform: PlatformId): AccountFormat {
-  return platform === "youtube" ? "landscape" : "vertical";
+  return platform === "youtube" || platform === "mock" ? "landscape" : "vertical";
 }
 
 export function resolveAccountFormat(platform: PlatformId, format?: AccountFormat | null): AccountFormat {
@@ -76,10 +80,12 @@ export const PlatformAccountSchema = z.object({
   platform: PlatformIdSchema,
   displayName: z.string().min(1).max(200),
   handle: z.string().max(200).nullable(),
+  externalId: z.string().max(200).nullable().optional(),
   format: AccountFormatSchema,
   enabled: z.boolean(),
   connection: AccountConnectionSchema,
   connectionError: z.string().nullable(),
+  lastCheckedAt: z.string().datetime({ offset: true }).nullable().optional(),
   publishSettings: PublishSettingsSchema,
   createdAt: z.string().datetime({ offset: true }),
   updatedAt: z.string().datetime({ offset: true }),

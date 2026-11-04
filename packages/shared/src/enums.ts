@@ -26,9 +26,15 @@ export const PIPELINE_STAGES = [
   "FINAL_APPROVAL",
   "RENDER",
   "DONE",
+  /** Side job: not in STAGE_ORDER; publish worker only. */
+  "PUBLISH",
 ] as const;
 export const PipelineStageSchema = z.enum(PIPELINE_STAGES);
 export type PipelineStage = z.infer<typeof PipelineStageSchema>;
+
+export function isPublishStage(stage: PipelineStage): boolean {
+  return stage === "PUBLISH";
+}
 
 export const AUTONOMY_MODES = ["AUTO", "ASSISTED", "MANUAL"] as const;
 export const AutonomyModeSchema = z.enum(AUTONOMY_MODES);

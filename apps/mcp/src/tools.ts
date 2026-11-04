@@ -258,6 +258,26 @@ export function registerVideoAgentTools(
   server.tool("list_renders", "List render versions for a project (newest first), including deleted ones.", projectIdShape, ({ projectId }) =>
     invoke(() => api.listRenders(projectId)));
 
+  server.tool("publish_project", "Queue publish jobs for selected platform accounts (optional schedule).", {
+    ...projectIdShape,
+    accountIds: z.array(z.string().uuid()).min(1),
+    scheduledFor: z.string().datetime({ offset: true }).optional(),
+    visibility: z.enum(["public", "unlisted", "private"]).optional(),
+    force: z.boolean().optional(),
+  }, ({ projectId, accountIds, scheduledFor, visibility, force }) => invoke(
+    () => api.publishProject(projectId, {
+      accountIds,
+      ...(scheduledFor === undefined ? {} : { scheduledFor }),
+      ...(visibility === undefined ? {} : { visibility }),
+      ...(force === undefined ? {} : { force }),
+    }),
+  ));
+
+  server.tool("list_publications", "List publications across projects, optionally filtered by status or profile.", {
+    status: z.enum(["QUEUED", "SCHEDULED", "UPLOADING", "PUBLISHED", "FAILED", "CANCELLED"]).optional(),
+    profileId: z.string().uuid().optional(),
+  }, ({ status, profileId }) => invoke(() => api.listPublications({ status, profileId })));
+
   server.tool("get_render_export_url", "Return the local HTTP URL to download a render export zip (does not stream the zip).", {
     ...projectIdShape,
     renderId: z.string().uuid(),

@@ -161,6 +161,15 @@ const ConfigSchema = z.object({
   MUSIC_PROVIDERS: z.string().default("openverse,local"),
   MUSIC_LIBRARY_DIR: z.string().optional(),
   MUSIC_SEARCH_TIMEOUT_MS: z.coerce.number().int().positive().default(30_000),
+  /** Base64-encoded 32-byte AES key for the token vault. If unset, a key file is created under DATA_DIR/secrets/. */
+  TOKEN_ENCRYPTION_KEY: z.string().optional(),
+  /** OAuth app credentials — fallback when the account vault has none (real publishers in later tasks). */
+  YOUTUBE_CLIENT_ID: z.string().optional(),
+  YOUTUBE_CLIENT_SECRET: z.string().optional(),
+  TIKTOK_CLIENT_KEY: z.string().optional(),
+  TIKTOK_CLIENT_SECRET: z.string().optional(),
+  META_APP_ID: z.string().optional(),
+  META_APP_SECRET: z.string().optional(),
 }).superRefine((values, context) => {
   if (Boolean(values.OPENVERSE_CLIENT_ID) !== Boolean(values.OPENVERSE_CLIENT_SECRET)) {
     context.addIssue({
@@ -273,6 +282,13 @@ export type AppConfig = {
   MUSIC_PROVIDERS: string;
   MUSIC_LIBRARY_DIR: string;
   MUSIC_SEARCH_TIMEOUT_MS: number;
+  TOKEN_ENCRYPTION_KEY?: string;
+  YOUTUBE_CLIENT_ID?: string;
+  YOUTUBE_CLIENT_SECRET?: string;
+  TIKTOK_CLIENT_KEY?: string;
+  TIKTOK_CLIENT_SECRET?: string;
+  META_APP_ID?: string;
+  META_APP_SECRET?: string;
 };
 
 const providerLimitPrefixes: Partial<Record<LlmProviderId, string>> = {

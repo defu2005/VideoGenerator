@@ -162,6 +162,13 @@
       "when": 1793805569830,
       "tag": "0022_nice_spencer_smythe",
       "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "6",
+      "when": 1793807302445,
+      "tag": "0023_late_wild_pack",
+      "breakpoints": true
     }
   ]
 }

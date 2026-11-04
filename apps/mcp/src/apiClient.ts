@@ -215,6 +215,24 @@ export class VideoAgentApiClient {
     });
   }
 
+  publishProject(
+    projectId: string,
+    input: { accountIds: string[]; scheduledFor?: string; visibility?: string; force?: boolean },
+  ): Promise<{ items: unknown[] }> {
+    return this.request(`/api/projects/${encodeURIComponent(projectId)}/publications`, {
+      method: "POST",
+      body: JSON.stringify(input),
+    });
+  }
+
+  listPublications(query: { status?: string; profileId?: string } = {}): Promise<{ items: unknown[] }> {
+    const params = new URLSearchParams();
+    if (query.status) params.set("status", query.status);
+    if (query.profileId) params.set("profileId", query.profileId);
+    const qs = params.toString();
+    return this.request(`/api/publications${qs ? `?${qs}` : ""}`);
+  }
+
   private async request<T>(path: string, init?: RequestInit): Promise<T> {
     let response: Response;
     try {
