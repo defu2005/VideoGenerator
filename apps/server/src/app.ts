@@ -49,6 +49,8 @@ import { RenderExecutor } from "./stages/render/renderExecutor.js";
 import { registerRenderRoutes } from "./api/render.js";
 import { MetadataService } from "./services/metadataService.js";
 import { registerMetadataRoutes } from "./api/metadata.js";
+import { ReviewService } from "./review/service.js";
+import { registerReviewRoutes } from "./api/review.js";
 import { AudioStore, MAX_AUDIO_BYTES } from "./services/audioStore.js";
 import { createMusicProviders } from "./providers/music/registry.js";
 import { probeDurationSec } from "./media/ffmpeg.js";
@@ -114,6 +116,18 @@ export function buildApp({ config }: { config: AppConfig }) {
   const ttsProviders = new TtsProviderRegistry(config);
   const scriptService = new ScriptService(database.sqlite, jobRepository, orchestrator, config);
   const sceneService = new SceneService(database.sqlite, jobRepository);
+  const reviewService = new ReviewService(
+    database.sqlite,
+    jobRepository,
+    config,
+    llmProviders,
+    sceneService,
+    visualService,
+    musicService,
+    timelineService,
+    guidelineService,
+    metadataService,
+  );
   const worker = new JobWorker(
     jobRepository,
     orchestrator,
@@ -154,6 +168,7 @@ export function buildApp({ config }: { config: AppConfig }) {
   registerTimelineRoutes(server, timelineService, projectService);
   registerRenderRoutes(server, renderService, projectService);
   registerMetadataRoutes(server, metadataService, projectService);
+  registerReviewRoutes(server, reviewService, projectService);
 
   server.addHook("onReady", async () => worker.start());
   server.addHook("onClose", async () => {

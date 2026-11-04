@@ -72,6 +72,42 @@ export class MockLlmProvider implements LlmProvider {
         thumbnailText: ["Key facts", "Still open"],
       }, req.model);
     }
+    if (req.schemaName === "ReviewAssistant") {
+      const context = payload.brief || payload.scenes
+        ? payload
+        : parsePromptObject(prompt.includes("## Context") ? prompt.slice(prompt.indexOf("{")) : prompt);
+      const scenes = Array.isArray(context.scenes)
+        ? context.scenes as Array<{ id?: string }>
+        : [];
+      const sceneIds = scenes.map((scene) => scene.id).filter((id): id is string => typeof id === "string");
+      const first = sceneIds[0];
+      const proposals: Array<Record<string, unknown>> = [
+        { type: "NOTE", text: `Tighten the opening for ${topic}.` },
+        { type: "MUSIC_MIX", volume: 0.18, duckingDb: -14 },
+        { type: "MUSIC_QUERY", query: "calm reflective piano" },
+        { type: "EDIT_METADATA", title: `${topic.slice(0, 60)} — reviewed`, tags: ["review"] },
+      ];
+      if (first) {
+        proposals.push(
+          { type: "EDIT_NARRATION", sceneId: first, text: `A clearer narration about ${topic}.` },
+          { type: "EDIT_DURATION", sceneId: first, durationSec: 8 },
+          { type: "EDIT_VISUAL_QUERY", sceneId: first, query: `${topic} documentary photograph` },
+          {
+            type: "SET_MOTION",
+            sceneId: first,
+            slot: 0,
+            motion: { type: "kenburns", from: { zoom: 1, x: 0.5, y: 0.5 }, to: { zoom: 1.08, x: 0.5, y: 0.5 } },
+          },
+        );
+      }
+      if (sceneIds.length > 1) {
+        proposals.push({ type: "REORDER_SCENES", sceneIds: [...sceneIds].reverse() });
+      }
+      return response({
+        reply: `Đã xem lại dự án về ${topic}. Dưới đây là vài đề xuất trước khi render.`,
+        proposals,
+      }, req.model);
+    }
     if (/image-search query editor/i.test(req.system)) {
       const input = payload as {
         scenes: Array<{ index: number; label: string; currentPrimary: string }>;

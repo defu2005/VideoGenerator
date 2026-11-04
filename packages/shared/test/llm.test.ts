@@ -25,6 +25,7 @@ describe("LLM routing schemas", () => {
         sceneQueries: { provider: "ollama", model: "scene-model" },
         visualAltQueries: { provider: "ollama", model: "scene-model" },
         visualRerank: { provider: "ollama", model: "scene-model" },
+        reviewChat: { provider: "gemini", model: "explicit-script-model" },
       },
     });
   });
@@ -38,12 +39,28 @@ describe("LLM routing schemas", () => {
   });
 
   it("catalogs the task tiers and budget feature controls", () => {
-    expect(LLM_TASKS).toHaveLength(10);
+    expect(LLM_TASKS).toHaveLength(11);
     expect(LLM_TASKS.find((task) => task.id === "research")).toMatchObject({ stage: "RESEARCH", tier: "strong" });
     expect(LLM_TASKS.find((task) => task.id === "sceneQueries")).toMatchObject({
       stage: "SCENE_PLAN",
       tier: "fast",
       budgetFeature: "sceneQueryAssist",
+    });
+    expect(LLM_TASKS.find((task) => task.id === "reviewChat")).toMatchObject({
+      stage: "FINAL_APPROVAL",
+      tier: "strong",
+    });
+    expect(LLM_TASKS.find((task) => task.id === "reviewChat")?.budgetFeature).toBeUndefined();
+  });
+
+  it("defaults reviewChat to the script route when unset", () => {
+    expect(LlmSettingsSchema.parse({
+      tasks: { script: { provider: "mock", model: "script-model" } },
+    })).toEqual({
+      tasks: {
+        script: { provider: "mock", model: "script-model" },
+        reviewChat: { provider: "mock", model: "script-model" },
+      },
     });
   });
 });

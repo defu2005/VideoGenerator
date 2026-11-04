@@ -148,6 +148,32 @@
 .timeline-scenes table { width: 100%; border-collapse: collapse; font-size: 11px; }
 .timeline-scenes th, .timeline-scenes td { border-bottom: 1px solid #eef1f7; padding: 7px 12px; text-align: left; white-space: nowrap; }
 .timeline-scenes th { color: #78839a; font-weight: 700; }
+.review-chat-panel { padding: 0; overflow: hidden; }
+.review-chat-toggle { display: flex; width: 100%; align-items: center; justify-content: space-between; gap: 16px; border: 0; background: transparent; padding: 14px 16px; text-align: left; cursor: pointer; }
+.review-chat-toggle h3 { margin: 4px 0 0; font-size: 15px; }
+.review-chat-toggle p:not(.eyebrow) { margin: 4px 0 0; color: #78839a; font-size: 11px; }
+.review-chat-toggle > span { color: #405ac5; font-size: 12px; font-weight: 650; white-space: nowrap; }
+.review-chat-body { display: grid; gap: 12px; border-top: 1px solid #eef1f7; padding: 14px 16px 16px; }
+.review-chat-quick { display: grid; gap: 8px; }
+.review-chat-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.review-chip { border: 1px solid #d8deea; border-radius: 999px; background: #f7f8fb; padding: 5px 10px; color: #44506a; font-size: 11px; cursor: pointer; }
+.review-chip:hover { border-color: #405ac5; color: #405ac5; }
+.review-chat-messages { display: grid; gap: 10px; max-height: 360px; overflow: auto; }
+.review-chat-empty, .review-chat-pending { margin: 0; color: #78839a; font-size: 12px; }
+.review-message { border-radius: 8px; background: #f7f8fb; padding: 10px 12px; }
+.review-message-user { background: #eef3ff; }
+.review-message header { margin-bottom: 4px; color: #59667d; font-size: 10px; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; }
+.review-message p { margin: 0; white-space: pre-wrap; font-size: 13px; }
+.review-proposals { display: grid; gap: 8px; margin: 10px 0 0; padding: 0; list-style: none; }
+.review-proposal-card { display: grid; gap: 6px; border: 1px solid #e4e8f1; border-radius: 8px; background: #fff; padding: 10px; }
+.review-proposal-card strong { font-size: 12px; }
+.review-proposal-card p { margin: 0; color: #59667d; font-size: 12px; }
+.review-rerun-banner { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; border: 1px solid #f0d7a8; border-radius: 8px; background: #fffaf2; padding: 10px 12px; }
+.review-rerun-banner p { margin: 0; color: #a45c17; font-size: 12px; }
+.review-chat-input { display: grid; gap: 8px; }
+.review-chat-input textarea { width: 100%; resize: vertical; border: 1px solid #d8deea; border-radius: 8px; padding: 8px 10px; font: inherit; }
+.review-chat-input-actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 8px; }
+.review-token-estimate { margin-right: auto; color: #78839a; font-size: 11px; }
 .voice-upload { position: relative; overflow: hidden; }
 .voice-upload input { position: absolute; width: 1px; height: 1px; opacity: 0; }
 .voice-empty { padding: 24px; }

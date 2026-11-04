@@ -51,6 +51,7 @@ describe("Video Agent MCP tools", () => {
     const tools = await client.listTools();
     const prompts = await client.listPrompts();
     expect(tools.tools.map((tool) => tool.name).sort()).toEqual([
+      "apply_review_proposal",
       "approve_scene_visual",
       "create_project",
       "get_guidelines",
@@ -59,6 +60,7 @@ describe("Video Agent MCP tools", () => {
       "get_project",
       "get_project_usage",
       "get_research",
+      "get_review_context",
       "get_scene_visuals",
       "get_scenes",
       "get_script",

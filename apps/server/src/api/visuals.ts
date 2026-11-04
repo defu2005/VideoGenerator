@@ -2,6 +2,7 @@ import {
   ApiErrorSchema,
   ProjectVisualsSchema,
   SceneVisualsSchema,
+  VisualMotionSchema,
 } from "@vg/shared";
 import { z } from "zod";
 import type { FastifyInstance } from "fastify";
@@ -27,6 +28,10 @@ const VisualQueryBody = z.object({
   visualQueries: z.object({ primary: z.string().trim().min(1).max(300), alternatives: z.array(z.string().trim().max(300)).max(3) }).strict().optional(),
   visualDescription: z.string().trim().max(500).optional(),
 }).strict().refine((value) => Object.keys(value).length > 0);
+const VisualMotionBody = z.object({
+  slot: z.number().int().nonnegative().default(0),
+  motion: VisualMotionSchema,
+}).strict();
 const SceneQuery = z.object({
   includeDiscarded: z.enum(["0", "1"]).optional(),
 }).strict();
@@ -195,5 +200,14 @@ export function registerVisualRoutes(
     const { id, sceneId } = SceneParams.parse(request.params);
     ensureSceneMutationAllowed(id, sceneId);
     return service.patchSceneVisualQuery(id, sceneId, VisualQueryBody.parse(request.body));
+  });
+
+  app.patch("/api/projects/:id/scenes/:sceneId/visuals/motion", {
+    schema: { params: SceneParams, body: VisualMotionBody, response: { 200: SceneVisualsSchema, ...Errors } },
+  }, async (request) => {
+    const { id, sceneId } = SceneParams.parse(request.params);
+    ensureSceneMutationAllowed(id, sceneId);
+    const body = VisualMotionBody.parse(request.body);
+    return service.setSelectionMotion(id, sceneId, body.slot, body.motion);
   });
 }

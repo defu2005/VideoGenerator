@@ -66,6 +66,7 @@ export const LlmTaskIdSchema = z.enum([
   "visionCheck",
   "musicAssist",
   "metadata",
+  "reviewChat",
 ]);
 export type LlmTaskId = z.infer<typeof LlmTaskIdSchema>;
 
@@ -87,6 +88,7 @@ export const LLM_TASKS: {
   { id: "visionCheck", label: "Kiểm tra ảnh bằng vision", stage: "VISUAL_REVIEW", purpose: "Check candidate image content.", tier: "fast", budgetFeature: "visionCheck" },
   { id: "musicAssist", label: "Chọn mood nhạc", stage: "MUSIC_SEARCH", purpose: "Assist with music mood selection.", tier: "fast", budgetFeature: "musicAssist" },
   { id: "metadata", label: "Tiêu đề, mô tả, hashtag", stage: "TIMELINE", purpose: "Generate publishing metadata.", tier: "fast", budgetFeature: "metadata" },
+  { id: "reviewChat", label: "Góp ý trước render", stage: "FINAL_APPROVAL", purpose: "Optional pre-render review chat with structured proposals.", tier: "strong" },
 ];
 
 function normalizeLlmSettings(value: unknown): unknown {
@@ -102,6 +104,10 @@ function normalizeLlmSettings(value: unknown): unknown {
     if (tasks.sceneQueries === undefined) tasks.sceneQueries = legacy.sceneplan;
     if (tasks.visualAltQueries === undefined) tasks.visualAltQueries = legacy.sceneplan;
     if (tasks.visualRerank === undefined) tasks.visualRerank = legacy.sceneplan;
+  }
+  // reviewChat defaults to the script route when unset (ignore nullable reset markers).
+  if (tasks.reviewChat === undefined && tasks.script !== undefined && tasks.script !== null) {
+    tasks.reviewChat = tasks.script;
   }
   return {
     ...(legacy.default === undefined ? {} : { default: legacy.default }),

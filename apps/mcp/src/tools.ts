@@ -1,4 +1,4 @@
-import { GUIDELINE_DISCLAIMER, PipelineStageSchema, ProjectStatusSchema, activeGuidelines, guidelinePromptBlock } from "@vg/shared";
+import { GUIDELINE_DISCLAIMER, PipelineStageSchema, ProjectStatusSchema, ReviewProposalSchema, activeGuidelines, guidelinePromptBlock } from "@vg/shared";
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { VideoAgentApiClient, VideoAgentApiError } from "./apiClient.js";
@@ -231,6 +231,14 @@ export function registerVideoAgentTools(
 
   server.tool("get_video_metadata", "Read publishing metadata (titles, description, tags) for a project.", projectIdShape, ({ projectId }) =>
     invoke(() => api.getVideoMetadata(projectId)));
+
+  server.tool("get_review_context", "Read the compact pre-render review context document for a project (0 LLM tokens).", projectIdShape, ({ projectId }) =>
+    invoke(() => api.getReviewContext(projectId)));
+
+  server.tool("apply_review_proposal", "Validate and apply one pre-render review proposal without storing a chat message.", {
+    ...projectIdShape,
+    proposal: ReviewProposalSchema,
+  }, ({ projectId, proposal }) => invoke(() => api.applyReviewProposal(projectId, proposal)));
 
   server.prompt("write_research", "Ask Claude to write research notes and save them in Video Agent.", {
     projectId: z.string().uuid(),

@@ -31,6 +31,7 @@ export * from "./schemas/metadata.js";
 export * from "./metadata/chapters.js";
 export * from "./metadata/tags.js";
 export * from "./metadata/draft.js";
+export * from "./schemas/review.js";
 export * from "./guidelines/schema.js";
 export * from "./guidelines/packs.js";
 export * from "./guidelines/resolve.js";

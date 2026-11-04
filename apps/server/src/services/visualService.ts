@@ -416,6 +416,28 @@ export class VisualService {
     return this.getSceneVisuals(projectId, sceneId);
   }
 
+  setSelectionMotion(
+    projectId: string,
+    sceneId: string,
+    slot: number,
+    motion: VisualSelection["motion"],
+  ) {
+    this.requireScene(projectId, sceneId);
+    const selection = slot === 0
+      ? this.getSelection(projectId, sceneId)
+      : null;
+    if (!selection || selection.slot !== slot) {
+      throw new AppError(404, "VISUAL_SELECTION_NOT_FOUND", "This scene has no selected image for that slot.");
+    }
+    const now = new Date().toISOString();
+    this.repository.atomic(() => {
+      this.upsertSelection({ ...selection, motion, updatedAt: now });
+      markStaleFrom(this.repository, projectId, "MUSIC_REVIEW");
+      this.repository.emitVisualUpdated(projectId, sceneId, "motion-updated");
+    });
+    return this.getSceneVisuals(projectId, sceneId);
+  }
+
   canApproveVisualReview(projectId: string): { allowed: true } | { allowed: false; message: string } {
     const visuals = this.getProjectVisuals(projectId);
     const needsAttention = visuals.scenes.filter((scene) => scene.status !== "READY_FOR_RENDER" && scene.status !== "SKIPPED").length;

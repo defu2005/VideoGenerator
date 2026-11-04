@@ -347,3 +347,38 @@ export const renders = sqliteTable("renders", {
 }, (table) => [
   index("renders_project_created_idx").on(table.projectId, table.createdAt),
 ]);
+
+export const reviewThreads = sqliteTable("review_threads", {
+  id: text("id").primaryKey(),
+  projectId: text("project_id").notNull().references(() => projects.id, { onDelete: "cascade" }),
+  contextHash: text("context_hash").notNull(),
+  createdAt: text("created_at").notNull(),
+}, (table) => [
+  index("review_threads_project_idx").on(table.projectId),
+]);
+
+export const reviewMessages = sqliteTable("review_messages", {
+  id: text("id").primaryKey(),
+  threadId: text("thread_id").notNull().references(() => reviewThreads.id, { onDelete: "cascade" }),
+  projectId: text("project_id").notNull().references(() => projects.id, { onDelete: "cascade" }),
+  role: text("role", { enum: ["user", "assistant"] }).notNull(),
+  content: text("content").notNull(),
+  proposals: text("proposals", { mode: "json" }).$type<unknown[] | null>(),
+  usage: text("usage", { mode: "json" }).$type<Record<string, unknown> | null>(),
+  createdAt: text("created_at").notNull(),
+}, (table) => [
+  index("review_messages_thread_idx").on(table.threadId),
+  index("review_messages_project_idx").on(table.projectId),
+]);
+
+export const reviewProposalApplications = sqliteTable("review_proposal_applications", {
+  id: text("id").primaryKey(),
+  messageId: text("message_id").notNull().references(() => reviewMessages.id, { onDelete: "cascade" }),
+  projectId: text("project_id").notNull().references(() => projects.id, { onDelete: "cascade" }),
+  proposalIndex: integer("proposal_index").notNull(),
+  result: text("result", { mode: "json" }).$type<Record<string, unknown> | null>(),
+  appliedAt: text("applied_at").notNull(),
+}, (table) => [
+  index("review_proposal_applications_message_idx").on(table.messageId),
+  uniqueIndex("review_proposal_applications_uq").on(table.messageId, table.proposalIndex),
+]);

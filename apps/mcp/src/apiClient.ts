@@ -165,6 +165,23 @@ export class VideoAgentApiClient {
     return this.request(`/api/projects/${encodeURIComponent(projectId)}/metadata`);
   }
 
+  getReviewContext(projectId: string): Promise<{
+    contextHash: string;
+    document: unknown;
+  }> {
+    return this.request(`/api/projects/${encodeURIComponent(projectId)}/review/context`);
+  }
+
+  applyReviewProposal(projectId: string, proposal: unknown): Promise<{
+    result: unknown;
+    staleStages: string[];
+  }> {
+    return this.request(`/api/projects/${encodeURIComponent(projectId)}/review/apply`, {
+      method: "POST",
+      body: JSON.stringify({ proposal }),
+    });
+  }
+
   runPipeline(projectId: string, stage?: string): Promise<unknown> {
     return this.request(`/api/projects/${encodeURIComponent(projectId)}/pipeline/run`, {
       method: "POST",

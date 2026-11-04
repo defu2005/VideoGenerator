@@ -5,6 +5,7 @@ import {
   SceneSchema,
   StoredVisualQueriesSchema,
   splitSentences,
+  type PipelineStage,
   type Project,
   type Scene,
   type ScenePatch,
@@ -13,6 +14,11 @@ import type Database from "better-sqlite3";
 import type { JobRepository } from "../jobs/jobRepository.js";
 import { markStaleFrom } from "../pipeline/invalidation.js";
 import { AppError } from "../lib/errors.js";
+
+export type SceneMutateOptions = {
+  /** Stage after which later DONE stages become STALE. Defaults to SCENE_PLAN. */
+  staleFrom?: PipelineStage;
+};
 
 type SceneRow = {
   id: string;
@@ -105,7 +111,7 @@ export class SceneService {
     });
   }
 
-  patch(projectId: string, sceneId: string, patch: ScenePatch) {
+  patch(projectId: string, sceneId: string, patch: ScenePatch, options?: SceneMutateOptions) {
     return this.mutate(projectId, () => {
       const project = this.requireProject(projectId);
       const current = this.findScene(projectId, sceneId);
@@ -125,10 +131,10 @@ export class SceneService {
       };
       this.saveScene(next);
       return this.recompute(projectId, project);
-    });
+    }, options);
   }
 
-  reorder(projectId: string, sceneIds: string[]) {
+  reorder(projectId: string, sceneIds: string[], options?: SceneMutateOptions) {
     return this.mutate(projectId, () => {
       const project = this.requireProject(projectId);
       const scenes = this.list(projectId);
@@ -142,7 +148,7 @@ export class SceneService {
       const timestamp = new Date().toISOString();
       sceneIds.forEach((id, order) => update.run(order, timestamp, id, projectId));
       return this.recompute(projectId, project);
-    });
+    }, options);
   }
 
   split(projectId: string, sceneId: string, sentenceIndex: number) {
@@ -236,7 +242,8 @@ export class SceneService {
     return track?.audio_path;
   }
 
-  private mutate<T>(projectId: string, operation: () => T): T {
+  private mutate<T>(projectId: string, operation: () => T, options?: SceneMutateOptions): T {
+    const staleFrom = options?.staleFrom ?? "SCENE_PLAN";
     return this.repository.atomic(() => {
       this.requireProject(projectId);
       if (this.repository.getActiveJob(projectId)) {
@@ -250,7 +257,7 @@ export class SceneService {
         jobId: null,
         error: null,
       });
-      markStaleFrom(this.repository, projectId, "SCENE_PLAN");
+      markStaleFrom(this.repository, projectId, staleFrom);
       return result;
     });
   }
