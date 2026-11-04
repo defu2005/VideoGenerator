@@ -86,6 +86,31 @@ function formatTime(value: number): string {
   return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")},${String(milliseconds).padStart(3, "0")}`;
 }
 
+/** ASS time: H:MM:SS.cc (centiseconds). libass ignores SRT-style "00:00:01,200" times. */
+function formatAssTime(value: number): string {
+  const totalCs = Math.max(0, Math.round(value * 100));
+  const hours = Math.floor(totalCs / 360_000);
+  const minutes = Math.floor((totalCs % 360_000) / 6000);
+  const seconds = Math.floor((totalCs % 6000) / 100);
+  const centis = totalCs % 100;
+  return `${hours}:${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}.${String(centis).padStart(2, "0")}`;
+}
+
+/** Rewrite SRT-style Dialogue times (written by older versions) into ASS times. */
+export function normalizeAssTimes(assText: string): string {
+  const toSec = (time: string) => {
+    const match = time.match(/^(\d+):(\d{2}):(\d{2}),(\d{3})$/);
+    if (!match) return null;
+    return Number(match[1]) * 3600 + Number(match[2]) * 60 + Number(match[3]) + Number(match[4]) / 1000;
+  };
+  return assText.replace(/^(Dialogue: [^,]*,)([^,]+,[^,]+),([^,]+,[^,]+),/gm, (whole, head: string, start: string, end: string) => {
+    const startSec = toSec(start);
+    const endSec = toSec(end);
+    if (startSec === null || endSec === null) return whole;
+    return `${head}${formatAssTime(startSec)},${formatAssTime(endSec)},`;
+  });
+}
+
 export function wrapLines(text: string, maxCharsPerLine: number, maxLines: number): string[] {
   const trimmed = normalizeText(text);
   const safeMaxChars = Math.max(1, maxCharsPerLine);
@@ -237,8 +262,15 @@ export function toAss(cues: SubtitleCue[], style: Record<string, unknown> = {}):
   const height = Number(style.height ?? dims.height);
   const fontName = String(style.fontName ?? "Arial");
   const rawFontSize = Number(style.fontSize);
-  const fontSize = Number.isFinite(rawFontSize) && rawFontSize > 0 ? rawFontSize : Math.round(height * 0.05);
-  const marginBottom = Number(style.marginBottom ?? Math.round(height * 0.08));
+  const defaultFont = aspectRatio === "9:16"
+    ? Math.round(width * 0.055)
+    : Math.round(height * 0.05);
+  const fontSize = Number.isFinite(rawFontSize) && rawFontSize > 0 ? rawFontSize : defaultFont;
+  const defaultMargin = aspectRatio === "9:16"
+    ? Math.round(height * 0.18)
+    : Math.round(height * 0.08);
+  const rawMargin = Number(style.marginBottom);
+  const marginBottom = Number.isFinite(rawMargin) && rawMargin >= 0 ? rawMargin : defaultMargin;
   const textColor = String(style.textColor ?? "&H00FFFFFF");
   const outlineColor = String(style.outlineColor ?? "&H00000000");
 
@@ -262,7 +294,7 @@ export function toAss(cues: SubtitleCue[], style: Record<string, unknown> = {}):
   const dialogs = cues
     .filter((cue) => cue.text.trim())
     .sort((a, b) => (a.startSec ?? 0) - (b.startSec ?? 0))
-    .map((cue) => `Dialogue: 0,${formatTime(cue.startSec)},${formatTime(cue.endSec)},Default,,0,0,0,,${escapeAssText(cue.text.trim())}`)
+    .map((cue) => `Dialogue: 0,${formatAssTime(cue.startSec)},${formatAssTime(cue.endSec)},Default,,0,0,0,,${escapeAssText(cue.text.trim())}`)
     .join("\n");
 
   return `${header}\n${dialogs}\n`;

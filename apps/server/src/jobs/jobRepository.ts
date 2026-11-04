@@ -214,13 +214,14 @@ export class JobRepository {
     attempt?: number;
     previousState: StageState;
     runAfter?: Date;
+    scope?: string | null;
   }): Job {
     const timestamp = this.now().toISOString();
     const job = JobSchema.parse({
       id: randomUUID(),
       projectId: input.projectId,
       stage: input.stage,
-      scope: null,
+      scope: input.scope ?? null,
       status: "QUEUED",
       progress: 0,
       message: null,

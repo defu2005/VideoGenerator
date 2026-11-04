@@ -6,7 +6,10 @@ import { z } from "zod";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import type Database from "better-sqlite3";
 import {
+  PipelineStateSchema,
+  RenderRequestSchema,
   RenderSettingsSchema,
+  RenderVariantsResultSchema,
   RenderVersionListSchema,
   RenderVersionPatchSchema,
   RenderVersionSchema,
@@ -17,6 +20,7 @@ import { createZipStream } from "../lib/zip.js";
 import { getRenderSettings, saveRenderSettings } from "../settings/render.js";
 import type { RenderService } from "../services/renderService.js";
 import type { AutoReportService } from "../services/autoReportService.js";
+import type { PipelineOrchestrator } from "../pipeline/orchestrator.js";
 import { parseRangeHeader } from "./music.js";
 
 const ProjectParams = z.object({ id: z.string().uuid() }).strict();
@@ -30,6 +34,7 @@ export function registerRenderRoutes(
   projectService: { getProject: (id: string) => Promise<Project | undefined> },
   sqlite?: Database.Database,
   autoReport?: AutoReportService,
+  orchestrator?: PipelineOrchestrator,
 ): void {
   async function project(request: FastifyRequest): Promise<Project> {
     const { id } = ProjectParams.parse(request.params);
@@ -64,6 +69,34 @@ export function registerRenderRoutes(
   const baseName = (title: string) => (title.replace(/[\/:*?"<>|\r\n]+/g, " ").trim().slice(0, 80) || "video");
 
   app.get("/api/projects/:id/render", async (request) => renders.get((await project(request)).id));
+
+  app.post("/api/projects/:id/render", async (request, reply) => {
+    const found = await project(request);
+    const body = RenderRequestSchema.parse(request.body ?? {});
+    if (!orchestrator) throw new AppError(500, "INTERNAL_ERROR", "Orchestrator unavailable");
+    const pipeline = orchestrator.runRender(found.id, body.aspectRatio);
+    return reply.code(202).send(PipelineStateSchema.parse(pipeline));
+  });
+
+  // Variant renders take minutes: answer at once and render in the background, one run per project.
+  const variantRuns = new Set<string>();
+  app.post("/api/projects/:id/render-variants", async (request, reply) => {
+    const found = await project(request);
+    const { missing, skipped } = renders.planMissingVariants(found);
+    if (missing.length && variantRuns.has(found.id)) {
+      throw new AppError(409, "VARIANTS_RUNNING", "Đang render các định dạng còn thiếu cho dự án này.");
+    }
+    if (missing.length) {
+      variantRuns.add(found.id);
+      void renders
+        .renderMissingVariants(found, new AbortController().signal)
+        .catch((error: unknown) => {
+          request.log.error({ err: error, projectId: found.id }, "render-variants failed");
+        })
+        .finally(() => variantRuns.delete(found.id));
+    }
+    return reply.code(missing.length ? 202 : 200).send(RenderVariantsResultSchema.parse({ queued: missing, skipped, renders: [] }));
+  });
 
   app.get("/api/projects/:id/render/video", async (request, reply) => {
     const found = await project(request);

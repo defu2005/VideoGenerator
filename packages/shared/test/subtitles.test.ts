@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { cuesWithoutTimings, splitCue, toAss, toSrt, wrapLines } from "../src/subtitles/index.js";
+import { cuesWithoutTimings, normalizeAssTimes, splitCue, toAss, toSrt, wrapLines } from "../src/subtitles/index.js";
 
 describe("subtitle helpers", () => {
   it("wraps text by word boundaries without exceeding the max width", () => {
@@ -69,5 +69,20 @@ describe("subtitle helpers", () => {
     expect(match).not.toBeNull();
     expect(Number(match?.[1] ?? "0")).toBeGreaterThan(0);
     expect(Number(match?.[1] ?? "0")).not.toBe(0);
+  });
+});
+
+describe("ASS times", () => {
+  it("writes Dialogue times as H:MM:SS.cc, not SRT times", () => {
+    const ass = toAss([{ startSec: 0.2, endSec: 3726.287, text: "Xin chào" }], { aspectRatio: "16:9" });
+    expect(ass).toContain("Dialogue: 0,0:00:00.20,1:02:06.29,Default,");
+    expect(ass).not.toMatch(/\d{2}:\d{2}:\d{2},\d{3}/);
+  });
+
+  it("rewrites SRT-style times from older ASS files and leaves good ones alone", () => {
+    const old = "Dialogue: 0,00:00:13,367,00:00:19,222,Default,,0,0,0,,Sputnik 1, vệ tinh";
+    expect(normalizeAssTimes(old)).toBe("Dialogue: 0,0:00:13.37,0:00:19.22,Default,,0,0,0,,Sputnik 1, vệ tinh");
+    const good = "Dialogue: 0,0:00:00.10,0:00:01.00,Default,,0,0,0,,Xin chào";
+    expect(normalizeAssTimes(good)).toBe(good);
   });
 });

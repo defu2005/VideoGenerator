@@ -102,6 +102,7 @@ describe("RenderPanel", () => {
       calls.push({ url, init });
       if (url.endsWith("/pipeline") || url.includes("/run")) return jsonResponse(pipelineWith("DONE"));
       if (url.endsWith("/renders")) return jsonResponse({ renders: [version()] });
+      if (url.endsWith("/render") && init?.method === "POST") return jsonResponse(pipelineWith("DONE"));
       if (url.endsWith("/render")) return jsonResponse(render);
       if (url.endsWith("/metadata")) {
         return jsonResponse({
@@ -129,8 +130,58 @@ describe("RenderPanel", () => {
     expect(screen.getByText("Lịch sử bản render")).toBeInTheDocument();
     expect(screen.getByText(/v2/)).toBeInTheDocument();
 
+    expect(screen.getByLabelText("Định dạng")).toHaveValue("16:9");
+    expect(screen.getAllByText(/Ngang 16:9/).length).toBeGreaterThan(0);
+
     fireEvent.click(screen.getByRole("button", { name: "Render lại" }));
-    await waitFor(() => expect(calls.some((call) => call.init?.method === "POST" && call.url.endsWith("/pipeline/run") && String(call.init.body).includes('"RENDER"'))).toBe(true));
+    await waitFor(() => expect(calls.some((call) =>
+      call.init?.method === "POST"
+      && call.url.endsWith("/render")
+      && String(call.init.body).includes('"16:9"')
+    )).toBe(true));
+  });
+
+  it("shows a vertical player frame and the profile multi-format button", async () => {
+    const verticalProject = {
+      ...project,
+      profileId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+      settings: { ...project.settings, aspectRatio: "16:9" as const },
+    };
+    const verticalVersion = version({
+      id: "r-vert",
+      aspectRatio: "9:16",
+      width: 1080,
+      height: 1920,
+      report: { ...report, width: 1080, height: 1920 },
+    });
+    vi.stubGlobal("EventSource", undefined);
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.endsWith("/pipeline")) return jsonResponse(pipelineWith("DONE"));
+      if (url.endsWith("/renders")) return jsonResponse({ renders: [verticalVersion] });
+      if (url.endsWith("/render") && init?.method === "POST") return jsonResponse(pipelineWith("DONE"));
+      if (url.endsWith("/render")) return jsonResponse({ render: verticalVersion });
+      if (url.endsWith("/render-variants")) return jsonResponse({ queued: [], skipped: ["16:9", "9:16"], renders: [] });
+      if (url.endsWith("/metadata")) {
+        return jsonResponse({
+          metadata: null, stale: true,
+          extras: { chaptersText: "", creditsText: "", disclosure: "AI" },
+        });
+      }
+      return jsonResponse(timeline);
+    }));
+    const { container } = renderWithProviders(<RenderPanel project={verticalProject} />);
+    expect(await screen.findByText(/1080×1920/)).toBeInTheDocument();
+    expect(container.querySelector(".render-player.is-vertical")).toBeTruthy();
+    expect(screen.getAllByText("Dọc 9:16").length).toBeGreaterThan(0);
+    expect(screen.getByRole("button", { name: "Render cho mọi tài khoản của hồ sơ" })).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText("Định dạng"), { target: { value: "9:16" } });
+    fireEvent.click(screen.getByRole("button", { name: "Render lại" }));
+    await waitFor(() => expect(
+      (vi.mocked(fetch).mock.calls as Array<[RequestInfo | URL, RequestInit?]>)
+        .some(([url, init]) => String(url).endsWith("/render") && init?.method === "POST" && String(init.body).includes('"9:16"')),
+    ).toBe(true));
   });
 
   it("switches the player source, patches a note, and confirms delete", async () => {

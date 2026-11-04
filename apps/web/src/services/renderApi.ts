@@ -1,8 +1,31 @@
-import type { ProjectRender, RenderSettings, RenderVersion, RenderVersionList, RenderVersionPatch } from "@vg/shared";
+import type {
+  PipelineState,
+  ProjectRender,
+  RenderSettings,
+  RenderVariantAspect,
+  RenderVariantsResult,
+  RenderVersion,
+  RenderVersionList,
+  RenderVersionPatch,
+} from "@vg/shared";
 import { apiRequest } from "./apiClient";
 
 export function getProjectRender(projectId: string): Promise<ProjectRender> {
   return apiRequest<ProjectRender>(`/projects/${projectId}/render`);
+}
+
+export function startProjectRender(projectId: string, aspectRatio?: RenderVariantAspect): Promise<PipelineState> {
+  return apiRequest<PipelineState>(`/projects/${projectId}/render`, {
+    method: "POST",
+    body: JSON.stringify(aspectRatio ? { aspectRatio } : {}),
+  });
+}
+
+export function startProjectRenderVariants(projectId: string): Promise<RenderVariantsResult> {
+  return apiRequest<RenderVariantsResult>(`/projects/${projectId}/render-variants`, {
+    method: "POST",
+    body: JSON.stringify({}),
+  });
 }
 
 export function listProjectRenders(projectId: string): Promise<RenderVersionList> {

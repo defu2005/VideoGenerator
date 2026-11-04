@@ -2,6 +2,7 @@ import {
   GATES,
   STAGE_ORDER,
   isGate,
+  renderJobScope,
   type Job,
   type JobError,
   type JobUsage,
@@ -9,6 +10,7 @@ import {
   type PipelineState,
   type Project,
   type ProjectStatus,
+  type RenderVariantAspect,
   type StageRecord,
   type StageState,
   storyModeForProject,
@@ -136,6 +138,42 @@ export class PipelineOrchestrator {
       this.repository.setRunMode(projectId, "SINGLE");
       this.enqueue(projectId, stage);
       this.updateProjectStatus(projectId, stage);
+    });
+    return this.requirePipeline(projectId);
+  }
+
+  /**
+   * Queue a RENDER job, optionally as an aspect-ratio variant.
+   * Does not mark earlier stages stale — variants reuse the same timeline/assets.
+   */
+  runRender(projectId: string, aspectRatio?: RenderVariantAspect): PipelineState {
+    this.repository.atomic(() => {
+      this.requireProject(projectId);
+      this.assertNoActiveJob(projectId);
+      this.repository.ensureStages(projectId);
+      const position = STAGE_ORDER.indexOf("RENDER");
+      const stages = this.repository.getStages(projectId);
+      const incomplete = stages.find((item, index) => index < position && item.state !== "DONE" && item.state !== "SKIPPED");
+      if (incomplete) this.invalid(`Complete ${incomplete.stage} before running RENDER.`);
+      const previousState = this.repository.getStage(projectId, "RENDER").state;
+      this.repository.setRunMode(projectId, "SINGLE");
+      const job = this.repository.createJob({
+        projectId,
+        stage: "RENDER",
+        scope: renderJobScope(aspectRatio),
+        maxAttempts: this.config.JOB_MAX_ATTEMPTS,
+        previousState: previousState === "DONE" || previousState === "STALE" ? previousState : previousState,
+        runAfter: this.now(),
+      });
+      this.repository.updateStage(projectId, "RENDER", {
+        state: "QUEUED",
+        progress: 0,
+        message: "Waiting for a worker",
+        jobId: job.id,
+        error: null,
+      });
+      this.wakeWorker();
+      this.updateProjectStatus(projectId, "RENDER");
     });
     return this.requirePipeline(projectId);
   }

@@ -10,8 +10,18 @@ export const RenderIssueCodeSchema = z.enum([
   "FRAME_MISMATCH",
   "SUBTITLE_ILLEGIBLE",
   "RENDER_VISION_FAILED",
+  "VERTICAL_TOO_LONG",
 ]);
 export type RenderIssueCode = z.infer<typeof RenderIssueCodeSchema>;
+
+/** Aspects that can be requested as a render variant (project may still use 1:1). */
+export const RenderVariantAspectSchema = z.enum(["16:9", "9:16"]);
+export type RenderVariantAspect = z.infer<typeof RenderVariantAspectSchema>;
+
+export const RenderRequestSchema = z.object({
+  aspectRatio: RenderVariantAspectSchema.optional(),
+}).strict();
+export type RenderRequest = z.infer<typeof RenderRequestSchema>;
 
 export const RenderIssueSchema = z.object({
   code: RenderIssueCodeSchema,
@@ -51,8 +61,18 @@ export const RenderSchema = z.object({
   hasSubtitles: z.boolean(),
   report: RenderReportSchema,
   createdAt: z.string(),
+  /** Null = project default aspect at render time. */
+  aspectRatio: z.enum(["16:9", "9:16", "1:1"]).nullable().optional(),
+  variantOf: z.string().nullable().optional(),
 }).strict();
 export type Render = z.infer<typeof RenderSchema>;
+
+export const RenderVariantsResultSchema = z.object({
+  queued: z.array(RenderVariantAspectSchema),
+  skipped: z.array(RenderVariantAspectSchema),
+  renders: z.array(RenderSchema),
+}).strict();
+export type RenderVariantsResult = z.infer<typeof RenderVariantsResultSchema>;
 
 export const ProjectRenderSchema = z.object({
   render: RenderSchema.nullable(),

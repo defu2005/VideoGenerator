@@ -85,9 +85,13 @@ export function buildSceneClipPlan(
       inputs.push({ kind: "IMAGE", path });
       inputArgs.push("-i", path);
       const { z, x, y } = zoompanExprs(visual.motion, count);
+      // Cover + crop. Prefer stored motion focus (vision/Ken Burns centre); else geometric centre.
+      const focus = point(visual.motion?.from);
+      const sw = w * SUPERSAMPLE;
+      const sh = h * SUPERSAMPLE;
       chains.push(
-        `[${index}:v]select='eq(n,0)',scale=${w * SUPERSAMPLE}:${h * SUPERSAMPLE}:force_original_aspect_ratio=increase:flags=lanczos,`
-        + `crop=${w * SUPERSAMPLE}:${h * SUPERSAMPLE},setsar=1,`
+        `[${index}:v]select='eq(n,0)',scale=${sw}:${sh}:force_original_aspect_ratio=increase:flags=lanczos,`
+        + `crop=${sw}:${sh}:(iw-${sw})*${num(focus.x)}:(ih-${sh})*${num(focus.y)},setsar=1,`
         + `zoompan=z='${z}':x='${x}':y='${y}':d=${count}:s=${w}x${h}:fps=${fps},`
         + `trim=end_frame=${count},setpts=PTS-STARTPTS${label}`,
       );

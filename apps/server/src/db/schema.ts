@@ -423,6 +423,9 @@ export const renders = sqliteTable("renders", {
   deletedAt: text("deleted_at"),
   reviewThreadId: text("review_thread_id"),
   metadataSnapshot: text("metadata_snapshot", { mode: "json" }).$type<Record<string, unknown> | null>(),
+  /** Null = project default aspect. */
+  aspectRatio: text("aspect_ratio", { enum: ["16:9", "9:16", "1:1"] }),
+  variantOf: text("variant_of"),
 }, (table) => [
   index("renders_project_created_idx").on(table.projectId, table.createdAt),
 ]);

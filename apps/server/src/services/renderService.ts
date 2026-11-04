@@ -5,24 +5,36 @@ import type Database from "better-sqlite3";
 import {
   RenderVisionBatchSchema,
   VideoMetadataDraftSchema,
+  aspectsNeededFromAccounts,
   buildCreditsText,
   buildFinalPlan,
   buildMetadataText,
   buildSceneClipPlan,
   CLIP_OUTPUT_ARGS,
   concatListText,
+  missingRenderAspects,
+  normalizeAssTimes,
+  splitCue,
   parseBlackdetect,
   parseProgressSeconds,
   RENDER_FORMAT_VERSION,
   RenderReportSchema,
   resolveBudget,
+  renderTargetFor,
+  subtitleLayoutForAspect,
+  toAss,
+  VERTICAL_DURATION_WARN_SEC,
+  wrapLines,
+  type AspectRatio,
   type CreditsAsset,
   type Project,
   type ProjectRender,
   type Render,
   type RenderIssue,
   type RenderReport,
+  type RenderVariantAspect,
   type RenderVersion,
+  type SubtitleCue,
   type Timeline,
   type TimelineScene,
   type VideoMetadataDraft,
@@ -73,7 +85,45 @@ type RenderRow = {
   deleted_at: string | null;
   review_thread_id: string | null;
   metadata_snapshot: string | null;
+  aspect_ratio: "16:9" | "9:16" | "1:1" | null;
+  variant_of: string | null;
 };
+
+export type RenderOptions = {
+  /** When set and different from the project default, only the frame size / ASS layout change. */
+  aspectRatio?: RenderVariantAspect;
+};
+
+function aspectFromTarget(target: { width: number; height: number }): AspectRatio {
+  if (target.width === target.height) return "1:1";
+  if (target.height > target.width) return "9:16";
+  return "16:9";
+}
+
+/** Absolute-timed cues from an SRT file (newline-joined text kept as multi-line). */
+function parseSrtCues(text: string): SubtitleCue[] {
+  const blocks = text.replace(/\r\n/g, "\n").trim().split(/\n\n+/);
+  const cues: SubtitleCue[] = [];
+  for (const block of blocks) {
+    const lines = block.split("\n").filter((line) => line.length > 0);
+    if (lines.length < 2) continue;
+    const timing = lines.find((line) => line.includes("-->"));
+    if (!timing) continue;
+    const match = timing.match(
+      /(\d{2}):(\d{2}):(\d{2})[,.](\d{3})\s*-->\s*(\d{2}):(\d{2}):(\d{2})[,.](\d{3})/,
+    );
+    if (!match) continue;
+    const toSec = (h: string, m: string, s: string, ms: string) =>
+      Number(h) * 3600 + Number(m) * 60 + Number(s) + Number(ms) / 1000;
+    const startSec = toSec(match[1], match[2], match[3], match[4]);
+    const endSec = toSec(match[5], match[6], match[7], match[8]);
+    const textStart = lines.indexOf(timing) + 1;
+    const cueText = lines.slice(textStart).join("\n").trim();
+    if (!cueText) continue;
+    cues.push({ startSec, endSec, text: cueText, index: cues.length });
+  }
+  return cues;
+}
 
 type LicenseJson = {
   name?: string | null;
@@ -223,7 +273,20 @@ export class RenderService {
       hasSubtitles: Boolean(row.srt_path && existsSync(row.srt_path)),
       report: report.data,
       createdAt: row.created_at,
+      aspectRatio: row.aspect_ratio ?? null,
+      variantOf: row.variant_of ?? null,
     };
+  }
+
+  private primaryRenderId(projectId: string, projectAspect: AspectRatio): string | null {
+    const rows = this.sqlite.prepare(
+      "SELECT * FROM renders WHERE project_id = ? AND status = 'DONE' AND deleted_at IS NULL ORDER BY created_at DESC, rowid DESC",
+    ).all(projectId) as RenderRow[];
+    for (const row of rows) {
+      const aspect = row.aspect_ratio ?? projectAspect;
+      if (aspect === projectAspect) return row.id;
+    }
+    return rows[0]?.id ?? null;
   }
 
   private toVersion(row: RenderRow): RenderVersion | null {
@@ -453,12 +516,77 @@ export class RenderService {
     }
   }
 
-  async render(project: Project, signal: AbortSignal, onProgress: RenderProgress = () => {}): Promise<{ render: Render; reused: boolean }> {
+  /**
+   * Build (or rebuild) ASS burn-in text for the given output aspect.
+   * Variants re-wrap cues in code — no LLM, no timeline rewrite.
+   */
+  private assForAspect(
+    timeline: Timeline,
+    project: Project,
+    outputAspect: AspectRatio,
+  ): string | null {
+    if (!timeline.subtitles) return null;
+    if (!existsSync(timeline.subtitles.assPath) && !existsSync(timeline.subtitles.srtPath)) {
+      throw new StageError("Tệp phụ đề không còn — chạy lại bước Timeline.", "RENDER_SUBTITLE_MISSING", false);
+    }
+    const timelineAspect = aspectFromTarget(timeline.target);
+    if (outputAspect === timelineAspect && existsSync(timeline.subtitles.assPath)) {
+      return normalizeAssTimes(readFileSync(timeline.subtitles.assPath, "utf8"));
+    }
+    const landscapeMax = Number(project.settings.subtitles?.maxCharsPerLine) > 0
+      ? Number(project.settings.subtitles?.maxCharsPerLine)
+      : undefined;
+    const layout = subtitleLayoutForAspect(outputAspect, landscapeMax);
+    let cues: SubtitleCue[] = [];
+    if (existsSync(timeline.subtitles.srtPath)) {
+      cues = parseSrtCues(readFileSync(timeline.subtitles.srtPath, "utf8"));
+    }
+    if (!cues.length && existsSync(timeline.subtitles.assPath)) {
+      // Fall back to the stored ASS body (same timings); re-style only.
+      return normalizeAssTimes(readFileSync(timeline.subtitles.assPath, "utf8"));
+    }
+    // Narrower lines: split long cues (timed by length) so each shows at most 2 lines.
+    const wrapped = cues
+      .flatMap((cue) => splitCue(
+        { ...cue, text: cue.text.replace(/\n+/g, " ") },
+        { aspectRatio: outputAspect, maxCharsPerLine: layout.maxCharsPerLine, maxLines: 2 },
+      ))
+      .map((cue, index) => ({
+        ...cue,
+        index,
+        text: wrapLines(cue.text, layout.maxCharsPerLine, 2).join("\n"),
+      }));
+    return toAss(wrapped, {
+      aspectRatio: layout.aspectRatio,
+      width: layout.width,
+      height: layout.height,
+      fontSize: layout.fontSize,
+      marginBottom: layout.marginBottom,
+      fontName: "Arial",
+    });
+  }
+
+  async render(
+    project: Project,
+    signal: AbortSignal,
+    onProgress: RenderProgress = () => {},
+    options: RenderOptions = {},
+  ): Promise<{ render: Render; reused: boolean }> {
     this.ensureBackfill();
-    const { timeline, inputHash: timelineHash } = this.timelines.get(project.id);
-    if (!timeline || !timelineHash) {
+    const { timeline: baseTimeline, inputHash: timelineHash } = this.timelines.get(project.id);
+    if (!baseTimeline || !timelineHash) {
       throw new StageError("Chưa có timeline — chạy bước Timeline trước.", "RENDER_NO_TIMELINE", false);
     }
+    const projectAspect = (project.settings.aspectRatio ?? aspectFromTarget(baseTimeline.target)) as AspectRatio;
+    const requested = options.aspectRatio;
+    const outputAspect: AspectRatio = requested ?? projectAspect;
+    const isVariant = Boolean(requested && requested !== projectAspect);
+    const storedAspect: AspectRatio | null = isVariant || requested ? outputAspect : null;
+
+    const timeline: Timeline = outputAspect === aspectFromTarget(baseTimeline.target)
+      ? baseTimeline
+      : { ...baseTimeline, target: renderTargetFor(outputAspect) };
+
     const started = Date.now();
     const resolvePath = this.resolver(project.id);
     const renderDir = this.renderDir(project.id);
@@ -473,16 +601,16 @@ export class RenderService {
     if (timeline.music && !existsSync(resolvePath(timeline.music.path))) {
       throw new StageError("Tệp nhạc nền không còn — chọn lại nhạc ở tab Nhạc.", "RENDER_MUSIC_MISSING", false);
     }
-    let assText: string | null = null;
-    if (timeline.subtitles) {
-      if (!existsSync(timeline.subtitles.assPath)) {
-        throw new StageError("Tệp phụ đề không còn — chạy lại bước Timeline.", "RENDER_SUBTITLE_MISSING", false);
-      }
-      assText = readFileSync(timeline.subtitles.assPath, "utf8");
-    }
+    const assText = this.assForAspect(baseTimeline, project, outputAspect);
 
     const clipHashes = timeline.scenes.map((scene) => this.clipHash(scene, timeline, resolvePath));
-    const inputHash = sha({ v: RENDER_FORMAT_VERSION, timelineHash, ass: assText ? sha(assText) : null, clipHashes });
+    const inputHash = sha({
+      v: RENDER_FORMAT_VERSION,
+      timelineHash,
+      aspect: outputAspect,
+      ass: assText ? sha(assText) : null,
+      clipHashes,
+    });
 
     const reusable = this.sqlite.prepare(
       "SELECT * FROM renders WHERE project_id = ? AND status = 'DONE' AND deleted_at IS NULL AND input_hash = ? ORDER BY created_at DESC, rowid DESC",
@@ -501,7 +629,7 @@ export class RenderService {
     const thumbsDir = join(versionFolder, "thumbs");
     mkdirSync(thumbsDir, { recursive: true });
 
-    // 1. Scene clips (0–60 %), cached by content hash.
+    // 1. Scene clips (0–60 %), cached by content hash (includes target size).
     const clipPaths: string[] = [];
     let clipsReused = 0;
     let clipsRendered = 0;
@@ -608,12 +736,13 @@ export class RenderService {
 
     // 4. Checks (95–100 %). Issues are reported, never fatal.
     onProgress(95, "Kiểm tra video");
-    const report = await this.check(timeline, outputPath, thumbsDir, signal, project);
+    const report = await this.check(timeline, outputPath, thumbsDir, signal, project, outputAspect);
     const elapsedSec = Math.round((Date.now() - started) / 100) / 10;
     const fullReport: RenderReport = { ...report, clipsReused, clipsRendered, elapsedSec };
 
     const metadataSnapshot = this.currentMetadataSnapshot(project.id);
     const version = this.nextVersionNumber(project.id);
+    const variantOf = isVariant ? this.primaryRenderId(project.id, projectAspect) : null;
     const row: RenderRow = {
       id: renderId,
       project_id: project.id,
@@ -634,14 +763,16 @@ export class RenderService {
       deleted_at: null,
       review_thread_id: this.currentReviewThreadId(project.id),
       metadata_snapshot: metadataSnapshot ? JSON.stringify(metadataSnapshot) : null,
+      aspect_ratio: storedAspect,
+      variant_of: variantOf,
     };
     this.sqlite.prepare(`
       INSERT INTO renders (id, project_id, input_hash, status, output_path, credits_path, srt_path,
         duration_sec, size_bytes, width, height, report, created_at,
-        version, note, pinned, deleted_at, review_thread_id, metadata_snapshot)
+        version, note, pinned, deleted_at, review_thread_id, metadata_snapshot, aspect_ratio, variant_of)
       VALUES (@id, @project_id, @input_hash, @status, @output_path, @credits_path, @srt_path,
         @duration_sec, @size_bytes, @width, @height, @report, @created_at,
-        @version, @note, @pinned, @deleted_at, @review_thread_id, @metadata_snapshot)
+        @version, @note, @pinned, @deleted_at, @review_thread_id, @metadata_snapshot, @aspect_ratio, @variant_of)
     `).run(row);
 
     try {
@@ -654,12 +785,58 @@ export class RenderService {
     return { render: this.toRender(row)!, reused: false };
   }
 
+  /** Render every profile-account format that still lacks a finished render. Sequential, no LLM. */
+  /** Formats the profile's accounts need that have no finished render yet. */
+  planMissingVariants(project: Project): { missing: RenderVariantAspect[]; skipped: RenderVariantAspect[] } {
+    if (!project.profileId) {
+      throw new AppError(400, "NO_PROFILE", "Dự án chưa gắn hồ sơ — không biết định dạng tài khoản.");
+    }
+    const accounts = this.sqlite.prepare(
+      "SELECT format, enabled FROM platform_accounts WHERE profile_id = ?",
+    ).all(project.profileId) as Array<{ format: "landscape" | "vertical"; enabled: number | boolean }>;
+    const needed = aspectsNeededFromAccounts(
+      accounts.map((row) => ({ format: row.format, enabled: Boolean(row.enabled) })),
+    );
+    const projectAspect = (project.settings.aspectRatio ?? "16:9") as AspectRatio;
+    const existing = this.list(project.id).renders;
+    const missing = missingRenderAspects({
+      needed,
+      projectAspect: projectAspect === "1:1" ? "16:9" : projectAspect,
+      existing: existing.map((row) => ({
+        aspectRatio: row.aspectRatio ?? null,
+        status: row.status,
+        deleted: row.deleted,
+      })),
+    });
+    const skipped = needed.filter((aspect) => !missing.includes(aspect));
+    return { missing, skipped };
+  }
+
+  async renderMissingVariants(
+    project: Project,
+    signal: AbortSignal,
+    onProgress: RenderProgress = () => {},
+  ): Promise<{
+    queued: RenderVariantAspect[];
+    skipped: RenderVariantAspect[];
+    renders: Render[];
+  }> {
+    const { missing, skipped } = this.planMissingVariants(project);
+    const renders: Render[] = [];
+    for (const aspect of missing) {
+      const { render } = await this.render(project, signal, onProgress, { aspectRatio: aspect });
+      renders.push(render);
+    }
+    return { queued: missing, skipped, renders };
+  }
+
   private async check(
     timeline: Timeline,
     outputPath: string,
     thumbsDir: string,
     signal: AbortSignal,
     project?: Project,
+    outputAspect?: AspectRatio,
   ): Promise<Omit<RenderReport, "clipsReused" | "clipsRendered" | "elapsedSec">> {
     const issues: RenderIssue[] = [];
     const probe = await this.tools.probe(outputPath, signal);
@@ -680,6 +857,15 @@ export class RenderService {
         severity: "ERROR",
         sceneId: null,
         message: `Kích thước ${probe.width}×${probe.height}, cần ${timeline.target.width}×${timeline.target.height}.`,
+      });
+    }
+    const aspect = outputAspect ?? aspectFromTarget(timeline.target);
+    if (aspect === "9:16" && probe.durationSec > VERTICAL_DURATION_WARN_SEC) {
+      issues.push({
+        code: "VERTICAL_TOO_LONG",
+        severity: "WARN",
+        sceneId: null,
+        message: `Bản dọc dài ${probe.durationSec.toFixed(0)}s (trên ${VERTICAL_DURATION_WARN_SEC}s). TikTok/Reels có thể cắt hoặc từ chối — video không bị cắt tự động.`,
       });
     }
 

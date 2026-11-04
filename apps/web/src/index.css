@@ -744,6 +744,30 @@ button:disabled { cursor: not-allowed; opacity: .58; }
 .render-progress span { display: block; height: 100%; background: #405ac5; transition: width 0.3s ease; }
 .render-player { padding: 0; overflow: hidden; background: #0f1320; }
 .render-player video { display: block; width: 100%; max-height: 70vh; background: #0f1320; }
+.render-player.is-vertical {
+  display: flex;
+  justify-content: center;
+  background: linear-gradient(180deg, #12161f 0%, #0a0c12 100%);
+}
+.render-player.is-vertical video {
+  width: auto;
+  max-width: min(100%, 420px);
+  height: min(70vh, 740px);
+  aspect-ratio: 9 / 16;
+  object-fit: contain;
+  margin-inline: auto;
+}
+.render-format {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  font-size: 0.85rem;
+  color: var(--muted, #6b7280);
+}
+.render-format select {
+  min-width: 10rem;
+  padding: 0.4rem 0.6rem;
+}
 .render-report { padding: 12px 15px; }
 .render-report h3 { margin: 0 0 4px; color: #168352; font-size: 12px; }
 .render-report.has-errors h3 { color: #b42318; }

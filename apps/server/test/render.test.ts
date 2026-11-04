@@ -1,10 +1,11 @@
 import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { randomUUID } from "node:crypto";
 import Fastify from "fastify";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { TimelineSchema, type Timeline } from "@vg/shared";
+import { STAGE_ORDER, TimelineSchema, type Timeline } from "@vg/shared";
 import { registerRenderRoutes } from "../src/api/render.js";
-import { runFfmpeg } from "../src/media/ffmpeg.js";
+import { runFfmpeg, probeMedia } from "../src/media/ffmpeg.js";
 import { StageError } from "../src/pipeline/stageExecutor.js";
 import { RenderService, type MediaTools } from "../src/services/renderService.js";
 import { RenderExecutor } from "../src/stages/render/renderExecutor.js";
@@ -361,6 +362,140 @@ describe("Render versions", () => {
     const metaEntry = entries.find((entry) => entry.name === "metadata.txt")!;
     expect(metaEntry.crc).toBe(crc32(Buffer.from(text, "utf8")) >>> 0);
     await app.close();
+  });
+});
+
+describe("Render variants (TASK-023)", () => {
+  function markStagesDone(harness: Harness) {
+    harness.repository.ensureStages(harness.projectId);
+    for (const stage of STAGE_ORDER) {
+      if (stage === "DONE") continue;
+      harness.repository.updateStage(harness.projectId, stage, {
+        state: "DONE",
+        progress: 100,
+        message: "fixture",
+        jobId: null,
+        error: null,
+      });
+    }
+  }
+
+  it("renders a 9:16 variant with the right size without re-running earlier stages", async () => {
+    const { harness, dir, timelines, project } = setup();
+    const ff = (args: string[]) => runFfmpeg(["-y", "-hide_banner", "-loglevel", "error", ...args]);
+    await ff(["-f", "lavfi", "-i", "testsrc=s=320x240:d=1", "-frames:v", "1", join(dir, "visuals/a.png")]);
+    await ff(["-f", "lavfi", "-i", "sine=f=440:d=1", "-ac", "1", join(dir, "voice/a.wav")]);
+    await ff(["-f", "lavfi", "-i", "sine=f=220:d=2", join(dir, "music/m.wav")]);
+
+    markStagesDone(harness);
+    const service = new RenderService(harness.sqlite, harness.config, timelines);
+    harness.executors.set("RENDER", new RenderExecutor(service));
+
+    const app = Fastify();
+    registerRenderRoutes(
+      app,
+      service,
+      { getProject: async (id) => harness.repository.getProject(id) },
+      harness.sqlite,
+      undefined,
+      harness.orchestrator,
+    );
+
+    const beforeJobs = harness.repository.listJobs(harness.projectId, 50);
+    expect(beforeJobs).toHaveLength(0);
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/api/projects/${harness.projectId}/render`,
+      payload: { aspectRatio: "9:16" },
+    });
+    expect(response.statusCode).toBe(202);
+
+    await harness.worker.tick();
+
+    const jobs = harness.repository.listJobs(harness.projectId, 50);
+    expect(jobs.every((job) => job.stage === "RENDER")).toBe(true);
+    expect(jobs).toHaveLength(1);
+    expect(jobs[0]?.scope).toBe("aspect:9:16");
+    expect(jobs[0]?.status).toBe("SUCCEEDED");
+
+    const listed = service.list(harness.projectId).renders;
+    expect(listed).toHaveLength(1);
+    expect(listed[0]?.aspectRatio).toBe("9:16");
+    expect(listed[0]?.width).toBe(1080);
+    expect(listed[0]?.height).toBe(1920);
+    const probe = await probeMedia(listed[0]!.id
+      ? join(dir, "render/versions", listed[0]!.id, "output.mp4")
+      : "");
+    expect(probe.width).toBe(1080);
+    expect(probe.height).toBe(1920);
+    expect(project().settings.aspectRatio).toBe("16:9");
+    await app.close();
+  }, 90_000);
+
+  it("render-variants picks the missing formats from the profile accounts", async () => {
+    const { harness, timelines, project } = setup();
+    let probeSize = { width: 160, height: 90 };
+    const { tools } = fakeTools();
+    tools.probe = vi.fn(async () => ({
+      durationSec: 3,
+      width: probeSize.width,
+      height: probeSize.height,
+      hasVideo: true,
+      hasAudio: true,
+    }));
+    const service = new RenderService(harness.sqlite, harness.config, timelines, tools);
+
+    const profileId = randomUUID();
+    const now = new Date().toISOString();
+    harness.sqlite.prepare(
+      `INSERT INTO profiles (id, name, description, direction, language, default_brief, voice, guidelines, llm, avatar_path, color, archived_at, created_at, updated_at)
+       VALUES (?, ?, '', '', 'vi', ?, NULL, ?, NULL, NULL, '#3B82F6', NULL, ?, ?)`,
+    ).run(
+      profileId,
+      `Profile ${profileId.slice(0, 8)}`,
+      JSON.stringify({ platform: "youtube" }),
+      JSON.stringify({ platformPack: "auto", customRules: [] }),
+      now,
+      now,
+    );
+    harness.sqlite.prepare(
+      `INSERT INTO platform_accounts (id, profile_id, platform, display_name, handle, format, enabled, connection, connection_error, publish_settings, created_at, updated_at)
+       VALUES (?, ?, 'youtube', 'Main', NULL, 'landscape', 1, 'NOT_CONNECTED', NULL, ?, ?, ?)`,
+    ).run(randomUUID(), profileId, JSON.stringify({ visibility: "public", autoPublish: false }), now, now);
+    harness.sqlite.prepare(
+      `INSERT INTO platform_accounts (id, profile_id, platform, display_name, handle, format, enabled, connection, connection_error, publish_settings, created_at, updated_at)
+       VALUES (?, ?, 'tiktok', 'Shorts', NULL, 'vertical', 1, 'NOT_CONNECTED', NULL, ?, ?, ?)`,
+    ).run(randomUUID(), profileId, JSON.stringify({ visibility: "public", autoPublish: false }), now, now);
+    harness.sqlite.prepare("UPDATE projects SET profile_id = ? WHERE id = ?").run(profileId, harness.projectId);
+
+    // Project default landscape already rendered → only 9:16 is missing.
+    probeSize = { width: 160, height: 90 };
+    await service.render(project(), new AbortController().signal);
+
+    probeSize = { width: 1080, height: 1920 };
+    const result = await service.renderMissingVariants(project(), new AbortController().signal);
+    expect(result.skipped).toEqual(["16:9"]);
+    expect(result.queued).toEqual(["9:16"]);
+    expect(result.renders).toHaveLength(1);
+    expect(result.renders[0]?.aspectRatio).toBe("9:16");
+    expect(result.renders[0]?.width).toBe(1080);
+    expect(result.renders[0]?.height).toBe(1920);
+
+    const again = await service.renderMissingVariants(project(), new AbortController().signal);
+    expect(again.queued).toEqual([]);
+    expect(again.skipped).toEqual(["16:9", "9:16"]);
+    expect(again.renders).toHaveLength(0);
+  });
+
+  it("warns when a vertical variant is longer than 180s", async () => {
+    const { harness, state, timelines, project } = setup();
+    state.timeline = { ...state.timeline, totalDurationSec: 200 };
+    const { tools } = fakeTools();
+    tools.probe = vi.fn(async () => ({ durationSec: 200, width: 1080, height: 1920, hasVideo: true, hasAudio: true }));
+    const service = new RenderService(harness.sqlite, harness.config, timelines, tools);
+    const { render } = await service.render(project(), new AbortController().signal, () => {}, { aspectRatio: "9:16" });
+    expect(render.report.issues.some((issue) => issue.code === "VERTICAL_TOO_LONG")).toBe(true);
   });
 });
 

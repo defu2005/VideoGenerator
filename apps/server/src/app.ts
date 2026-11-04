@@ -195,7 +195,7 @@ export function buildApp({ config }: { config: AppConfig }) {
   registerSubtitleRoutes(server, database.sqlite, jobRepository, config);
   registerMusicRoutes(server, musicService, projectService, jobRepository);
   registerTimelineRoutes(server, timelineService, projectService);
-  registerRenderRoutes(server, renderService, projectService, database.sqlite, autoReportService);
+  registerRenderRoutes(server, renderService, projectService, database.sqlite, autoReportService, orchestrator);
   registerMetadataRoutes(server, metadataService, projectService);
   registerAutoReportRoutes(server, autoReportService, projectService);
   registerReviewRoutes(server, reviewService, projectService);

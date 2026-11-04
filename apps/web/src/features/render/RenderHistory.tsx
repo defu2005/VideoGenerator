@@ -1,4 +1,4 @@
-import type { RenderVersion } from "@vg/shared";
+import { renderAspectLabel, type RenderVersion } from "@vg/shared";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { deleteProjectRender, patchProjectRender, renderExportUrl, renderFileUrl } from "../../services/renderApi";
@@ -99,6 +99,7 @@ export function RenderHistory({
               <div className="render-history-main">
                 <p className="render-history-meta">
                   <strong>v{item.version}</strong>
+                  {" · "}{renderAspectLabel(item.aspectRatio)}
                   {" · "}{shortDate(item.createdAt)}
                   {" · "}{clock(item.durationSec)}
                   {" · "}{megabytes(item.sizeBytes)}
