@@ -276,4 +276,61 @@ describe("ProfileDetailPage accounts tab", () => {
     expect(await screen.findByText(/Content Posting API/)).toBeInTheDocument();
     expect(screen.getByText(/Chế độ: Gửi vào hộp thư nháp/i)).toBeInTheDocument();
   });
+
+  it("shows Meta help, Page picker, and Cần kết nối lại when expiring", async () => {
+    const fbAccount: PlatformAccount = {
+      ...account,
+      platform: "facebook_reels",
+      format: "vertical",
+      connection: "CONNECTED",
+      externalId: "pending:user-1",
+      displayName: "Meta User",
+    };
+    const soon = new Date(Date.now() + 2 * 24 * 60 * 60 * 1000).toISOString();
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.endsWith(`/profiles/${profileId}`) && (!init || !init.method || init.method === "GET")) {
+        return jsonResponse({ ...profile, accounts: [fbAccount] });
+      }
+      if (url.includes(`/accounts/${accountId}/meta-target`) && init?.method === "POST") {
+        return jsonResponse(connectionDetail({
+          connection: "CONNECTED",
+          externalId: "page-1",
+          displayName: "My Page",
+          tokenExpiresAt: soon,
+          metaTargets: undefined,
+        }));
+      }
+      if (url.includes(`/accounts/${accountId}/connection`)) {
+        return jsonResponse(connectionDetail({
+          connection: "CONNECTED",
+          externalId: "pending:user-1",
+          displayName: "Meta User",
+          tokenExpiresAt: soon,
+          redirectUri: "http://127.0.0.1:3001/api/oauth/facebook_reels/callback",
+          metaTargets: [
+            { id: "page-1", name: "My Page", kind: "page" },
+            { id: "page-2", name: "Other", kind: "page" },
+          ],
+        }));
+      }
+      return jsonResponse({ error: { code: "NOT_FOUND", message: url } }, 404);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    renderAccountsTab();
+    expect(await screen.findByText("Hướng dẫn kết nối Meta (FB/IG Reels)")).toBeInTheDocument();
+    fireEvent.click(screen.getByText("Hướng dẫn kết nối Meta (FB/IG Reels)"));
+    expect(await screen.findByText(/developers.facebook.com/)).toBeInTheDocument();
+    expect(screen.getByText("Cần kết nối lại")).toBeInTheDocument();
+    expect(screen.getByText(/Chọn Facebook Page để đăng Reels/)).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText("Page"), { target: { value: "page-1" } });
+    fireEvent.click(screen.getByRole("button", { name: "Lưu lựa chọn" }));
+    await waitFor(() => {
+      expect(fetchMock.mock.calls.some(([url, init]) =>
+        String(url).includes("/meta-target") && (init as RequestInit | undefined)?.method === "POST",
+      )).toBe(true);
+    });
+  });
 });

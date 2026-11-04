@@ -82,6 +82,12 @@ export function registerOAuthRoutes(
       tokens,
       identity,
     });
-    return reply.redirect(deps.publish.webProfileUrl(profileId));
+    const profileUrl = deps.publish.webProfileUrl(profileId);
+    if (platform === "facebook_reels" || platform === "instagram_reels") {
+      const url = new URL(profileUrl);
+      url.searchParams.set("metaPick", pending.accountId);
+      return reply.redirect(url.toString());
+    }
+    return reply.redirect(profileUrl);
   });
 }

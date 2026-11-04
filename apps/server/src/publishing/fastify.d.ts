@@ -1,4 +1,6 @@
 import type { JobWorker } from "../jobs/worker.js";
+import type { FacebookReelsPublisher } from "./facebookReelsPublisher.js";
+import type { InstagramReelsPublisher } from "./instagramReelsPublisher.js";
 import type { MockPublisher } from "./mockPublisher.js";
 import type { OAuthStateStore } from "./oauthState.js";
 import type { PublishService } from "./publishService.js";
@@ -16,6 +18,8 @@ declare module "fastify" {
       mock: MockPublisher | null;
       youtube: YouTubePublisher;
       tiktok: TikTokPublisher;
+      facebookReels: FacebookReelsPublisher;
+      instagramReels: InstagramReelsPublisher;
       service: PublishService;
       vault: TokenVault;
       ticker: PublishTicker;

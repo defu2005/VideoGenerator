@@ -122,6 +122,16 @@ export const PlatformAppCredentialsInputSchema = z.object({
 }).strict();
 export type PlatformAppCredentialsInput = z.infer<typeof PlatformAppCredentialsInputSchema>;
 
+/** Page / IG account choice after Meta OAuth (no tokens). */
+export const MetaTargetPublicSchema = z.object({
+  id: z.string().min(1),
+  name: z.string().min(1),
+  handle: z.string().optional(),
+  kind: z.enum(["page", "instagram"]),
+  pageId: z.string().optional(),
+}).strict();
+export type MetaTargetPublic = z.infer<typeof MetaTargetPublicSchema>;
+
 export const AccountConnectionDetailSchema = z.object({
   connection: z.enum(["NOT_CONNECTED", "CONNECTED", "EXPIRED", "ERROR"]),
   connectionError: z.string().nullable(),
@@ -137,5 +147,15 @@ export const AccountConnectionDetailSchema = z.object({
   canConnect: z.boolean(),
   /** Vietnamese hint shown when Kết nối is disabled; null when canConnect. */
   connectBlockedReason: z.string().nullable(),
+  /**
+   * After Meta OAuth, before the user picks a Page (facebook_reels) or IG account
+   * (instagram_reels). Empty/omitted when not applicable.
+   */
+  metaTargets: z.array(MetaTargetPublicSchema).optional(),
 }).strict();
 export type AccountConnectionDetail = z.infer<typeof AccountConnectionDetailSchema>;
+
+export const SelectMetaTargetBodySchema = z.object({
+  targetId: z.string().min(1),
+}).strict();
+export type SelectMetaTargetBody = z.infer<typeof SelectMetaTargetBodySchema>;

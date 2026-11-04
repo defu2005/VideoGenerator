@@ -17,6 +17,7 @@ export * from "./automation/slots.js";
 export * from "./schemas/publication.js";
 export * from "./publishing/youtubeHelp.js";
 export * from "./publishing/tiktokHelp.js";
+export * from "./publishing/metaHelp.js";
 export * from "./schemas/script.js";
 export * from "./schemas/scene.js";
 export * from "./schemas/visual.js";

@@ -65,6 +65,8 @@ import { createProfileService } from "./services/profileService.js";
 import { registerProfileRoutes } from "./api/profiles.js";
 import { TokenVault } from "./publishing/tokenVault.js";
 import { createPublisherRegistry } from "./publishing/registry.js";
+import { FacebookReelsPublisher } from "./publishing/facebookReelsPublisher.js";
+import { InstagramReelsPublisher } from "./publishing/instagramReelsPublisher.js";
 import { OAuthStateStore } from "./publishing/oauthState.js";
 import { PublishService } from "./publishing/publishService.js";
 import { PublishTicker } from "./publishing/ticker.js";
@@ -180,10 +182,22 @@ export function buildApp({ config }: { config: AppConfig }) {
     vault: tokenVault,
     sqlite: database.sqlite,
   });
+  const facebookReelsPublisher = new FacebookReelsPublisher({
+    config,
+    vault: tokenVault,
+    sqlite: database.sqlite,
+  });
+  const instagramReelsPublisher = new InstagramReelsPublisher({
+    config,
+    vault: tokenVault,
+    sqlite: database.sqlite,
+  });
   const { registry: publisherRegistry, mock: mockPublisher } = createPublisherRegistry({
     enableMock: config.LLM_ENABLE_MOCK,
     youtube: youtubePublisher,
     tiktok: tiktokPublisher,
+    facebookReels: facebookReelsPublisher,
+    instagramReels: instagramReelsPublisher,
   });
   const oauthState = new OAuthStateStore();
   const publishService = new PublishService(
@@ -233,6 +247,8 @@ export function buildApp({ config }: { config: AppConfig }) {
     mock: mockPublisher,
     youtube: youtubePublisher,
     tiktok: tiktokPublisher,
+    facebookReels: facebookReelsPublisher,
+    instagramReels: instagramReelsPublisher,
     service: publishService,
     vault: tokenVault,
     ticker: publishTicker,

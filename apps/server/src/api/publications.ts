@@ -7,6 +7,7 @@ import {
   PlatformAppCredentialsInputSchema,
   PublicationListResponseSchema,
   PublicationSchema,
+  SelectMetaTargetBodySchema,
 } from "@vg/shared";
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
@@ -125,6 +126,18 @@ export function registerPublicationRoutes(
     if (account.profile_id !== id) throw new AppError(404, "ACCOUNT_NOT_FOUND", "Platform account not found");
     await deps.publish.checkConnection(accountId, AbortSignal.timeout(30_000));
     return deps.publish.connectionDetail(accountId);
+  });
+
+  app.post("/api/profiles/:id/accounts/:accountId/meta-target", {
+    schema: {
+      params: AccountParams,
+      body: SelectMetaTargetBodySchema,
+      response: { 200: AccountConnectionDetailSchema, ...ErrorResponses },
+    },
+  }, async (request) => {
+    const { id, accountId } = AccountParams.parse(request.params);
+    const body = SelectMetaTargetBodySchema.parse(request.body);
+    return deps.publish.selectMetaTarget(id, accountId, body.targetId, AbortSignal.timeout(30_000));
   });
 
   app.put("/api/profiles/:id/accounts/:accountId/app-credentials", {

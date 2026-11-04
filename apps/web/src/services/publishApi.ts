@@ -92,6 +92,17 @@ export function deleteAppCredentials(profileId: string, accountId: string): Prom
   );
 }
 
+export function selectMetaTarget(
+  profileId: string,
+  accountId: string,
+  targetId: string,
+): Promise<AccountConnectionDetail> {
+  return apiRequest(
+    `/profiles/${encodeURIComponent(profileId)}/accounts/${encodeURIComponent(accountId)}/meta-target`,
+    { method: "POST", body: JSON.stringify({ targetId }) },
+  );
+}
+
 export type PublishFormVisibility = PublishVisibility;
 
 export const accountConnectionKeys = {

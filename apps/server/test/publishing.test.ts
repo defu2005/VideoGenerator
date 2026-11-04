@@ -231,7 +231,7 @@ describe("canConnect / connectBlockedReason", () => {
     expect(body.connectBlockedReason).toBeNull();
   });
 
-  it("blocks platforms that still lack a publisher (e.g. Facebook Reels)", async () => {
+  it("blocks Facebook Reels when publisher exists but Meta app credentials are missing", async () => {
     const profile = await createProfile();
     const created = await app.inject({
       method: "POST",
@@ -248,7 +248,7 @@ describe("canConnect / connectBlockedReason", () => {
     expect(detail.statusCode).toBe(200);
     const body = detail.json();
     expect(body.canConnect).toBe(false);
-    expect(body.connectBlockedReason).toBe("Nền tảng này chưa được hỗ trợ đăng tự động");
+    expect(body.connectBlockedReason).toContain("Chưa có thông tin ứng dụng");
   });
 
   it("blocks TikTok when publisher exists but app credentials are missing", async () => {

@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { Link, Navigate, useParams } from "react-router-dom";
 import {
+  META_RECONNECT_SOON_VI,
+  META_SETUP_HELP_VI,
   ProfileDefaultBriefSchema,
   TIKTOK_SETUP_HELP_VI,
   YOUTUBE_PLAYLIST_SCOPE_NOTE_VI,
@@ -35,6 +37,7 @@ import {
   getAccountConnection,
   oauthStartUrl,
   saveAppCredentials,
+  selectMetaTarget,
 } from "../../services/publishApi";
 import { BriefFields } from "../projects/BriefFields";
 import { ModelAdvisorPanel } from "../settings/ModelAdvisorPanel";
@@ -323,7 +326,8 @@ function AccountCard({
   const [clientSecret, setClientSecret] = useState("");
   const [credMessage, setCredMessage] = useState("");
   const [checkMessage, setCheckMessage] = useState("");
-  const [busy, setBusy] = useState<"disconnect" | "check" | "saveCreds" | "deleteCreds" | null>(null);
+  const [busy, setBusy] = useState<"disconnect" | "check" | "saveCreds" | "deleteCreds" | "metaTarget" | null>(null);
+  const [selectedMetaTargetId, setSelectedMetaTargetId] = useState("");
 
   const connectionQuery = useQuery({
     queryKey: accountConnectionKeys.detail(profileId, account.id),
@@ -343,7 +347,11 @@ function AccountCard({
   const connectBlockedReason = detail?.connectBlockedReason ?? null;
   const reconnect = connection === "EXPIRED" || connection === "ERROR";
   const connected = connection === "CONNECTED";
+  const isMeta = account.platform === "facebook_reels" || account.platform === "instagram_reels";
   const expiringSoon = isExpiringSoon(detail?.tokenExpiresAt ?? null);
+  const metaTargets = detail?.metaTargets ?? [];
+  const needsMetaPicker = isMeta && metaTargets.length > 0
+    && (!externalId || externalId.startsWith("pending:"));
 
   async function invalidateConnection() {
     await queryClient.invalidateQueries({ queryKey: accountConnectionKeys.detail(profileId, account.id) });
@@ -429,6 +437,23 @@ function AccountCard({
     }
   }
 
+  async function onSelectMetaTarget(event: FormEvent) {
+    event.preventDefault();
+    if (!selectedMetaTargetId) return;
+    setBusy("metaTarget");
+    onError("");
+    try {
+      const result = await selectMetaTarget(profileId, account.id, selectedMetaTargetId);
+      queryClient.setQueryData(accountConnectionKeys.detail(profileId, account.id), result);
+      await queryClient.invalidateQueries({ queryKey: profileKeys.detail(profileId) });
+      setSelectedMetaTargetId("");
+    } catch (err) {
+      onError(err instanceof Error ? err.message : "Chọn Page/Instagram thất bại");
+    } finally {
+      setBusy(null);
+    }
+  }
+
   return (
     <li className="account-row" style={{ flexDirection: "column", alignItems: "stretch" }}>
       <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
@@ -454,7 +479,9 @@ function AccountCard({
                 <span>
                   Token hết hạn: {formatDateTime(detail.tokenExpiresAt)}
                   {expiringSoon && (
-                    <span style={{ color: "#b42318", fontWeight: 700, marginLeft: 8 }}>Sắp hết hạn</span>
+                    <span style={{ color: "#b42318", fontWeight: 700, marginLeft: 8 }}>
+                      {isMeta ? META_RECONNECT_SOON_VI : "Sắp hết hạn"}
+                    </span>
                   )}
                 </span>
               )}
@@ -517,6 +544,23 @@ function AccountCard({
               </pre>
             </details>
           )}
+          {isMeta && (
+            <details style={{ marginTop: 8 }}>
+              <summary style={{ cursor: "pointer", fontWeight: 600 }}>Hướng dẫn kết nối Meta (FB/IG Reels)</summary>
+              <pre
+                className="page-subtitle"
+                style={{
+                  whiteSpace: "pre-wrap",
+                  margin: "0.5rem 0 0",
+                  fontFamily: "inherit",
+                  fontSize: 13,
+                  lineHeight: 1.45,
+                }}
+              >
+                {META_SETUP_HELP_VI}
+              </pre>
+            </details>
+          )}
           {account.platform === "tiktok" && (
             <p className="field-hint" style={{ margin: "0.5rem 0 0" }}>
               {account.publishSettings.tiktokUploadMode === "inbox"
@@ -526,6 +570,42 @@ function AccountCard({
           )}
           {account.platform === "youtube" && account.publishSettings.playlistId && (
             <p className="field-hint" style={{ margin: "0.5rem 0 0" }}>{YOUTUBE_PLAYLIST_SCOPE_NOTE_VI}</p>
+          )}
+          {needsMetaPicker && (
+            <form
+              className="form-panel"
+              style={{ marginTop: 12, padding: 12 }}
+              onSubmit={(event) => void onSelectMetaTarget(event)}
+            >
+              <p style={{ margin: "0 0 0.5rem", fontWeight: 600 }}>
+                {account.platform === "facebook_reels"
+                  ? "Chọn Facebook Page để đăng Reels"
+                  : "Chọn tài khoản Instagram chuyên nghiệp"}
+              </p>
+              <label className="form-field">
+                <span>{account.platform === "facebook_reels" ? "Page" : "Instagram"}</span>
+                <select
+                  value={selectedMetaTargetId}
+                  required
+                  onChange={(event) => setSelectedMetaTargetId(event.target.value)}
+                >
+                  <option value="">— Chọn —</option>
+                  {metaTargets.map((target) => (
+                    <option key={target.id} value={target.id}>
+                      {target.name}{target.handle ? ` (${target.handle})` : ""} · {target.id}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <button
+                className="button button-primary"
+                type="submit"
+                disabled={busy === "metaTarget" || !selectedMetaTargetId}
+                style={{ marginTop: 8 }}
+              >
+                {busy === "metaTarget" ? "Đang lưu…" : "Lưu lựa chọn"}
+              </button>
+            </form>
           )}
         </div>
         <div className="account-row-actions">

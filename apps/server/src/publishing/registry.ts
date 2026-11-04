@@ -1,4 +1,6 @@
 import type { PlatformId } from "@vg/shared";
+import type { FacebookReelsPublisher } from "./facebookReelsPublisher.js";
+import type { InstagramReelsPublisher } from "./instagramReelsPublisher.js";
 import { MockPublisher } from "./mockPublisher.js";
 import type { Publisher } from "./types.js";
 import type { TikTokPublisher } from "./tiktokPublisher.js";
@@ -36,6 +38,8 @@ export function createPublisherRegistry(options: {
   enableMock: boolean;
   youtube?: YouTubePublisher;
   tiktok?: TikTokPublisher;
+  facebookReels?: FacebookReelsPublisher;
+  instagramReels?: InstagramReelsPublisher;
 }): {
   registry: PublisherRegistry;
   mock: MockPublisher | null;
@@ -47,6 +51,12 @@ export function createPublisherRegistry(options: {
   }
   if (options.tiktok) {
     registry.register(options.tiktok);
+  }
+  if (options.facebookReels) {
+    registry.register(options.facebookReels);
+  }
+  if (options.instagramReels) {
+    registry.register(options.instagramReels);
   }
   if (options.enableMock) {
     mock = new MockPublisher();

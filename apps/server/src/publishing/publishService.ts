@@ -10,6 +10,7 @@ import {
   type AccountFormat,
   type CreatePublicationsBody,
   type ListPublicationsQuery,
+  type MetaTargetPublic,
   type PlatformId,
   type Publication,
   type PublicationListItem,
@@ -24,7 +25,10 @@ import { AppError } from "../lib/errors.js";
 import { JobRepository } from "../jobs/jobRepository.js";
 import type { RenderService } from "../services/renderService.js";
 import { hasEnvAppCredentials } from "./envAppCredentials.js";
+import type { FacebookReelsPublisher } from "./facebookReelsPublisher.js";
 import { evaluatePublishGuardrail } from "./guardrail.js";
+import type { InstagramReelsPublisher } from "./instagramReelsPublisher.js";
+import { isMetaPlatform } from "./metaGraph.js";
 import type { PublisherRegistry } from "./registry.js";
 import type { TokenVault } from "./tokenVault.js";
 import { trimPublishMetadata } from "./trimMetadata.js";
@@ -304,9 +308,14 @@ export class PublishService {
       this.setConnection(accountId, "EXPIRED", "Cần kết nối lại tài khoản");
       throw new AppError(409, "ACCOUNT_EXPIRED", "Cần kết nối lại tài khoản");
     }
+    this.bindMetaExternalId(publisher, account.external_id);
     tokens = await this.ensureFreshTokens(accountId, account.platform, publisher, tokens, signal);
     const identity = await publisher.oauth.fetchIdentity(tokens, signal);
     const nowIso = this.now().toISOString();
+    // Keep a pending Meta picker id until the user selects a Page / IG account.
+    const externalId = account.external_id?.startsWith("pending:")
+      ? account.external_id
+      : identity.externalId;
     this.sqlite.prepare(
       `UPDATE platform_accounts SET display_name = ?, handle = ?, external_id = ?,
        connection = 'CONNECTED', connection_error = NULL, last_checked_at = ?, updated_at = ?
@@ -314,7 +323,7 @@ export class PublishService {
     ).run(
       identity.displayName,
       identity.handle ?? account.handle,
-      identity.externalId,
+      externalId,
       nowIso,
       nowIso,
       accountId,
@@ -342,7 +351,7 @@ export class PublishService {
     ).run(this.now().toISOString(), accountId);
   }
 
-  connectionDetail(accountId: string): AccountConnectionDetail {
+  async connectionDetail(accountId: string, signal: AbortSignal = AbortSignal.timeout(15_000)): Promise<AccountConnectionDetail> {
     const account = this.requireAccount(accountId);
     const meta = this.vault.getCredentialMeta(accountId);
     const appCredentials = this.vault.appCredentialsStatus(accountId, account.profile_id, account.platform);
@@ -350,7 +359,7 @@ export class PublishService {
       account.platform,
       appCredentials.configured,
     );
-    return {
+    const detail: AccountConnectionDetail = {
       connection: account.connection as AccountConnectionDetail["connection"],
       connectionError: account.connection_error,
       displayName: account.display_name,
@@ -364,6 +373,84 @@ export class PublishService {
       canConnect,
       connectBlockedReason,
     };
+
+    if (isMetaPlatform(account.platform) && needsMetaTargetPicker(account.external_id)) {
+      const tokens = this.vault.loadTokens(accountId);
+      const publisher = this.registry.get(account.platform);
+      if (tokens && publisher && isMetaPublisher(publisher)) {
+        try {
+          const targets = await publisher.listTargets(tokens.accessToken, signal);
+          detail.metaTargets = targets.map(toPublicMetaTarget);
+        } catch {
+          detail.metaTargets = [];
+        }
+      } else {
+        detail.metaTargets = [];
+      }
+    }
+
+    return detail;
+  }
+
+  /**
+   * After Meta OAuth: swap the stored user token for the chosen Page token and
+   * set external_id to the Page (facebook_reels) or IG user id (instagram_reels).
+   */
+  async selectMetaTarget(
+    profileId: string,
+    accountId: string,
+    targetId: string,
+    signal: AbortSignal,
+  ): Promise<AccountConnectionDetail> {
+    const account = this.requireAccount(accountId);
+    if (account.profile_id !== profileId) {
+      throw new AppError(404, "ACCOUNT_NOT_FOUND", "Platform account not found");
+    }
+    if (!isMetaPlatform(account.platform)) {
+      throw new AppError(400, "NOT_META", "Chỉ Facebook/Instagram Reels mới chọn Page/IG");
+    }
+    const publisher = this.registry.get(account.platform);
+    if (!publisher || !isMetaPublisher(publisher)) {
+      throw new AppError(400, "PUBLISHER_UNAVAILABLE", "Publisher unavailable");
+    }
+    const tokens = this.vault.loadTokens(accountId);
+    if (!tokens) {
+      throw new AppError(409, "ACCOUNT_EXPIRED", "Cần kết nối lại tài khoản");
+    }
+    const targets = await publisher.listTargets(tokens.accessToken, signal);
+    const chosen = targets.find((target) => target.id === targetId);
+    if (!chosen) {
+      throw new AppError(404, "META_TARGET_NOT_FOUND", "Không tìm thấy Page/tài khoản Instagram đã chọn");
+    }
+    if (account.platform === "facebook_reels" && chosen.kind !== "page") {
+      throw new AppError(400, "META_TARGET_KIND", "Facebook Reels cần chọn một Facebook Page");
+    }
+    if (account.platform === "instagram_reels" && chosen.kind !== "instagram") {
+      throw new AppError(400, "META_TARGET_KIND", "Instagram Reels cần chọn một tài khoản Instagram");
+    }
+
+    this.vault.storeTokens(accountId, {
+      accessToken: chosen.pageAccessToken,
+      expiresAt: tokens.expiresAt,
+      scopes: tokens.scopes,
+      tokenType: tokens.tokenType ?? "Bearer",
+    }, tokens.scopes);
+
+    const nowIso = this.now().toISOString();
+    this.sqlite.prepare(
+      `UPDATE platform_accounts SET display_name = ?, handle = ?, external_id = ?,
+       connection = 'CONNECTED', connection_error = NULL, last_checked_at = ?, updated_at = ?
+       WHERE id = ?`,
+    ).run(
+      chosen.name,
+      chosen.handle ?? null,
+      chosen.id,
+      nowIso,
+      nowIso,
+      accountId,
+    );
+
+    return this.connectionDetail(accountId, signal);
   }
 
   private resolveConnectAvailability(
@@ -408,6 +495,7 @@ export class PublishService {
       this.setConnection(publication.accountId, "EXPIRED", "Cần kết nối lại tài khoản");
       throw Object.assign(new Error("Cần kết nối lại tài khoản"), { status: 401, retryable: false });
     }
+    this.bindMetaExternalId(publisher, account.external_id);
     try {
       tokens = await this.ensureFreshTokens(publication.accountId, account.platform, publisher, tokens, signal);
     } catch (error) {
@@ -694,6 +782,10 @@ export class PublishService {
     const account = this.requireAccount(input.accountId);
     this.vault.storeTokens(input.accountId, input.tokens, input.tokens.scopes);
     const nowIso = this.now().toISOString();
+    // Meta: keep pending:* external_id so the UI shows the Page/IG picker.
+    const externalId = isMetaPlatform(account.platform) && !input.identity.externalId.startsWith("pending:")
+      ? `pending:${input.identity.externalId}`
+      : input.identity.externalId;
     this.sqlite.prepare(
       `UPDATE platform_accounts SET display_name = ?, handle = ?, external_id = ?,
        connection = 'CONNECTED', connection_error = NULL, last_checked_at = ?, updated_at = ?
@@ -701,12 +793,18 @@ export class PublishService {
     ).run(
       input.identity.displayName,
       input.identity.handle ?? account.handle,
-      input.identity.externalId,
+      externalId,
       nowIso,
       nowIso,
       input.accountId,
     );
     return { profileId: account.profile_id };
+  }
+
+  private bindMetaExternalId(publisher: Publisher, externalId: string | null): void {
+    if (isMetaPublisher(publisher)) {
+      publisher.bindExternalId(externalId);
+    }
   }
 
   private toPublication(row: PublicationRow): Publication {
@@ -738,5 +836,30 @@ export class PublishService {
   }
 }
 
-// silence unused import for list item type re-export convenience
+function needsMetaTargetPicker(externalId: string | null): boolean {
+  return !externalId || externalId.startsWith("pending:");
+}
+
+function toPublicMetaTarget(target: {
+  id: string;
+  name: string;
+  handle?: string;
+  kind: "page" | "instagram";
+  pageId?: string;
+}): MetaTargetPublic {
+  return {
+    id: target.id,
+    name: target.name,
+    kind: target.kind,
+    ...(target.handle ? { handle: target.handle } : {}),
+    ...(target.pageId ? { pageId: target.pageId } : {}),
+  };
+}
+
+function isMetaPublisher(
+  publisher: Publisher,
+): publisher is FacebookReelsPublisher | InstagramReelsPublisher {
+  return publisher.platform === "facebook_reels" || publisher.platform === "instagram_reels";
+}
+
 export type { PublicationListItem };
