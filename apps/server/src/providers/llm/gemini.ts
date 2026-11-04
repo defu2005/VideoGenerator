@@ -1,9 +1,11 @@
+import { readFileSync } from "node:fs";
 import { fetchLlmJson, asRecord, numeric } from "./http.js";
 import { LlmError, type LlmProvider, type LlmRequest, type LlmResponse } from "./types.js";
 
 export class GeminiProvider implements LlmProvider {
   readonly id = "gemini";
   readonly label = "Google Gemini";
+  readonly capabilities = { vision: true, maxImagesPerCall: 10 } as const;
 
   constructor(
     private readonly apiKey: string,
@@ -13,10 +15,7 @@ export class GeminiProvider implements LlmProvider {
   ) {}
 
   async generate(req: LlmRequest, signal: AbortSignal) {
-    const contents = req.messages.map((message) => ({
-      role: message.role === "assistant" ? "model" : "user",
-      parts: [{ text: message.content }],
-    }));
+    const contents = buildGeminiContents(req);
     const result = await fetchLlmJson(
       `${this.baseUrl}/models/${encodeURIComponent(req.model)}:generateContent?key=${encodeURIComponent(this.apiKey)}`,
       {
@@ -60,4 +59,29 @@ export class GeminiProvider implements LlmProvider {
       finishReason,
     };
   }
+}
+
+export function buildGeminiContents(req: LlmRequest): unknown[] {
+  return req.messages.map((message, index) => {
+    const role = message.role === "assistant" ? "model" : "user";
+    if (message.role !== "user" || index !== firstUserIndex(req) || !req.images?.length) {
+      return { role, parts: [{ text: message.content }] };
+    }
+    return {
+      role,
+      parts: [
+        ...req.images.map((image) => ({
+          inlineData: {
+            mimeType: "image/jpeg",
+            data: readFileSync(image.path).toString("base64"),
+          },
+        })),
+        { text: `${message.content}\n\nImage labels: ${req.images.map((image) => image.label).join(", ")}` },
+      ],
+    };
+  });
+}
+
+function firstUserIndex(req: LlmRequest): number {
+  return req.messages.findIndex((message) => message.role === "user");
 }

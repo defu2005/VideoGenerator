@@ -7,6 +7,9 @@ export const RenderIssueCodeSchema = z.enum([
   "NO_AUDIO",
   "BLACK_FRAMES",
   "THUMBNAIL_FAILED",
+  "FRAME_MISMATCH",
+  "SUBTITLE_ILLEGIBLE",
+  "RENDER_VISION_FAILED",
 ]);
 export type RenderIssueCode = z.infer<typeof RenderIssueCodeSchema>;
 

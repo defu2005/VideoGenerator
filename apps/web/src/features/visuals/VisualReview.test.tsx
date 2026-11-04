@@ -49,7 +49,7 @@ const visuals: ProjectVisuals = {
   }],
   summary: {
     withImage: 1, needsUser: 1, lowRelevance: 1, licenseCounts: { UNKNOWN: 1 },
-    statusCounts: { NO_VISUAL: 0, SEARCHING: 0, REVIEW_REQUIRED: 1, APPROVED: 0, READY_FOR_RENDER: 0, SKIPPED: 0 },
+    statusCounts: { NO_VISUAL: 0, SEARCHING: 0, REVIEW_REQUIRED: 1, NEEDS_ATTENTION: 0, APPROVED: 0, READY_FOR_RENDER: 0, SKIPPED: 0 },
   },
 };
 const sceneVisuals: SceneVisuals = { selection, candidates: [candidate], status: "REVIEW_REQUIRED", noVisual: false };

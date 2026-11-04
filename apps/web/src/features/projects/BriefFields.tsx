@@ -60,7 +60,12 @@ export function BriefFields({
       sceneQueryAssist: "Scene query assist (BALANCED/QUALITY/CUSTOM)",
       semanticImageRerank: "Semantic image rerank (QUALITY/CUSTOM)",
       scriptReviewPasses: "Script review passes",
-      visionCheck: "Vision check (available in a later step)",
+      visionCheck: "Kiểm tra ảnh bằng AI nhìn (MAX/CUSTOM)",
+      visionRetryRounds: "Số vòng tìm lại khi AI nhìn chưa đạt",
+      visionThreshold: "Ngưỡng điểm AI nhìn (0–10)",
+      visualSearchBreadth: "Số ảnh liên quan tối thiểu mỗi scene",
+      renderVerify: "Kiểm tra frame sau render bằng AI nhìn",
+      factCheck: "Đối chiếu fact script với research",
       musicAssist: "Music assist (BALANCED/QUALITY/CUSTOM)",
       metadata: "Publishing metadata (BALANCED/QUALITY/CUSTOM)",
       guidelineCheck: "Kiểm tra định hướng nội dung bằng AI",
@@ -79,9 +84,17 @@ export function BriefFields({
     return field(path, label, (
       <select aria-label={key} value={String(value)} onChange={(event) => onChange(
         path,
-        key === "repairAttempts" || key === "scriptReviewPasses" ? Number(event.target.value) : event.target.value,
+        key === "repairAttempts" || key === "scriptReviewPasses" || key === "visionRetryRounds" || key === "visionThreshold" || key === "visualSearchBreadth"
+          ? Number(event.target.value)
+          : event.target.value,
       )}>
-        {(key === "storyMode" ? ["merged", "separate"] : key === "guidelineCheck" ? ["off", "check", "checkAndFix"] : ["0", "1", "2"]).map((choice) => (
+        {(
+          key === "storyMode" ? ["merged", "separate"]
+            : key === "guidelineCheck" ? ["off", "check", "checkAndFix"]
+              : key === "visualSearchBreadth" ? ["8", "16"]
+                : key === "visionThreshold" ? ["5", "6", "7", "8", "9"]
+                  : ["0", "1", "2"]
+        ).map((choice) => (
           <option key={choice} value={choice}>{choice}</option>
         ))}
       </select>
@@ -98,6 +111,7 @@ export function BriefFields({
           <option value="ECO">ECO — Rẻ nhất (~1 lượt gọi AI/video)</option>
           <option value="BALANCED">BALANCED — Cân bằng chất lượng/chi phí (~8–13 lượt)</option>
           <option value="QUALITY">QUALITY — Chất lượng cao: AI tự review &amp; sửa script (~9–26 lượt)</option>
+          <option value="MAX">MAX — Không tiết kiệm token — kiểm tra ảnh bằng AI nhìn</option>
           <option value="CUSTOM">CUSTOM</option>
         </select>
       ))}
@@ -105,11 +119,17 @@ export function BriefFields({
         Ước tính: ~{budgetEstimate.total.min === budgetEstimate.total.max
           ? budgetEstimate.total.min
           : `${budgetEstimate.total.min}–${budgetEstimate.total.max}`} lượt gọi AI ({budgetEstimate.mode})
+        {budgetEstimate.tokens
+          ? ` · ~${budgetEstimate.tokens.input + budgetEstimate.tokens.output} token`
+          : ""}
       </small>
       <small className="field-hint">
         Visual Search: {budgetEstimate.perStage.find((item) => item.stage === "VISUAL_SEARCH")?.calls.max
           ? `up to ${budgetEstimate.perStage.find((item) => item.stage === "VISUAL_SEARCH")?.calls.max} LLM calls`
           : "0 LLM calls"}
+        {budgetEstimate.perStage.find((item) => item.stage === "RENDER")?.calls.max
+          ? ` · Render vision up to ${budgetEstimate.perStage.find((item) => item.stage === "RENDER")?.calls.max}`
+          : ""}
       </small>
       {resolved.budget.mode === "CUSTOM" && (
         <fieldset className="budget-custom-fields">
@@ -121,6 +141,11 @@ export function BriefFields({
           {customFeature("sceneQueryAssist", budgetFeatures.sceneQueryAssist)}
           {customFeature("semanticImageRerank", budgetFeatures.semanticImageRerank)}
           {customFeature("visionCheck", budgetFeatures.visionCheck)}
+          {customFeature("visionRetryRounds", budgetFeatures.visionRetryRounds)}
+          {customFeature("visionThreshold", budgetFeatures.visionThreshold)}
+          {customFeature("visualSearchBreadth", budgetFeatures.visualSearchBreadth)}
+          {customFeature("renderVerify", budgetFeatures.renderVerify)}
+          {customFeature("factCheck", budgetFeatures.factCheck)}
           {customFeature("musicAssist", budgetFeatures.musicAssist)}
           {customFeature("metadata", budgetFeatures.metadata)}
           {customFeature("guidelineCheck", budgetFeatures.guidelineCheck)}

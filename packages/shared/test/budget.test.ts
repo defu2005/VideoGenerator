@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { estimateBudget, recommendBrief, resolveBudget } from "../src/index.js";
+import { estimateBudget, estimateSceneCount, recommendBrief, resolveBudget } from "../src/index.js";
 
-const project = (mode: "ECO" | "BALANCED" | "QUALITY" | "CUSTOM") => ({
+const project = (mode: "ECO" | "BALANCED" | "QUALITY" | "MAX" | "CUSTOM") => ({
   topic: "A video topic",
   description: "",
   settings: {
@@ -18,27 +18,41 @@ describe("budget modes", () => {
     ["ECO", {
       storyMode: "merged", repairAttempts: 0, scriptReview: false, scriptReviewPasses: 0,
       researchDepth: "light", altQueryAssist: false, sceneQueryAssist: false,
-      semanticImageRerank: false, visionCheck: false, musicAssist: false, metadata: false, guidelineCheck: "off", outputHeadroom: 1,
+      semanticImageRerank: false, visionCheck: false, visionRetryRounds: 0, visionThreshold: 7,
+      visualSearchBreadth: 8, renderVerify: false, factCheck: false,
+      musicAssist: false, metadata: false, guidelineCheck: "off", outputHeadroom: 1,
     }],
     ["BALANCED", {
       storyMode: "separate", repairAttempts: 1, scriptReview: true, scriptReviewPasses: 1,
       researchDepth: "standard", altQueryAssist: true, sceneQueryAssist: true,
-      semanticImageRerank: true, visionCheck: false, musicAssist: true, metadata: true, guidelineCheck: "check", outputHeadroom: 1.5,
+      semanticImageRerank: true, visionCheck: false, visionRetryRounds: 0, visionThreshold: 7,
+      visualSearchBreadth: 8, renderVerify: false, factCheck: false,
+      musicAssist: true, metadata: true, guidelineCheck: "check", outputHeadroom: 1.5,
     }],
     ["QUALITY", {
       storyMode: "separate", repairAttempts: 2, scriptReview: true, scriptReviewPasses: 2,
       researchDepth: "deep", altQueryAssist: true, sceneQueryAssist: true,
-      semanticImageRerank: true, visionCheck: false, musicAssist: true, metadata: true, guidelineCheck: "checkAndFix", outputHeadroom: 2,
+      semanticImageRerank: true, visionCheck: false, visionRetryRounds: 0, visionThreshold: 7,
+      visualSearchBreadth: 8, renderVerify: false, factCheck: false,
+      musicAssist: true, metadata: true, guidelineCheck: "checkAndFix", outputHeadroom: 2,
+    }],
+    ["MAX", {
+      storyMode: "separate", repairAttempts: 2, scriptReview: true, scriptReviewPasses: 2,
+      researchDepth: "deep", altQueryAssist: true, sceneQueryAssist: true,
+      semanticImageRerank: true, visionCheck: true, visionRetryRounds: 2, visionThreshold: 7,
+      visualSearchBreadth: 16, renderVerify: true, factCheck: true,
+      musicAssist: true, metadata: true, guidelineCheck: "checkAndFix", outputHeadroom: 2,
     }],
   ] as const)("resolves the %s feature preset", (mode, expected) => {
     expect(resolveBudget(mode)).toEqual(expected);
   });
 
   it("uses BALANCED defaults with partial CUSTOM overrides", () => {
-    expect(resolveBudget("CUSTOM", { storyMode: "merged", scriptReview: true })).toEqual({
+    expect(resolveBudget("CUSTOM", { storyMode: "merged", scriptReview: true, visionCheck: true })).toEqual({
       ...resolveBudget("BALANCED"),
       storyMode: "merged",
       scriptReview: true,
+      visionCheck: true,
     });
   });
 
@@ -49,6 +63,24 @@ describe("budget modes", () => {
   ] as const)("estimates %s LLM call bounds", (mode, min, max) => {
     expect(estimateBudget(project(mode), "mock").total).toEqual({ min, max });
     expect(estimateBudget(project(mode), "mock").tokens).toBeDefined();
+  });
+
+  it("estimates MAX with vision and fact-check calls", () => {
+    const scenes = estimateSceneCount(project("MAX"));
+    const estimate = estimateBudget(project("MAX"), "mock");
+    expect(estimate.features.visionCheck).toBe(true);
+    expect(estimate.features.factCheck).toBe(true);
+    expect(estimate.features.renderVerify).toBe(true);
+    expect(estimate.later).toBeUndefined();
+    // SCRIPT includes fact-check (+1 vs QUALITY)
+    expect(estimate.perStage.find((stage) => stage.stage === "SCRIPT")?.calls.min).toBeGreaterThan(
+      estimateBudget(project("QUALITY")).perStage.find((stage) => stage.stage === "SCRIPT")!.calls.min,
+    );
+    // VISUAL_SEARCH includes per-scene vision + consistency
+    expect(estimate.perStage.find((stage) => stage.stage === "VISUAL_SEARCH")?.calls.min).toBeGreaterThanOrEqual(scenes);
+    expect(estimate.perStage.find((stage) => stage.stage === "RENDER")?.calls.min).toBeGreaterThan(0);
+    expect(estimate.total.min).toBeGreaterThan(estimateBudget(project("QUALITY"), "mock").total.min);
+    expect(estimate.tokens?.input).toBeGreaterThan(0);
   });
 
   it.each([
@@ -88,14 +120,15 @@ describe("budget modes", () => {
       { stage: "VISUAL_SEARCH", state: "DONE" },
       { stage: "MUSIC_SEARCH", state: "DONE" },
       { stage: "TIMELINE", state: "DONE" },
+      { stage: "RENDER", state: "DONE" },
     ];
     expect(estimateBudget(project("QUALITY"), "mock", done).total).toEqual({ min: 0, max: 0 });
     expect(estimateBudget(project("QUALITY"), "copilot-cli").tokens).toBeUndefined();
   });
 
-  it("counts musicAssist and metadata outside later", () => {
+  it("counts musicAssist and metadata and no longer lists visionCheck as later", () => {
     const estimate = estimateBudget(project("BALANCED"));
-    expect(estimate.later).toEqual(["visionCheck"]);
+    expect(estimate.later).toBeUndefined();
     expect(estimate.perStage.find((stage) => stage.stage === "MUSIC_SEARCH")?.tasks).toContainEqual(
       expect.objectContaining({ task: "musicAssist", calls: { min: 1, max: 1 } }),
     );

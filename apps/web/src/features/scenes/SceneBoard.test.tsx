@@ -119,7 +119,7 @@ const emptyVisuals: ProjectVisuals = {
     durationSec: scene.estDurationSec,
   })),
   summary: { withImage: 0, needsUser: scenes.length, lowRelevance: 0, licenseCounts: {}, statusCounts: {
-    NO_VISUAL: scenes.length, SEARCHING: 0, REVIEW_REQUIRED: 0, APPROVED: 0, READY_FOR_RENDER: 0, SKIPPED: 0,
+    NO_VISUAL: scenes.length, SEARCHING: 0, REVIEW_REQUIRED: 0, NEEDS_ATTENTION: 0, APPROVED: 0, READY_FOR_RENDER: 0, SKIPPED: 0,
   } },
 };
 const pipeline: PipelineState = {

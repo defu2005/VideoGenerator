@@ -1,4 +1,6 @@
 import { randomUUID } from "node:crypto";
+import { existsSync } from "node:fs";
+import { join } from "node:path";
 import type Database from "better-sqlite3";
 import {
   ReviewAssistantOutputSchema,
@@ -28,12 +30,14 @@ import { estimateLlmCost } from "../providers/llm/pricing.js";
 import type { LlmProviderRegistry } from "../providers/llm/registry.js";
 import { getAppLlmSettings } from "../providers/llm/settings.js";
 import { generateRoutedStructured } from "../providers/llm/structured.js";
+import type { LlmImageAttachment } from "../providers/llm/types.js";
 import { LlmError } from "../providers/llm/types.js";
 import type { MetadataService } from "../services/metadataService.js";
 import type { MusicService } from "../services/musicService.js";
 import type { SceneService } from "../services/sceneService.js";
 import type { TimelineService } from "../services/timelineService.js";
 import type { VisualService } from "../services/visualService.js";
+import { projectDir } from "../storage/paths.js";
 import { buildReviewContext } from "./contextBuilder.js";
 import { HISTORY_WINDOW, buildReviewPrompt } from "./prompt.js";
 import { validateReviewOutput } from "./validate.js";
@@ -105,9 +109,6 @@ export class ReviewService {
     signal?: AbortSignal;
     logger?: FastifyBaseLogger;
   } = {}): Promise<ReviewMessage> {
-    // TODO(TASK-004G): attachImages is accepted but ignored until vision adapters exist.
-    void options.attachImages;
-
     if (this.repository.getActiveJob(project.id)) {
       throw new AppError(409, "INVALID_PIPELINE_STATE", "Đang có tiến trình chạy, thử lại sau.");
     }
@@ -126,6 +127,14 @@ export class ReviewService {
 
     const appRouting = getAppLlmSettings(this.sqlite);
     const route = this.registry.resolveTask("reviewChat", project, appRouting);
+    const images = options.attachImages ? this.selectedSceneImages(project.id) : [];
+    if (images.length && !route.provider.capabilities?.vision) {
+      throw new AppError(
+        422,
+        "VISION_PROVIDER_REQUIRED",
+        "Đính kèm ảnh cần route vision. Vào Cài đặt → Mô hình AI hoặc tắt đính kèm ảnh.",
+      );
+    }
     let generated;
     try {
       generated = await generateRoutedStructured({
@@ -141,8 +150,12 @@ export class ReviewService {
         repairAttempts: 1,
         signal: options.signal ?? new AbortController().signal,
         cache: this.cache,
-        cacheKeyExtra: context.contextHash,
+        cacheKeyExtra: `${context.contextHash}|imgs:${images.map((image) => image.label).join(",")}`,
         logger: options.logger,
+        ...(images.length ? {
+          images,
+          visionCacheDir: join(projectDir(this.config.DATA_DIR, project.id), "vision-cache"),
+        } : {}),
       });
     } catch (error) {
       if (error instanceof LlmError) {
@@ -364,6 +377,21 @@ export class ReviewService {
       guidelines: this.guidelines,
       appliedProposals,
     });
+  }
+
+  private selectedSceneImages(projectId: string): LlmImageAttachment[] {
+    const visuals = this.visuals.getProjectVisuals(projectId);
+    const images: LlmImageAttachment[] = [];
+    const maxImages = 10;
+    for (const scene of visuals.scenes) {
+      if (images.length >= maxImages) break;
+      const candidate = scene.selectedCandidate;
+      if (!candidate?.localPath) continue;
+      const path = join(projectDir(this.config.DATA_DIR, projectId), "visuals", candidate.localPath);
+      if (!existsSync(path)) continue;
+      images.push({ path, label: scene.sceneId });
+    }
+    return images;
   }
 
   private estimateTokens(contextJson: string, userText: string): ReviewEstimate {

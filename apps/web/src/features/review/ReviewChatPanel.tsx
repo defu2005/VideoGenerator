@@ -63,6 +63,7 @@ export function ReviewChatPanel({ project }: { project: Project }) {
   const [error, setError] = useState("");
   const [staleStages, setStaleStages] = useState<PipelineStage[]>([]);
   const [applyingKey, setApplyingKey] = useState<string | null>(null);
+  const [attachImages, setAttachImages] = useState(project.settings.budget?.mode === "MAX");
 
   const review = useQuery({
     queryKey: reviewKeys.project(project.id),
@@ -88,7 +89,7 @@ export function ReviewChatPanel({ project }: { project: Project }) {
   };
 
   const send = useMutation({
-    mutationFn: (text: string) => sendReviewMessage(project.id, { text }),
+    mutationFn: (text: string) => sendReviewMessage(project.id, { text, attachImages }),
     onSuccess: async () => {
       setDraft("");
       await queryClient.invalidateQueries({ queryKey: reviewKeys.project(project.id) });
@@ -282,9 +283,19 @@ export function ReviewChatPanel({ project }: { project: Project }) {
                     placeholder="Ví dụ: Mở đầu cuốn hơn…"
                   />
                 </label>
+                <label className="review-attach-images">
+                  <input
+                    type="checkbox"
+                    checked={attachImages}
+                    onChange={(event) => setAttachImages(event.target.checked)}
+                  />
+                  Đính kèm ảnh scene đã chọn (vision)
+                  {attachImages ? " · +≈1000 token/ảnh" : ""}
+                </label>
                 <div className="review-chat-input-actions">
                   <span className="review-token-estimate">
                     Ước tính ≈ {estimate?.inputTokens ?? "…"} vào / {estimate?.outputTokens ?? "…"} ra
+                    {attachImages ? " (+ảnh)" : ""}
                   </span>
                   <button type="button" className="button button-secondary" disabled={reset.isPending || !review.data?.thread} onClick={() => reset.mutate()}>
                     Bắt đầu cuộc trò chuyện mới

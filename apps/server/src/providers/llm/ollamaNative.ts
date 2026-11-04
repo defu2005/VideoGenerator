@@ -1,8 +1,11 @@
+import { readFileSync } from "node:fs";
 import { fetchLlmJson, asRecord, numeric } from "./http.js";
-import { LlmError, type LlmProvider, type LlmRequest, type LlmResponse } from "./types.js";
+import { LlmError, type LlmProvider, type LlmProviderCapabilities, type LlmRequest, type LlmResponse } from "./types.js";
 
 /** Ollama's own /api/chat, with a bearer token. Used for the remote tunnel, which does not expose /v1. */
 export class OllamaNativeProvider implements LlmProvider {
+  readonly capabilities: LlmProviderCapabilities;
+
   constructor(
     readonly id: string,
     readonly label: string,
@@ -10,7 +13,10 @@ export class OllamaNativeProvider implements LlmProvider {
     private readonly token: string,
     readonly defaultModel: string | null,
     private readonly timeoutMs: number,
-  ) {}
+    capabilities: LlmProviderCapabilities = { vision: false, maxImagesPerCall: 0 },
+  ) {
+    this.capabilities = capabilities;
+  }
 
   async generate(req: LlmRequest, signal: AbortSignal): Promise<LlmResponse> {
     const url = `${this.baseUrl.replace(/\/+$/, "")}/api/chat`;
@@ -22,7 +28,7 @@ export class OllamaNativeProvider implements LlmProvider {
       },
       body: JSON.stringify({
         model: req.model,
-        messages: [{ role: "system", content: req.system }, ...req.messages],
+        messages: buildOllamaMessages(req),
         stream: false,
         ...(req.json ? { format: "json" } : {}),
         options: {
@@ -56,4 +62,24 @@ export class OllamaNativeProvider implements LlmProvider {
       finishReason,
     };
   }
+}
+
+export function buildOllamaMessages(req: LlmRequest): unknown[] {
+  const messages: unknown[] = [{ role: "system", content: req.system }];
+  for (const [index, message] of req.messages.entries()) {
+    if (message.role !== "user" || index !== firstUserIndex(req) || !req.images?.length) {
+      messages.push({ role: message.role, content: message.content });
+      continue;
+    }
+    messages.push({
+      role: "user",
+      content: `${message.content}\n\nImage labels: ${req.images.map((image) => image.label).join(", ")}`,
+      images: req.images.map((image) => readFileSync(image.path).toString("base64")),
+    });
+  }
+  return messages;
+}
+
+function firstUserIndex(req: LlmRequest): number {
+  return req.messages.findIndex((message) => message.role === "user");
 }

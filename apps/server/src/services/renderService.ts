@@ -3,6 +3,7 @@ import { copyFileSync, existsSync, mkdirSync, readFileSync, renameSync, rmSync, 
 import { isAbsolute, join } from "node:path";
 import type Database from "better-sqlite3";
 import {
+  RenderVisionBatchSchema,
   VideoMetadataDraftSchema,
   buildCreditsText,
   buildFinalPlan,
@@ -14,6 +15,7 @@ import {
   parseProgressSeconds,
   RENDER_FORMAT_VERSION,
   RenderReportSchema,
+  resolveBudget,
   type CreditsAsset,
   type Project,
   type ProjectRender,
@@ -29,6 +31,11 @@ import type { AppConfig } from "../lib/config.js";
 import { AppError } from "../lib/errors.js";
 import { probeMedia, runFfmpeg, type FfmpegRunOptions, type MediaProbe } from "../media/ffmpeg.js";
 import { StageError } from "../pipeline/stageExecutor.js";
+import { LlmCache } from "../providers/llm/cache.js";
+import type { LlmProviderRegistry } from "../providers/llm/registry.js";
+import { getAppLlmSettings } from "../providers/llm/settings.js";
+import { generateRoutedStructured } from "../providers/llm/structured.js";
+import { LlmError } from "../providers/llm/types.js";
 import { getRenderSettings } from "../settings/render.js";
 import { projectDir } from "../storage/paths.js";
 import type { TimelineService } from "./timelineService.js";
@@ -127,6 +134,7 @@ export class RenderService {
     private readonly timelines: Pick<TimelineService, "get">,
     private readonly tools: MediaTools = defaultMediaTools,
     private readonly now: () => Date = () => new Date(),
+    private readonly llmProviders?: LlmProviderRegistry,
   ) {}
 
   private ensureBackfill(): void {
@@ -599,7 +607,7 @@ export class RenderService {
 
     // 4. Checks (95–100 %). Issues are reported, never fatal.
     onProgress(95, "Kiểm tra video");
-    const report = await this.check(timeline, outputPath, thumbsDir, signal);
+    const report = await this.check(timeline, outputPath, thumbsDir, signal, project);
     const elapsedSec = Math.round((Date.now() - started) / 100) / 10;
     const fullReport: RenderReport = { ...report, clipsReused, clipsRendered, elapsedSec };
 
@@ -650,6 +658,7 @@ export class RenderService {
     outputPath: string,
     thumbsDir: string,
     signal: AbortSignal,
+    project?: Project,
   ): Promise<Omit<RenderReport, "clipsReused" | "clipsRendered" | "elapsedSec">> {
     const issues: RenderIssue[] = [];
     const probe = await this.tools.probe(outputPath, signal);
@@ -710,6 +719,10 @@ export class RenderService {
       }
     }
 
+    if (project && resolveBudget(project).renderVerify && this.llmProviders && thumbnails.length) {
+      await this.runRenderVision(project, timeline, thumbsDir, thumbnails, issues, signal);
+    }
+
     return {
       ok: !issues.some((issue) => issue.severity === "ERROR"),
       expectedDurationSec: expected,
@@ -720,6 +733,77 @@ export class RenderService {
       issues,
       thumbnails,
     };
+  }
+
+  private async runRenderVision(
+    project: Project,
+    timeline: Timeline,
+    thumbsDir: string,
+    thumbnails: string[],
+    issues: RenderIssue[],
+    signal: AbortSignal,
+  ): Promise<void> {
+    if (!this.llmProviders) return;
+    try {
+      const route = this.llmProviders.resolveTask("renderVision", project, getAppLlmSettings(this.sqlite));
+      const maxImages = route.provider.capabilities?.maxImagesPerCall ?? 5;
+      const frames = thumbnails.map((sceneId) => {
+        const scene = timeline.scenes.find((item) => item.sceneId === sceneId);
+        return {
+          sceneId,
+          path: join(thumbsDir, `${sceneId}.jpg`),
+          order: scene?.order ?? 0,
+        };
+      }).filter((frame) => existsSync(frame.path));
+      for (let offset = 0; offset < frames.length; offset += maxImages) {
+        const batch = frames.slice(offset, offset + maxImages);
+        const generated = await generateRoutedStructured({
+          registry: this.llmProviders,
+          route,
+          task: "renderVision",
+          system: "Check each rendered mid-frame thumbnail. Return JSON frames[{sceneId, matchesSelection, subtitleLegible, subjectCropOk, notes?}].",
+          prompt: JSON.stringify({
+            frames: batch.map((frame) => ({ sceneId: frame.sceneId, order: frame.order })),
+          }),
+          schema: RenderVisionBatchSchema,
+          schemaName: "RenderVision",
+          schemaVersion: "1",
+          maxOutputTokens: 1_500,
+          repairAttempts: 0,
+          signal,
+          cache: new LlmCache(this.sqlite, this.config.LLM_CACHE_ENABLED),
+          images: batch.map((frame) => ({ path: frame.path, label: frame.sceneId })),
+          visionCacheDir: join(this.dir(project.id), "vision-cache"),
+        });
+        for (const frame of generated.value.frames) {
+          if (!frame.matchesSelection || !frame.subjectCropOk) {
+            issues.push({
+              code: "FRAME_MISMATCH",
+              severity: "ERROR",
+              sceneId: frame.sceneId,
+              message: frame.notes || "Frame giữa scene không khớp ảnh đã chọn hoặc bị cắt lệch.",
+            });
+          }
+          if (!frame.subtitleLegible) {
+            issues.push({
+              code: "SUBTITLE_ILLEGIBLE",
+              severity: "ERROR",
+              sceneId: frame.sceneId,
+              message: "Phụ đề khó đọc hoặc che chủ thể.",
+            });
+          }
+        }
+      }
+    } catch (error) {
+      if (isAbort(error) || signal.aborted) throw error;
+      const message = error instanceof LlmError ? error.message : error instanceof Error ? error.message : String(error);
+      issues.push({
+        code: "RENDER_VISION_FAILED",
+        severity: "WARN",
+        sceneId: null,
+        message: `Kiểm tra vision sau render thất bại: ${message}`,
+      });
+    }
   }
 
   /** Credits from the DB metadata of every visual and the music used in the timeline. */

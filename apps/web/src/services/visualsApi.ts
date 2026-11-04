@@ -71,3 +71,11 @@ export function localVisualFileUrl(projectId: string, localPath: string): string
   const fileName = localPath.split("/").at(-1) ?? "";
   return `/api/projects/${projectId}/visual-files/${encodeURIComponent(fileName)}`;
 }
+
+export function visionCheckCandidate(projectId: string, sceneId: string, candidateId: string) {
+  return apiRequest<{
+    candidate: import("@vg/shared").VisualCandidate;
+    usage: unknown;
+    estimate: { calls: number; images: number };
+  }>(`${scenePath(projectId, sceneId)}/${candidateId}/vision-check`, { method: "POST" });
+}

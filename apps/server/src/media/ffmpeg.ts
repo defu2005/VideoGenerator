@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process";
-import { existsSync } from "node:fs";
+import { existsSync, mkdirSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import ffmpegStatic from "ffmpeg-static";
 import ffprobeStatic from "ffprobe-static";
@@ -149,4 +149,25 @@ export async function probeMedia(file: string, signal?: AbortSignal): Promise<Me
     hasVideo: Boolean(video),
     hasAudio: streams.some((stream) => stream.codec_type === "audio"),
   };
+}
+
+/**
+ * Downscale an image for vision LLM calls: long side ≤ 768 px, JPEG quality ≈ 80.
+ * Portrait-safe (`-2` keeps even height). No-op copy via ffmpeg when already small.
+ */
+export async function downscaleForVision(
+  src: string,
+  dst: string,
+  signal?: AbortSignal,
+): Promise<void> {
+  if (!existsSync(src)) throw new Error(`Vision source missing: ${src}`);
+  mkdirSync(dirname(dst), { recursive: true });
+  if (existsSync(dst)) return;
+  await runFfmpeg([
+    "-hide_banner", "-nostdin", "-y",
+    "-i", src,
+    "-vf", "scale='min(768,iw)':-2",
+    "-q:v", "2",
+    dst,
+  ], { signal });
 }

@@ -54,7 +54,6 @@ describe("budget estimate API", () => {
         { stage: "TIMELINE", calls: { min: 1, max: 1 } },
       ],
       tokens: { input: expect.any(Number), output: expect.any(Number) },
-      later: ["visionCheck"],
     });
 
     const db = new Database(config.DATABASE_PATH);

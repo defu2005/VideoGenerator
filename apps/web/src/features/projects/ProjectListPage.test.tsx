@@ -261,7 +261,7 @@ describe("CreateProjectDialog", () => {
     fireEvent.change(reviewPasses, { target: { value: "2" } });
     expect(reviewPasses).toHaveValue("2");
     expect(screen.getByText("Ước tính: ~9–15 lượt gọi AI (CUSTOM)")).toBeInTheDocument();
-    expect(screen.getByText(/Vision check \(available in a later step\)/)).toBeInTheDocument();
+    expect(screen.getByText(/Kiểm tra ảnh bằng AI nhìn \(MAX\/CUSTOM\)/)).toBeInTheDocument();
     expect(screen.getByLabelText("metadata")).toBeInTheDocument();
     expect(screen.getByLabelText("musicAssist")).toBeInTheDocument();
   });

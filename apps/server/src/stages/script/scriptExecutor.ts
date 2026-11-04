@@ -13,6 +13,7 @@ import { preflight } from "../../providers/llm/preflight.js";
 import { scriptPrompt } from "./prompt.js";
 import { checkScriptDuration, computeSectionDurations, maxOutputTokensForDuration, researchInputHash, scriptContentHash, scriptInputHash } from "./scriptUtils.js";
 import { scriptReviewPrompt } from "./reviewPrompt.js";
+import { FactCheckResponseSchema, factCheckPrompt } from "./factCheckPrompt.js";
 import { getAppLlmSettings } from "../../providers/llm/settings.js";
 import { GuidelineService } from "../../guidelines/service.js";
 import { runGuidelineLlmCheck } from "../../guidelines/llmCheck.js";
@@ -289,6 +290,48 @@ export class ScriptExecutor implements StageExecutor {
         model = guided.model || model;
       }
       if (JSON.stringify(finalData) !== beforeGuidelines) version += 1;
+
+      if (budget.factCheck) {
+        context.reportProgress(82, "Fact-checking script against research");
+        try {
+          const factRoute = this.registry.resolveTask("factCheck", project, appRouting);
+          const factPrompt = factCheckPrompt(project.topic, research, finalData);
+          const factChecked = await generateRoutedStructured({
+            registry: this.registry,
+            route: factRoute,
+            task: "factCheck",
+            ...factPrompt,
+            schema: FactCheckResponseSchema,
+            schemaName: "FactCheck",
+            schemaVersion: "1",
+            maxOutputTokens: Math.ceil(maxOutputTokensForDuration(
+              project.settings.targetDurationSec,
+              this.config.SPEECH_WORDS_PER_MINUTE,
+            ) * budget.outputHeadroom),
+            repairAttempts: Math.min(1, budget.repairAttempts) as 0 | 1,
+            signal: context.signal,
+            cache: this.cache,
+            cacheKeyExtra: scriptContentHash(finalData),
+            logger: context.logger,
+          });
+          addUsage(spentUsage, features, "factCheck", factChecked.usage);
+          spentCost += estimateLlmCost(this.config, factChecked.provider, factChecked.model, factChecked.usage);
+          if (factChecked.value.revisedScript) {
+            finalData = computeSectionDurations(factChecked.value.revisedScript, this.config.SPEECH_WORDS_PER_MINUTE);
+            version += 1;
+          }
+          if (factChecked.value.notes.length) {
+            reviewNotes = [...(reviewNotes ?? []), ...factChecked.value.notes].slice(0, 8);
+          }
+          provider = factChecked.provider;
+          model = factChecked.model;
+        } catch (error) {
+          if (error instanceof LlmError && error.usage) {
+            addUsage(spentUsage, features, "factCheck", error.usage);
+          }
+          context.logger.warn({ err: error }, "factCheck failed; continuing with the current script");
+        }
+      }
 
       context.reportProgress(85, "Saving script");
       const serializedData = JSON.stringify(finalData);

@@ -73,6 +73,7 @@ export async function resolveAgyPathWithRetry(
 }
 
 export class AntgravityCliProvider extends CliProviderBase {
+  readonly capabilities = { vision: false, maxImagesPerCall: 0 } as const;
   private readonly binaryPathValue: string | null;
   private readonly effortValue: string;
 

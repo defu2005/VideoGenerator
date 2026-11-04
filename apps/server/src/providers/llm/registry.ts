@@ -36,8 +36,8 @@ export class LlmProviderRegistry {
       this.addProvider(new GeminiProvider(config.GEMINI_API_KEY, config.GEMINI_MODEL || null, timeoutMs));
     }
 
-    if (config.OPENAI_API_KEY) this.addCompatible("openai", "OpenAI", config.OPENAI_BASE_URL, config.OPENAI_API_KEY, config.OPENAI_MODEL);
-    if (config.OLLAMA_BASE_URL) this.addCompatible("ollama", "Ollama", config.OLLAMA_BASE_URL, undefined, config.OLLAMA_MODEL, false);
+    if (config.OPENAI_API_KEY) this.addCompatible("openai", "OpenAI", config.OPENAI_BASE_URL, config.OPENAI_API_KEY, config.OPENAI_MODEL, true, envVisionFlag("OPENAI_VISION"));
+    if (config.OLLAMA_BASE_URL) this.addCompatible("ollama", "Ollama", config.OLLAMA_BASE_URL, undefined, config.OLLAMA_MODEL, false, envVisionFlag("OLLAMA_VISION"));
     if (config.REMOTE_OLLAMA_BASE_URL && config.REMOTE_OLLAMA_TOKEN) {
       this.addProvider(new OllamaNativeProvider(
         "remote-ollama",
@@ -46,18 +46,19 @@ export class LlmProviderRegistry {
         config.REMOTE_OLLAMA_TOKEN,
         config.REMOTE_OLLAMA_MODEL || "llama3.2:1b",
         timeoutMs,
+        envVisionFlag("OLLAMA_VISION") || envVisionFlag("REMOTE_OLLAMA_VISION"),
       ));
     }
-    if (config.OPENROUTER_API_KEY) this.addCompatible("openrouter", "OpenRouter", "https://openrouter.ai/api/v1", config.OPENROUTER_API_KEY, config.OPENROUTER_MODEL);
-    if (config.DEEPSEEK_API_KEY) this.addCompatible("deepseek", "DeepSeek", "https://api.deepseek.com/v1", config.DEEPSEEK_API_KEY, config.DEEPSEEK_MODEL);
-    if (config.GROQ_API_KEY) this.addCompatible("groq", "Groq", "https://api.groq.com/openai/v1", config.GROQ_API_KEY, config.GROQ_MODEL);
+    if (config.OPENROUTER_API_KEY) this.addCompatible("openrouter", "OpenRouter", "https://openrouter.ai/api/v1", config.OPENROUTER_API_KEY, config.OPENROUTER_MODEL, true, envVisionFlag("OPENROUTER_VISION"));
+    if (config.DEEPSEEK_API_KEY) this.addCompatible("deepseek", "DeepSeek", "https://api.deepseek.com/v1", config.DEEPSEEK_API_KEY, config.DEEPSEEK_MODEL, true, envVisionFlag("DEEPSEEK_VISION"));
+    if (config.GROQ_API_KEY) this.addCompatible("groq", "Groq", "https://api.groq.com/openai/v1", config.GROQ_API_KEY, config.GROQ_MODEL, true, envVisionFlag("GROQ_VISION"));
     // OmniRoute is a local gateway (default port 20128); setting its URL or key turns it on.
     if (config.OMNIROUTE_BASE_URL || config.OMNIROUTE_API_KEY) {
-      this.addCompatible("omniroute", "OmniRoute", omniRouteBaseUrl(config), config.OMNIROUTE_API_KEY, config.OMNIROUTE_MODEL);
+      this.addCompatible("omniroute", "OmniRoute", omniRouteBaseUrl(config), config.OMNIROUTE_API_KEY, config.OMNIROUTE_MODEL, true, envVisionFlag("OMNIROUTE_VISION"));
     }
-    if (config.OPENCODE_API_KEY) this.addCompatible("opencode", "OpenCode Zen", config.OPENCODE_BASE_URL, config.OPENCODE_API_KEY, config.OPENCODE_MODEL);
+    if (config.OPENCODE_API_KEY) this.addCompatible("opencode", "OpenCode Zen", config.OPENCODE_BASE_URL, config.OPENCODE_API_KEY, config.OPENCODE_MODEL, true, envVisionFlag("OPENCODE_VISION"));
     if (config.CUSTOM_LLM_BASE_URL) {
-      this.addCompatible("custom", "Custom OpenAI-compatible", config.CUSTOM_LLM_BASE_URL, config.CUSTOM_LLM_API_KEY, config.CUSTOM_LLM_MODEL);
+      this.addCompatible("custom", "Custom OpenAI-compatible", config.CUSTOM_LLM_BASE_URL, config.CUSTOM_LLM_API_KEY, config.CUSTOM_LLM_MODEL, true, envVisionFlag("CUSTOM_LLM_VISION"));
     }
     if (config.CLAUDE_CLI_ENABLED) {
       this.addProvider(new ClaudeCliProvider(
@@ -379,6 +380,7 @@ export class LlmProviderRegistry {
     apiKey: string | undefined,
     model: string | undefined,
     supportsJson = true,
+    visionCapabilities: { vision: boolean; maxImagesPerCall: number } = { vision: false, maxImagesPerCall: 0 },
   ): void {
     this.addProvider(new OpenAiCompatibleProvider(
       id,
@@ -388,6 +390,7 @@ export class LlmProviderRegistry {
       model || null,
       Math.min(this.config.LLM_TIMEOUT_MS, Math.max(1, this.config.STAGE_TIMEOUT_MS - 1)),
       supportsJson,
+      visionCapabilities,
     ));
   }
 
@@ -467,4 +470,10 @@ export function omniRouteBaseUrl(config: Pick<AppConfig, "OMNIROUTE_BASE_URL">):
 
 function createNotConfiguredError(message: string): LlmError {
   return new LlmError(message, "LLM_NOT_CONFIGURED", false);
+}
+
+function envVisionFlag(name: string, env: NodeJS.ProcessEnv = process.env): { vision: boolean; maxImagesPerCall: number } {
+  const raw = env[name]?.trim().toLowerCase();
+  const enabled = raw === "1" || raw === "true" || raw === "yes";
+  return enabled ? { vision: true, maxImagesPerCall: 10 } : { vision: false, maxImagesPerCall: 0 };
 }

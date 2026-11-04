@@ -202,6 +202,7 @@ export const visualCandidates = sqliteTable("visual_candidates", {
   actualHeight: integer("actual_height"),
   downloadedAt: text("downloaded_at"),
   downloadError: text("download_error"),
+  visionCheck: text("vision_check", { mode: "json" }),
   createdAt: text("created_at").notNull(),
   searchHash: text("search_hash").notNull(),
 }, (table) => [
@@ -231,6 +232,7 @@ export const visualSearchState = sqliteTable("visual_search_state", {
   sceneId: text("scene_id").primaryKey().references(() => scenes.id, { onDelete: "cascade" }),
   projectId: text("project_id").notNull().references(() => projects.id, { onDelete: "cascade" }),
   searchHash: text("search_hash").notNull(),
+  visionMeta: text("vision_meta", { mode: "json" }),
   updatedAt: text("updated_at").notNull(),
 }, (table) => [
   index("visual_search_state_project_idx").on(table.projectId),

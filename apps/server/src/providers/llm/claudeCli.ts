@@ -1,6 +1,6 @@
-import { existsSync, readFileSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { basename, delimiter, dirname, isAbsolute, join, resolve } from "node:path";
-import type { LlmRequest } from "./types.js";
+import type { LlmRequest, LlmResponse } from "./types.js";
 import {
   CliProviderBase,
   parseJsonCliResponse,
@@ -8,6 +8,7 @@ import {
   type CliProviderOptions,
 } from "./cliProvider.js";
 import { LlmError } from "./types.js";
+import { safeImageFileName } from "./visionImages.js";
 
 export const CLAUDE_CLI_FLAGS = {
   print: "-p",
@@ -16,12 +17,16 @@ export const CLAUDE_CLI_FLAGS = {
   maxTurns: ["--max-turns", "1"],
   tools: ["--tools", ""],
   disallowedMcpTools: ["--disallowedTools", "mcp__*"],
+  addDir: "--add-dir",
+  allowedTools: ["--allowedTools", "Read"],
 } as const;
 
 export class ClaudeCliProvider extends CliProviderBase {
+  readonly capabilities = { vision: true, maxImagesPerCall: 5 } as const;
+
   constructor(
     binaryPath: string | null,
-    dataDir: string,
+    private readonly dataDir: string,
     timeoutMs: number,
     defaultModel: string | null = null,
     spawnProcess?: CliProviderOptions["spawnProcess"],
@@ -34,16 +39,7 @@ export class ClaudeCliProvider extends CliProviderBase {
       timeoutMs,
       defaultModel,
       hint: "Install Claude Code CLI and run `claude` once to log in",
-      args: (request) => [
-        CLAUDE_CLI_FLAGS.print,
-        ...CLAUDE_CLI_FLAGS.outputFormat,
-        CLAUDE_CLI_FLAGS.systemPrompt,
-        request.system,
-        ...CLAUDE_CLI_FLAGS.maxTurns,
-        ...CLAUDE_CLI_FLAGS.tools,
-        ...CLAUDE_CLI_FLAGS.disallowedMcpTools,
-        ...(request.model ? ["--model", request.model] : []),
-      ],
+      args: (request) => buildClaudeArgs(request),
       formatPrompt: formatClaudePrompt,
       parseResponse: parseJsonCliResponse,
       classifyFailure: classifyClaudeFailure,
@@ -51,6 +47,46 @@ export class ClaudeCliProvider extends CliProviderBase {
       spawnProcess,
     });
   }
+
+  override async generate(request: LlmRequest, signal: AbortSignal): Promise<LlmResponse> {
+    if (!request.images?.length) return super.generate(request, signal);
+    const imageRoot = join(this.dataDir, "tmp", "claude-cli-vision");
+    mkdirSync(imageRoot, { recursive: true });
+    const imageDir = mkdtempSync(join(imageRoot, "img-"));
+    try {
+      const copied = request.images.map((image, index) => {
+        const name = safeImageFileName(image.label, index);
+        const dest = join(imageDir, name);
+        copyFileSync(image.path, dest);
+        return { ...image, path: dest };
+      });
+      return await super.generate({
+        ...request,
+        images: copied,
+        messages: annotateClaudeImagePaths(request.messages, copied, imageDir),
+      }, signal);
+    } finally {
+      rmSync(imageDir, { recursive: true, force: true });
+    }
+  }
+}
+
+export function buildClaudeArgs(request: LlmRequest): string[] {
+  const hasImages = Boolean(request.images?.length);
+  const imageDir = hasImages ? dirname(request.images![0]!.path) : null;
+  return [
+    CLAUDE_CLI_FLAGS.print,
+    ...CLAUDE_CLI_FLAGS.outputFormat,
+    CLAUDE_CLI_FLAGS.systemPrompt,
+    request.system,
+    // Reading images needs one tool turn per image plus the final answer.
+    ...(hasImages ? ["--max-turns", String(request.images!.length + 2)] : CLAUDE_CLI_FLAGS.maxTurns),
+    ...(hasImages
+      ? ["--tools", "Read", ...CLAUDE_CLI_FLAGS.allowedTools, CLAUDE_CLI_FLAGS.addDir, imageDir!]
+      : CLAUDE_CLI_FLAGS.tools),
+    ...CLAUDE_CLI_FLAGS.disallowedMcpTools,
+    ...(request.model ? ["--model", request.model] : []),
+  ];
 }
 
 export function resolveClaudeCliPath(binary: string, env: NodeJS.ProcessEnv = process.env): string | null {
@@ -81,6 +117,23 @@ function formatClaudePrompt(request: LlmRequest): string {
   return request.messages
     .map(({ role, content }) => `${role === "assistant" ? "Assistant" : "User"}:\n${content}`)
     .join("\n\n");
+}
+
+function annotateClaudeImagePaths(
+  messages: LlmRequest["messages"],
+  images: NonNullable<LlmRequest["images"]>,
+  imageDir: string,
+): LlmRequest["messages"] {
+  const listing = [
+    `Images are available under ${imageDir}. Use the Read tool on these paths:`,
+    ...images.map((image) => `- ${image.label}: ${image.path}`),
+  ].join("\n");
+  let annotated = false;
+  return messages.map((message) => {
+    if (annotated || message.role !== "user") return message;
+    annotated = true;
+    return { ...message, content: `${message.content}\n\n${listing}` };
+  });
 }
 
 function mapClaudeSpawnError(error: unknown): LlmError {

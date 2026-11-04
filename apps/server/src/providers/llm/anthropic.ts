@@ -1,9 +1,11 @@
+import { readFileSync } from "node:fs";
 import { fetchLlmJson, asRecord, numeric } from "./http.js";
 import { LlmError, type LlmProvider, type LlmRequest, type LlmResponse } from "./types.js";
 
 export class AnthropicProvider implements LlmProvider {
   readonly id = "anthropic";
   readonly label = "Anthropic";
+  readonly capabilities = { vision: true, maxImagesPerCall: 10 } as const;
 
   constructor(
     private readonly apiKey: string,
@@ -23,7 +25,7 @@ export class AnthropicProvider implements LlmProvider {
       body: JSON.stringify({
         model: req.model,
         system: req.system,
-        messages: req.messages,
+        messages: buildAnthropicMessages(req),
         max_tokens: req.maxOutputTokens,
         ...(req.temperature === undefined ? {} : { temperature: req.temperature }),
       }),
@@ -50,4 +52,28 @@ export class AnthropicProvider implements LlmProvider {
       finishReason,
     };
   }
+}
+
+export function buildAnthropicMessages(req: LlmRequest): unknown[] {
+  return req.messages.map((message, index) => {
+    if (message.role !== "user" || index !== firstUserIndex(req) || !req.images?.length) {
+      return { role: message.role, content: message.content };
+    }
+    const content: unknown[] = [
+      ...req.images.map((image) => ({
+        type: "image",
+        source: {
+          type: "base64",
+          media_type: "image/jpeg",
+          data: readFileSync(image.path).toString("base64"),
+        },
+      })),
+      { type: "text", text: `${message.content}\n\nImage labels: ${req.images.map((image) => image.label).join(", ")}` },
+    ];
+    return { role: "user", content };
+  });
+}
+
+function firstUserIndex(req: LlmRequest): number {
+  return req.messages.findIndex((message) => message.role === "user");
 }

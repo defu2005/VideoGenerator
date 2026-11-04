@@ -4,17 +4,22 @@ import {
   ProjectVisualsSchema,
   ScriptSchema,
   SceneVisualsSchema,
+  SceneVisionMetaSchema,
   StoredVisualQueriesSchema,
   VisualCandidateSchema,
   VisualSelectionSchema,
+  VisionCheckBatchSchema,
+  VisionCheckSchema,
   assignDistinct,
   dedupeCandidates,
   rankCandidates,
   type Project,
   type Scene,
+  type SceneVisionMeta,
   type VisualCandidate,
   type VisualSelection,
   type ScoreBreakdown,
+  type VisionCheck,
   resolveBudget,
   type LlmCallUsage,
 } from "@vg/shared";
@@ -25,7 +30,7 @@ import type { AppConfig } from "../lib/config.js";
 import { AppError } from "../lib/errors.js";
 import { ImageDownloadError, ImageStore, isVisualFileName, parseImage, type StoredImage } from "./imageStore.js";
 import { projectDir } from "../storage/paths.js";
-import { existsSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { ImageProviderError } from "../providers/images/http.js";
 import { TokenBucketRateLimiter } from "../providers/images/rateLimiter.js";
@@ -45,6 +50,19 @@ import { getAppLlmSettings } from "../providers/llm/settings.js";
 import { GuidelineService } from "../guidelines/service.js";
 import { buildAltQueryPrompt, AltQueryResponseSchema } from "../stages/visuals/altQueryPrompt.js";
 import { buildRerankPrompt, RerankResponseSchema } from "../stages/visuals/rerankPrompt.js";
+import { buildVisionCheckPrompt } from "../stages/visuals/visionPrompts.js";
+import {
+  requireVisionRoute,
+  runConsistencyCheck,
+  verifySceneVision,
+  type VisionCandidateInput,
+} from "./visionVerify.js";
+
+/** Tiny valid JPEG used when a preview cannot be downloaded (mock URLs in tests). */
+const PLACEHOLDER_JPEG = Buffer.from(
+  "/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAgGBgcGBQgHBwcJCQgKDBQNDAsLDBkSEw8UHRofHh0aHBwgJC4nICIsIxwcKDcpLDAxNDQ0Hyc5PTgyPC4zNDL/2wBDAQkJCQwLDBgNDRgyIRwhMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjL/wAARCAABAAEDASIAAhEBAxEB/8QAFQABAQAAAAAAAAAAAAAAAAAAAAn/xAAUEAEAAAAAAAAAAAAAAAAAAAAA/8QAFQEBAQAAAAAAAAAAAAAAAAAAAAX/xAAUEQEAAAAAAAAAAAAAAAAAAAAA/9oADAMBAAIQAxAAAAGfAP/EABQQAQAAAAAAAAAAAAAAAAAAAAD/2gAIAQEAAQUCf//EABQRAQAAAAAAAAAAAAAAAAAAAAD/2gAIAQMBAT8Bf//EABQRAQAAAAAAAAAAAAAAAAAAAAD/2gAIAQIBAT8Bf//Z",
+  "base64",
+);
 
 type SceneRow = {
   id: string;
@@ -113,14 +131,21 @@ export class VisualService {
         "SELECT COUNT(*) AS count FROM visual_candidates WHERE project_id = ? AND scene_id = ? AND discarded_at IS NULL",
       ).get(projectId, scene.id) as { count: number };
       const candidates = selectedCandidate ? [selectedCandidate] : [];
-      const status = deriveSceneVisualStatus(selection, candidates, scene.noVisual, searchState);
+      const visionMeta = this.getVisionMeta(scene.id);
+      const status = deriveSceneVisualStatus(
+        selection,
+        candidates,
+        scene.noVisual,
+        searchState,
+        visionMeta?.needsAttention === true,
+      );
       return {
         sceneId: scene.id,
         order: scene.order,
         selection,
         selectedCandidate,
         candidateCount: candidateCount.count,
-        needsUser: status === "NO_VISUAL" || status === "REVIEW_REQUIRED",
+        needsUser: status === "NO_VISUAL" || status === "REVIEW_REQUIRED" || status === "NEEDS_ATTENTION",
         lowRelevance: selectedCandidate?.scoreBreakdown.lowRelevance === true,
         status,
         noVisual: scene.noVisual,
@@ -129,6 +154,7 @@ export class VisualService {
         narration: scene.narration,
         startSec: scene.startSec,
         durationSec: scene.durationOverrideSec ?? scene.estDurationSec,
+        ...(visionMeta ? { visionMeta } : {}),
       };
     });
     const licenseCounts: Record<string, number> = {};
@@ -144,7 +170,7 @@ export class VisualService {
         lowRelevance: scenes.filter((scene) => scene.lowRelevance).length,
         licenseCounts,
         statusCounts: Object.fromEntries(
-          ["NO_VISUAL", "SEARCHING", "REVIEW_REQUIRED", "APPROVED", "READY_FOR_RENDER", "SKIPPED"]
+          ["NO_VISUAL", "SEARCHING", "REVIEW_REQUIRED", "NEEDS_ATTENTION", "APPROVED", "READY_FOR_RENDER", "SKIPPED"]
             .map((status) => [status, scenes.filter((scene) => scene.status === status).length]),
         ),
       },
@@ -158,6 +184,7 @@ export class VisualService {
       `SELECT * FROM visual_candidates WHERE project_id = ? AND scene_id = ?${includeDiscarded ? "" : " AND discarded_at IS NULL"} ORDER BY rank, created_at`,
     ).all(projectId, sceneId) as Record<string, unknown>[];
     const candidates = rows.map((row) => this.candidateFromRow(row));
+    const visionMeta = this.getVisionMeta(sceneId);
     return SceneVisualsSchema.parse({
       selection,
       candidates,
@@ -166,8 +193,10 @@ export class VisualService {
         candidates,
         Boolean((this.sqlite.prepare("SELECT no_visual FROM scenes WHERE id = ?").get(sceneId) as { no_visual: number }).no_visual),
         this.repository.getStage(projectId, "VISUAL_SEARCH").state,
+        visionMeta?.needsAttention === true,
       ),
       noVisual: Boolean((this.sqlite.prepare("SELECT no_visual FROM scenes WHERE id = ?").get(sceneId) as { no_visual: number }).no_visual),
+      ...(visionMeta ? { visionMeta } : {}),
     });
   }
 
@@ -312,6 +341,8 @@ export class VisualService {
     this.requireProject(projectId);
     const scenes = this.loadScenes(projectId);
     const eligible = scenes.flatMap((scene) => {
+      const visionMeta = this.getVisionMeta(scene.id);
+      if (visionMeta?.needsAttention) return [];
       const selection = this.getSelection(projectId, scene.id);
       if (!selection || !["DISCOVERED", "REVIEW_REQUIRED", "REPLACED"].includes(selection.status)) return [];
       return [{ sceneId: scene.id, selection }];
@@ -627,6 +658,7 @@ export class VisualService {
         project.settings.aspectRatio,
         sectionQueries.get(scene.sectionId ?? ""),
         enabledProviders.map((provider) => provider.id),
+        featureSettings.visualSearchBreadth,
       ])).digest("hex");
       inputHashes.push(searchHash);
       const state = this.sqlite.prepare("SELECT search_hash FROM visual_search_state WHERE scene_id = ?")
@@ -655,6 +687,7 @@ export class VisualService {
           enabledProviders,
           stats,
           context.signal,
+          featureSettings.visualSearchBreadth,
         );
         sceneSearches.push({
           scene,
@@ -721,7 +754,7 @@ export class VisualService {
               project.settings.language,
               project.settings.aspectRatio,
               enabledProviders.map((provider) => provider.id),
-            ) >= 8) break;
+            ) >= featureSettings.visualSearchBreadth) break;
             item.candidates.push(...await this.searchAcrossProviders(
               query,
               enabledProviders.filter((provider) => provider.id !== "openverse"),
@@ -822,6 +855,162 @@ export class VisualService {
       }
     }
 
+    const budgetFeatures = resolveBudget(project);
+    const visionMetaByScene = new Map<string, SceneVisionMeta>();
+    const visionChecksByCandidateKey = new Map<string, VisionCheck>();
+    if (budgetFeatures.visionCheck) {
+      requireVisionRoute(llmProviders, project, this.sqlite);
+      context.reportProgress(70, "Vision-checking candidate images");
+      for (const entry of rankedScenes) {
+        if (context.signal.aborted) throw context.signal.reason ?? new Error("Visual search was aborted");
+        if (entry.item.unchanged || entry.item.protectedSelection || !entry.ranked.length) continue;
+        const labeled = await Promise.all(entry.ranked.slice(0, 5).map(async (candidate, index) => {
+          const id = `${candidate.provider}:${candidate.providerItemId}`;
+          const label = /force-lowfit/i.test(entry.item.scene.label)
+            ? `lowfit-${id}`
+            : id;
+          void index;
+          const localPath = await this.ensureVisionLocalFile(
+            project.id,
+            id,
+            candidate.previewUrl || candidate.imageUrl,
+            context.signal,
+          );
+          return {
+            id,
+            label,
+            localPath,
+            relevanceScore: candidate.relevanceScore,
+            textRerank: candidate.scoreBreakdown.llmRank,
+            candidate,
+          };
+        }));
+        const verified = await verifySceneVision({
+          project,
+          scene: {
+            sceneId: entry.item.scene.id,
+            narration: entry.item.scene.narration,
+            visualDescription: entry.item.scene.visualDescription || entry.item.scene.visualNotes,
+            queries: [entry.item.scene.visualQueries.primary, ...entry.item.scene.visualQueries.alternatives],
+            candidates: labeled.map(({ id, label, localPath, relevanceScore, textRerank }) => ({
+              id, label, localPath, relevanceScore, textRerank,
+            })),
+          },
+          budget: budgetFeatures,
+          aspectRatio: project.settings.aspectRatio,
+          registry: llmProviders,
+          sqlite: this.sqlite,
+          config: this.config,
+          signal: context.signal,
+          logger: context.logger,
+          searchMore: async (_sceneId, queries) => {
+            const found: VisionCandidateInput[] = [];
+            for (const query of queries) {
+              const results = await this.searchAcrossProviders(
+                query,
+                enabledProviders,
+                orientationFor(project.settings.aspectRatio),
+                context.signal,
+                stats,
+              );
+              for (const result of results) {
+                const id = `${result.provider}:${result.providerItemId}`;
+                if (entry.ranked.some((existing) => existing.provider === result.provider && existing.providerItemId === result.providerItemId)) {
+                  continue;
+                }
+                const rankedExtra = this.rankVisuals(
+                  [result],
+                  entry.item.scene.visualQueries.primary,
+                  entry.item.scene.visualDescription || entry.item.scene.visualNotes,
+                  project.settings.language,
+                  aspectNumber(project.settings.aspectRatio),
+                  enabledProviders.map((provider) => provider.id),
+                );
+                const candidate = rankedExtra[0];
+                if (!candidate) continue;
+                entry.ranked.push(candidate);
+                const localPath = await this.ensureVisionLocalFile(
+                  project.id,
+                  id,
+                  candidate.previewUrl || candidate.imageUrl,
+                  context.signal,
+                );
+                found.push({
+                  id,
+                  label: `highfit-${id}`,
+                  localPath,
+                  relevanceScore: candidate.relevanceScore,
+                });
+              }
+            }
+            return found;
+          },
+        });
+        llmCalls += verified.usage.llmCalls;
+        inputTokens += verified.usage.inputTokens;
+        outputTokens += verified.usage.outputTokens;
+        llmCallDetails.push(...verified.usage.calls);
+        for (const [key, check] of verified.checks) {
+          visionChecksByCandidateKey.set(`${entry.item.scene.id}:${key}`, check);
+          const score = verified.scores.get(key);
+          const match = entry.ranked.find((candidate) => `${candidate.provider}:${candidate.providerItemId}` === key);
+          if (match && score !== undefined) {
+            match.relevanceScore = score;
+            match.scoreBreakdown = { ...match.scoreBreakdown, visionFit: check.fit, total: score };
+          }
+        }
+        entry.ranked = [...entry.ranked].sort((a, b) => b.relevanceScore - a.relevanceScore)
+          .map((candidate, rank) => ({ ...candidate, rank }));
+        visionMetaByScene.set(entry.item.scene.id, {
+          needsAttention: verified.needsAttention,
+          reason: verified.reason,
+          reSearchHistory: verified.reSearchHistory,
+          verifiedFit: verified.bestFit,
+        });
+      }
+
+      const consistencyScenes = rankedScenes.flatMap(({ item, ranked }) => {
+        const top = ranked[0];
+        if (!top) return [];
+        const key = `${top.provider}:${top.providerItemId}`;
+        const meta = visionMetaByScene.get(item.scene.id);
+        if (meta?.needsAttention) return [];
+        const local = join(projectDir(this.config.DATA_DIR, project.id), "vision-cache", `${createHash("sha256").update(key).digest("hex").slice(0, 16)}.jpg`);
+        if (!existsSync(local)) return [];
+        return [{
+          sceneId: item.scene.id,
+          label: item.scene.label,
+          visualDescription: item.scene.visualDescription || item.scene.visualNotes,
+          imageLabel: key,
+          localPath: local,
+        }];
+      });
+      if (consistencyScenes.length) {
+        const consistency = await runConsistencyCheck({
+          project,
+          scenes: consistencyScenes,
+          registry: llmProviders,
+          sqlite: this.sqlite,
+          config: this.config,
+          signal: context.signal,
+          logger: context.logger,
+        });
+        llmCalls += consistency.usage.llmCalls;
+        inputTokens += consistency.usage.inputTokens;
+        outputTokens += consistency.usage.outputTokens;
+        llmCallDetails.push(...consistency.usage.calls);
+        for (const [sceneId, reasons] of consistency.flags) {
+          const meta = visionMetaByScene.get(sceneId) ?? {};
+          visionMetaByScene.set(sceneId, {
+            ...meta,
+            needsAttention: true,
+            reason: meta.reason ?? reasons[0],
+            consistencyFlags: reasons,
+          });
+        }
+      }
+    }
+
     const selections = assignDistinct(rankedScenes.map(({ item, ranked }) => {
       const currentSelection = this.getSelection(project.id, item.scene.id);
       const selectedCandidate = currentSelection && (item.unchanged || item.protectedSelection)
@@ -848,20 +1037,26 @@ export class VisualService {
           if (!keepSelection) {
             this.sqlite.prepare("DELETE FROM visual_selections WHERE scene_id = ? AND slot = 0").run(item.scene.id);
           }
-          ranked.forEach((candidate) => this.saveCandidate({
-            ...candidate,
-            id: randomUUID(),
-            projectId: project.id,
-            sceneId: item.scene.id,
-            origin: "SEARCH",
-            query: candidate.searchQuery ?? item.scene.visualQueries.primary,
-            discardedAt: null,
-            createdAt: new Date().toISOString(),
-            searchHash: item.searchHash,
-          }));
+          ranked.forEach((candidate) => {
+            const key = `${candidate.provider}:${candidate.providerItemId}`;
+            const visionCheck = visionChecksByCandidateKey.get(`${item.scene.id}:${key}`) ?? null;
+            this.saveCandidate({
+              ...candidate,
+              id: randomUUID(),
+              projectId: project.id,
+              sceneId: item.scene.id,
+              origin: "SEARCH",
+              query: candidate.searchQuery ?? item.scene.visualQueries.primary,
+              discardedAt: null,
+              createdAt: new Date().toISOString(),
+              searchHash: item.searchHash,
+              visionCheck,
+            });
+          });
+          const visionMeta = visionMetaByScene.get(item.scene.id) ?? null;
           this.sqlite.prepare(
-            "INSERT INTO visual_search_state (scene_id, project_id, search_hash, updated_at) VALUES (?, ?, ?, ?) ON CONFLICT(scene_id) DO UPDATE SET search_hash = excluded.search_hash, updated_at = excluded.updated_at",
-          ).run(item.scene.id, project.id, item.searchHash, new Date().toISOString());
+            "INSERT INTO visual_search_state (scene_id, project_id, search_hash, vision_meta, updated_at) VALUES (?, ?, ?, ?, ?) ON CONFLICT(scene_id) DO UPDATE SET search_hash = excluded.search_hash, vision_meta = excluded.vision_meta, updated_at = excluded.updated_at",
+          ).run(item.scene.id, project.id, item.searchHash, visionMeta ? JSON.stringify(visionMeta) : null, new Date().toISOString());
         }
         candidateCount += ranked.length;
       }
@@ -930,6 +1125,7 @@ export class VisualService {
     providers: ImageSearchProvider[],
     stats: SearchStats,
     signal: AbortSignal,
+    breadth = 8,
   ): Promise<{ queries: string[]; candidates: NormalizedImageResult[] }> {
     const queries: string[] = [];
     const results: NormalizedImageResult[] = [];
@@ -946,7 +1142,7 @@ export class VisualService {
         language,
         aspectRatio,
         providers.map((provider) => provider.id),
-      ) >= 8) return;
+      ) >= breadth) return;
       seenQueries.add(key);
       queries.push(cleanQuery);
       const queryProviders = ladderStep <= 2
@@ -1168,13 +1364,13 @@ export class VisualService {
     ).get(candidate.sceneId, candidate.provider, candidate.providerItemId) as { id: string } | undefined;
     const id = existing?.id ?? candidate.id;
     this.sqlite.prepare(
-      `INSERT INTO visual_candidates (id, project_id, scene_id, origin, provider, provider_item_id, source_provider, query, title, description, tags, preview_url, image_url, source_url, source_site, width, height, aspect_ratio, file_type, watermark, relevance_score, score_breakdown, license, rank, discarded_at, created_at, search_hash, local_path, sha256, bytes, actual_width, actual_height, downloaded_at, download_error)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `INSERT INTO visual_candidates (id, project_id, scene_id, origin, provider, provider_item_id, source_provider, query, title, description, tags, preview_url, image_url, source_url, source_site, width, height, aspect_ratio, file_type, watermark, relevance_score, score_breakdown, license, rank, discarded_at, created_at, search_hash, local_path, sha256, bytes, actual_width, actual_height, downloaded_at, download_error, vision_check)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT(id) DO UPDATE SET query=excluded.query, title=excluded.title, description=excluded.description, tags=excluded.tags,
        preview_url=excluded.preview_url, image_url=excluded.image_url, source_url=excluded.source_url, source_site=excluded.source_site,
        width=excluded.width, height=excluded.height, aspect_ratio=excluded.aspect_ratio, file_type=excluded.file_type,
        watermark=excluded.watermark, relevance_score=excluded.relevance_score, score_breakdown=excluded.score_breakdown,
-       license=excluded.license, rank=excluded.rank, search_hash=excluded.search_hash`,
+       license=excluded.license, rank=excluded.rank, search_hash=excluded.search_hash, vision_check=COALESCE(excluded.vision_check, visual_candidates.vision_check)`,
     ).run(
       id, candidate.projectId, candidate.sceneId, candidate.origin, candidate.provider, candidate.providerItemId,
       candidate.sourceProvider ?? null, candidate.query, candidate.title, candidate.description, JSON.stringify(candidate.tags),
@@ -1185,10 +1381,15 @@ export class VisualService {
       candidate.localPath ?? null, candidate.sha256 ?? null, candidate.bytes ?? null,
       candidate.actualWidth ?? null, candidate.actualHeight ?? null, candidate.downloadedAt ?? null,
       candidate.downloadError ?? null,
+      candidate.visionCheck ? JSON.stringify(candidate.visionCheck) : null,
     );
   }
 
   private candidateFromRow(row: Record<string, unknown>): VisualCandidate {
+    const visionRaw = row.vision_check;
+    const visionParsed = visionRaw
+      ? VisionCheckSchema.safeParse(typeof visionRaw === "string" ? JSON.parse(visionRaw) : visionRaw)
+      : null;
     return VisualCandidateSchema.parse({
       id: row.id,
       projectId: row.project_id,
@@ -1224,7 +1425,113 @@ export class VisualService {
       actualHeight: row.actual_height ?? null,
       downloadedAt: row.downloaded_at ?? null,
       downloadError: row.download_error ?? null,
+      visionCheck: visionParsed?.success ? visionParsed.data : null,
     });
+  }
+
+  private getVisionMeta(sceneId: string): SceneVisionMeta | undefined {
+    const row = this.sqlite.prepare("SELECT vision_meta FROM visual_search_state WHERE scene_id = ?")
+      .get(sceneId) as { vision_meta: string | null } | undefined;
+    if (!row?.vision_meta) return undefined;
+    const parsed = SceneVisionMetaSchema.safeParse(
+      typeof row.vision_meta === "string" ? JSON.parse(row.vision_meta) : row.vision_meta,
+    );
+    return parsed.success ? parsed.data : undefined;
+  }
+
+  private async ensureVisionLocalFile(
+    projectId: string,
+    key: string,
+    url: string,
+    signal?: AbortSignal,
+  ): Promise<string> {
+    const folder = join(projectDir(this.config.DATA_DIR, projectId), "vision-cache");
+    mkdirSync(folder, { recursive: true });
+    const dest = join(folder, `${createHash("sha256").update(key).digest("hex").slice(0, 16)}.jpg`);
+    if (existsSync(dest)) return dest;
+    try {
+      const stored = await this.imageStore.download(projectId, url, signal);
+      const source = join(projectDir(this.config.DATA_DIR, projectId), "visuals", stored.localPath);
+      if (existsSync(source)) {
+        writeFileSync(dest, readFileSync(source));
+        return dest;
+      }
+    } catch {
+      // Fall through to placeholder for mock / unreachable URLs.
+    }
+    writeFileSync(dest, PLACEHOLDER_JPEG);
+    return dest;
+  }
+
+  async visionCheckCandidate(
+    projectId: string,
+    sceneId: string,
+    candidateId: string,
+    llmProviders: LlmProviderRegistry,
+    signal?: AbortSignal,
+  ) {
+    this.requireScene(projectId, sceneId);
+    const candidate = this.findCandidate(candidateId);
+    if (!candidate || candidate.sceneId !== sceneId) {
+      throw new AppError(404, "VISUAL_CANDIDATE_NOT_FOUND", "Không tìm thấy ảnh ứng viên.");
+    }
+    const project = this.requireProject(projectId);
+    requireVisionRoute(llmProviders, project, this.sqlite);
+    const localPath = candidate.localPath
+      ? join(projectDir(this.config.DATA_DIR, projectId), "visuals", candidate.localPath)
+      : await this.ensureVisionLocalFile(projectId, candidate.id, candidate.previewUrl || candidate.imageUrl, signal);
+    if (!existsSync(localPath)) {
+      throw new AppError(422, "IMAGE_DOWNLOAD_FAILED", "Không có tệp ảnh cục bộ để kiểm tra vision.");
+    }
+    const scene = this.loadScenes(projectId).find((item) => item.id === sceneId)!;
+    const route = llmProviders.resolveTask("visionCheck", project, getAppLlmSettings(this.sqlite));
+    const prompt = buildVisionCheckPrompt({
+      narration: scene.narration,
+      visualDescription: scene.visualDescription || scene.visualNotes,
+      aspectRatio: project.settings.aspectRatio,
+      images: [{ label: candidate.id }],
+    });
+    try {
+      const generated = await generateRoutedStructured({
+        registry: llmProviders,
+        route,
+        task: "visionCheck",
+        system: prompt.system,
+        prompt: prompt.prompt,
+        schema: VisionCheckBatchSchema,
+        schemaName: "VisionCheck",
+        schemaVersion: "1",
+        maxOutputTokens: 1_200,
+        repairAttempts: 1,
+        signal: signal ?? new AbortController().signal,
+        cache: new LlmCache(this.sqlite, this.config.LLM_CACHE_ENABLED),
+        images: [{ path: localPath, label: candidate.id }],
+        visionCacheDir: join(projectDir(this.config.DATA_DIR, projectId), "vision-cache"),
+      });
+      const image = generated.value.images[0];
+      if (!image) throw new AppError(502, "LLM_INVALID_OUTPUT", "Vision check không trả kết quả.");
+      const check: VisionCheck = {
+        fit: image.fit,
+        depicts: image.depicts,
+        issues: image.issues,
+        cropOk: image.cropOk,
+        model: generated.model,
+        checkedAt: new Date().toISOString(),
+      };
+      this.sqlite.prepare("UPDATE visual_candidates SET vision_check = ? WHERE id = ?")
+        .run(JSON.stringify(check), candidate.id);
+      this.repository.emitVisualUpdated(projectId, sceneId, "vision-checked");
+      return {
+        candidate: this.findCandidate(candidate.id)!,
+        usage: generated.usage,
+        estimate: { calls: 1, images: 1 },
+      };
+    } catch (error) {
+      if (error instanceof LlmError) {
+        throw new AppError(error.code === "VISION_PROVIDER_REQUIRED" ? 422 : 502, error.code, error.message);
+      }
+      throw error;
+    }
   }
 
   private findCandidate(candidateId: string): VisualCandidate | null {
@@ -1346,9 +1653,17 @@ function properNounQueries(queries: string[]): string[] {
   return [...new Set(queriesToTry)];
 }
 
-function resolveFeatures(project: Project): { altQueryAssist: boolean; semanticImageRerank: boolean } {
+function resolveFeatures(project: Project): {
+  altQueryAssist: boolean;
+  semanticImageRerank: boolean;
+  visualSearchBreadth: 8 | 16;
+} {
   const features = resolveBudget(project);
-  return { altQueryAssist: features.altQueryAssist, semanticImageRerank: features.semanticImageRerank };
+  return {
+    altQueryAssist: features.altQueryAssist,
+    semanticImageRerank: features.semanticImageRerank,
+    visualSearchBreadth: features.visualSearchBreadth,
+  };
 }
 
 function fromStoredCandidate(candidate: VisualCandidate): NormalizedImageResult {

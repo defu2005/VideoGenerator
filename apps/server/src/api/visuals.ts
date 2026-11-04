@@ -9,6 +9,7 @@ import type { FastifyInstance } from "fastify";
 import { createReadStream } from "node:fs";
 import { AppError } from "../lib/errors.js";
 import type { JobRepository } from "../jobs/jobRepository.js";
+import type { LlmProviderRegistry } from "../providers/llm/registry.js";
 import type { VisualService } from "../services/visualService.js";
 
 const ProjectParams = z.object({ id: z.string().uuid() }).strict();
@@ -55,6 +56,7 @@ export function registerVisualRoutes(
   app: FastifyInstance,
   service: VisualService,
   repository: JobRepository,
+  llmProviders?: LlmProviderRegistry,
 ): void {
   const ensureNoActiveJob = (projectId: string) => {
     if (repository.getActiveJob(projectId)) {
@@ -209,5 +211,26 @@ export function registerVisualRoutes(
     ensureSceneMutationAllowed(id, sceneId);
     const body = VisualMotionBody.parse(request.body);
     return service.setSelectionMotion(id, sceneId, body.slot, body.motion);
+  });
+
+  app.post("/api/projects/:id/scenes/:sceneId/visuals/:candidateId/vision-check", {
+    schema: {
+      params: CandidateParams,
+      response: {
+        200: z.object({
+          candidate: z.unknown(),
+          usage: z.unknown(),
+          estimate: z.object({ calls: z.number(), images: z.number() }).strict(),
+        }).strict(),
+        ...Errors,
+      },
+    },
+  }, async (request) => {
+    if (!llmProviders) {
+      throw new AppError(503, "LLM_NOT_CONFIGURED", "LLM providers are not available.");
+    }
+    const { id, sceneId, candidateId } = CandidateParams.parse(request.params);
+    ensureSceneMutationAllowed(id, sceneId);
+    return service.visionCheckCandidate(id, sceneId, candidateId, llmProviders);
   });
 }

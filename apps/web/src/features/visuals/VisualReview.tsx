@@ -20,6 +20,7 @@ import {
   searchSceneVisuals,
   selectSceneVisual,
   uploadSceneVisual,
+  visionCheckCandidate,
 } from "../../services/visualsApi";
 import { sceneTimecode } from "../scenes/SceneCard";
 
@@ -38,11 +39,12 @@ type VisualMutationContext = {
   previousActiveVisuals: SceneVisuals | null;
 };
 
-const statuses: SceneVisualStatus[] = ["NO_VISUAL", "SEARCHING", "REVIEW_REQUIRED", "APPROVED", "READY_FOR_RENDER", "SKIPPED"];
+const statuses: SceneVisualStatus[] = ["NO_VISUAL", "SEARCHING", "REVIEW_REQUIRED", "NEEDS_ATTENTION", "APPROVED", "READY_FOR_RENDER", "SKIPPED"];
 const statusNames: Record<SceneVisualStatus, string> = {
   NO_VISUAL: "Chưa có ảnh",
   SEARCHING: "Đang tìm",
   REVIEW_REQUIRED: "Cần xem",
+  NEEDS_ATTENTION: "Cần bạn xem (AI)",
   APPROVED: "Đã duyệt",
   READY_FOR_RENDER: "Sẵn sàng render",
   SKIPPED: "Không dùng ảnh",
@@ -224,7 +226,7 @@ export function VisualReview({ project }: { project: Project }) {
     return new Map([...uses].filter(([, indexes]) => indexes.length > 1));
   }, [rows]);
   const visible = rows.filter((row) => {
-    if (filter === "review") return row.status === "REVIEW_REQUIRED";
+    if (filter === "review") return row.status === "REVIEW_REQUIRED" || row.status === "NEEDS_ATTENTION";
     if (filter === "low") return row.lowRelevance;
     if (filter === "reused") return Boolean(row.selectedCandidate && reused.has(row.selectedCandidate.sourceUrl || row.selectedCandidate.providerItemId));
     if (filter === "none") return row.status === "NO_VISUAL";
@@ -405,6 +407,11 @@ export function VisualReview({ project }: { project: Project }) {
               <h2>{row.visualDescription || row.visualQueries.primary || "Chưa có mô tả ảnh"}</h2>
               <p>{row.narration.slice(0, 170)}</p>
               <span className={`visual-status status-${row.status.toLowerCase()}`}>{statusNames[row.status]}</span>
+              {row.status === "NEEDS_ATTENTION"
+                ? <span className="visual-warning">Cần bạn xem · {row.visionMeta?.reason ?? "AI nhìn chưa đạt"}</span>
+                : row.selectedCandidate?.visionCheck
+                  ? <span className="visual-chip">Đã kiểm tra bằng AI · {row.selectedCandidate.visionCheck.fit}/10</span>
+                  : null}
               {row.lowRelevance && <span className="visual-warning">Ít liên quan</span>}
               {reusedAt && <span className="visual-warning">Ảnh dùng lại ở scene {reusedAt.filter((number) => number !== row.order + 1).join(", ")}</span>}
               {candidate && <span className={`visual-warning license-${candidate.license.kind.toLowerCase()}`}>{licenseBadge(candidate)}</span>}
@@ -434,6 +441,21 @@ export function VisualReview({ project }: { project: Project }) {
         <div className="visual-drawer-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) closePanel(); }}>
           <section className="panel visual-drawer" role="dialog" aria-modal="true" aria-labelledby="visual-drawer-title">
             <header><div><p className="eyebrow">SCENE {activeRow.order + 1}</p><h2 id="visual-drawer-title">Chọn hình ảnh</h2></div><button className="button button-secondary" type="button" onClick={closePanel}>Đóng</button></header>
+            {activeVisuals?.status === "NEEDS_ATTENTION" || activeRow.status === "NEEDS_ATTENTION" ? (
+              <p className="visual-warning" role="status">Cần bạn xem — {activeVisuals?.visionMeta?.reason ?? activeRow.visionMeta?.reason ?? "AI nhìn chưa đạt ngưỡng."}</p>
+            ) : activeRow.selectedCandidate?.visionCheck ? (
+              <p className="visual-chip" role="status">Đã kiểm tra bằng AI · {activeRow.selectedCandidate.visionCheck.fit}/10</p>
+            ) : null}
+            {(activeVisuals?.visionMeta?.reSearchHistory?.length ?? activeRow.visionMeta?.reSearchHistory?.length ?? 0) > 0 && (
+              <details className="visual-research-history">
+                <summary>Lịch sử tìm lại bằng AI</summary>
+                <ul>
+                  {(activeVisuals?.visionMeta?.reSearchHistory ?? activeRow.visionMeta?.reSearchHistory ?? []).map((entry) => (
+                    <li key={`r-${entry.round}`}>{entry.round}. {entry.queries.join(" · ")} — {entry.why}{entry.bestFit != null ? ` (fit ${entry.bestFit}/10)` : ""}</li>
+                  ))}
+                </ul>
+              </details>
+            )}
             <label className="form-field"><span>Mô tả ảnh</span><textarea value={description} onChange={(event) => setDescription(event.target.value)} /></label>
             <div className="visual-search-form">
               <label className="form-field"><span>Từ khóa tìm kiếm</span><input value={query} onChange={(event) => setQuery(event.target.value)} /></label>
@@ -448,6 +470,15 @@ export function VisualReview({ project }: { project: Project }) {
                   <img src={imageUrl(project.id, item)} loading="lazy" alt={item.title} />
                   <strong>{item.title || `Candidate ${index + 1}`}</strong>
                   <small>{item.provider} · {item.width}×{item.height} · {Math.round(item.relevanceScore * 100)}% · {licenseBadge(item)}</small>
+                  {item.visionCheck && (
+                    <div className="visual-vision-check">
+                      <span className="visual-chip">AI nhìn: {item.visionCheck.fit}/10</span>
+                      <small>{item.visionCheck.depicts}</small>
+                      <div className="visual-candidate-marks">
+                        {item.visionCheck.issues.map((issue) => <span key={issue}>{issue}</span>)}
+                      </div>
+                    </div>
+                  )}
                   <div className="visual-candidate-marks">
                     {item.scoreBreakdown.lowRelevance === true && <span>Ít liên quan</span>}
                     {(item.scoreBreakdown.reusedAcrossScenes === true || rows.some((row) => row.sceneId !== activeSceneId
@@ -455,6 +486,25 @@ export function VisualReview({ project }: { project: Project }) {
                     {item.watermark !== "NONE" && <span>Watermark {item.watermark.toLowerCase()}</span>}
                   </div>
                   <button className="button button-secondary" type="button" disabled={mutate.isPending} onClick={() => run({ type: "select", sceneId: activeSceneId, candidateId: item.id })}>Chọn · {index + 1}</button>
+                  <button
+                    className="button button-secondary"
+                    type="button"
+                    disabled={mutate.isPending}
+                    onClick={() => {
+                      if (!window.confirm("Kiểm tra lại bằng AI? Ước tính ~1 lượt gọi vision (≈1000 token ảnh).")) return;
+                      void visionCheckCandidate(project.id, activeSceneId, item.id)
+                        .then(async () => {
+                          setActiveVisuals(await getSceneVisuals(project.id, activeSceneId));
+                          await queryClient.invalidateQueries({ queryKey: visualKeys.project(project.id) });
+                          setNotice("Đã kiểm tra bằng AI.");
+                        })
+                        .catch((cause: unknown) => {
+                          setError(cause instanceof Error ? cause.message : "Không kiểm tra được bằng AI.");
+                        });
+                    }}
+                  >
+                    Kiểm tra lại bằng AI
+                  </button>
                 </article>
               ))}
             </div>

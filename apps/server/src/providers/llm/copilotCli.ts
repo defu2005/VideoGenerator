@@ -23,6 +23,8 @@ export const COPILOT_CLI_FLAGS = {
 } as const;
 
 export class CopilotCliProvider extends CliProviderBase {
+  readonly capabilities = { vision: true, maxImagesPerCall: 5 } as const;
+
   constructor(
     binaryPath: string | null,
     dataDir: string,
@@ -43,18 +45,7 @@ export class CopilotCliProvider extends CliProviderBase {
       defaultModel,
       hint: "Install GitHub Copilot CLI and sign in once",
       limits,
-      args: (request, cwd) => [
-        COPILOT_CLI_FLAGS.silent,
-        ...COPILOT_CLI_FLAGS.outputFormat,
-        COPILOT_CLI_FLAGS.disableTelemetry,
-        COPILOT_CLI_FLAGS.availableTools,
-        COPILOT_CLI_FLAGS.disableBuiltinMcps,
-        COPILOT_CLI_FLAGS.disallowTempDir,
-        COPILOT_CLI_FLAGS.logDir,
-        cwd,
-        ...COPILOT_CLI_FLAGS.logLevel,
-        ...(request.model ? [COPILOT_CLI_FLAGS.model, request.model] : []),
-      ],
+      args: (request, cwd) => buildCopilotArgs(request, cwd),
       formatPrompt: formatCopilotPrompt,
       parseResponse: parseCopilotResponse,
       classifyFailure: classifyCopilotFailure,
@@ -62,6 +53,22 @@ export class CopilotCliProvider extends CliProviderBase {
       spawnProcess,
     });
   }
+}
+
+export function buildCopilotArgs(request: LlmRequest, cwd: string): string[] {
+  return [
+    COPILOT_CLI_FLAGS.silent,
+    ...COPILOT_CLI_FLAGS.outputFormat,
+    COPILOT_CLI_FLAGS.disableTelemetry,
+    COPILOT_CLI_FLAGS.availableTools,
+    COPILOT_CLI_FLAGS.disableBuiltinMcps,
+    COPILOT_CLI_FLAGS.disallowTempDir,
+    COPILOT_CLI_FLAGS.logDir,
+    cwd,
+    ...COPILOT_CLI_FLAGS.logLevel,
+    ...(request.model ? [COPILOT_CLI_FLAGS.model, request.model] : []),
+    ...(request.images ?? []).flatMap((image) => ["--attachment", image.path]),
+  ];
 }
 
 function formatCopilotPrompt(request: LlmRequest): string {

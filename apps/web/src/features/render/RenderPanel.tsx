@@ -1,6 +1,7 @@
 import type { Project, RenderIssueCode, RenderVersion } from "@vg/shared";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
+import { Link } from "react-router-dom";
 import { ErrorState } from "../../components/ErrorState";
 import { Spinner } from "../../components/Spinner";
 import { pipelineKeys, usePipeline } from "../../hooks/usePipeline";
@@ -19,6 +20,9 @@ const ISSUE_LABEL: Record<RenderIssueCode, string> = {
   NO_AUDIO: "Không có tiếng",
   BLACK_FRAMES: "Khung đen",
   THUMBNAIL_FAILED: "Lỗi ảnh xem trước",
+  FRAME_MISMATCH: "Frame không khớp",
+  SUBTITLE_ILLEGIBLE: "Phụ đề khó đọc",
+  RENDER_VISION_FAILED: "Lỗi AI nhìn sau render",
 };
 
 function clock(seconds: number): string {
@@ -163,6 +167,12 @@ export function RenderPanel({ project }: { project: Project }) {
                 {data.report.issues.map((issue, index) => (
                   <li key={`${issue.code}-${issue.sceneId ?? "all"}-${index}`} className={issue.severity === "ERROR" ? "error" : "warn"}>
                     <strong>{ISSUE_LABEL[issue.code] ?? issue.code}</strong> {issue.message}
+                    {issue.sceneId && (issue.code === "FRAME_MISMATCH" || issue.code === "SUBTITLE_ILLEGIBLE" || issue.code === "BLACK_FRAMES") && (
+                      <>
+                        {" · "}
+                        <Link to={`/projects/${project.id}?tab=visuals&scene=${issue.sceneId}`}>Sửa scene này</Link>
+                      </>
+                    )}
                   </li>
                 ))}
               </ul>

@@ -94,8 +94,8 @@ export function buildApp({ config }: { config: AppConfig }) {
     probeDurationSec,
   );
   const timelineService = new TimelineService(database.sqlite, config);
-  const renderService = new RenderService(database.sqlite, config, timelineService);
   const llmProviders = new LlmProviderRegistry(config);
+  const renderService = new RenderService(database.sqlite, config, timelineService, undefined, undefined, llmProviders);
   const metadataService = new MetadataService(database.sqlite, config, llmProviders, timelineService, renderService);
   const orchestrator = new PipelineOrchestrator(
     jobRepository,
@@ -109,9 +109,19 @@ export function buildApp({ config }: { config: AppConfig }) {
         : gate === "FINAL_APPROVAL"
           ? timelineService.canApproveFinal(project.id)
           : { allowed: true },
-    (_project, _gate) => guidelineService.openMustCount(_project.id) > 0
-      ? "Có phát hiện MUST đang mở. AUTO tạm dừng để bạn xem định hướng nội dung."
-      : null,
+    (project, gate) => {
+      if (guidelineService.openMustCount(project.id) > 0) {
+        return "Có phát hiện MUST đang mở. AUTO tạm dừng để bạn xem định hướng nội dung.";
+      }
+      if (gate === "VISUAL_REVIEW") {
+        const visuals = visualService.getProjectVisuals(project.id);
+        const needsAttention = visuals.scenes.filter((scene) => scene.status === "NEEDS_ATTENTION").length;
+        if (needsAttention > 0) {
+          return `${needsAttention} scene cần bạn xem (AI nhìn chưa đạt ngưỡng). AUTO tạm dừng tại VISUAL_REVIEW.`;
+        }
+      }
+      return null;
+    },
   );
   const ttsProviders = new TtsProviderRegistry(config);
   const scriptService = new ScriptService(database.sqlite, jobRepository, orchestrator, config);
@@ -161,7 +171,7 @@ export function buildApp({ config }: { config: AppConfig }) {
   registerScriptRoutes(server, scriptService, projectService, config, guidelineService);
   registerGuidelineRoutes(server, database.sqlite, projectService, guidelineService, llmProviders, config);
   registerSceneRoutes(server, sceneService);
-  registerVisualRoutes(server, visualService, jobRepository);
+  registerVisualRoutes(server, visualService, jobRepository, llmProviders);
   registerVoiceRoutes(server, ttsProviders, database.sqlite, projectService, jobRepository, config);
   registerSubtitleRoutes(server, database.sqlite, jobRepository, config);
   registerMusicRoutes(server, musicService, projectService, jobRepository);

@@ -1,10 +1,12 @@
 import type { FastifyBaseLogger } from "fastify";
+import { join } from "node:path";
 import { z } from "zod";
 import type { LlmCallUsage, LlmTaskId } from "@vg/shared";
 import type { LlmProviderRegistry, ResolvedLlmRoute } from "./registry.js";
 import { LlmCache, createLlmCacheKey } from "./cache.js";
-import type { LlmProvider } from "./types.js";
+import type { LlmImageAttachment, LlmProvider } from "./types.js";
 import { LlmError } from "./types.js";
+import { prepareVisionImages, visionCacheKeyExtra } from "./visionImages.js";
 
 export async function generateStructured<T>(input: {
   provider: LlmProvider;
@@ -21,6 +23,9 @@ export async function generateStructured<T>(input: {
   cacheKeyExtra?: string;
   logger?: FastifyBaseLogger;
   task?: LlmTaskId;
+  images?: LlmImageAttachment[];
+  /** Project data dir used to cache resized vision JPEGs. */
+  visionCacheDir?: string;
 } ): Promise<{
   value: T;
   usage: { llmCalls: number; inputTokens: number; outputTokens: number; tokensUnknown?: boolean; calls: LlmCallUsage[] };
@@ -28,6 +33,13 @@ export async function generateStructured<T>(input: {
   model: string;
   cached: boolean;
 }> {
+  assertVisionCapable(input.provider, input.images);
+  const preparedImages = await prepareVisionImages(
+    input.images,
+    input.visionCacheDir ?? join(process.cwd(), ".vision-cache"),
+    input.signal,
+  );
+  const imageKey = visionCacheKeyExtra(preparedImages);
   const key = createLlmCacheKey({
     provider: input.provider.id,
     model: input.model,
@@ -35,7 +47,7 @@ export async function generateStructured<T>(input: {
     prompt: input.prompt,
     schemaName: input.schemaName,
     schemaVersion: input.schemaVersion,
-    cacheKeyExtra: input.cacheKeyExtra,
+    cacheKeyExtra: [input.cacheKeyExtra ?? "", imageKey].filter(Boolean).join("|"),
   });
   const cached = input.cache?.get(key);
   if (cached) {
@@ -87,6 +99,7 @@ export async function generateStructured<T>(input: {
     calls: [...callDetails],
   });
   const maxOutputTokens = Math.min(input.maxOutputTokens, input.provider.limits?.maxOutputTokens ?? Number.POSITIVE_INFINITY);
+  const requestImages = preparedImages.map((image) => ({ path: image.path, label: image.label }));
   let response;
   try {
     response = await input.provider.generate({
@@ -97,6 +110,7 @@ export async function generateStructured<T>(input: {
       messages: [{ role: "user", content: input.prompt }],
       maxOutputTokens,
       json: true,
+      ...(requestImages.length ? { images: requestImages } : {}),
     }, input.signal);
   } catch (error) {
     if (input.signal.aborted || isAbortError(error)) throw error;
@@ -158,6 +172,7 @@ export async function generateStructured<T>(input: {
         ],
         maxOutputTokens,
         json: true,
+        ...(requestImages.length ? { images: requestImages } : {}),
       }, input.signal);
     } catch (error) {
       if (input.signal.aborted || isAbortError(error)) throw error;
@@ -316,7 +331,25 @@ function isAbortError(error: unknown): boolean {
 }
 
 // Errors raised before a request reaches the provider (missing CLI, nothing configured) spend no call.
-const NOT_SENT_CODES = new Set(["LLM_NOT_CONFIGURED", "LLM_LIMIT_TOO_SMALL"]);
+const NOT_SENT_CODES = new Set(["LLM_NOT_CONFIGURED", "LLM_LIMIT_TOO_SMALL", "VISION_PROVIDER_REQUIRED", "FFMPEG_MISSING"]);
+
+export function assertVisionCapable(provider: LlmProvider, images: LlmImageAttachment[] | undefined): void {
+  if (!images?.length) return;
+  if (!provider.capabilities?.vision) {
+    throw new LlmError(
+      `Provider "${provider.id}" cannot accept images. Chọn route vision ở Cài đặt → Mô hình AI (anthropic, gemini, claude-cli, copilot-cli, …).`,
+      "VISION_PROVIDER_REQUIRED",
+      false,
+    );
+  }
+  if (images.length > provider.capabilities.maxImagesPerCall) {
+    throw new LlmError(
+      `Provider "${provider.id}" accepts at most ${provider.capabilities.maxImagesPerCall} images per call.`,
+      "LLM_BAD_REQUEST",
+      false,
+    );
+  }
+}
 
 function attemptedCalls(error: unknown): number {
   return error instanceof LlmError && NOT_SENT_CODES.has(error.code) ? 0 : 1;

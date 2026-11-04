@@ -10,11 +10,23 @@ export type LlmErrorCode =
   | "LLM_OUTPUT_TRUNCATED"
   | "LLM_NOT_CONFIGURED"
   | "LLM_LIMIT_TOO_SMALL"
-  | "LLM_QUOTA_EXHAUSTED";
+  | "LLM_QUOTA_EXHAUSTED"
+  | "VISION_PROVIDER_REQUIRED"
+  | "FFMPEG_MISSING";
 
 export type LlmProviderLimits = {
   maxInputTokens?: number;
   maxOutputTokens?: number;
+};
+
+export type LlmProviderCapabilities = {
+  vision: boolean;
+  maxImagesPerCall: number;
+};
+
+export type LlmImageAttachment = {
+  path: string;
+  label: string;
 };
 
 export type LlmRequest = {
@@ -26,6 +38,8 @@ export type LlmRequest = {
   maxOutputTokens: number;
   temperature?: number;
   json: boolean;
+  /** Request-level image attachments (resized locally before send). */
+  images?: LlmImageAttachment[];
 };
 
 export type LlmResponse = {
@@ -41,6 +55,9 @@ export interface LlmProvider {
   label: string;
   defaultModel: string | null;
   limits?: LlmProviderLimits;
+  capabilities?: LlmProviderCapabilities;
+  configured?: boolean;
+  hint?: string;
   generate(req: LlmRequest, signal: AbortSignal): Promise<LlmResponse>;
 }
 

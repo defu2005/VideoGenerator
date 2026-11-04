@@ -1,7 +1,10 @@
+import { readFileSync } from "node:fs";
 import { fetchLlmJson, asRecord, numeric } from "./http.js";
-import { LlmError, type LlmProvider, type LlmRequest, type LlmResponse } from "./types.js";
+import { LlmError, type LlmProvider, type LlmProviderCapabilities, type LlmRequest, type LlmResponse } from "./types.js";
 
 export class OpenAiCompatibleProvider implements LlmProvider {
+  readonly capabilities: LlmProviderCapabilities;
+
   constructor(
     readonly id: string,
     readonly label: string,
@@ -10,7 +13,10 @@ export class OpenAiCompatibleProvider implements LlmProvider {
     readonly defaultModel: string | null,
     private readonly timeoutMs: number,
     private readonly supportsJsonMode = true,
-  ) {}
+    capabilities: LlmProviderCapabilities = { vision: false, maxImagesPerCall: 0 },
+  ) {
+    this.capabilities = capabilities;
+  }
 
   async generate(req: LlmRequest, signal: AbortSignal) {
     const headers: Record<string, string> = { "content-type": "application/json" };
@@ -21,7 +27,7 @@ export class OpenAiCompatibleProvider implements LlmProvider {
       headers,
       body: JSON.stringify({
         model: req.model,
-        messages: [{ role: "system", content: req.system }, ...req.messages],
+        messages: buildOpenAiMessages(req),
         max_tokens: req.maxOutputTokens,
         ...(req.temperature === undefined ? {} : { temperature: req.temperature }),
         ...(req.json && this.supportsJsonMode ? { response_format: { type: "json_object" } } : {}),
@@ -56,4 +62,29 @@ export class OpenAiCompatibleProvider implements LlmProvider {
       finishReason,
     };
   }
+}
+
+export function buildOpenAiMessages(req: LlmRequest): unknown[] {
+  const messages: unknown[] = [{ role: "system", content: req.system }];
+  for (const [index, message] of req.messages.entries()) {
+    if (message.role !== "user" || index !== firstUserIndex(req) || !req.images?.length) {
+      messages.push({ role: message.role, content: message.content });
+      continue;
+    }
+    messages.push({
+      role: "user",
+      content: [
+        { type: "text", text: `${message.content}\n\nImage labels: ${req.images.map((image) => image.label).join(", ")}` },
+        ...req.images.map((image) => ({
+          type: "image_url",
+          image_url: { url: `data:image/jpeg;base64,${readFileSync(image.path).toString("base64")}` },
+        })),
+      ],
+    });
+  }
+  return messages;
+}
+
+function firstUserIndex(req: LlmRequest): number {
+  return req.messages.findIndex((message) => message.role === "user");
 }

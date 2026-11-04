@@ -47,6 +47,8 @@ export type ScoreBreakdown = {
   total: number;
   lowRelevance: boolean;
   reusedAcrossScenes?: boolean;
+  llmRank?: number;
+  visionFit?: number;
 };
 
 export function normalizeTerms(value: string): string[] {

@@ -6,6 +6,7 @@ import {
   VisualStatusSchema,
   WatermarkStatusSchema,
 } from "../enums.js";
+import { SceneVisionMetaSchema, VisionCheckSchema } from "./vision.js";
 
 export const LicenseMetadataSchema = z.object({
   kind: LicenseKindSchema,
@@ -55,6 +56,7 @@ export const VisualCandidateSchema = z.object({
   actualHeight: z.number().int().positive().nullable().optional(),
   downloadedAt: z.string().datetime({ offset: true }).nullable().optional(),
   downloadError: z.string().nullable().optional(),
+  visionCheck: VisionCheckSchema.nullable().optional(),
   createdAt: z.string().datetime({ offset: true }),
   searchHash: z.string().optional(),
 }).strict();
@@ -86,6 +88,7 @@ export const SceneVisualsSchema = z.object({
   candidates: z.array(VisualCandidateSchema),
   status: SceneVisualStatusSchema.optional(),
   noVisual: z.boolean().optional(),
+  visionMeta: SceneVisionMetaSchema.optional(),
 }).strict();
 export type SceneVisuals = z.infer<typeof SceneVisualsSchema>;
 
@@ -105,6 +108,7 @@ export const ProjectVisualsSchema = z.object({
     narration: z.string(),
     startSec: z.number().nonnegative(),
     durationSec: z.number().nonnegative(),
+    visionMeta: SceneVisionMetaSchema.optional(),
   }).strict()),
   summary: z.object({
     withImage: z.number().int().nonnegative(),
@@ -121,9 +125,11 @@ export function deriveSceneVisualStatus(
   candidates: Pick<VisualCandidate, "id" | "localPath" | "sha256" | "actualWidth" | "actualHeight">[],
   noVisual: boolean,
   stageState: string | null | undefined,
+  visionNeedsAttention = false,
 ): import("../enums.js").SceneVisualStatus {
   if (noVisual) return "SKIPPED";
   if (stageState === "RUNNING") return "SEARCHING";
+  if (visionNeedsAttention) return "NEEDS_ATTENTION";
   if (!selection) return "NO_VISUAL";
   if (selection.status === "DISCOVERED" || selection.status === "REVIEW_REQUIRED" || selection.status === "REPLACED") {
     return "REVIEW_REQUIRED";

@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import type { LlmProvider, LlmRequest } from "./types.js";
 
 const researchFixture = {
@@ -21,12 +22,58 @@ export class MockLlmProvider implements LlmProvider {
   readonly id = "mock";
   readonly label = "Mock (development)";
   readonly defaultModel = "mock-v1";
+  readonly capabilities = { vision: true, maxImagesPerCall: 10 } as const;
 
   async generate(req: LlmRequest, signal: AbortSignal) {
     if (signal.aborted) throw new DOMException("Aborted", "AbortError");
     const prompt = req.messages[0]?.content ?? "";
     const topic = prompt.match(/^Topic:\s*(.+)$/mi)?.[1]?.trim() ?? "the supplied topic";
     const payload = parsePromptObject(prompt);
+    if (req.schemaName === "VisionCheck") {
+      const labels = req.images?.map((image) => image.label)
+        ?? (Array.isArray(payload.images) ? payload.images.map((item) => String((item as { label?: string }).label ?? "img")) : ["img-0"]);
+      return response({
+        images: labels.map((label) => {
+          const fit = mockVisionFit(label);
+          return {
+            label,
+            fit,
+            depicts: fit >= 7 ? `A matching documentary image for ${label}` : `Unrelated content for ${label}`,
+            issues: fit < 7 ? ["wrong_subject"] : [],
+            cropOk: true,
+          };
+        }),
+      }, req.model);
+    }
+    if (req.schemaName === "VisionResearch") {
+      return response({
+        queries: [`${topic} archival photograph`, `${topic} documentary still`, `${topic} historical scene`],
+        why: "Vision feedback suggested the previous candidates missed the subject.",
+      }, req.model);
+    }
+    if (req.schemaName === "VisionConsistency") {
+      return response({ flags: [] }, req.model);
+    }
+    if (req.schemaName === "RenderVision") {
+      const frames = Array.isArray(payload.frames)
+        ? payload.frames as Array<{ sceneId: string }>
+        : (req.images ?? []).map((image) => ({ sceneId: image.label }));
+      return response({
+        frames: frames.map((frame) => ({
+          sceneId: frame.sceneId,
+          matchesSelection: true,
+          subtitleLegible: true,
+          subjectCropOk: true,
+          notes: "ok",
+        })),
+      }, req.model);
+    }
+    if (req.schemaName === "FactCheck") {
+      return response({
+        softenedClaims: [],
+        notes: ["Claims match the research notes."],
+      }, req.model);
+    }
     if (req.schemaName === "visual-rerank") {
       const scenes = payload.scenes as Array<{ sceneId: string; candidates: Array<{ candidateIndex: number }> }> ?? [];
       return response({ scenes: scenes.map(({ sceneId, candidates }) => ({
@@ -187,4 +234,12 @@ function response(value: unknown, model: string) {
     provider: "mock",
     finishReason: "stop" as const,
   };
+}
+
+/** Deterministic fit from label hash. Labels containing "lowfit" force < 7; "highfit" forces ≥ 7. */
+export function mockVisionFit(label: string): number {
+  if (/lowfit/i.test(label)) return 3;
+  if (/highfit/i.test(label)) return 9;
+  const digest = createHash("sha256").update(label).digest();
+  return digest[0]! % 11;
 }
