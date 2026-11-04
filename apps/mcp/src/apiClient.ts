@@ -165,6 +165,16 @@ export class VideoAgentApiClient {
     return this.request(`/api/projects/${encodeURIComponent(projectId)}/metadata`);
   }
 
+  listRenders(projectId: string): Promise<{ renders: unknown[] }> {
+    return this.request(`/api/projects/${encodeURIComponent(projectId)}/renders`);
+  }
+
+  getRenderExportUrl(projectId: string, renderId: string): { url: string } {
+    return {
+      url: `${this.baseUrl}/api/projects/${encodeURIComponent(projectId)}/renders/${encodeURIComponent(renderId)}/export`,
+    };
+  }
+
   getReviewContext(projectId: string): Promise<{
     contextHash: string;
     document: unknown;

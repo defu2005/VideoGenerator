@@ -55,3 +55,31 @@ export const ProjectRenderSchema = z.object({
   render: RenderSchema.nullable(),
 }).strict();
 export type ProjectRender = z.infer<typeof ProjectRenderSchema>;
+
+export const RenderVersionSchema = RenderSchema.extend({
+  version: z.number().int().nonnegative(),
+  note: z.string().max(500).nullable(),
+  pinned: z.boolean(),
+  deleted: z.boolean(),
+  reviewThreadId: z.string().uuid().nullable(),
+  hasMetadata: z.boolean(),
+}).strict();
+export type RenderVersion = z.infer<typeof RenderVersionSchema>;
+
+export const RenderVersionListSchema = z.object({
+  renders: z.array(RenderVersionSchema),
+}).strict();
+export type RenderVersionList = z.infer<typeof RenderVersionListSchema>;
+
+export const RenderVersionPatchSchema = z.object({
+  note: z.string().max(500).nullable().optional(),
+  pinned: z.boolean().optional(),
+}).strict();
+export type RenderVersionPatch = z.infer<typeof RenderVersionPatchSchema>;
+
+export const RenderSettingsSchema = z.object({
+  keepVersions: z.number().int().min(1).max(50).default(5),
+}).strict();
+export type RenderSettings = z.infer<typeof RenderSettingsSchema>;
+
+export const DEFAULT_RENDER_KEEP_VERSIONS = 5;

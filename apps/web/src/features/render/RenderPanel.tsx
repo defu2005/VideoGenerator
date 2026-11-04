@@ -1,13 +1,14 @@
-import type { Project, RenderIssueCode } from "@vg/shared";
+import type { Project, RenderIssueCode, RenderVersion } from "@vg/shared";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
 import { ErrorState } from "../../components/ErrorState";
 import { Spinner } from "../../components/Spinner";
 import { pipelineKeys, usePipeline } from "../../hooks/usePipeline";
 import { runPipeline } from "../../services/pipelineApi";
-import { getProjectRender, renderFileUrl, renderThumbUrl } from "../../services/renderApi";
+import { getProjectRender, listProjectRenders, renderFileUrl, renderThumbUrl } from "../../services/renderApi";
 import { getProjectTimeline } from "../../services/timelineApi";
 import { MetadataPanel } from "./MetadataPanel";
+import { RenderHistory, renderHistoryKeys } from "./RenderHistory";
 
 const renderKeys = { project: (projectId: string) => ["render", projectId] as const };
 
@@ -32,8 +33,10 @@ function megabytes(bytes: number): string {
 export function RenderPanel({ project }: { project: Project }) {
   const queryClient = useQueryClient();
   const [error, setError] = useState("");
+  const [selectedId, setSelectedId] = useState<string | null>(null);
   const pipeline = usePipeline(project.id);
   const render = useQuery({ queryKey: renderKeys.project(project.id), queryFn: () => getProjectRender(project.id) });
+  const history = useQuery({ queryKey: renderHistoryKeys.list(project.id), queryFn: () => listProjectRenders(project.id) });
   const timeline = useQuery({ queryKey: ["timeline", project.id], queryFn: () => getProjectTimeline(project.id) });
 
   const stage = pipeline.data?.stages.find((record) => record.stage === "RENDER");
@@ -41,20 +44,45 @@ export function RenderPanel({ project }: { project: Project }) {
   const wasRendering = useRef(false);
   useEffect(() => {
     // Reload the render once the job ends, so the player shows the new file.
-    if (wasRendering.current && !rendering) void queryClient.invalidateQueries({ queryKey: renderKeys.project(project.id) });
+    if (wasRendering.current && !rendering) {
+      void queryClient.invalidateQueries({ queryKey: renderKeys.project(project.id) });
+      void queryClient.invalidateQueries({ queryKey: renderHistoryKeys.list(project.id) });
+    }
     wasRendering.current = Boolean(rendering);
   }, [rendering, project.id, queryClient]);
 
-  if (render.isPending || pipeline.isPending || timeline.isPending) return <Spinner label="Đang tải render" />;
+  useEffect(() => {
+    const current = render.data?.render?.id ?? null;
+    if (!current) return;
+    setSelectedId((prev) => prev && history.data?.renders.some((item) => item.id === prev && !item.deleted) ? prev : current);
+  }, [render.data?.render?.id, history.data?.renders]);
+
+  if (render.isPending || pipeline.isPending || timeline.isPending || history.isPending) return <Spinner label="Đang tải render" />;
   if (render.isError) return <ErrorState message={render.error.message} onRetry={() => void render.refetch()} />;
   if (pipeline.isError) return <ErrorState message={pipeline.error.message} onRetry={() => void pipeline.refetch()} />;
   if (timeline.isError) return <ErrorState message={timeline.error.message} onRetry={() => void timeline.refetch()} />;
+  if (history.isError) return <ErrorState message={history.error.message} onRetry={() => void history.refetch()} />;
 
-  const data = render.data.render;
+  const versions = history.data.renders;
+  const selected: RenderVersion | null = versions.find((item) => item.id === selectedId && !item.deleted)
+    ?? versions.find((item) => item.id === render.data.render?.id && !item.deleted)
+    ?? null;
+  const data = selected ?? (render.data.render
+    ? {
+        ...render.data.render,
+        version: 0,
+        note: null,
+        pinned: false,
+        deleted: false,
+        reviewThreadId: null,
+        hasMetadata: false,
+      }
+    : null);
   const scenes = timeline.data.timeline?.scenes ?? [];
   const hasTimeline = Boolean(timeline.data.timeline);
   const canRun = hasTimeline && Boolean(stage) && !pipeline.data.activeJob && !pipeline.isMutating;
   const progress = Math.round(stage?.progress ?? 0);
+  const useVersionUrls = Boolean(selected);
 
   async function runStage() {
     setError("");
@@ -98,9 +126,9 @@ export function RenderPanel({ project }: { project: Project }) {
           </button>
           {data && (
             <>
-              <a className="button button-secondary" href={renderFileUrl(project.id, "video", data.id, true)} download>Tải video</a>
-              {data.hasCredits && <a className="button button-secondary" href={renderFileUrl(project.id, "credits", data.id)} download>Tải credits</a>}
-              {data.hasSubtitles && <a className="button button-secondary" href={renderFileUrl(project.id, "subtitles", data.id)} download>Tải phụ đề</a>}
+              <a className="button button-secondary" href={renderFileUrl(project.id, "video", data.id, true, useVersionUrls)} download>Tải video</a>
+              {data.hasCredits && <a className="button button-secondary" href={renderFileUrl(project.id, "credits", data.id, false, useVersionUrls)} download>Tải credits</a>}
+              {data.hasSubtitles && <a className="button button-secondary" href={renderFileUrl(project.id, "subtitles", data.id, false, useVersionUrls)} download>Tải phụ đề</a>}
             </>
           )}
         </div>
@@ -109,8 +137,15 @@ export function RenderPanel({ project }: { project: Project }) {
       {data && (
         <>
           <section className="panel render-player">
-            <video key={data.id} controls preload="metadata" src={renderFileUrl(project.id, "video", data.id)} aria-label="Video đã render" />
+            <video key={data.id} controls preload="metadata" src={renderFileUrl(project.id, "video", data.id, false, useVersionUrls)} aria-label="Video đã render" />
           </section>
+          <RenderHistory
+            projectId={project.id}
+            projectTitle={project.title}
+            renders={versions}
+            selectedId={data.id}
+            onSelect={setSelectedId}
+          />
           <MetadataPanel project={project} />
           <section className={`panel render-report${data.report.ok ? "" : " has-errors"}`} aria-label="Kiểm tra video">
             <h3>
@@ -140,7 +175,7 @@ export function RenderPanel({ project }: { project: Project }) {
                 const label = scene ? `${scene.order + 1}. ${scene.label}` : sceneId;
                 return (
                   <figure key={sceneId}>
-                    <img src={renderThumbUrl(project.id, sceneId, data.id)} alt={label} loading="lazy" />
+                    <img src={renderThumbUrl(project.id, sceneId, data.id, useVersionUrls)} alt={label} loading="lazy" />
                     <figcaption>{label}</figcaption>
                   </figure>
                 );

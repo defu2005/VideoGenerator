@@ -1,6 +1,6 @@
 import { fireEvent, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { STAGE_ORDER, type PipelineState, type Project, type ProjectRender, type ProjectTimeline } from "@vg/shared";
+import { STAGE_ORDER, type PipelineState, type Project, type ProjectRender, type ProjectTimeline, type RenderVersion } from "@vg/shared";
 import { jsonResponse, renderWithProviders } from "../../test/testUtils";
 import { RenderPanel } from "./RenderPanel";
 
@@ -44,17 +44,41 @@ const timeline: ProjectTimeline = {
   },
 };
 
+const report = {
+  ok: true, expectedDurationSec: 64, durationSec: 64.02, width: 1920, height: 1080, hasAudio: true,
+  issues: [{ code: "BLACK_FRAMES" as const, severity: "WARN" as const, sceneId, message: "Khung đen 1.0s ở cảnh 1." }],
+  thumbnails: [sceneId], clipsReused: 0, clipsRendered: 1, elapsedSec: 12.3,
+};
+
 const render: ProjectRender = {
   render: {
     id: "r1", projectId, status: "DONE", inputHash: "h", durationSec: 64, sizeBytes: 3 * 1024 * 1024,
     width: 1920, height: 1080, hasCredits: true, hasSubtitles: false, createdAt: project.updatedAt,
-    report: {
-      ok: true, expectedDurationSec: 64, durationSec: 64.02, width: 1920, height: 1080, hasAudio: true,
-      issues: [{ code: "BLACK_FRAMES", severity: "WARN", sceneId, message: "Khung đen 1.0s ở cảnh 1." }],
-      thumbnails: [sceneId], clipsReused: 0, clipsRendered: 1, elapsedSec: 12.3,
-    },
+    report,
   },
 };
+
+const version = (overrides: Partial<RenderVersion> = {}): RenderVersion => ({
+  id: "r1",
+  projectId,
+  status: "DONE",
+  inputHash: "h",
+  durationSec: 64,
+  sizeBytes: 3 * 1024 * 1024,
+  width: 1920,
+  height: 1080,
+  hasCredits: true,
+  hasSubtitles: false,
+  createdAt: project.updatedAt,
+  report,
+  version: 2,
+  note: "Bản tốt",
+  pinned: false,
+  deleted: false,
+  reviewThreadId: null,
+  hasMetadata: true,
+  ...overrides,
+});
 
 function pipelineWith(state: "DONE" | "PENDING"): PipelineState {
   return {
@@ -77,6 +101,7 @@ describe("RenderPanel", () => {
       const url = String(input);
       calls.push({ url, init });
       if (url.endsWith("/pipeline") || url.includes("/run")) return jsonResponse(pipelineWith("DONE"));
+      if (url.endsWith("/renders")) return jsonResponse({ renders: [version()] });
       if (url.endsWith("/render")) return jsonResponse(render);
       if (url.endsWith("/metadata")) {
         return jsonResponse({
@@ -94,16 +119,66 @@ describe("RenderPanel", () => {
     const { container } = renderWithProviders(<RenderPanel project={project} />);
 
     expect(await screen.findByText("1:04 · 1920×1080 · 3.0 MB")).toBeInTheDocument();
-    expect(container.querySelector("video")?.getAttribute("src")).toBe(`/api/projects/${projectId}/render/video?v=r1`);
-    expect(screen.getByRole("link", { name: "Tải video" })).toHaveAttribute("href", `/api/projects/${projectId}/render/video?v=r1&download=1`);
+    expect(container.querySelector("video")?.getAttribute("src")).toBe(`/api/projects/${projectId}/renders/r1/video?v=r1`);
+    expect(screen.getByRole("link", { name: "Tải video" })).toHaveAttribute("href", `/api/projects/${projectId}/renders/r1/video?v=r1&download=1`);
     expect(screen.getByRole("link", { name: "Tải credits" })).toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "Tải phụ đề" })).toBeNull();
     expect(screen.getByText("Kiểm tra: đạt · 1 vấn đề")).toBeInTheDocument();
     expect(screen.getByText("Khung đen")).toBeInTheDocument();
-    expect(screen.getByAltText("1. Intro")).toHaveAttribute("src", `/api/projects/${projectId}/render/thumbs/${sceneId}?v=r1`);
+    expect(screen.getByAltText("1. Intro")).toHaveAttribute("src", `/api/projects/${projectId}/renders/r1/thumbs/${sceneId}?v=r1`);
+    expect(screen.getByText("Lịch sử bản render")).toBeInTheDocument();
+    expect(screen.getByText(/v2/)).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Render lại" }));
     await waitFor(() => expect(calls.some((call) => call.init?.method === "POST" && call.url.endsWith("/pipeline/run") && String(call.init.body).includes('"RENDER"'))).toBe(true));
+  });
+
+  it("switches the player source, patches a note, and confirms delete", async () => {
+    const calls: { url: string; init?: RequestInit }[] = [];
+    let note = "Bản tốt";
+    let deleted = false;
+    vi.stubGlobal("EventSource", undefined);
+    vi.stubGlobal("confirm", vi.fn(() => true));
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      calls.push({ url, init });
+      if (url.endsWith("/pipeline")) return jsonResponse(pipelineWith("DONE"));
+      if (url.endsWith("/renders")) {
+        return jsonResponse({
+          renders: [
+            version({ id: "r2", version: 2, note, deleted }),
+            version({ id: "r1", version: 1, note: null, hasMetadata: false, report: { ...report, issues: [], clipsReused: 1 } }),
+          ],
+        });
+      }
+      if (url.includes("/renders/r2") && init?.method === "PATCH") {
+        note = JSON.parse(String(init.body)).note;
+        return jsonResponse(version({ id: "r2", version: 2, note }));
+      }
+      if (url.includes("/renders/r2") && init?.method === "DELETE") {
+        deleted = true;
+        return jsonResponse(version({ id: "r2", version: 2, deleted: true }));
+      }
+      if (url.endsWith("/render")) return jsonResponse({ render: { ...render.render!, id: deleted ? "r1" : "r2" } });
+      if (url.endsWith("/metadata")) {
+        return jsonResponse({ metadata: null, stale: true, extras: { chaptersText: "", creditsText: "", disclosure: "AI" } });
+      }
+      return jsonResponse(timeline);
+    }));
+    const { container } = renderWithProviders(<RenderPanel project={project} />);
+    expect(await screen.findByText("Lịch sử bản render")).toBeInTheDocument();
+    const viewButtons = screen.getAllByRole("button", { name: "Xem" });
+    fireEvent.click(viewButtons[1]!);
+    await waitFor(() => expect(container.querySelector("video")?.getAttribute("src")).toBe(`/api/projects/${projectId}/renders/r1/video?v=r1`));
+
+    const noteInput = screen.getAllByPlaceholderText("Ghi chú ngắn…")[0]!;
+    fireEvent.change(noteInput, { target: { value: "Ghi chú mới" } });
+    fireEvent.blur(noteInput);
+    await waitFor(() => expect(calls.some((call) => call.init?.method === "PATCH" && String(call.init.body).includes("Ghi chú mới"))).toBe(true));
+
+    fireEvent.click(screen.getAllByRole("button", { name: "Xoá" })[0]!);
+    await waitFor(() => expect(calls.some((call) => call.init?.method === "DELETE")).toBe(true));
+    expect(window.confirm).toHaveBeenCalled();
   });
 
   it("asks for a timeline before rendering", async () => {
@@ -111,6 +186,7 @@ describe("RenderPanel", () => {
     vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
       const url = String(input);
       if (url.endsWith("/pipeline")) return jsonResponse(pipelineWith("PENDING"));
+      if (url.endsWith("/renders")) return jsonResponse({ renders: [] });
       if (url.endsWith("/render")) return jsonResponse({ render: null });
       if (url.endsWith("/metadata")) {
         return jsonResponse({ metadata: null, stale: true, extras: { chaptersText: "", creditsText: "", disclosure: "AI" } });

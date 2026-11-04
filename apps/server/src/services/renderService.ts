@@ -3,8 +3,10 @@ import { copyFileSync, existsSync, mkdirSync, readFileSync, renameSync, rmSync, 
 import { isAbsolute, join } from "node:path";
 import type Database from "better-sqlite3";
 import {
+  VideoMetadataDraftSchema,
   buildCreditsText,
   buildFinalPlan,
+  buildMetadataText,
   buildSceneClipPlan,
   CLIP_OUTPUT_ARGS,
   concatListText,
@@ -18,12 +20,16 @@ import {
   type Render,
   type RenderIssue,
   type RenderReport,
+  type RenderVersion,
   type Timeline,
   type TimelineScene,
+  type VideoMetadataDraft,
 } from "@vg/shared";
 import type { AppConfig } from "../lib/config.js";
+import { AppError } from "../lib/errors.js";
 import { probeMedia, runFfmpeg, type FfmpegRunOptions, type MediaProbe } from "../media/ffmpeg.js";
 import { StageError } from "../pipeline/stageExecutor.js";
+import { getRenderSettings } from "../settings/render.js";
 import { projectDir } from "../storage/paths.js";
 import type { TimelineService } from "./timelineService.js";
 
@@ -38,6 +44,7 @@ export type RenderProgress = (pct: number, message: string) => void;
 
 const DURATION_TOLERANCE_SEC = 0.2;
 const BASE_ARGS = ["-y", "-hide_banner", "-nostdin", "-loglevel", "error"];
+const RECENT_READ_MS = 60_000;
 
 type RenderRow = {
   id: string;
@@ -53,6 +60,12 @@ type RenderRow = {
   height: number;
   report: string;
   created_at: string;
+  version: number;
+  note: string | null;
+  pinned: number | boolean;
+  deleted_at: string | null;
+  review_thread_id: string | null;
+  metadata_snapshot: string | null;
 };
 
 type LicenseJson = {
@@ -77,7 +90,37 @@ function isAbort(error: unknown): boolean {
   return error instanceof Error && error.name === "AbortError";
 }
 
+function isBusyError(error: unknown): boolean {
+  const code = (error as NodeJS.ErrnoException | undefined)?.code;
+  return code === "EBUSY" || code === "EPERM";
+}
+
+function isVersionPath(outputPath: string): boolean {
+  return /[/\\]versions[/\\]/.test(outputPath);
+}
+
+/** Idempotent: assign version 1..n by created_at for rows still at 0. */
+export function backfillRenderVersions(sqlite: Database.Database): void {
+  const projects = sqlite.prepare(
+    "SELECT DISTINCT project_id FROM renders WHERE version = 0",
+  ).all() as Array<{ project_id: string }>;
+  const update = sqlite.prepare("UPDATE renders SET version = ? WHERE id = ?");
+  for (const { project_id } of projects) {
+    const rows = sqlite.prepare(
+      "SELECT id FROM renders WHERE project_id = ? ORDER BY created_at ASC, rowid ASC",
+    ).all(project_id) as Array<{ id: string }>;
+    let next = 1;
+    for (const row of rows) {
+      update.run(next, row.id);
+      next += 1;
+    }
+  }
+}
+
 export class RenderService {
+  private readonly recentReads = new Map<string, number>();
+  private backfilled = false;
+
   constructor(
     private readonly sqlite: Database.Database,
     private readonly config: AppConfig,
@@ -86,12 +129,31 @@ export class RenderService {
     private readonly now: () => Date = () => new Date(),
   ) {}
 
+  private ensureBackfill(): void {
+    if (this.backfilled) return;
+    backfillRenderVersions(this.sqlite);
+    this.backfilled = true;
+  }
+
   private dir(projectId: string): string {
     return projectDir(this.config.DATA_DIR, projectId);
   }
 
   renderDir(projectId: string): string {
     return join(this.dir(projectId), "render");
+  }
+
+  versionDir(projectId: string, renderId: string): string {
+    return join(this.renderDir(projectId), "versions", renderId);
+  }
+
+  private touchRead(renderId: string): void {
+    this.recentReads.set(renderId, Date.now());
+  }
+
+  private wasRecentlyRead(renderId: string): boolean {
+    const at = this.recentReads.get(renderId);
+    return at !== undefined && Date.now() - at < RECENT_READ_MS;
   }
 
   private resolver(projectId: string) {
@@ -123,8 +185,17 @@ export class RenderService {
   }
 
   private latestRow(projectId: string): RenderRow | undefined {
-    return this.sqlite.prepare("SELECT * FROM renders WHERE project_id = ? ORDER BY created_at DESC, rowid DESC LIMIT 1")
-      .get(projectId) as RenderRow | undefined;
+    this.ensureBackfill();
+    return this.sqlite.prepare(
+      "SELECT * FROM renders WHERE project_id = ? AND deleted_at IS NULL ORDER BY created_at DESC, rowid DESC LIMIT 1",
+    ).get(projectId) as RenderRow | undefined;
+  }
+
+  private rowById(projectId: string, renderId: string): RenderRow | undefined {
+    this.ensureBackfill();
+    return this.sqlite.prepare(
+      "SELECT * FROM renders WHERE project_id = ? AND id = ?",
+    ).get(projectId, renderId) as RenderRow | undefined;
   }
 
   private toRender(row: RenderRow): Render | null {
@@ -146,30 +217,235 @@ export class RenderService {
     };
   }
 
+  private toVersion(row: RenderRow): RenderVersion | null {
+    const render = this.toRender(row);
+    if (!render) return null;
+    return {
+      ...render,
+      version: row.version,
+      note: row.note,
+      pinned: Boolean(row.pinned),
+      deleted: Boolean(row.deleted_at),
+      reviewThreadId: row.review_thread_id,
+      hasMetadata: Boolean(row.metadata_snapshot),
+    };
+  }
+
   get(projectId: string): ProjectRender {
     const row = this.latestRow(projectId);
     if (!row || !existsSync(row.output_path)) return { render: null };
     return { render: this.toRender(row) };
   }
 
+  list(projectId: string): { renders: RenderVersion[] } {
+    this.ensureBackfill();
+    const rows = this.sqlite.prepare(
+      "SELECT * FROM renders WHERE project_id = ? ORDER BY created_at DESC, rowid DESC",
+    ).all(projectId) as RenderRow[];
+
+    // Hide older legacy TASK-012 rows that share the same overwritten output_path.
+    const hidden = new Set<string>();
+    const byPath = new Map<string, RenderRow[]>();
+    for (const row of rows) {
+      if (isVersionPath(row.output_path)) continue;
+      const group = byPath.get(row.output_path) ?? [];
+      group.push(row);
+      byPath.set(row.output_path, group);
+    }
+    for (const group of byPath.values()) {
+      if (group.length < 2) continue;
+      for (const row of group.slice(1)) hidden.add(row.id);
+    }
+
+    const renders: RenderVersion[] = [];
+    for (const row of rows) {
+      if (hidden.has(row.id)) continue;
+      const version = this.toVersion(row);
+      if (version) renders.push(version);
+    }
+    return { renders };
+  }
+
+  getVersion(projectId: string, renderId: string): RenderVersion {
+    const row = this.rowById(projectId, renderId);
+    if (!row) throw new AppError(404, "RENDER_NOT_FOUND", "Không tìm thấy bản render này.");
+    const version = this.toVersion(row);
+    if (!version) throw new AppError(404, "RENDER_NOT_FOUND", "Không tìm thấy bản render này.");
+    return version;
+  }
+
   /** Absolute path of a downloadable render file, or null when it does not exist. */
-  file(projectId: string, kind: "video" | "credits" | "subtitles" | "thumb", sceneId?: string): string | null {
-    const row = this.latestRow(projectId);
-    if (!row) return null;
+  file(
+    projectId: string,
+    kind: "video" | "credits" | "subtitles" | "thumb",
+    sceneId?: string,
+    renderId?: string,
+  ): string | null {
+    const row = renderId ? this.rowById(projectId, renderId) : this.latestRow(projectId);
+    if (!row || row.deleted_at) return null;
+    this.touchRead(row.id);
     let path: string | null = null;
     if (kind === "video") path = row.output_path;
     else if (kind === "credits") path = row.credits_path;
     else if (kind === "subtitles") path = row.srt_path;
     else {
       const report = this.toRender(row)?.report;
-      // Only scene ids the report lists, so the id never builds an arbitrary path.
       if (!sceneId || !report?.thumbnails.includes(sceneId)) return null;
-      path = join(this.renderDir(projectId), "thumbs", `${sceneId}.jpg`);
+      const versionThumbs = join(this.versionDir(projectId, row.id), "thumbs", `${sceneId}.jpg`);
+      const legacyThumbs = join(this.renderDir(projectId), "thumbs", `${sceneId}.jpg`);
+      path = existsSync(versionThumbs) ? versionThumbs : legacyThumbs;
     }
     return path && existsSync(path) ? path : null;
   }
 
+  patch(projectId: string, renderId: string, patch: { note?: string | null; pinned?: boolean }): RenderVersion {
+    const row = this.rowById(projectId, renderId);
+    if (!row) throw new AppError(404, "RENDER_NOT_FOUND", "Không tìm thấy bản render này.");
+    const note = patch.note === undefined ? row.note : patch.note;
+    if (note !== null && note.length > 500) {
+      throw new AppError(400, "VALIDATION_ERROR", "Ghi chú tối đa 500 ký tự.");
+    }
+    const pinned = patch.pinned === undefined ? Boolean(row.pinned) : patch.pinned;
+    this.sqlite.prepare("UPDATE renders SET note = ?, pinned = ? WHERE id = ?").run(note, pinned ? 1 : 0, renderId);
+    return this.getVersion(projectId, renderId);
+  }
+
+  deleteVersion(projectId: string, renderId: string): RenderVersion {
+    const row = this.rowById(projectId, renderId);
+    if (!row) throw new AppError(404, "RENDER_NOT_FOUND", "Không tìm thấy bản render này.");
+    if (row.deleted_at) return this.toVersion(row)!;
+    try {
+      this.removeVersionFiles(projectId, row);
+    } catch (error) {
+      if (isBusyError(error)) {
+        throw new AppError(409, "RENDER_IN_USE", "Không xoá được vì tệp đang được mở hoặc phát.");
+      }
+      throw error;
+    }
+    const deletedAt = this.now().toISOString();
+    this.sqlite.prepare("UPDATE renders SET deleted_at = ? WHERE id = ?").run(deletedAt, renderId);
+    return this.getVersion(projectId, renderId);
+  }
+
+  private removeVersionFiles(projectId: string, row: RenderRow): void {
+    const versionFolder = this.versionDir(projectId, row.id);
+    if (existsSync(versionFolder)) {
+      rmSync(versionFolder, { recursive: true, force: false });
+      return;
+    }
+    // Legacy single-folder rows: only delete files if no other non-deleted row still points at them.
+    const stillUsed = this.sqlite.prepare(
+      "SELECT COUNT(*) AS n FROM renders WHERE project_id = ? AND id != ? AND deleted_at IS NULL AND (output_path = ? OR credits_path = ? OR srt_path = ?)",
+    ).get(projectId, row.id, row.output_path, row.credits_path, row.srt_path) as { n: number };
+    if (stillUsed.n > 0) return;
+    for (const path of [row.output_path, row.credits_path, row.srt_path]) {
+      if (path && existsSync(path)) rmSync(path, { force: false });
+    }
+  }
+
+  private nextVersionNumber(projectId: string): number {
+    const row = this.sqlite.prepare(
+      "SELECT COALESCE(MAX(version), 0) AS max_version FROM renders WHERE project_id = ?",
+    ).get(projectId) as { max_version: number };
+    return Number(row.max_version) + 1;
+  }
+
+  private currentReviewThreadId(projectId: string): string | null {
+    const row = this.sqlite.prepare(
+      "SELECT id FROM review_threads WHERE project_id = ? ORDER BY created_at DESC LIMIT 1",
+    ).get(projectId) as { id: string } | undefined;
+    return row?.id ?? null;
+  }
+
+  private currentMetadataSnapshot(projectId: string): VideoMetadataDraft | null {
+    const row = this.sqlite.prepare(
+      "SELECT draft, edited FROM video_metadata WHERE project_id = ?",
+    ).get(projectId) as { draft: string; edited: string | null } | undefined;
+    if (!row) return null;
+    try {
+      const edited = row.edited ? VideoMetadataDraftSchema.safeParse(JSON.parse(row.edited)) : null;
+      if (edited?.success) return edited.data;
+      const draft = VideoMetadataDraftSchema.safeParse(JSON.parse(row.draft));
+      return draft.success ? draft.data : null;
+    } catch {
+      return null;
+    }
+  }
+
+  metadataTextForExport(projectId: string, renderId: string, projectTitle: string): string {
+    const row = this.rowById(projectId, renderId);
+    if (!row) throw new AppError(404, "RENDER_NOT_FOUND", "Không tìm thấy bản render này.");
+    let draft: VideoMetadataDraft | null = null;
+    if (row.metadata_snapshot) {
+      const parsed = VideoMetadataDraftSchema.safeParse(
+        typeof row.metadata_snapshot === "string" ? JSON.parse(row.metadata_snapshot) : row.metadata_snapshot,
+      );
+      if (parsed.success) draft = parsed.data;
+    }
+    if (!draft) draft = this.currentMetadataSnapshot(projectId);
+    if (!draft) {
+      draft = {
+        titles: [projectTitle],
+        description: "",
+        tags: [],
+        hashtags: [],
+        thumbnailText: [],
+      };
+    }
+    const creditsText = row.credits_path && existsSync(row.credits_path)
+      ? readFileSync(row.credits_path, "utf8")
+      : "";
+    return buildMetadataText({
+      titles: draft.titles,
+      description: draft.description,
+      tags: draft.tags,
+      hashtags: draft.hashtags,
+      creditsText,
+    });
+  }
+
+  exportPaths(projectId: string, renderId: string): {
+    video: string;
+    credits: string | null;
+    subtitles: string | null;
+    report: RenderReport;
+    version: number;
+  } {
+    const row = this.rowById(projectId, renderId);
+    if (!row || row.deleted_at) throw new AppError(404, "RENDER_NOT_FOUND", "Không tìm thấy bản render này.");
+    if (!existsSync(row.output_path)) throw new AppError(404, "RENDER_FILE_NOT_FOUND", "Tệp render không còn.");
+    this.touchRead(row.id);
+    const report = RenderReportSchema.parse(JSON.parse(row.report));
+    return {
+      video: row.output_path,
+      credits: row.credits_path && existsSync(row.credits_path) ? row.credits_path : null,
+      subtitles: row.srt_path && existsSync(row.srt_path) ? row.srt_path : null,
+      report,
+      version: row.version,
+    };
+  }
+
+  private applyRetention(projectId: string): void {
+    const keep = getRenderSettings(this.sqlite).keepVersions;
+    const rows = this.sqlite.prepare(
+      "SELECT * FROM renders WHERE project_id = ? AND deleted_at IS NULL AND status = 'DONE' ORDER BY created_at DESC, rowid DESC",
+    ).all(projectId) as RenderRow[];
+    if (rows.length <= keep) return;
+    const newestId = rows[0]?.id;
+    const removable = rows.slice(keep).filter((row) => !row.pinned && row.id !== newestId && !this.wasRecentlyRead(row.id));
+    for (const row of removable) {
+      try {
+        this.removeVersionFiles(projectId, row);
+        this.sqlite.prepare("UPDATE renders SET deleted_at = ? WHERE id = ?").run(this.now().toISOString(), row.id);
+      } catch (error) {
+        if (isBusyError(error)) continue;
+        throw error;
+      }
+    }
+  }
+
   async render(project: Project, signal: AbortSignal, onProgress: RenderProgress = () => {}): Promise<{ render: Render; reused: boolean }> {
+    this.ensureBackfill();
     const { timeline, inputHash: timelineHash } = this.timelines.get(project.id);
     if (!timeline || !timelineHash) {
       throw new StageError("Chưa có timeline — chạy bước Timeline trước.", "RENDER_NO_TIMELINE", false);
@@ -178,9 +454,7 @@ export class RenderService {
     const resolvePath = this.resolver(project.id);
     const renderDir = this.renderDir(project.id);
     const clipsDir = join(renderDir, "clips");
-    const thumbsDir = join(renderDir, "thumbs");
     mkdirSync(clipsDir, { recursive: true });
-    mkdirSync(thumbsDir, { recursive: true });
 
     for (const scene of timeline.scenes) {
       if (scene.voice && !existsSync(resolvePath(scene.voice.path))) {
@@ -201,14 +475,22 @@ export class RenderService {
     const clipHashes = timeline.scenes.map((scene) => this.clipHash(scene, timeline, resolvePath));
     const inputHash = sha({ v: RENDER_FORMAT_VERSION, timelineHash, ass: assText ? sha(assText) : null, clipHashes });
 
-    const latest = this.latestRow(project.id);
-    if (latest && latest.status === "DONE" && latest.input_hash === inputHash && existsSync(latest.output_path)) {
-      const render = this.toRender(latest);
+    const reusable = this.sqlite.prepare(
+      "SELECT * FROM renders WHERE project_id = ? AND status = 'DONE' AND deleted_at IS NULL AND input_hash = ? ORDER BY created_at DESC, rowid DESC",
+    ).all(project.id, inputHash) as RenderRow[];
+    for (const candidate of reusable) {
+      if (!existsSync(candidate.output_path)) continue;
+      const render = this.toRender(candidate);
       if (render) {
         onProgress(100, "Dùng lại bản render trước");
         return { render, reused: true };
       }
     }
+
+    const renderId = randomUUID();
+    const versionFolder = this.versionDir(project.id, renderId);
+    const thumbsDir = join(versionFolder, "thumbs");
+    mkdirSync(thumbsDir, { recursive: true });
 
     // 1. Scene clips (0–60 %), cached by content hash.
     const clipPaths: string[] = [];
@@ -263,8 +545,9 @@ export class RenderService {
     });
     const finalFilter = "final.filter.txt";
     writeFileSync(join(renderDir, finalFilter), plan.filter);
-    const outputPath = join(renderDir, "output.mp4");
-    const partPath = join(renderDir, "output.part.mp4");
+    const relativePart = join("versions", renderId, "output.part.mp4");
+    const partPath = join(versionFolder, "output.part.mp4");
+    const outputPath = join(versionFolder, "output.mp4");
     onProgress(60, "Ghép video, phụ đề và âm thanh");
     try {
       await this.tools.ffmpeg([
@@ -281,7 +564,7 @@ export class RenderService {
         "-c:a", "aac", "-b:a", "192k", "-ar", "48000",
         "-t", String(timeline.totalDurationSec),
         "-movflags", "+faststart",
-        "output.part.mp4",
+        relativePart,
       ], {
         cwd: renderDir,
         signal,
@@ -292,22 +575,25 @@ export class RenderService {
           onProgress(Math.round(pct), "Ghép video, phụ đề và âm thanh");
         },
       });
-      rmSync(outputPath, { force: true });
       renameSync(partPath, outputPath);
     } catch (error) {
       rmSync(partPath, { force: true });
-      if (isAbort(error) || signal.aborted) throw error;
+      if (isAbort(error) || signal.aborted) {
+        rmSync(versionFolder, { recursive: true, force: true });
+        throw error;
+      }
+      rmSync(versionFolder, { recursive: true, force: true });
       throw new StageError(`FFmpeg lỗi khi ghép video: ${(error as Error).message}`, "RENDER_FINAL_FAILED", false);
     } finally {
       rmSync(join(renderDir, finalFilter), { force: true });
     }
 
     // 3. Sidecars.
-    const creditsPath = join(renderDir, "credits.txt");
+    const creditsPath = join(versionFolder, "credits.txt");
     writeFileSync(creditsPath, this.creditsText(project, timeline));
     let srtPath: string | null = null;
     if (timeline.subtitles && existsSync(timeline.subtitles.srtPath)) {
-      srtPath = join(renderDir, "subtitles.srt");
+      srtPath = join(versionFolder, "subtitles.srt");
       copyFileSync(timeline.subtitles.srtPath, srtPath);
     }
 
@@ -317,8 +603,10 @@ export class RenderService {
     const elapsedSec = Math.round((Date.now() - started) / 100) / 10;
     const fullReport: RenderReport = { ...report, clipsReused, clipsRendered, elapsedSec };
 
+    const metadataSnapshot = this.currentMetadataSnapshot(project.id);
+    const version = this.nextVersionNumber(project.id);
     const row: RenderRow = {
-      id: randomUUID(),
+      id: renderId,
       project_id: project.id,
       input_hash: inputHash,
       status: "DONE",
@@ -331,13 +619,28 @@ export class RenderService {
       height: fullReport.height,
       report: JSON.stringify(fullReport),
       created_at: this.now().toISOString(),
+      version,
+      note: null,
+      pinned: 0,
+      deleted_at: null,
+      review_thread_id: this.currentReviewThreadId(project.id),
+      metadata_snapshot: metadataSnapshot ? JSON.stringify(metadataSnapshot) : null,
     };
     this.sqlite.prepare(`
       INSERT INTO renders (id, project_id, input_hash, status, output_path, credits_path, srt_path,
-        duration_sec, size_bytes, width, height, report, created_at)
+        duration_sec, size_bytes, width, height, report, created_at,
+        version, note, pinned, deleted_at, review_thread_id, metadata_snapshot)
       VALUES (@id, @project_id, @input_hash, @status, @output_path, @credits_path, @srt_path,
-        @duration_sec, @size_bytes, @width, @height, @report, @created_at)
+        @duration_sec, @size_bytes, @width, @height, @report, @created_at,
+        @version, @note, @pinned, @deleted_at, @review_thread_id, @metadata_snapshot)
     `).run(row);
+
+    try {
+      this.applyRetention(project.id);
+    } catch (error) {
+      if (!isBusyError(error)) throw error;
+    }
+
     onProgress(100, "Render xong");
     return { render: this.toRender(row)!, reused: false };
   }

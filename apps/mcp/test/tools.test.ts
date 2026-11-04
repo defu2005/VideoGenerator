@@ -59,6 +59,7 @@ describe("Video Agent MCP tools", () => {
       "get_pipeline",
       "get_project",
       "get_project_usage",
+      "get_render_export_url",
       "get_research",
       "get_review_context",
       "get_scene_visuals",
@@ -67,6 +68,7 @@ describe("Video Agent MCP tools", () => {
       "get_video_metadata",
       "get_writing_brief",
       "list_projects",
+      "list_renders",
       "recommend_brief",
       "run_pipeline",
       "save_research",
@@ -345,6 +347,26 @@ describe("Video Agent MCP tools", () => {
     expect(calls).toEqual(["PUT:research", "PUT:script"]);
     expect(result.isError).toBe(true);
     expect(resultText(result)).toBe(validation);
+  });
+
+  it("lists renders and returns a local export URL without streaming", async () => {
+    const fetchImpl = vi.fn(async (input: RequestInfo | URL) => {
+      expect(String(input)).toBe(`http://127.0.0.1:3001/api/projects/${projectId}/renders`);
+      return jsonResponse({ renders: [{ id: "22222222-2222-4222-8222-222222222222", version: 1 }] });
+    }) as typeof fetch;
+    const client = await connect(fetchImpl);
+    const listed = await client.callTool({ name: "list_renders", arguments: { projectId } });
+    expect(JSON.parse(resultText(listed))).toEqual({
+      renders: [{ id: "22222222-2222-4222-8222-222222222222", version: 1 }],
+    });
+    const exportUrl = await client.callTool({
+      name: "get_render_export_url",
+      arguments: { projectId, renderId: "22222222-2222-4222-8222-222222222222" },
+    });
+    expect(JSON.parse(resultText(exportUrl))).toEqual({
+      url: `http://127.0.0.1:3001/api/projects/${projectId}/renders/22222222-2222-4222-8222-222222222222/export`,
+    });
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
   });
 
   it("returns the required server-down message", async () => {

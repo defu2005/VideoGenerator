@@ -344,6 +344,12 @@ export const renders = sqliteTable("renders", {
   height: integer("height").notNull(),
   report: text("report", { mode: "json" }).$type<Record<string, unknown>>().notNull(),
   createdAt: text("created_at").notNull(),
+  version: integer("version").notNull().default(0),
+  note: text("note"),
+  pinned: integer("pinned", { mode: "boolean" }).notNull().default(false),
+  deletedAt: text("deleted_at"),
+  reviewThreadId: text("review_thread_id"),
+  metadataSnapshot: text("metadata_snapshot", { mode: "json" }).$type<Record<string, unknown> | null>(),
 }, (table) => [
   index("renders_project_created_idx").on(table.projectId, table.createdAt),
 ]);

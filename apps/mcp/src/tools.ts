@@ -232,6 +232,14 @@ export function registerVideoAgentTools(
   server.tool("get_video_metadata", "Read publishing metadata (titles, description, tags) for a project.", projectIdShape, ({ projectId }) =>
     invoke(() => api.getVideoMetadata(projectId)));
 
+  server.tool("list_renders", "List render versions for a project (newest first), including deleted ones.", projectIdShape, ({ projectId }) =>
+    invoke(() => api.listRenders(projectId)));
+
+  server.tool("get_render_export_url", "Return the local HTTP URL to download a render export zip (does not stream the zip).", {
+    ...projectIdShape,
+    renderId: z.string().uuid(),
+  }, ({ projectId, renderId }) => invoke(async () => api.getRenderExportUrl(projectId, renderId)));
+
   server.tool("get_review_context", "Read the compact pre-render review context document for a project (0 LLM tokens).", projectIdShape, ({ projectId }) =>
     invoke(() => api.getReviewContext(projectId)));
 

@@ -737,6 +737,23 @@ button:disabled { cursor: not-allowed; opacity: .58; }
 .render-thumbs figure { flex: 0 0 auto; width: 160px; margin: 0; }
 .render-thumbs img { display: block; width: 100%; border-radius: 4px; background: #eef1f7; }
 .render-thumbs figcaption { margin-top: 4px; overflow: hidden; color: #59667d; font-size: 10px; white-space: nowrap; text-overflow: ellipsis; }
+.render-history { padding: 14px 16px; }
+.render-history h3 { margin: 0 0 10px; font-size: 13px; }
+.render-history-list { display: grid; gap: 10px; margin: 0; padding: 0; list-style: none; }
+.render-history-row { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 12px; padding: 10px 12px; border: 1px solid #e8ebf2; border-radius: 8px; background: #fff; }
+.render-history-row.is-selected { border-color: #405ac5; background: #f5f7ff; }
+.render-history-row.is-deleted { opacity: 0.55; background: #f5f6f8; }
+.render-history-meta { margin: 0; font-size: 12px; }
+.render-history-badges { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0 0; }
+.render-badge { display: inline-flex; padding: 2px 7px; border-radius: 999px; font-size: 10px; font-weight: 700; }
+.render-badge.ok { background: #e8f8ef; color: #168352; }
+.render-badge.issues { background: #fde8ea; color: #b42318; }
+.render-badge.deleted { background: #eef1f7; color: #68748a; }
+.render-badge.pinned { background: #fff4e5; color: #a45c17; }
+.render-history-compare { margin: 6px 0 0; color: #68748a; font-size: 11px; }
+.render-history-note { display: grid; gap: 4px; margin-top: 8px; font-size: 11px; font-weight: 600; }
+.render-history-note input { font: inherit; font-weight: 400; }
+.render-history-actions { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 6px; }
 
 .metadata-panel { display: grid; gap: 12px; padding: 16px 18px; }
 .metadata-header { display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: 12px; }

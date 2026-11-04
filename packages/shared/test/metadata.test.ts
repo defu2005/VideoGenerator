@@ -3,6 +3,7 @@ import {
   MusicAssistOutputSchema,
   VideoMetadataDraftSchema,
   buildChapters,
+  buildMetadataText,
   cleanupTagsAndHashtags,
   codeMetadataDraft,
   formatChapterTime,
@@ -119,5 +120,26 @@ describe("tag and hashtag cleanup", () => {
       hashtags: [],
       thumbnailText: [],
     });
+  });
+});
+
+describe("buildMetadataText", () => {
+  it("includes titles, composed description, tags, hashtags and AI disclosure", () => {
+    const text = buildMetadataText({
+      titles: ["Ocean story", "Calm sea"],
+      description: "A calm sea at dawn.",
+      tags: ["ocean", "nature"],
+      hashtags: ["#ocean"],
+      chaptersText: "0:00 Opening",
+      creditsText: "Photo by Alice",
+      disclosure: "Video có sử dụng giọng đọc tổng hợp và nội dung do AI hỗ trợ.",
+    });
+    expect(text).toContain("Ocean story");
+    expect(text).toContain("A calm sea at dawn.");
+    expect(text).toContain("0:00 Opening");
+    expect(text).toContain("Photo by Alice");
+    expect(text).toContain("ocean, nature");
+    expect(text).toContain("#ocean");
+    expect(text).toContain("Video có sử dụng giọng đọc tổng hợp và nội dung do AI hỗ trợ.");
   });
 });
