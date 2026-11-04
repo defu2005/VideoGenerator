@@ -16,6 +16,7 @@ import { ProjectUsagePanel } from "../usage/ProjectUsagePanel";
 import { VoicePanel } from "../voice/VoicePanel";
 import { SubtitlePanel } from "../subtitles/SubtitlePanel";
 import { MusicPanel } from "../music/MusicPanel";
+import { TimelinePanel } from "../timeline/TimelinePanel";
 
 const TABS = ["overview", "script", "scenes", "visuals", "voice", "subtitles", "music", "timeline", "render", "usage"] as const;
 
@@ -164,6 +165,8 @@ export function ProjectDetailPage() {
                   ? <SubtitlePanel project={project} />
                   : tab === "music"
                     ? <MusicPanel project={project} />
+                  : tab === "timeline"
+                    ? <TimelinePanel project={project} />
                   : <section className="panel coming-soon"><span className="coming-icon">◷</span><p className="eyebrow">{tab.toUpperCase()}</p><h2>Coming in a later task</h2><p>This project workspace will be available in a later task.</p></section>}
       <EditProjectDialog project={project} open={editing} onClose={() => setEditing(false)} />
       <ConfirmDialog

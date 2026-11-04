@@ -512,7 +512,7 @@ export class PipelineOrchestrator {
     if (isGate(next)) {
       const autoApprove = project.mode === "AUTO"
         && (next !== "FINAL_APPROVAL" || project.settings.autoRender);
-      const approval = next === "VISUAL_REVIEW" || next === "MUSIC_REVIEW" ? this.canApprove(project, next) : { allowed: true as const };
+      const approval = this.canApprove(project, next);
       if (autoApprove && approval.allowed) {
         this.repository.updateStage(projectId, next, {
           state: "DONE",

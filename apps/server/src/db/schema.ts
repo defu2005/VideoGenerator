@@ -290,3 +290,12 @@ export const musicSelections = sqliteTable("music_selections", {
   searchHash: text("search_hash").notNull().default(""),
   updatedAt: text("updated_at").notNull(),
 });
+
+export const timelines = sqliteTable("timelines", {
+  projectId: text("project_id").primaryKey().references(() => projects.id, { onDelete: "cascade" }),
+  data: text("data", { mode: "json" }).$type<Record<string, unknown>>().notNull(),
+  inputHash: text("input_hash").notNull(),
+  totalDurationSec: real("total_duration_sec").notNull(),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+});

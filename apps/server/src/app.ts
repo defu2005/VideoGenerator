@@ -41,6 +41,9 @@ import { SubtitleExecutor } from "./stages/subtitle/subtitleExecutor.js";
 import { MusicSearchExecutor } from "./stages/music/musicSearchExecutor.js";
 import { registerMusicRoutes } from "./api/music.js";
 import { MusicService } from "./services/musicService.js";
+import { TimelineService } from "./services/timelineService.js";
+import { TimelineExecutor } from "./stages/timeline/timelineExecutor.js";
+import { registerTimelineRoutes } from "./api/timeline.js";
 import { AudioStore, MAX_AUDIO_BYTES } from "./services/audioStore.js";
 import { createMusicProviders } from "./providers/music/registry.js";
 import { probeDurationSec } from "./media/ffmpeg.js";
@@ -80,6 +83,7 @@ export function buildApp({ config }: { config: AppConfig }) {
     new AudioStore(config.DATA_DIR, config.IMAGE_SEARCH_USER_AGENT),
     probeDurationSec,
   );
+  const timelineService = new TimelineService(database.sqlite, config);
   const orchestrator = new PipelineOrchestrator(
     jobRepository,
     config,
@@ -89,7 +93,9 @@ export function buildApp({ config }: { config: AppConfig }) {
       ? visualService.canApproveVisualReview(project.id)
       : gate === "MUSIC_REVIEW"
         ? musicService.canApproveMusicReview(project)
-        : { allowed: true },
+        : gate === "FINAL_APPROVAL"
+          ? timelineService.canApproveFinal(project.id)
+          : { allowed: true },
   );
   const llmProviders = new LlmProviderRegistry(config);
   const ttsProviders = new TtsProviderRegistry(config);
@@ -108,6 +114,7 @@ export function buildApp({ config }: { config: AppConfig }) {
         VOICE: new VoiceExecutor(database.sqlite, ttsProviders, config),
         SUBTITLE: new SubtitleExecutor(database.sqlite, config),
         MUSIC_SEARCH: new MusicSearchExecutor(musicService),
+        TIMELINE: new TimelineExecutor(timelineService),
       },
     ),
     config,
@@ -129,6 +136,7 @@ export function buildApp({ config }: { config: AppConfig }) {
   registerVoiceRoutes(server, ttsProviders, database.sqlite, projectService, jobRepository, config);
   registerSubtitleRoutes(server, database.sqlite, jobRepository, config);
   registerMusicRoutes(server, musicService, projectService, jobRepository);
+  registerTimelineRoutes(server, timelineService, projectService);
 
   server.addHook("onReady", async () => worker.start());
   server.addHook("onClose", async () => {
