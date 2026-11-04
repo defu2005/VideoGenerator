@@ -132,7 +132,7 @@ describe("PipelinePanel", () => {
 
     renderWithProviders(<PipelinePanel projectId={projectId} project={project} />);
 
-    expect(await screen.findByText(/Ước tính: ~6–11 lượt gọi AI/)).toBeInTheDocument();
+    expect(await screen.findByText(/Ước tính: ~8–13 lượt gọi AI/)).toBeInTheDocument();
     expect(screen.getByText("research: mock · research-model · 1–2 calls")).toBeInTheDocument();
     expect(screen.getByText("scriptReview: mock · review-model · 1–2 calls")).toBeInTheDocument();
     expect(screen.getByText("sceneQueries: mock · scene-model · 1 calls")).toBeInTheDocument();

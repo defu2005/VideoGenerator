@@ -61,7 +61,8 @@ export function BriefFields({
       semanticImageRerank: "Semantic image rerank (QUALITY/CUSTOM)",
       scriptReviewPasses: "Script review passes",
       visionCheck: "Vision check (available in a later step)",
-      musicAssist: "Music assist (available in a later step)",
+      musicAssist: "Music assist (BALANCED/QUALITY/CUSTOM)",
+      metadata: "Publishing metadata (BALANCED/QUALITY/CUSTOM)",
       guidelineCheck: "Kiểm tra định hướng nội dung bằng AI",
     };
     const label = labels[key] ?? key;
@@ -95,8 +96,8 @@ export function BriefFields({
           onChange={(event) => onChange("budget.mode", event.target.value)}
         >
           <option value="ECO">ECO — Rẻ nhất (~1 lượt gọi AI/video)</option>
-          <option value="BALANCED">BALANCED — Cân bằng chất lượng/chi phí (~5 lượt)</option>
-          <option value="QUALITY">QUALITY — Chất lượng cao: AI tự review &amp; sửa script (~7 lượt)</option>
+          <option value="BALANCED">BALANCED — Cân bằng chất lượng/chi phí (~8–13 lượt)</option>
+          <option value="QUALITY">QUALITY — Chất lượng cao: AI tự review &amp; sửa script (~9–26 lượt)</option>
           <option value="CUSTOM">CUSTOM</option>
         </select>
       ))}
@@ -121,6 +122,7 @@ export function BriefFields({
           {customFeature("semanticImageRerank", budgetFeatures.semanticImageRerank)}
           {customFeature("visionCheck", budgetFeatures.visionCheck)}
           {customFeature("musicAssist", budgetFeatures.musicAssist)}
+          {customFeature("metadata", budgetFeatures.metadata)}
           {customFeature("guidelineCheck", budgetFeatures.guidelineCheck)}
         </fieldset>
       )}

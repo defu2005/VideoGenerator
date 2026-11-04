@@ -90,7 +90,7 @@ describe("ProjectFormFields task routes", () => {
     fireEvent.click(screen.getByText("Mô hình AI theo tác vụ"));
     expect(await screen.findByText(/RESEARCH · Mặc định app/)).toBeInTheDocument();
     expect(screen.getByText(/SCRIPT · Dự án/)).toBeInTheDocument();
-    expect(screen.getByText(/FINAL · ENV/)).toBeInTheDocument();
+    expect(screen.getByText(/TIMELINE · ENV/)).toBeInTheDocument();
 
     fireEvent.change(screen.getByLabelText("Nghiên cứu — nhà cung cấp của dự án"), { target: { value: "mock" } });
     await waitFor(() => expect(onLlmTasksChange).toHaveBeenLastCalledWith({

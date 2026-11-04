@@ -86,7 +86,7 @@ export const LLM_TASKS: {
   { id: "visualRerank", label: "Xếp hạng ảnh theo ngữ nghĩa", stage: "VISUAL_SEARCH", purpose: "Rerank candidates using text metadata, without vision.", tier: "fast", budgetFeature: "semanticImageRerank" },
   { id: "visionCheck", label: "Kiểm tra ảnh bằng vision", stage: "VISUAL_REVIEW", purpose: "Check candidate image content.", tier: "fast", budgetFeature: "visionCheck" },
   { id: "musicAssist", label: "Chọn mood nhạc", stage: "MUSIC_SEARCH", purpose: "Assist with music mood selection.", tier: "fast", budgetFeature: "musicAssist" },
-  { id: "metadata", label: "Tiêu đề, mô tả, hashtag", stage: "FINAL", purpose: "Generate publishing metadata.", tier: "fast", budgetFeature: "metadata" },
+  { id: "metadata", label: "Tiêu đề, mô tả, hashtag", stage: "TIMELINE", purpose: "Generate publishing metadata.", tier: "fast", budgetFeature: "metadata" },
 ];
 
 function normalizeLlmSettings(value: unknown): unknown {

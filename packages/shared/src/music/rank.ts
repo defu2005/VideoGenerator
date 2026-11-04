@@ -15,6 +15,8 @@ export interface MusicRankInput {
   energy: string;
   keywords: string[];
   videoDurationSec: number;
+  /** Soft penalty terms from music assist (never hard-filters). */
+  avoid?: string[];
 }
 
 export interface MusicScore {
@@ -69,12 +71,17 @@ export function scoreMusicTrack(track: RawMusicTrack, input: MusicRankInput): Mu
   }
 
   const license = COMMERCIAL_OK.includes(track.licenseKind) ? 0.05 : 0;
+  const avoidWords = [...new Set((input.avoid ?? []).flatMap(musicWords))];
+  const avoidHits = avoidWords.filter((word) => words.has(word)).length;
+  const avoid = avoidWords.length && avoidHits > 0 ? round(-0.08 * Math.min(3, avoidHits)) : 0;
+
   const breakdown = {
     mood: round(mood * 0.55),
     instrumental,
     energy,
     duration: round(duration),
     license,
+    ...(avoid !== 0 ? { avoid } : {}),
   };
   const score = round(Object.values(breakdown).reduce((sum, value) => sum + value, 0));
   return { score, breakdown, usable };

@@ -288,6 +288,17 @@ export const musicSelections = sqliteTable("music_selections", {
   startOffsetSec: real("start_offset_sec").notNull().default(0),
   queryOverride: text("query_override"),
   searchHash: text("search_hash").notNull().default(""),
+  assist: text("assist", { mode: "json" }).$type<Record<string, unknown> | null>(),
+  updatedAt: text("updated_at").notNull(),
+});
+
+export const videoMetadata = sqliteTable("video_metadata", {
+  projectId: text("project_id").primaryKey().references(() => projects.id, { onDelete: "cascade" }),
+  inputHash: text("input_hash").notNull(),
+  draft: text("draft", { mode: "json" }).$type<Record<string, unknown>>().notNull(),
+  edited: text("edited", { mode: "json" }).$type<Record<string, unknown> | null>(),
+  source: text("source", { enum: ["LLM", "CODE"] }).notNull(),
+  createdAt: text("created_at").notNull(),
   updatedAt: text("updated_at").notNull(),
 });
 

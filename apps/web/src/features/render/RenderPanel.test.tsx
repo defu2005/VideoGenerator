@@ -78,6 +78,17 @@ describe("RenderPanel", () => {
       calls.push({ url, init });
       if (url.endsWith("/pipeline") || url.includes("/run")) return jsonResponse(pipelineWith("DONE"));
       if (url.endsWith("/render")) return jsonResponse(render);
+      if (url.endsWith("/metadata")) {
+        return jsonResponse({
+          metadata: {
+            projectId, inputHash: "hash", source: "CODE",
+            draft: { titles: ["Ocean story"], description: "A calm sea", tags: ["ocean"], hashtags: ["#ocean"], thumbnailText: ["Sea"] },
+            edited: null, createdAt: project.updatedAt, updatedAt: project.updatedAt,
+          },
+          stale: false,
+          extras: { chaptersText: "", creditsText: "Credits", disclosure: "AI disclosure" },
+        });
+      }
       return jsonResponse(timeline);
     }));
     const { container } = renderWithProviders(<RenderPanel project={project} />);
@@ -101,6 +112,9 @@ describe("RenderPanel", () => {
       const url = String(input);
       if (url.endsWith("/pipeline")) return jsonResponse(pipelineWith("PENDING"));
       if (url.endsWith("/render")) return jsonResponse({ render: null });
+      if (url.endsWith("/metadata")) {
+        return jsonResponse({ metadata: null, stale: true, extras: { chaptersText: "", creditsText: "", disclosure: "AI" } });
+      }
       return jsonResponse({ timeline: null, inputHash: null, updatedAt: null });
     }));
     renderWithProviders(<RenderPanel project={project} />);

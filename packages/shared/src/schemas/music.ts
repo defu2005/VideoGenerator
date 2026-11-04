@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { MusicAssistOutputSchema } from "./metadata.js";
 import { LicenseMetadataSchema } from "./visual.js";
 
 export const MusicProviderSchema = z.enum(["openverse", "local", "upload", "mock"]);
@@ -43,6 +44,7 @@ export const MusicSelectionSchema = MusicMixSettingsSchema.extend({
   status: MusicSelectionStatusSchema,
   selectedBy: z.enum(["AGENT", "USER"]),
   queryOverride: z.string().nullable(),
+  assist: MusicAssistOutputSchema.nullable().optional(),
   updatedAt: z.string().datetime({ offset: true }),
 }).strict();
 export type MusicSelection = z.infer<typeof MusicSelectionSchema>;
@@ -56,6 +58,7 @@ export const ProjectMusicSchema = z.object({
   candidates: z.array(MusicCandidateSchema),
   selection: MusicSelectionSchema.nullable(),
   selectedCandidate: MusicCandidateSchema.nullable(),
+  assist: MusicAssistOutputSchema.nullable().optional(),
 }).strict();
 export type ProjectMusic = z.infer<typeof ProjectMusicSchema>;
 

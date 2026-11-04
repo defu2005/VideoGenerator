@@ -37,4 +37,18 @@ describe("music ranking", () => {
     expect(musicQueryFor({ mood: "Calm, hopeful", keywords: [] }, ["tense", "tense", "warm"])).toBe("calm hopeful tense");
     expect(musicQueryFor({ mood: "", keywords: [] })).toBe("calm ambient");
   });
+
+  it("applies a soft avoid penalty without filtering tracks out", () => {
+    const withVocals = scoreMusicTrack(
+      track({ title: "Sung piece", tags: ["calm", "piano", "vocals"] }),
+      { ...input, avoid: ["vocals", "lyrics"] },
+    );
+    const instrumental = scoreMusicTrack(
+      track({ title: "Quiet", tags: ["calm", "piano", "instrumental"] }),
+      { ...input, avoid: ["vocals", "lyrics"] },
+    );
+    expect(withVocals.usable).toBe(true);
+    expect(withVocals.breakdown.avoid).toBeLessThan(0);
+    expect(instrumental.score).toBeGreaterThan(withVocals.score);
+  });
 });

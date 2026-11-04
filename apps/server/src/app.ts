@@ -47,6 +47,8 @@ import { registerTimelineRoutes } from "./api/timeline.js";
 import { RenderService } from "./services/renderService.js";
 import { RenderExecutor } from "./stages/render/renderExecutor.js";
 import { registerRenderRoutes } from "./api/render.js";
+import { MetadataService } from "./services/metadataService.js";
+import { registerMetadataRoutes } from "./api/metadata.js";
 import { AudioStore, MAX_AUDIO_BYTES } from "./services/audioStore.js";
 import { createMusicProviders } from "./providers/music/registry.js";
 import { probeDurationSec } from "./media/ffmpeg.js";
@@ -91,6 +93,8 @@ export function buildApp({ config }: { config: AppConfig }) {
   );
   const timelineService = new TimelineService(database.sqlite, config);
   const renderService = new RenderService(database.sqlite, config, timelineService);
+  const llmProviders = new LlmProviderRegistry(config);
+  const metadataService = new MetadataService(database.sqlite, config, llmProviders, timelineService, renderService);
   const orchestrator = new PipelineOrchestrator(
     jobRepository,
     config,
@@ -107,7 +111,6 @@ export function buildApp({ config }: { config: AppConfig }) {
       ? "Có phát hiện MUST đang mở. AUTO tạm dừng để bạn xem định hướng nội dung."
       : null,
   );
-  const llmProviders = new LlmProviderRegistry(config);
   const ttsProviders = new TtsProviderRegistry(config);
   const scriptService = new ScriptService(database.sqlite, jobRepository, orchestrator, config);
   const sceneService = new SceneService(database.sqlite, jobRepository);
@@ -123,8 +126,8 @@ export function buildApp({ config }: { config: AppConfig }) {
         VISUAL_SEARCH: new VisualSearchExecutor(visualService, llmProviders),
         VOICE: new VoiceExecutor(database.sqlite, ttsProviders, config),
         SUBTITLE: new SubtitleExecutor(database.sqlite, config),
-        MUSIC_SEARCH: new MusicSearchExecutor(musicService),
-        TIMELINE: new TimelineExecutor(timelineService, guidelineService),
+        MUSIC_SEARCH: new MusicSearchExecutor(musicService, database.sqlite, llmProviders, config),
+        TIMELINE: new TimelineExecutor(timelineService, guidelineService, metadataService),
         RENDER: new RenderExecutor(renderService),
       },
     ),
@@ -150,6 +153,7 @@ export function buildApp({ config }: { config: AppConfig }) {
   registerMusicRoutes(server, musicService, projectService, jobRepository);
   registerTimelineRoutes(server, timelineService, projectService);
   registerRenderRoutes(server, renderService, projectService);
+  registerMetadataRoutes(server, metadataService, projectService);
 
   server.addHook("onReady", async () => worker.start());
   server.addHook("onClose", async () => {

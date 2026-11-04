@@ -44,17 +44,26 @@ describe("budget modes", () => {
 
   it.each([
     ["ECO", 1, 1],
-    ["BALANCED", 6, 11],
-    ["QUALITY", 7, 24],
+    ["BALANCED", 8, 13],
+    ["QUALITY", 9, 26],
   ] as const)("estimates %s LLM call bounds", (mode, min, max) => {
     expect(estimateBudget(project(mode), "mock").total).toEqual({ min, max });
     expect(estimateBudget(project(mode), "mock").tokens).toBeDefined();
   });
 
   it.each([
-    ["ECO", { RESEARCH: { min: 1, max: 1 }, VISUAL_SEARCH: { min: 0, max: 0 }, SCRIPT: { min: 0, max: 0 }, SCENE_PLAN: { min: 0, max: 0 } }],
-    ["BALANCED", { RESEARCH: { min: 1, max: 2 }, VISUAL_SEARCH: { min: 1, max: 2 }, SCRIPT: { min: 3, max: 6 }, SCENE_PLAN: { min: 1, max: 1 } }],
-    ["QUALITY", { RESEARCH: { min: 1, max: 3 }, VISUAL_SEARCH: { min: 1, max: 2 }, SCRIPT: { min: 4, max: 18 }, SCENE_PLAN: { min: 1, max: 1 } }],
+    ["ECO", {
+      RESEARCH: { min: 1, max: 1 }, VISUAL_SEARCH: { min: 0, max: 0 }, SCRIPT: { min: 0, max: 0 },
+      SCENE_PLAN: { min: 0, max: 0 }, MUSIC_SEARCH: { min: 0, max: 0 }, TIMELINE: { min: 0, max: 0 },
+    }],
+    ["BALANCED", {
+      RESEARCH: { min: 1, max: 2 }, VISUAL_SEARCH: { min: 1, max: 2 }, SCRIPT: { min: 3, max: 6 },
+      SCENE_PLAN: { min: 1, max: 1 }, MUSIC_SEARCH: { min: 1, max: 1 }, TIMELINE: { min: 1, max: 1 },
+    }],
+    ["QUALITY", {
+      RESEARCH: { min: 1, max: 3 }, VISUAL_SEARCH: { min: 1, max: 2 }, SCRIPT: { min: 4, max: 18 },
+      SCENE_PLAN: { min: 1, max: 1 }, MUSIC_SEARCH: { min: 1, max: 1 }, TIMELINE: { min: 1, max: 1 },
+    }],
   ] as const)("estimates per-stage calls for %s", (mode, expected) => {
     const estimate = estimateBudget(project(mode));
     expect(Object.fromEntries(estimate.perStage.map((stage) => [stage.stage, stage.calls]))).toEqual(expected);
@@ -63,12 +72,12 @@ describe("budget modes", () => {
   it("estimates merged CUSTOM review and a user-set legacy research-off mode", () => {
     const custom = project("CUSTOM");
     custom.settings.budget.features = { storyMode: "merged", scriptReview: true };
-    expect(estimateBudget(custom).total).toEqual({ min: 5, max: 9 });
+    expect(estimateBudget(custom).total).toEqual({ min: 7, max: 11 });
 
     const off = project("BALANCED");
     off.settings.researchMode = "off";
     off.settings.userSet = ["researchMode"];
-    expect(estimateBudget(off).total).toEqual({ min: 5, max: 9 });
+    expect(estimateBudget(off).total).toEqual({ min: 7, max: 11 });
   });
 
   it("reports zero for completed stages and hides token estimates for CLI requests", () => {
@@ -77,9 +86,22 @@ describe("budget modes", () => {
       { stage: "SCRIPT", state: "DONE" },
       { stage: "SCENE_PLAN", state: "DONE" },
       { stage: "VISUAL_SEARCH", state: "DONE" },
+      { stage: "MUSIC_SEARCH", state: "DONE" },
+      { stage: "TIMELINE", state: "DONE" },
     ];
     expect(estimateBudget(project("QUALITY"), "mock", done).total).toEqual({ min: 0, max: 0 });
     expect(estimateBudget(project("QUALITY"), "copilot-cli").tokens).toBeUndefined();
+  });
+
+  it("counts musicAssist and metadata outside later", () => {
+    const estimate = estimateBudget(project("BALANCED"));
+    expect(estimate.later).toEqual(["visionCheck"]);
+    expect(estimate.perStage.find((stage) => stage.stage === "MUSIC_SEARCH")?.tasks).toContainEqual(
+      expect.objectContaining({ task: "musicAssist", calls: { min: 1, max: 1 } }),
+    );
+    expect(estimate.perStage.find((stage) => stage.stage === "TIMELINE")?.tasks).toContainEqual(
+      expect.objectContaining({ task: "metadata", calls: { min: 1, max: 1 } }),
+    );
   });
 
   it("estimates visual search LLM bounds from budget features", () => {

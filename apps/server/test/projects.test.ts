@@ -203,7 +203,7 @@ describe("project API", () => {
     expect(estimate.json()).toMatchObject({
       mode: "BALANCED",
       features: { storyMode: "separate" },
-      total: { min: 5, max: 9 },
+      total: { min: 7, max: 11 },
     });
   });
 

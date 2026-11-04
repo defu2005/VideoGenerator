@@ -7,6 +7,7 @@ import { pipelineKeys, usePipeline } from "../../hooks/usePipeline";
 import { runPipeline } from "../../services/pipelineApi";
 import { getProjectRender, renderFileUrl, renderThumbUrl } from "../../services/renderApi";
 import { getProjectTimeline } from "../../services/timelineApi";
+import { MetadataPanel } from "./MetadataPanel";
 
 const renderKeys = { project: (projectId: string) => ["render", projectId] as const };
 
@@ -110,6 +111,7 @@ export function RenderPanel({ project }: { project: Project }) {
           <section className="panel render-player">
             <video key={data.id} controls preload="metadata" src={renderFileUrl(project.id, "video", data.id)} aria-label="Video đã render" />
           </section>
+          <MetadataPanel project={project} />
           <section className={`panel render-report${data.report.ok ? "" : " has-errors"}`} aria-label="Kiểm tra video">
             <h3>
               {data.report.ok ? "Kiểm tra: đạt" : "Kiểm tra: có lỗi"}
@@ -147,6 +149,8 @@ export function RenderPanel({ project }: { project: Project }) {
           )}
         </>
       )}
+
+      {!data && <MetadataPanel project={project} />}
     </div>
   );
 }

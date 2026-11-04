@@ -17,6 +17,7 @@ import type { MusicSearchProvider } from "../src/providers/music/types.js";
 import { AudioStore, sniffAudio } from "../src/services/audioStore.js";
 import { MusicService } from "../src/services/musicService.js";
 import { MusicSearchExecutor } from "../src/stages/music/musicSearchExecutor.js";
+import { LlmProviderRegistry } from "../src/providers/llm/registry.js";
 import { parseRangeHeader } from "../src/api/music.js";
 
 const root = mkdtempSync(join(tmpdir(), "vg-music-"));
@@ -57,6 +58,10 @@ function service(providers: MusicSearchProvider[], fetchImpl = fakeFetch()) {
     new AudioStore(config.DATA_DIR, "test-agent", { fetchImpl: fetchImpl as unknown as typeof fetch, resolveHost: async () => ["93.184.216.34"] }),
     async () => 120,
   );
+}
+
+function executor(music: MusicService) {
+  return new MusicSearchExecutor(music, sqlite, new LlmProviderRegistry(config), config);
 }
 
 function context(project: Project) {
@@ -164,15 +169,15 @@ describe("MUSIC_SEARCH executor", () => {
     const mock = new MockMusicProvider();
     const spy = vi.spyOn(mock, "search");
     const music = service([mock]);
-    const executor = new MusicSearchExecutor(music);
-    const first = await executor.run(context(project));
+    const musicExecutor = executor(music);
+    const first = await musicExecutor.run(context(project));
     const state = music.getProjectMusic(project);
     expect(state.candidates.length).toBeGreaterThan(0);
     expect(state.candidates[0].title).toBe("Calm piano");
     expect(state.selection).toMatchObject({ status: "REVIEW_REQUIRED", selectedBy: "AGENT", candidateId: state.candidates[0].id, volume: 0.2, duckingDb: -12 });
     expect(music.canApproveMusicReview(project).allowed).toBe(false);
 
-    const second = await executor.run(context(project));
+    const second = await musicExecutor.run(context(project));
     expect(spy).toHaveBeenCalledTimes(1);
     expect(second.message).toContain("dùng lại");
     expect(second.outputHash).toBe(first.outputHash);
@@ -181,10 +186,10 @@ describe("MUSIC_SEARCH executor", () => {
   it("tolerates one provider failing, and fails retryably when all fail", async () => {
     const project = await createProject();
     const broken: MusicSearchProvider = { id: "openverse", search: async () => { throw new Error("boom"); } };
-    const result = await new MusicSearchExecutor(service([broken, new MockMusicProvider()])).run(context(project));
+    const result = await executor(service([broken, new MockMusicProvider()])).run(context(project));
     expect(result.message).toContain("lỗi: openverse");
     const other = await createProject();
-    await expect(new MusicSearchExecutor(service([broken])).run(context(other))).rejects.toMatchObject({ code: "MUSIC_SEARCH_FAILED", retryable: true });
+    await expect(executor(service([broken])).run(context(other))).rejects.toMatchObject({ code: "MUSIC_SEARCH_FAILED", retryable: true });
   });
 
   it("keeps the user's pick on a new search", async () => {
@@ -194,7 +199,7 @@ describe("MUSIC_SEARCH executor", () => {
     const pick = music.getProjectMusic(project).candidates.find((candidate) => candidate.title === "Epic drums")!;
     await music.select(project, pick.id, "USER");
     music.updateSettings(project, { query: "epic drums" });
-    await new MusicSearchExecutor(music).run(context(project));
+    await executor(music).run(context(project));
     const state = music.getProjectMusic(project);
     expect(state.selection).toMatchObject({ status: "APPROVED", selectedBy: "USER", candidateId: pick.id });
     expect(state.selectedCandidate?.localPath).toMatch(/^music\/[a-f0-9]{64}\.mp3$/);
@@ -205,7 +210,7 @@ describe("MUSIC_SEARCH executor", () => {
     const project = await createProject("AUTO");
     const fetchImpl = fakeFetch();
     const music = service([new MockMusicProvider()], fetchImpl);
-    const result = await new MusicSearchExecutor(music).run(context(project));
+    const result = await executor(music).run(context(project));
     expect(fetchImpl).toHaveBeenCalledTimes(1);
     expect(result.message).toContain("tự chọn");
     expect(music.getProjectMusic(project).selection).toMatchObject({ status: "APPROVED", selectedBy: "AGENT" });
@@ -216,7 +221,7 @@ describe("MUSIC_SEARCH executor", () => {
     const project = await createProject("ASSISTED", false);
     const provider = new MockMusicProvider();
     const spy = vi.spyOn(provider, "search");
-    await new MusicSearchExecutor(service([provider])).run(context(project));
+    await executor(service([provider])).run(context(project));
     expect(spy).not.toHaveBeenCalled();
     expect(service([provider]).getProjectMusic(project).selection?.status).toBe("NONE");
   });

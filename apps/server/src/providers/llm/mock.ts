@@ -50,6 +50,28 @@ export class MockLlmProvider implements LlmProvider {
         alternatives: [`${label} archival photograph`],
       })) }, req.model);
     }
+    if (req.schemaName === "MusicAssist") {
+      return response({
+        mood: "calm reflective",
+        energy: "low",
+        queries: ["calm piano ambient", "soft documentary score"],
+        avoid: ["vocals", "lyrics"],
+        why: `Matches the reflective tone of ${topic}.`,
+      }, req.model);
+    }
+    if (req.schemaName === "VideoMetadataDraft") {
+      return response({
+        titles: [
+          `${topic.slice(0, 60)}: A Clear Overview`,
+          `What We Know About ${topic.slice(0, 50)}`,
+          `${topic.slice(0, 50)} Explained Carefully`,
+        ],
+        description: `A careful look at ${topic}, what is known, and what still needs checking.`,
+        tags: ["documentary", topic.slice(0, 40), "explainer"].filter(Boolean),
+        hashtags: ["#documentary", "#explainer"],
+        thumbnailText: ["Key facts", "Still open"],
+      }, req.model);
+    }
     if (/image-search query editor/i.test(req.system)) {
       const input = payload as {
         scenes: Array<{ index: number; label: string; currentPrimary: string }>;

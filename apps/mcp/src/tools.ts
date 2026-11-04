@@ -229,6 +229,9 @@ export function registerVideoAgentTools(
   server.tool("get_pipeline", "Get pipeline status and all stage states for a project.", projectIdShape, ({ projectId }) =>
     invoke(() => api.getPipeline(projectId)));
 
+  server.tool("get_video_metadata", "Read publishing metadata (titles, description, tags) for a project.", projectIdShape, ({ projectId }) =>
+    invoke(() => api.getVideoMetadata(projectId)));
+
   server.prompt("write_research", "Ask Claude to write research notes and save them in Video Agent.", {
     projectId: z.string().uuid(),
   }, ({ projectId }) => ({

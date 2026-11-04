@@ -712,6 +712,29 @@ button:disabled { cursor: not-allowed; opacity: .58; }
 .render-thumbs img { display: block; width: 100%; border-radius: 4px; background: #eef1f7; }
 .render-thumbs figcaption { margin-top: 4px; overflow: hidden; color: #59667d; font-size: 10px; white-space: nowrap; text-overflow: ellipsis; }
 
+.metadata-panel { display: grid; gap: 12px; padding: 16px 18px; }
+.metadata-header { display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.metadata-header h2 { margin: 4px 0 0; font-size: 16px; }
+.metadata-header p:not(.eyebrow) { margin: 4px 0 0; color: #78839a; font-size: 11px; }
+.metadata-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.metadata-notice { margin: 0; color: #168352; font-size: 11px; }
+.metadata-titles { margin: 0; padding: 10px 12px; border: 1px solid #e8ebf2; border-radius: 8px; }
+.metadata-titles legend { padding: 0 4px; font-size: 12px; font-weight: 700; }
+.metadata-title-option { display: grid; grid-template-columns: auto 1fr; gap: 8px; align-items: center; margin: 6px 0; }
+.metadata-title-option input[type="text"], .metadata-title-option input:not([type="radio"]) { width: 100%; }
+.metadata-description { display: grid; gap: 6px; font-size: 12px; font-weight: 600; }
+.metadata-description textarea { width: 100%; font: inherit; font-weight: 400; }
+.metadata-extras { display: grid; gap: 8px; }
+.metadata-extras label { display: flex; gap: 6px; align-items: center; font-size: 11px; }
+.metadata-readonly { margin: 0; padding: 10px 12px; overflow: auto; border-radius: 8px; background: #f5f7fb; color: #59667d; font-size: 11px; white-space: pre-wrap; }
+.metadata-chips { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); }
+.metadata-chips h3 { margin: 0 0 6px; font-size: 12px; }
+.chip-row { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
+.chip { display: inline-flex; padding: 3px 8px; border: 1px solid #d9dee9; border-radius: 999px; background: #fff; color: #405ac5; font-size: 11px; }
+.metadata-thumbs-text h3 { margin: 0 0 4px; font-size: 12px; }
+.metadata-thumbs-text ul { margin: 0; padding-left: 18px; font-size: 11px; color: #59667d; }
+.music-assist { margin: 6px 0 0; color: #405ac5; font-size: 11px; }
+
 .guideline-fieldset { margin: 12px 0; padding: 12px; border: 1px solid #e8ebf2; border-radius: 11px; }
 .guideline-fieldset legend { padding: 0 6px; font-size: 12px; font-weight: 700; }
 .guideline-channels { display: flex; flex-wrap: wrap; gap: 8px 14px; margin-bottom: 12px; }

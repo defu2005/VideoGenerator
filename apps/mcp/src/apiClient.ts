@@ -150,6 +150,21 @@ export class VideoAgentApiClient {
     return this.request(`/api/projects/${encodeURIComponent(projectId)}/pipeline`);
   }
 
+  getVideoMetadata(projectId: string): Promise<{
+    metadata: {
+      projectId: string;
+      inputHash: string;
+      draft: unknown;
+      edited: unknown;
+      source: "LLM" | "CODE";
+      createdAt: string;
+      updatedAt: string;
+    } | null;
+    stale: boolean;
+  }> {
+    return this.request(`/api/projects/${encodeURIComponent(projectId)}/metadata`);
+  }
+
   runPipeline(projectId: string, stage?: string): Promise<unknown> {
     return this.request(`/api/projects/${encodeURIComponent(projectId)}/pipeline/run`, {
       method: "POST",

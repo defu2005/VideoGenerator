@@ -121,6 +121,13 @@ export function MusicPanel({ project }: { project: Project }) {
           <p className="eyebrow">BACKGROUND MUSIC</p>
           <h2>{data.enabled ? (current ? current.title : selection?.status === "NONE" ? "Không dùng nhạc" : "Chưa chọn nhạc") : "Nhạc nền đang tắt"}</h2>
           <p>Mood: {data.mood || "—"} · Năng lượng: {data.energy || "—"} · Video ~{formatDuration(data.videoDurationSec)}</p>
+          {(data.assist ?? data.selection?.assist) && (
+            <p className="music-assist" title={(data.assist ?? data.selection?.assist)?.why}>
+              AI gợi ý: {(data.assist ?? data.selection?.assist)?.mood}
+              {" · "}
+              {(data.assist ?? data.selection?.assist)?.queries.join(" · ")}
+            </p>
+          )}
         </div>
         <div className="music-header-actions">
           <button className="button button-secondary" type="button" disabled={!canRunStage} onClick={() => void runStage()}>Chạy bước tìm nhạc</button>

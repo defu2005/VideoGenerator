@@ -124,7 +124,7 @@ export function storyModeForProject(project: {
 }
 
 export type BudgetEstimateStage = {
-  stage: "RESEARCH" | "SCRIPT" | "SCENE_PLAN" | "VISUAL_SEARCH";
+  stage: "RESEARCH" | "SCRIPT" | "SCENE_PLAN" | "VISUAL_SEARCH" | "MUSIC_SEARCH" | "TIMELINE";
   calls: { min: number; max: number };
   reason: string;
   tasks?: { task: string; provider?: string; model?: string; calls: { min: number; max: number } }[];
@@ -143,7 +143,7 @@ export const BudgetEstimateSchema = z.object({
   mode: BudgetModeSchema,
   features: BudgetFeaturesSchema,
   perStage: z.array(z.object({
-    stage: z.enum(["RESEARCH", "SCRIPT", "SCENE_PLAN", "VISUAL_SEARCH"]),
+    stage: z.enum(["RESEARCH", "SCRIPT", "SCENE_PLAN", "VISUAL_SEARCH", "MUSIC_SEARCH", "TIMELINE"]),
     calls: z.object({ min: z.number().int().nonnegative(), max: z.number().int().nonnegative() }).strict(),
     reason: z.string(),
     tasks: z.array(z.object({
@@ -180,7 +180,7 @@ export function estimateBudget(
   const features = resolveBudget(budget);
   const mode = budget.mode ?? "BALANCED";
   const storyMode = storyModeForProject(project);
-  const stateFor = (stage: "RESEARCH" | "SCRIPT" | "SCENE_PLAN" | "VISUAL_SEARCH") =>
+  const stateFor = (stage: BudgetEstimateStage["stage"]) =>
     stages.find((record) => record.stage === stage)?.state;
   const researchDone = stateFor("RESEARCH") === "DONE";
   const scriptDone = stateFor("SCRIPT") === "DONE";
@@ -240,6 +240,31 @@ export function estimateBudget(
         : "Scene planning is deterministic and uses no LLM calls.",
   });
 
+  // Metadata runs after TIMELINE success (not a separate pipeline stage); count it under TIMELINE.
+  const musicSearchDone = stateFor("MUSIC_SEARCH") === "DONE";
+  const musicAssistCalls = !musicSearchDone && features.musicAssist ? 1 : 0;
+  perStage.push({
+    stage: "MUSIC_SEARCH",
+    calls: { min: musicAssistCalls, max: musicAssistCalls },
+    reason: musicSearchDone
+      ? "Music search is already complete and unchanged."
+      : musicAssistCalls
+        ? "One music-assist call suggests mood, energy and search queries."
+        : "Music search uses the code query only.",
+  });
+
+  const timelineDone = stateFor("TIMELINE") === "DONE";
+  const metadataCalls = !timelineDone && features.metadata ? 1 : 0;
+  perStage.push({
+    stage: "TIMELINE",
+    calls: { min: metadataCalls, max: metadataCalls },
+    reason: timelineDone
+      ? "Timeline is already complete and unchanged."
+      : metadataCalls
+        ? "One metadata call drafts titles, description, tags and hashtags after the timeline."
+        : "Publishing metadata uses a code draft only.",
+  });
+
   const total = perStage.reduce((result, item) => ({
     min: result.min + item.calls.min,
     max: result.max + item.calls.max,
@@ -260,12 +285,16 @@ export function estimateBudget(
     sceneQueries: { min: sceneAssistCalls, max: sceneAssistCalls },
     visualAltQueries: { min: 0, max: visualAssistMax },
     visualRerank: { min: rerankCalls, max: rerankCalls },
+    musicAssist: { min: musicAssistCalls, max: musicAssistCalls },
+    metadata: { min: metadataCalls, max: metadataCalls },
   };
   for (const stage of perStage) {
     const taskIds = stage.stage === "RESEARCH" ? ["research"]
       : stage.stage === "SCRIPT" ? ["script", "scriptReview", "guidelineCheck"]
         : stage.stage === "SCENE_PLAN" ? ["sceneQueries"]
-          : ["visualAltQueries", "visualRerank"];
+          : stage.stage === "MUSIC_SEARCH" ? ["musicAssist"]
+            : stage.stage === "TIMELINE" ? ["metadata"]
+              : ["visualAltQueries", "visualRerank"];
     stage.tasks = taskIds.map((task) => {
       const route = routes?.[task];
       return {
@@ -282,7 +311,7 @@ export function estimateBudget(
     perStage,
     total,
     ...(tokens ? { tokens } : {}),
-    later: ["visionCheck", "musicAssist", "metadata"],
+    later: ["visionCheck"],
   };
 }
 
@@ -315,10 +344,14 @@ function estimateBudgetTokens(
   const scriptCalls = stages.find((stage) => stage.stage === "SCRIPT")?.calls.max ?? 0;
   const scenePlanCalls = stages.find((stage) => stage.stage === "SCENE_PLAN")?.calls.max ?? 0;
   const visualSearchCalls = stages.find((stage) => stage.stage === "VISUAL_SEARCH")?.calls.max ?? 0;
+  const musicSearchCalls = stages.find((stage) => stage.stage === "MUSIC_SEARCH")?.calls.max ?? 0;
+  const timelineCalls = stages.find((stage) => stage.stage === "TIMELINE")?.calls.max ?? 0;
   const output = researchCalls * (storyMode === "merged" ? scriptOutput + researchOutput : researchOutput)
     + scriptCalls * scriptOutput
     + scenePlanCalls * 500
-    + visualSearchCalls * 500;
+    + visualSearchCalls * 500
+    + musicSearchCalls * 200
+    + timelineCalls * 400;
   return { input: calls * perCallInput, output };
 }
 

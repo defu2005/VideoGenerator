@@ -4,10 +4,12 @@ import { join } from "node:path";
 import type Database from "better-sqlite3";
 import {
   DEFAULT_MUSIC_MIX,
+  MusicAssistOutputSchema,
   musicQueryFor,
   musicWords,
   rankMusicTracks,
   type LicenseMetadata,
+  type MusicAssistOutput,
   type MusicCandidate,
   type MusicSelection,
   type MusicSettingsPatch,
@@ -57,8 +59,18 @@ type SelectionRow = {
   start_offset_sec: number;
   query_override: string | null;
   search_hash: string;
+  assist: string | null;
   updated_at: string;
 };
+
+function parseAssist(raw: string | null | undefined): MusicAssistOutput | null {
+  if (!raw) return null;
+  try {
+    return MusicAssistOutputSchema.parse(typeof raw === "string" ? JSON.parse(raw) : raw);
+  } catch {
+    return null;
+  }
+}
 
 export type MusicInput = {
   enabled: boolean;
@@ -110,6 +122,7 @@ function toSelection(row: SelectionRow): MusicSelection {
     duckingDb: Number(row.ducking_db),
     startOffsetSec: Number(row.start_offset_sec),
     queryOverride: row.query_override,
+    assist: parseAssist(row.assist),
     updatedAt: row.updated_at,
   };
 }
@@ -168,7 +181,14 @@ export class MusicService {
       candidates,
       selection,
       selectedCandidate: selection?.candidateId ? candidates.find((candidate) => candidate.id === selection.candidateId) ?? null : null,
+      assist: selection?.assist ?? null,
     };
+  }
+
+  saveAssist(projectId: string, assist: MusicAssistOutput | null): void {
+    if (!this.selectionRow(projectId)) return;
+    this.sqlite.prepare("UPDATE music_selections SET assist = ?, updated_at = ? WHERE project_id = ?")
+      .run(assist ? JSON.stringify(assist) : null, this.now().toISOString(), projectId);
   }
 
   searchHash(input: MusicInput): string {
@@ -179,35 +199,74 @@ export class MusicService {
   }
 
   /** Search all providers, rank, and replace the stored (non-upload) candidates. */
-  async search(project: Project, options: { signal?: AbortSignal; force?: boolean; warn?: (message: string) => void } = {}): Promise<MusicSearchOutcome> {
-    const input = this.input(project);
-    const hash = this.searchHash(input);
+  async search(project: Project, options: {
+    signal?: AbortSignal;
+    force?: boolean;
+    warn?: (message: string) => void;
+    assist?: MusicAssistOutput | null;
+  } = {}): Promise<MusicSearchOutcome> {
+    const base = this.input(project);
+    const assist = options.assist ?? null;
+    const queries = assist?.queries.map((query) => query.trim()).filter(Boolean).slice(0, 3) ?? [];
+    const input: MusicInput = {
+      ...base,
+      mood: assist?.mood?.trim() || base.mood,
+      energy: assist?.energy || base.energy,
+      query: queries[0] || base.query,
+    };
+    const hash = this.searchHash({
+      ...input,
+      query: queries.length ? queries.join("\u0000") : input.query,
+    });
     const existing = this.candidates(project.id);
     const selection = this.ensureSelection(project);
+    if (assist) this.saveAssist(project.id, assist);
     if (!options.force && selection.search_hash === hash && existing.some((candidate) => candidate.provider !== "upload")) {
       return { candidates: existing, reused: true, failedProviders: [], query: input.query };
     }
 
     const failedProviders: string[] = [];
     const found: MusicSearchResult[] = [];
-    for (const provider of this.providers) {
-      try {
-        found.push(...await provider.search({ query: input.query, limit: PER_PROVIDER, signal: options.signal }));
-      } catch (error) {
-        if (options.signal?.aborted) throw options.signal.reason ?? error;
-        failedProviders.push(provider.id);
-        options.warn?.(`Music provider ${provider.id} failed: ${error instanceof Error ? error.message : String(error)}`);
+    const searchQueries = queries.length ? queries : [input.query];
+    for (const query of searchQueries) {
+      for (const provider of this.providers) {
+        try {
+          found.push(...await provider.search({ query, limit: PER_PROVIDER, signal: options.signal }));
+        } catch (error) {
+          if (options.signal?.aborted) throw options.signal.reason ?? error;
+          if (!failedProviders.includes(provider.id)) failedProviders.push(provider.id);
+          options.warn?.(`Music provider ${provider.id} failed: ${error instanceof Error ? error.message : String(error)}`);
+        }
       }
     }
-    if (failedProviders.length === this.providers.length && this.providers.length > 0) {
+
+    // If every assist query returned nothing, fall back to the code query.
+    let usedQuery = input.query;
+    let tracks = dedupeMusicResults(found);
+    if (queries.length > 0 && tracks.length === 0) {
+      usedQuery = base.query;
+      for (const provider of this.providers) {
+        try {
+          tracks.push(...await provider.search({ query: usedQuery, limit: PER_PROVIDER, signal: options.signal }));
+        } catch (error) {
+          if (options.signal?.aborted) throw options.signal.reason ?? error;
+          if (!failedProviders.includes(provider.id)) failedProviders.push(provider.id);
+          options.warn?.(`Music provider ${provider.id} failed: ${error instanceof Error ? error.message : String(error)}`);
+        }
+      }
+      tracks = dedupeMusicResults(tracks);
+    }
+
+    if (failedProviders.length === this.providers.length && this.providers.length > 0 && tracks.length === 0) {
       throw new AudioDownloadError(`Không tìm được nhạc: ${failedProviders.join(", ")} đều lỗi.`, undefined, true);
     }
 
-    const ranked = rankMusicTracks(found, {
+    const ranked = rankMusicTracks(tracks, {
       mood: input.mood,
       energy: input.energy,
-      keywords: [...input.keywords, ...musicWords(input.query)],
+      keywords: [...input.keywords, ...musicWords(usedQuery), ...(assist?.queries ?? []).flatMap(musicWords)],
       videoDurationSec: input.videoDurationSec,
+      avoid: assist?.avoid,
     }, KEEP_CANDIDATES);
 
     const createdAt = this.now().toISOString();
@@ -235,7 +294,7 @@ export class MusicService {
       }
       this.sqlite.prepare("UPDATE music_selections SET search_hash = ?, updated_at = ? WHERE project_id = ?").run(hash, createdAt, project.id);
     })();
-    return { candidates: this.candidates(project.id), reused: false, failedProviders, query: input.query };
+    return { candidates: this.candidates(project.id), reused: false, failedProviders, query: usedQuery };
   }
 
   /** Preselect the best track for review unless the user already decided. */
@@ -369,8 +428,8 @@ export class MusicService {
   ensureSelection(project: Project): SelectionRow {
     const existing = this.selectionRow(project.id);
     if (existing) return existing;
-    this.sqlite.prepare(`INSERT INTO music_selections (project_id, candidate_id, status, selected_by, volume, fade_in_sec, fade_out_sec, ducking_db, start_offset_sec, query_override, search_hash, updated_at)
-      VALUES (?, NULL, 'REVIEW_REQUIRED', 'AGENT', ?, ?, ?, ?, ?, NULL, '', ?)`).run(
+    this.sqlite.prepare(`INSERT INTO music_selections (project_id, candidate_id, status, selected_by, volume, fade_in_sec, fade_out_sec, ducking_db, start_offset_sec, query_override, search_hash, assist, updated_at)
+      VALUES (?, NULL, 'REVIEW_REQUIRED', 'AGENT', ?, ?, ?, ?, ?, NULL, '', NULL, ?)`).run(
       project.id, project.settings.music.volume, DEFAULT_MUSIC_MIX.fadeInSec, DEFAULT_MUSIC_MIX.fadeOutSec, DEFAULT_MUSIC_MIX.duckingDb,
       DEFAULT_MUSIC_MIX.startOffsetSec, this.now().toISOString(),
     );
@@ -389,4 +448,16 @@ export class MusicService {
   private candidateRow(projectId: string, candidateId: string): CandidateRow | undefined {
     return this.sqlite.prepare("SELECT * FROM music_candidates WHERE id = ? AND project_id = ?").get(candidateId, projectId) as CandidateRow | undefined;
   }
+}
+
+function dedupeMusicResults(tracks: MusicSearchResult[]): MusicSearchResult[] {
+  const seen = new Set<string>();
+  const result: MusicSearchResult[] = [];
+  for (const track of tracks) {
+    const key = `${track.provider}\u0000${track.providerItemId}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    result.push(track);
+  }
+  return result;
 }
