@@ -33,15 +33,15 @@
 | 17 | [TASK-030](TASK-030.md) | Facebook Reels + Instagram Reels publishers | (guide only) |
 | 18 | [TASK-031](TASK-031.md) | Notifications + Telegram bot (pairing, events, daily summary) | (guide only) |
 | 19 | [TASK-032](TASK-032.md) | LLM assistant that controls the app (web chat + Telegram, confirm rules) | (guide only) |
-| 20 | TASK-033 (guide pending) | Platform analytics sync (YouTube Analytics, TikTok video stats, Meta insights) + analytics dashboard | (guide only) |
-| 21 | TASK-034 (guide pending) | Revenue + profit per video/channel (minus LLM/TTS cost), manual revenue entry, payout reminder, monthly report | (guide only) |
-| 22 | TASK-035 (guide pending) | Learn from results: LLM performance insights → direction, topics, best posting time | (guide only) |
-| 23 | TASK-036 (guide pending) | Auto thumbnails (frames + title text, AI pick, upload) | (guide only) |
-| 24 | TASK-037 (guide pending) | Long video → Shorts/Reels clips added to the schedule | (guide only) |
-| 25 | TASK-038 (guide pending) | Comment inbox across platforms, LLM reply suggestions, spam filter | (guide only) |
-| 26 | TASK-039 (guide pending) | Trending topics via official APIs + multi-language dubbing/subtitles | (guide only) |
-| 27 | TASK-040 (guide pending) | More TTS sources: Google Gemini/Cloud, ElevenLabs, OpenAI, FPT.AI/Viettel AI, local Piper/VieNeu; word timings | (guide only) |
-| 28 | TASK-041 (guide pending) | Editing skills: real transitions (xfade), emphasis (punch-in, keyword callouts, SFX), animated styled subtitles (word highlight), LLM edit plan, per-profile edit presets, subtitle gap fix | (guide only) |
+| 20 | [TASK-033](TASK-033.md) | Platform analytics sync (YouTube Analytics, TikTok video stats, Meta insights) + analytics dashboard | (guide only) |
+| 21 | [TASK-034](TASK-034.md) | Revenue + profit per video/channel (minus LLM/TTS cost), manual revenue entry, payout reminder, monthly report | (guide only) |
+| 22 | [TASK-035](TASK-035.md) | Learn from results: LLM performance insights → direction, topics, best posting time | (guide only) |
+| 23 | [TASK-036](TASK-036.md) | Auto thumbnails (frames + title text, AI pick, upload) | (guide only) |
+| 24 | [TASK-037](TASK-037.md) | Long video → Shorts/Reels clips added to the schedule | (guide only) |
+| 25 | [TASK-038](TASK-038.md) | Comment inbox across platforms, LLM reply suggestions, spam filter | (guide only) |
+| 26 | [TASK-039](TASK-039.md) | Trending topics via official APIs + multi-language dubbing/subtitles | (guide only) |
+| 27 | [TASK-040](TASK-040.md) | More TTS sources: Google Gemini/Cloud, ElevenLabs, OpenAI, FPT.AI/Viettel AI, local Piper/VieNeu; word timings | (guide only) |
+| 28 | [TASK-041](TASK-041.md) | Editing skills: real transitions (xfade), emphasis (punch-in, keyword callouts, SFX), animated styled subtitles (word highlight), LLM edit plan, per-profile edit presets, subtitle gap fix | (guide only) |
 
 The spec in `docs/tasks/` is the requirement. The guide in `docs/cursor/` gives the current code state, the file map and the steps. When they disagree, the guide wins (it is newer). Each task depends on the ones above it; don't skip ahead.
 

@@ -107,6 +107,10 @@ export class TelegramClient {
     }
   }
 
+  async sendChatAction(chatId: string, action: "typing" | "upload_document" = "typing", signal?: AbortSignal): Promise<void> {
+    await this.call("sendChatAction", { chat_id: chatId, action }, signal);
+  }
+
   async answerCallbackQuery(callbackQueryId: string, text?: string, signal?: AbortSignal): Promise<void> {
     await this.call("answerCallbackQuery", {
       callback_query_id: callbackQueryId,

@@ -11,6 +11,7 @@ export function AppLayout() {
         <div className="mobile-brand"><span className="brand-mark">V</span> Video Agent</div>
         <nav className="primary-nav" aria-label="Main navigation">
           <NavLink to="/" end>Dashboard</NavLink>
+          <NavLink to="/assistant">Trợ lý AI</NavLink>
           <NavLink to="/projects">Projects</NavLink>
           <NavLink to="/profiles">Hồ sơ</NavLink>
           <NavLink to="/publish/calendar">Lịch đăng</NavLink>

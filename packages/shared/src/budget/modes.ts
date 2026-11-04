@@ -37,6 +37,8 @@ export const BudgetFeaturesSchema = z.object({
   modelAdvisor: z.boolean(),
   /** LLM call that suggests profile topic queue items (settings / automation, not pipeline). */
   topicSuggest: z.boolean(),
+  /** App-wide assistant chat (web + Telegram), not pipeline. */
+  assistantChat: z.boolean(),
   outputHeadroom: z.union([z.literal(1), z.literal(1.5), z.literal(2)]),
 }).strict();
 export type BudgetFeatures = z.infer<typeof BudgetFeaturesSchema>;
@@ -82,6 +84,7 @@ const PRESETS: Record<Exclude<BudgetMode, "CUSTOM">, BudgetFeatures> = {
     webImageSearch: 0,
     modelAdvisor: true,
     topicSuggest: true,
+    assistantChat: true,
     outputHeadroom: 1,
   },
   BALANCED: {
@@ -105,6 +108,7 @@ const PRESETS: Record<Exclude<BudgetMode, "CUSTOM">, BudgetFeatures> = {
     webImageSearch: 3,
     modelAdvisor: true,
     topicSuggest: true,
+    assistantChat: true,
     outputHeadroom: 1.5,
   },
   QUALITY: {
@@ -128,6 +132,7 @@ const PRESETS: Record<Exclude<BudgetMode, "CUSTOM">, BudgetFeatures> = {
     webImageSearch: 8,
     modelAdvisor: true,
     topicSuggest: true,
+    assistantChat: true,
     outputHeadroom: 2,
   },
   MAX: {
@@ -151,6 +156,7 @@ const PRESETS: Record<Exclude<BudgetMode, "CUSTOM">, BudgetFeatures> = {
     webImageSearch: 999,
     modelAdvisor: true,
     topicSuggest: true,
+    assistantChat: true,
     outputHeadroom: 2,
   },
 };

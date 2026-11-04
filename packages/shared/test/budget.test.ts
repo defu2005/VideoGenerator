@@ -20,28 +20,28 @@ describe("budget modes", () => {
       researchDepth: "light", altQueryAssist: false, sceneQueryAssist: false,
       semanticImageRerank: false, visionCheck: false, visionRetryRounds: 0, visionThreshold: 7,
       visualSearchBreadth: 8, renderVerify: false, factCheck: false,
-      musicAssist: false, metadata: false, guidelineCheck: "off", webImageSearch: 0, modelAdvisor: true, topicSuggest: true, outputHeadroom: 1,
+      musicAssist: false, metadata: false, guidelineCheck: "off", webImageSearch: 0, modelAdvisor: true, topicSuggest: true, assistantChat: true, outputHeadroom: 1,
     }],
     ["BALANCED", {
       storyMode: "separate", repairAttempts: 1, scriptReview: true, scriptReviewPasses: 1,
       researchDepth: "standard", altQueryAssist: true, sceneQueryAssist: true,
       semanticImageRerank: true, visionCheck: false, visionRetryRounds: 0, visionThreshold: 7,
       visualSearchBreadth: 8, renderVerify: false, factCheck: false,
-      musicAssist: true, metadata: true, guidelineCheck: "check", webImageSearch: 3, modelAdvisor: true, topicSuggest: true, outputHeadroom: 1.5,
+      musicAssist: true, metadata: true, guidelineCheck: "check", webImageSearch: 3, modelAdvisor: true, topicSuggest: true, assistantChat: true, outputHeadroom: 1.5,
     }],
     ["QUALITY", {
       storyMode: "separate", repairAttempts: 2, scriptReview: true, scriptReviewPasses: 2,
       researchDepth: "deep", altQueryAssist: true, sceneQueryAssist: true,
       semanticImageRerank: true, visionCheck: false, visionRetryRounds: 0, visionThreshold: 7,
       visualSearchBreadth: 8, renderVerify: false, factCheck: false,
-      musicAssist: true, metadata: true, guidelineCheck: "checkAndFix", webImageSearch: 8, modelAdvisor: true, topicSuggest: true, outputHeadroom: 2,
+      musicAssist: true, metadata: true, guidelineCheck: "checkAndFix", webImageSearch: 8, modelAdvisor: true, topicSuggest: true, assistantChat: true, outputHeadroom: 2,
     }],
     ["MAX", {
       storyMode: "separate", repairAttempts: 2, scriptReview: true, scriptReviewPasses: 2,
       researchDepth: "deep", altQueryAssist: true, sceneQueryAssist: true,
       semanticImageRerank: true, visionCheck: true, visionRetryRounds: 2, visionThreshold: 7,
       visualSearchBreadth: 16, renderVerify: true, factCheck: true,
-      musicAssist: true, metadata: true, guidelineCheck: "checkAndFix", webImageSearch: 999, modelAdvisor: true, topicSuggest: true, outputHeadroom: 2,
+      musicAssist: true, metadata: true, guidelineCheck: "checkAndFix", webImageSearch: 999, modelAdvisor: true, topicSuggest: true, assistantChat: true, outputHeadroom: 2,
     }],
   ] as const)("resolves the %s feature preset", (mode, expected) => {
     expect(resolveBudget(mode)).toEqual(expected);

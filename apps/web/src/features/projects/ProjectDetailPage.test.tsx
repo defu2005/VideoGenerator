@@ -230,6 +230,7 @@ describe("ProjectDetailPage", () => {
           webImageSearch: 3,
           modelAdvisor: true,
           topicSuggest: true,
+          assistantChat: true,
           outputHeadroom: 1.5,
         },
         perStage: [],

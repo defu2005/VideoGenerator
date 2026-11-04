@@ -14,6 +14,7 @@ import { ProfileDetailPage } from "./features/profiles/ProfileDetailPage";
 import { ProfileListPage } from "./features/profiles/ProfileListPage";
 import { PublishCalendarPage } from "./features/publish/PublishCalendarPage";
 import { UsagePage } from "./features/usage/UsagePage";
+import { AssistantPage } from "./features/assistant/AssistantPage";
 import { queryRetryDelay, shouldRetryQuery } from "./services/queryRetry";
 
 const queryClient = new QueryClient({
@@ -33,6 +34,7 @@ export function App() {
         <Routes>
           <Route element={<AppLayout />}>
             <Route index element={<DashboardPage />} />
+            <Route path="assistant" element={<AssistantPage />} />
             <Route path="projects" element={<ProjectListPage />} />
             <Route path="profiles" element={<ProfileListPage />} />
             <Route path="profiles/:id" element={<Navigate replace to="direction" />} />

@@ -13,6 +13,7 @@ import type { AutomationService } from "../services/automationService.js";
 import type { TopicService } from "../services/topicService.js";
 import type { NotificationService } from "../notifications/notificationService.js";
 import type { TelegramPoller } from "../notifications/telegram.js";
+import type { AssistantService } from "../assistant/service.js";
 
 declare module "fastify" {
   interface FastifyInstance {
@@ -36,6 +37,9 @@ declare module "fastify" {
     vgNotifications: {
       service: NotificationService;
       poller: TelegramPoller;
+    };
+    vgAssistant: {
+      service: AssistantService;
     };
   }
 }

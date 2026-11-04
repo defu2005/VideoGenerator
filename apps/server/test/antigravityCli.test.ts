@@ -11,6 +11,7 @@ import {
   resolveAgyPath,
   resolveAgyPathWithRetry,
   AGY_STATIC_MODELS,
+  AGY_ARG_PROMPT_LIMIT,
 } from "../src/providers/llm/antigravityCli.js";
 import type { LlmRequest } from "../src/providers/llm/types.js";
 
@@ -654,5 +655,61 @@ process.stdin.on("end", () => {
       .rejects.toMatchObject({ code: "LLM_INVALID_OUTPUT", message: "Model cố dùng công cụ thay vì trả lời" });
     const { readFileSync } = await import("node:fs");
     expect(readFileSync(counter, "utf8")).toBe("2");
+  });
+});
+
+describe("Antigravity CLI long prompts", () => {
+  it("parses the final result event of stream-json output", () => {
+    const output = [
+      JSON.stringify({ event: "init", init: { model: "m" } }),
+      JSON.stringify({ event: "step_update", step_update: { text_delta: "PO" } }),
+      JSON.stringify({ event: "result", result: { status: "SUCCESS", response: "PONG\n", usage: { input_tokens: 7, output_tokens: 2 } } }),
+    ].join("\n");
+    const parsed = parseAgyResponse(output);
+    expect(parsed?.isError).toBe(false);
+    expect(parsed?.result.trim()).toBe("PONG");
+    expect(parsed?.usage).toEqual({ inputTokens: 7, outputTokens: 2 });
+  });
+
+  it("reports the error text of a failed stream-json result", () => {
+    const output = JSON.stringify({ event: "result", result: { status: "ERROR", response: "", error: "boom" } });
+    expect(parseAgyResponse(output)).toMatchObject({ isError: true, result: "boom" });
+  });
+
+  it("sends a prompt over the limit on stdin as stream-json instead of in --print=", async () => {
+    let capturedArgs: string[] = [];
+    const source = `
+let stdin = "";
+process.stdin.setEncoding("utf8");
+process.stdin.on("data", chunk => stdin += chunk);
+process.stdin.on("end", () => {
+  const msg = JSON.parse(stdin.trim());
+  const ok = msg.event === "user" && typeof msg.message.content === "string";
+  process.stdout.write(JSON.stringify({ event: "init" }) + "\\n");
+  process.stdout.write(JSON.stringify({ event: "result", result: {
+    status: ok ? "SUCCESS" : "ERROR",
+    response: ok ? "LEN:" + msg.message.content.length : "",
+    usage: { input_tokens: 1, output_tokens: 1 },
+  } }) + "\\n");
+});
+`;
+    const spawnFn = makeFakeSpawn(source);
+    const cli = provider({
+      spawnProcess: (cmd, args, opts) => {
+        capturedArgs = args;
+        return spawnFn!(cmd, args, opts);
+      },
+    });
+    const longText = "x".repeat(AGY_ARG_PROMPT_LIMIT + 10);
+    const res = await cli.generate(request(longText, "sys"), new AbortController().signal);
+
+    expect(capturedArgs).toContain("--print=");
+    expect(capturedArgs.some((a) => a.includes(longText))).toBe(false);
+    const inIdx = capturedArgs.indexOf("--input-format");
+    expect(capturedArgs[inIdx + 1]).toBe("stream-json");
+    const outIdx = capturedArgs.indexOf("--output-format");
+    expect(capturedArgs[outIdx + 1]).toBe("stream-json");
+    expect(res.text).toMatch(/^LEN:\d+$/);
+    expect(Number(res.text.slice(4))).toBeGreaterThan(AGY_ARG_PROMPT_LIMIT);
   });
 });

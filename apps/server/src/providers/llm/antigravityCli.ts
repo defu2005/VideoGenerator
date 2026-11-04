@@ -96,9 +96,11 @@ export class AntgravityCliProvider extends CliProviderBase {
       args: (request, cwd) => {
         const prompt = formatAgyFullPrompt(request);
         const timeoutSec = Math.ceil(timeoutMs / 1000);
+        const viaStdin = prompt.length > AGY_ARG_PROMPT_LIMIT;
         const args: string[] = [
-          `--print=${prompt}`,
-          "--output-format", "json",
+          ...(viaStdin
+            ? ["--print=", "--input-format", "stream-json", "--output-format", "stream-json"]
+            : [`--print=${prompt}`, "--output-format", "json"]),
           "--mode", "plan",
           "--print-timeout", `${timeoutSec}s`,
           "--disable-slash-commands",
@@ -107,8 +109,8 @@ export class AntgravityCliProvider extends CliProviderBase {
         ];
         return args;
       },
-      // Prompt is embedded in --print=<prompt> arg; stdin gets empty string.
-      formatPrompt: () => "",
+      // Short prompts go in --print=<prompt>; long ones go to stdin as one stream-json message.
+      formatPrompt: formatAgyStdin,
       parseResponse: parseAgyResponse,
       classifyFailure: classifyAgyFailure,
       mapSpawnError: mapAgySpawnError,
@@ -174,7 +176,42 @@ export class AntgravityCliProvider extends CliProviderBase {
   }
 }
 
-function formatAgyFullPrompt(request: LlmRequest): string {
+/**
+ * Windows caps a command line at ~32k chars, so longer prompts are sent on stdin
+ * with `--input-format stream-json` instead of inside `--print=`.
+ */
+export const AGY_ARG_PROMPT_LIMIT = 24_000;
+
+export function formatAgyStdin(request: LlmRequest): string {
+  const prompt = formatAgyFullPrompt(request);
+  if (prompt.length <= AGY_ARG_PROMPT_LIMIT) return "";
+  return `${JSON.stringify({ event: "user", message: { content: prompt } })}\n`;
+}
+
+/** stream-json output is one event per line; the final `result` event has the json-mode shape. */
+function agyResultPayload(output: string): Record<string, unknown> | undefined {
+  const trimmed = output.trim();
+  try {
+    const value = JSON.parse(trimmed) as Record<string, unknown>;
+    if (value["event"] !== "result") return value;
+  } catch {
+    // Not a single JSON document: fall through to the line scan.
+  }
+  const lines = trimmed.split(/\r?\n/).reverse();
+  for (const line of lines) {
+    try {
+      const value = JSON.parse(line) as Record<string, unknown>;
+      if (value["event"] === "result" && typeof value["result"] === "object" && value["result"] !== null) {
+        return value["result"] as Record<string, unknown>;
+      }
+    } catch {
+      continue;
+    }
+  }
+  return undefined;
+}
+
+export function formatAgyFullPrompt(request: LlmRequest): string {
   return [
     NO_TOOLS_RULE,
     `System instructions:\n${request.system}`,
@@ -209,12 +246,13 @@ function numeric(value: unknown): number | undefined {
 
 export function parseAgyResponse(output: string): ParsedCliResponse | undefined {
   try {
-    const value = JSON.parse(output.trim()) as Record<string, unknown>;
+    const value = agyResultPayload(output);
+    if (!value) return undefined;
     // status must be SUCCESS
     if (value["status"] !== "SUCCESS") {
-      const msg = typeof value["response"] === "string"
-        ? value["response"]
-        : String(value["status"] ?? "FAILED");
+      const msg = (typeof value["response"] === "string" && value["response"])
+        || (typeof value["error"] === "string" && value["error"])
+        || String(value["status"] ?? "FAILED");
       return { result: msg || "FAILED", usage: { inputTokens: 0, outputTokens: 0 }, isError: true };
     }
     const response = typeof value["response"] === "string" ? value["response"] : "";

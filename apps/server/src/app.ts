@@ -82,6 +82,9 @@ import { registerAutomationRoutes } from "./api/automation.js";
 import { NotificationService } from "./notifications/notificationService.js";
 import { TelegramPoller } from "./notifications/telegram.js";
 import { registerNotificationRoutes } from "./api/notifications.js";
+import { AssistantService } from "./assistant/service.js";
+import { installAssistantTelegramHandlers } from "./assistant/telegramBridge.js";
+import { registerAssistantRoutes } from "./api/assistant.js";
 
 export function buildApp({ config }: { config: AppConfig }) {
   const server = Fastify({
@@ -251,7 +254,43 @@ export function buildApp({ config }: { config: AppConfig }) {
       return lines.join("\n");
     },
   });
-  telegramPoller.installDefaultHandlers();
+  const assistantService = new AssistantService(
+    database.db,
+    database.sqlite,
+    config,
+    llmProviders,
+    profileService,
+    projectService,
+    topicService,
+    automationService,
+    orchestrator,
+    publishService,
+    usageService,
+    sceneService,
+  );
+  installAssistantTelegramHandlers(telegramPoller, assistantService, {
+    sqlite: database.sqlite,
+    getAutomationStatusText: async () => {
+      const status = await automationService.getStatus();
+      const paused = getAutomationPaused(database.sqlite);
+      const lines = [
+        `<b>Tự động hoá</b>: ${paused ? "⏸ tạm dừng" : "đang chạy"}`,
+        ...status.profiles.slice(0, 8).map((p) =>
+          `• ${p.profileName}: ${p.enabled ? "bật" : "tắt"} · hôm nay ${p.todayCount}`
+        ),
+      ];
+      if (status.profiles.length === 0) lines.push("— chưa có hồ sơ");
+      return lines.join("\n");
+    },
+  });
+  notificationService.setWaitingApprovalButtons((event) => {
+    const action = assistantService.createPendingApproveGate({
+      projectId: event.projectId,
+      gate: event.gate,
+      projectTitle: event.project,
+    });
+    return [[{ text: "Duyệt", data: `pa:${action.id}:y` }]];
+  });
   publishService.setNotificationService(notificationService);
   orchestrator.setNotificationService(notificationService);
   publishTicker.setNotifications(notificationService);
@@ -303,6 +342,9 @@ export function buildApp({ config }: { config: AppConfig }) {
     service: notificationService,
     poller: telegramPoller,
   });
+  server.decorate("vgAssistant", {
+    service: assistantService,
+  });
 
   server.register(cors, { origin: config.CORS_ORIGIN });
   registerHealthRoutes(server, database.sqlite);
@@ -333,6 +375,7 @@ export function buildApp({ config }: { config: AppConfig }) {
     notifications: notificationService,
     poller: telegramPoller,
   });
+  registerAssistantRoutes(server, assistantService);
   registerVoiceRoutes(server, ttsProviders, database.sqlite, projectService, jobRepository, config);
   registerSubtitleRoutes(server, database.sqlite, jobRepository, config);
   registerMusicRoutes(server, musicService, projectService, jobRepository);

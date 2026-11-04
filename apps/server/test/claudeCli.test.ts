@@ -1,10 +1,10 @@
 import { randomUUID } from "node:crypto";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { spawn, type ChildProcessWithoutNullStreams, type SpawnOptions } from "node:child_process";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { CLAUDE_CLI_FLAGS, ClaudeCliProvider } from "../src/providers/llm/claudeCli.js";
+import { buildClaudeArgs, CLAUDE_CLI_FLAGS, CLAUDE_SYSTEM_PROMPT_ARG_LIMIT, ClaudeCliProvider } from "../src/providers/llm/claudeCli.js";
 import { parseJsonCliResponse } from "../src/providers/llm/cliProvider.js";
 import type { LlmRequest } from "../src/providers/llm/types.js";
 
@@ -176,5 +176,26 @@ describe("Claude CLI token usage", () => {
       usage: { input_tokens: 2, cache_creation_input_tokens: 1500, cache_read_input_tokens: 9000, output_tokens: 40 },
     }));
     expect(parsed?.usage).toEqual({ inputTokens: 10502, outputTokens: 40 });
+  });
+});
+
+describe("buildClaudeArgs system prompt length", () => {
+  it("passes a short system prompt inline and a long one through a file", () => {
+    const dir = mkdtempSync(join(tmpdir(), "claude-args-"));
+    try {
+      const base = { messages: [{ role: "user", content: "hi" }] } as unknown as LlmRequest;
+      const short = buildClaudeArgs({ ...base, system: "ngắn" }, dir);
+      expect(short).toContain("ngắn");
+      expect(short).not.toContain("--system-prompt-file");
+
+      const longSystem = "x".repeat(CLAUDE_SYSTEM_PROMPT_ARG_LIMIT + 1);
+      const long = buildClaudeArgs({ ...base, system: longSystem }, dir);
+      expect(long).not.toContain(longSystem);
+      const fileIndex = long.indexOf("--system-prompt-file");
+      expect(fileIndex).toBeGreaterThan(-1);
+      expect(readFileSync(long[fileIndex + 1]!, "utf8")).toBe(longSystem);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 });

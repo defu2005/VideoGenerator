@@ -1,6 +1,17 @@
 import { createHash } from "node:crypto";
 import type { LlmProvider, LlmRequest } from "./types.js";
 
+let assistantChatScriptQueue: unknown[] = [];
+
+/** Test hook: queue structured AssistantChat steps (shifted per LLM call). */
+export function setAssistantChatScript(steps: unknown[]): void {
+  assistantChatScriptQueue = [...steps];
+}
+
+export function clearAssistantChatScript(): void {
+  assistantChatScriptQueue = [];
+}
+
 const researchFixture = {
   summary: "A concise, unverified overview prepared from model knowledge.",
   keyFacts: Array.from({ length: 5 }, (_, index) => ({
@@ -240,6 +251,13 @@ export class MockLlmProvider implements LlmProvider {
         routes,
         notes: "Đề xuất mock dựa trên catalog hiện có.",
       }, req.model);
+    }
+    if (req.schemaName === "AssistantChat") {
+      if (assistantChatScriptQueue.length > 0) {
+        const step = assistantChatScriptQueue.shift();
+        return response(step, req.model);
+      }
+      return response({ reply: "Đã nhận.", done: true }, req.model);
     }
     if (req.schemaName === "GuidelineCheck") {
       return response({ findings: [] }, req.model);

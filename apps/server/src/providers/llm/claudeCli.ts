@@ -1,4 +1,4 @@
-import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { basename, delimiter, dirname, isAbsolute, join, resolve } from "node:path";
 import type { LlmRequest, LlmResponse } from "./types.js";
 import {
@@ -39,7 +39,7 @@ export class ClaudeCliProvider extends CliProviderBase {
       timeoutMs,
       defaultModel,
       hint: "Install Claude Code CLI and run `claude` once to log in",
-      args: (request) => buildClaudeArgs(request),
+      args: (request, cwd) => buildClaudeArgs(request, cwd),
       formatPrompt: formatClaudePrompt,
       parseResponse: parseJsonCliResponse,
       classifyFailure: classifyClaudeFailure,
@@ -71,14 +71,25 @@ export class ClaudeCliProvider extends CliProviderBase {
   }
 }
 
-export function buildClaudeArgs(request: LlmRequest): string[] {
+/**
+ * Windows limits a command line to ~32k chars. Long system prompts (the assistant's tool
+ * catalog, for example) go through a file in the run folder instead.
+ */
+export const CLAUDE_SYSTEM_PROMPT_ARG_LIMIT = 6000;
+
+export function buildClaudeArgs(request: LlmRequest, cwd?: string): string[] {
   const hasImages = Boolean(request.images?.length);
   const imageDir = hasImages ? dirname(request.images![0]!.path) : null;
+  let systemArgs = [CLAUDE_CLI_FLAGS.systemPrompt, request.system];
+  if (cwd && request.system.length > CLAUDE_SYSTEM_PROMPT_ARG_LIMIT) {
+    const file = join(cwd, "system-prompt.md");
+    writeFileSync(file, request.system, "utf8");
+    systemArgs = ["--system-prompt-file", file];
+  }
   return [
     CLAUDE_CLI_FLAGS.print,
     ...CLAUDE_CLI_FLAGS.outputFormat,
-    CLAUDE_CLI_FLAGS.systemPrompt,
-    request.system,
+    ...systemArgs,
     // Reading images needs one tool turn per image plus the final answer.
     ...(hasImages ? ["--max-turns", String(request.images!.length + 2)] : CLAUDE_CLI_FLAGS.maxTurns),
     ...(hasImages

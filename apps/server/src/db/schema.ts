@@ -598,3 +598,37 @@ export const reviewProposalApplications = sqliteTable("review_proposal_applicati
   index("review_proposal_applications_message_idx").on(table.messageId),
   uniqueIndex("review_proposal_applications_uq").on(table.messageId, table.proposalIndex),
 ]);
+
+export const assistantConversations = sqliteTable("assistant_conversations", {
+  id: text("id").primaryKey(),
+  channel: text("channel", { enum: ["web", "telegram"] }).notNull(),
+  title: text("title").notNull(),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+});
+
+export const assistantMessages = sqliteTable("assistant_messages", {
+  id: text("id").primaryKey(),
+  conversationId: text("conversation_id").notNull().references(() => assistantConversations.id, { onDelete: "cascade" }),
+  role: text("role", { enum: ["user", "assistant", "tool"] }).notNull(),
+  content: text("content", { mode: "json" }).$type<Record<string, unknown>>().notNull(),
+  createdAt: text("created_at").notNull(),
+}, (table) => [
+  index("assistant_messages_conversation_idx").on(table.conversationId),
+]);
+
+export const assistantPendingActions = sqliteTable("assistant_pending_actions", {
+  id: text("id").primaryKey(),
+  conversationId: text("conversation_id").notNull().references(() => assistantConversations.id, { onDelete: "cascade" }),
+  tool: text("tool").notNull(),
+  args: text("args", { mode: "json" }).$type<unknown>().notNull(),
+  summary: text("summary").notNull(),
+  status: text("status", {
+    enum: ["pending", "confirmed", "rejected", "expired", "failed"],
+  }).notNull(),
+  result: text("result", { mode: "json" }).$type<unknown | null>(),
+  createdAt: text("created_at").notNull(),
+  expiresAt: text("expires_at").notNull(),
+}, (table) => [
+  index("assistant_pending_actions_conversation_idx").on(table.conversationId),
+]);

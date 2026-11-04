@@ -22,7 +22,7 @@ import {
   saveQuietQueue,
   TELEGRAM_BOT_TOKEN_KEY,
 } from "../settings/notifications.js";
-import { escapeHtml, maskTelegramSecret, TelegramClient } from "./telegram.js";
+import { escapeHtml, maskTelegramSecret, TelegramClient, type InlineButton } from "./telegram.js";
 
 const DEDUP_MS = 6 * 60 * 60 * 1000;
 const RETENTION_DAYS = 30;
@@ -38,6 +38,8 @@ export type NotificationServiceDeps = {
   fetchImpl?: typeof fetch;
   now?: () => Date;
   sleep?: (ms: number) => Promise<void>;
+  /** Optional: buttons for waiting_approval (e.g. Duyệt / Xem via assistant pending). */
+  waitingApprovalButtons?: (event: Extract<NotificationEvent, { kind: "waiting_approval" }>) => InlineButton[][] | null;
 };
 
 export class NotificationService {
@@ -45,11 +47,17 @@ export class NotificationService {
   private readonly sleepFn: (ms: number) => Promise<void>;
   private readonly fetchImpl: typeof fetch;
   private lastTokenCheckAt = 0;
+  private waitingApprovalButtons?: NotificationServiceDeps["waitingApprovalButtons"];
 
   constructor(private readonly deps: NotificationServiceDeps) {
     this.now = deps.now ?? (() => new Date());
     this.sleepFn = deps.sleep ?? ((ms) => new Promise((r) => setTimeout(r, ms)));
     this.fetchImpl = deps.fetchImpl ?? ((...args: Parameters<typeof fetch>) => fetch(...args));
+    this.waitingApprovalButtons = deps.waitingApprovalButtons;
+  }
+
+  setWaitingApprovalButtons(fn: NotificationServiceDeps["waitingApprovalButtons"]): void {
+    this.waitingApprovalButtons = fn;
   }
 
   /** Never throws into the caller. */
@@ -218,10 +226,21 @@ export class NotificationService {
     }
 
     const client = new TelegramClient(token, this.fetchImpl);
+    let buttons: InlineButton[][] | undefined;
+    if (event.kind === "waiting_approval" && !event.unexpectedAutoStop && this.waitingApprovalButtons) {
+      try {
+        buttons = this.waitingApprovalButtons(event) ?? undefined;
+      } catch (error) {
+        this.deps.logger.debug(
+          { err: error instanceof Error ? error.message : String(error) },
+          "waiting_approval buttons skipped",
+        );
+      }
+    }
     let lastError: string | null = null;
     for (let attempt = 1; attempt <= MAX_SEND_ATTEMPTS; attempt += 1) {
       try {
-        await client.sendMessage(chatId, message);
+        await client.sendMessage(chatId, message, buttons?.length ? { buttons } : {});
         this.insertLog({
           kind: event.kind,
           subjectKey,

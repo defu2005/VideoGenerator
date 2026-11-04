@@ -174,6 +174,37 @@
 .review-chat-input textarea { width: 100%; resize: vertical; border: 1px solid #d8deea; border-radius: 8px; padding: 8px 10px; font: inherit; }
 .review-chat-input-actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 8px; }
 .review-token-estimate { margin-right: auto; color: #78839a; font-size: 11px; }
+.assistant-page .assistant-settings { margin-bottom: 0; }
+.assistant-layout { display: grid; grid-template-columns: minmax(220px, 280px) 1fr; gap: 16px; align-items: start; }
+.assistant-conversations h2, .assistant-chat h2, .assistant-pending-list h3 { margin: 0 0 10px; font-size: 14px; }
+.assistant-conversation-list { margin: 0; padding: 0; list-style: none; display: grid; gap: 6px; }
+.assistant-conversation-list button { display: grid; gap: 2px; width: 100%; border: 1px solid #e4e8f1; border-radius: 8px; background: #fff; padding: 8px 10px; text-align: left; cursor: pointer; font: inherit; }
+.assistant-conversation-list button:hover { border-color: #c5cee3; }
+.assistant-conv-active { border-color: #405ac5 !important; background: #eef3ff !important; }
+.assistant-conv-title { font-size: 12px; font-weight: 650; color: #172033; }
+.assistant-conv-time { font-size: 10px; color: #78839a; }
+.assistant-messages { display: grid; gap: 10px; max-height: min(52vh, 480px); overflow: auto; margin-bottom: 12px; }
+.assistant-message { border-radius: 8px; background: #f7f8fb; padding: 10px 12px; }
+.assistant-message-user { background: #eef3ff; }
+.assistant-message header { margin-bottom: 4px; color: #59667d; font-size: 10px; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; }
+.assistant-message p { margin: 0; white-space: pre-wrap; font-size: 13px; }
+.assistant-clarify-question { margin-top: 6px !important; color: #44506a; font-size: 12px !important; }
+.assistant-quick-replies { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.assistant-chip { border: 1px solid #d8deea; border-radius: 999px; background: #fff; padding: 5px 10px; color: #44506a; font-size: 11px; cursor: pointer; }
+.assistant-chip:hover { border-color: #405ac5; color: #405ac5; }
+.assistant-tool-line { margin-top: 6px; font-size: 11px; color: #78839a; }
+.assistant-tool-line summary { cursor: pointer; }
+.assistant-empty { margin: 0; color: #78839a; font-size: 12px; }
+.assistant-pending-list { display: grid; gap: 8px; margin-bottom: 12px; }
+.assistant-pending-card { display: grid; gap: 8px; border: 1px solid #e4e8f1; border-radius: 8px; background: #fffaf2; padding: 10px 12px; }
+.assistant-pending-card p { margin: 0; font-size: 12px; color: #38445a; }
+.assistant-pending-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.assistant-input { display: grid; gap: 8px; }
+.assistant-input textarea { width: 100%; resize: vertical; border: 1px solid #d8deea; border-radius: 8px; padding: 8px 10px; font: inherit; }
+.assistant-input-actions { display: flex; justify-content: flex-end; gap: 8px; }
+@media (max-width: 900px) {
+  .assistant-layout { grid-template-columns: 1fr; }
+}
 .voice-upload { position: relative; overflow: hidden; }
 .voice-upload input { position: absolute; width: 1px; height: 1px; opacity: 0; }
 .voice-empty { padding: 24px; }
@@ -900,3 +931,12 @@ button:disabled { cursor: not-allowed; opacity: .58; }
 .notifications-page table { width: 100%; border-collapse: collapse; font-size: 12px; }
 .notifications-page th, .notifications-page td { border-bottom: 1px solid #eef1f6; padding: 8px 10px; text-align: left; vertical-align: top; color: #38445a; }
 .notifications-page th { color: #8a94a8; font-size: 10px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; }
+
+/* Assistant page layout */
+.assistant-page { display: grid; gap: 16px; }
+.assistant-page .page-heading p:not(.eyebrow) { margin: 6px 0 0; color: #59667d; font-size: 13px; }
+.assistant-page .panel { padding: 16px 18px; }
+.assistant-page .assistant-settings h2 { margin: 0 0 10px; color: #273046; font-size: 14px; }
+.assistant-page .field-checkbox { font-size: 13px; color: #38445a; }
+.assistant-page .field-checkbox input { width: 16px; height: 16px; margin: 0; }
+.assistant-chat { min-height: 320px; }
