@@ -5,6 +5,7 @@ import type { PublishService } from "./publishService.js";
 import type { PublisherRegistry } from "./registry.js";
 import type { PublishTicker } from "./ticker.js";
 import type { TokenVault } from "./tokenVault.js";
+import type { TikTokPublisher } from "./tiktokPublisher.js";
 import type { YouTubePublisher } from "./youtubePublisher.js";
 import type { AutomationService } from "../services/automationService.js";
 import type { TopicService } from "../services/topicService.js";
@@ -14,6 +15,7 @@ declare module "fastify" {
     vgPublish: {
       mock: MockPublisher | null;
       youtube: YouTubePublisher;
+      tiktok: TikTokPublisher;
       service: PublishService;
       vault: TokenVault;
       ticker: PublishTicker;

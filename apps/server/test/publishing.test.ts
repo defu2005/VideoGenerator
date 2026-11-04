@@ -231,12 +231,12 @@ describe("canConnect / connectBlockedReason", () => {
     expect(body.connectBlockedReason).toBeNull();
   });
 
-  it("blocks platforms that still lack a publisher (e.g. TikTok)", async () => {
+  it("blocks platforms that still lack a publisher (e.g. Facebook Reels)", async () => {
     const profile = await createProfile();
     const created = await app.inject({
       method: "POST",
       url: `/api/profiles/${profile.id}/accounts`,
-      payload: { platform: "tiktok", displayName: "TT" },
+      payload: { platform: "facebook_reels", displayName: "FB" },
     });
     expect(created.statusCode).toBe(201);
     const account = created.json<PlatformAccount>();
@@ -249,6 +249,23 @@ describe("canConnect / connectBlockedReason", () => {
     const body = detail.json();
     expect(body.canConnect).toBe(false);
     expect(body.connectBlockedReason).toBe("Nền tảng này chưa được hỗ trợ đăng tự động");
+  });
+
+  it("blocks TikTok when publisher exists but app credentials are missing", async () => {
+    const profile = await createProfile();
+    const created = await app.inject({
+      method: "POST",
+      url: `/api/profiles/${profile.id}/accounts`,
+      payload: { platform: "tiktok", displayName: "TT" },
+    });
+    const account = created.json<PlatformAccount>();
+
+    const detail = await app.inject({
+      method: "GET",
+      url: `/api/profiles/${profile.id}/accounts/${account.id}/connection`,
+    });
+    expect(detail.json().canConnect).toBe(false);
+    expect(detail.json().connectBlockedReason).toContain("Chưa có thông tin ứng dụng");
   });
 
   it("blocks YouTube when publisher exists but app credentials are missing", async () => {

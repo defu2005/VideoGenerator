@@ -14,7 +14,13 @@ const TTL_MS = 10 * 60 * 1000;
 export class OAuthStateStore {
   private readonly pending = new Map<string, OAuthPending>();
 
-  create(input: { accountId: string; platform: string; redirectUri: string }): {
+  create(input: {
+    accountId: string;
+    platform: string;
+    redirectUri: string;
+    /** TikTok Login Kit desktop requires hex(SHA-256(verifier)); Google uses base64url. */
+    challengeEncoding?: "base64url" | "hex";
+  }): {
     state: string;
     codeVerifier: string;
     codeChallenge: string;
@@ -22,7 +28,10 @@ export class OAuthStateStore {
     this.sweep();
     const state = randomBytes(24).toString("base64url");
     const codeVerifier = randomBytes(32).toString("base64url");
-    const codeChallenge = createHash("sha256").update(codeVerifier).digest("base64url");
+    const hash = createHash("sha256").update(codeVerifier);
+    const codeChallenge = input.challengeEncoding === "hex"
+      ? hash.digest("hex")
+      : hash.digest("base64url");
     this.pending.set(state, {
       accountId: input.accountId,
       platform: input.platform,

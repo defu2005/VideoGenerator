@@ -68,6 +68,7 @@ import { createPublisherRegistry } from "./publishing/registry.js";
 import { OAuthStateStore } from "./publishing/oauthState.js";
 import { PublishService } from "./publishing/publishService.js";
 import { PublishTicker } from "./publishing/ticker.js";
+import { TikTokPublisher } from "./publishing/tiktokPublisher.js";
 import { YouTubePublisher } from "./publishing/youtubePublisher.js";
 import { PublishExecutor } from "./stages/publish/publishExecutor.js";
 import { registerOAuthRoutes } from "./api/oauth.js";
@@ -174,9 +175,15 @@ export function buildApp({ config }: { config: AppConfig }) {
     vault: tokenVault,
     sqlite: database.sqlite,
   });
+  const tiktokPublisher = new TikTokPublisher({
+    config,
+    vault: tokenVault,
+    sqlite: database.sqlite,
+  });
   const { registry: publisherRegistry, mock: mockPublisher } = createPublisherRegistry({
     enableMock: config.LLM_ENABLE_MOCK,
     youtube: youtubePublisher,
+    tiktok: tiktokPublisher,
   });
   const oauthState = new OAuthStateStore();
   const publishService = new PublishService(
@@ -225,6 +232,7 @@ export function buildApp({ config }: { config: AppConfig }) {
   server.decorate("vgPublish", {
     mock: mockPublisher,
     youtube: youtubePublisher,
+    tiktok: tiktokPublisher,
     service: publishService,
     vault: tokenVault,
     ticker: publishTicker,

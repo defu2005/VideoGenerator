@@ -484,6 +484,7 @@ export class PublishService {
       aiDisclosure: true,
       ...(publishSettings.categoryId ? { categoryId: publishSettings.categoryId } : {}),
       ...(publishSettings.playlistId ? { playlistId: publishSettings.playlistId } : {}),
+      ...(publishSettings.tiktokUploadMode ? { tiktokUploadMode: publishSettings.tiktokUploadMode } : {}),
       ...(durationSec != null ? { durationSec: Number(durationSec) } : {}),
       ...(thumbnailPath ? { thumbnailPath } : {}),
     };
@@ -654,8 +655,12 @@ export class PublishService {
     autoPublish: boolean;
     categoryId?: string;
     playlistId?: string;
+    tiktokUploadMode?: "direct_post" | "inbox";
   } {
     const parsed = typeof raw === "string" ? JSON.parse(raw) as Record<string, unknown> : raw;
+    const tiktokUploadMode = parsed.tiktokUploadMode === "inbox" || parsed.tiktokUploadMode === "direct_post"
+      ? parsed.tiktokUploadMode
+      : undefined;
     return {
       visibility: (parsed.visibility as PublishVisibility) ?? "public",
       autoPublish: Boolean(parsed.autoPublish),
@@ -665,6 +670,7 @@ export class PublishService {
       ...(typeof parsed.playlistId === "string" && parsed.playlistId.trim()
         ? { playlistId: parsed.playlistId.trim() }
         : {}),
+      ...(tiktokUploadMode ? { tiktokUploadMode } : {}),
     };
   }
 

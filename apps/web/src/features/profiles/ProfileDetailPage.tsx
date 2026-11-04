@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { Link, Navigate, useParams } from "react-router-dom";
 import {
   ProfileDefaultBriefSchema,
+  TIKTOK_SETUP_HELP_VI,
   YOUTUBE_PLAYLIST_SCOPE_NOTE_VI,
   YOUTUBE_SETUP_HELP_VI,
   recommendBrief,
@@ -10,6 +11,7 @@ import {
   type PlatformAccount,
   type PlatformId,
   type ProfileDetail,
+  type TikTokUploadModeValue,
 } from "@vg/shared";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ApiRequestError } from "../../services/apiClient";
@@ -498,6 +500,30 @@ function AccountCard({
               </pre>
             </details>
           )}
+          {account.platform === "tiktok" && (
+            <details style={{ marginTop: 8 }}>
+              <summary style={{ cursor: "pointer", fontWeight: 600 }}>Hướng dẫn kết nối TikTok</summary>
+              <pre
+                className="page-subtitle"
+                style={{
+                  whiteSpace: "pre-wrap",
+                  margin: "0.5rem 0 0",
+                  fontFamily: "inherit",
+                  fontSize: 13,
+                  lineHeight: 1.45,
+                }}
+              >
+                {TIKTOK_SETUP_HELP_VI}
+              </pre>
+            </details>
+          )}
+          {account.platform === "tiktok" && (
+            <p className="field-hint" style={{ margin: "0.5rem 0 0" }}>
+              {account.publishSettings.tiktokUploadMode === "inbox"
+                ? "Chế độ: Gửi vào hộp thư nháp (hoàn tất trong app TikTok)."
+                : "Chế độ: Direct Post. App chưa duyệt audit thì chỉ đăng được riêng tư (SELF_ONLY)."}
+            </p>
+          )}
           {account.platform === "youtube" && account.publishSettings.playlistId && (
             <p className="field-hint" style={{ margin: "0.5rem 0 0" }}>{YOUTUBE_PLAYLIST_SCOPE_NOTE_VI}</p>
           )}
@@ -616,11 +642,13 @@ function AccountsTab({ profile }: { profile: ProfileDetail }) {
   const [autoPublish, setAutoPublish] = useState(false);
   const [categoryId, setCategoryId] = useState("");
   const [playlistId, setPlaylistId] = useState("");
+  const [tiktokUploadMode, setTiktokUploadMode] = useState<TikTokUploadModeValue>("direct_post");
   const [error, setError] = useState("");
   const [editing, setEditing] = useState<PlatformAccount | null>(null);
 
   const formPlatform = editing?.platform ?? platform;
   const showYoutubePublishExtras = formPlatform === "youtube";
+  const showTiktokPublishExtras = formPlatform === "tiktok";
 
   async function submit(event: FormEvent) {
     event.preventDefault();
@@ -632,6 +660,9 @@ function AccountsTab({ profile }: { profile: ProfileDetail }) {
           playlistId: playlistId.trim(),
         }
         : {};
+      const tiktokExtras = showTiktokPublishExtras
+        ? { tiktokUploadMode }
+        : {};
       if (editing) {
         await update.mutateAsync({
           profileId: profile.id,
@@ -640,7 +671,7 @@ function AccountsTab({ profile }: { profile: ProfileDetail }) {
             displayName,
             handle: handle.trim() || null,
             ...(format ? { format } : {}),
-            publishSettings: { visibility, autoPublish, ...youtubeExtras },
+            publishSettings: { visibility, autoPublish, ...youtubeExtras, ...tiktokExtras },
           },
         });
         setEditing(null);
@@ -652,7 +683,7 @@ function AccountsTab({ profile }: { profile: ProfileDetail }) {
             displayName,
             handle: handle.trim() || null,
             ...(format ? { format } : {}),
-            publishSettings: { visibility, autoPublish, ...youtubeExtras },
+            publishSettings: { visibility, autoPublish, ...youtubeExtras, ...tiktokExtras },
           },
         });
       }
@@ -663,6 +694,7 @@ function AccountsTab({ profile }: { profile: ProfileDetail }) {
       setAutoPublish(false);
       setCategoryId("");
       setPlaylistId("");
+      setTiktokUploadMode("direct_post");
     } catch (err) {
       setError(err instanceof ApiRequestError || err instanceof Error ? err.message : "Thao tác thất bại");
     }
@@ -678,6 +710,7 @@ function AccountsTab({ profile }: { profile: ProfileDetail }) {
     setAutoPublish(account.publishSettings.autoPublish);
     setCategoryId(account.publishSettings.categoryId ?? "");
     setPlaylistId(account.publishSettings.playlistId ?? "");
+    setTiktokUploadMode(account.publishSettings.tiktokUploadMode === "inbox" ? "inbox" : "direct_post");
   }
 
   return (
@@ -771,6 +804,23 @@ function AccountsTab({ profile }: { profile: ProfileDetail }) {
               <p className="field-hint">{YOUTUBE_PLAYLIST_SCOPE_NOTE_VI}</p>
             )}
           </>
+        )}
+        {showTiktokPublishExtras && (
+          <label className="form-field">
+            <span>Cách đăng TikTok</span>
+            <select
+              value={tiktokUploadMode}
+              onChange={(event) => setTiktokUploadMode(event.target.value as TikTokUploadModeValue)}
+            >
+              <option value="direct_post">Direct Post (đăng thẳng)</option>
+              <option value="inbox">Gửi vào hộp thư nháp</option>
+            </select>
+            <small className="field-hint">
+              {tiktokUploadMode === "inbox"
+                ? "Tải lên inbox; bạn mở app TikTok để chỉnh và đăng."
+                : "App chưa được TikTok duyệt thì Direct Post chỉ đăng được riêng tư (SELF_ONLY)."}
+            </small>
+          </label>
         )}
         <div className="dialog-actions">
           {editing && (

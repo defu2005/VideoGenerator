@@ -27,6 +27,10 @@ export type AccountConnection = z.infer<typeof AccountConnectionSchema>;
 export const PublishVisibilitySchema = z.enum(["public", "unlisted", "private"]);
 export type PublishVisibility = z.infer<typeof PublishVisibilitySchema>;
 
+/** TikTok: Direct Post vs inbox draft upload (finish in the TikTok app). */
+export const TikTokUploadModeValueSchema = z.enum(["direct_post", "inbox"]);
+export type TikTokUploadModeValue = z.infer<typeof TikTokUploadModeValueSchema>;
+
 /** Loose publish settings; platform-specific keys may appear. */
 export const PublishSettingsSchema = z.object({
   visibility: PublishVisibilitySchema.default("public"),
@@ -34,6 +38,8 @@ export const PublishSettingsSchema = z.object({
   categoryId: z.string().optional(),
   defaultTags: z.array(z.string()).optional(),
   playlistId: z.string().optional(),
+  /** TikTok only: direct_post (Content Posting) or inbox (video.upload draft). */
+  tiktokUploadMode: TikTokUploadModeValueSchema.optional(),
 }).passthrough();
 export type PublishSettings = z.infer<typeof PublishSettingsSchema>;
 
@@ -43,6 +49,7 @@ export const PublishSettingsInputSchema = z.object({
   categoryId: z.string().optional(),
   defaultTags: z.array(z.string()).optional(),
   playlistId: z.string().optional(),
+  tiktokUploadMode: TikTokUploadModeValueSchema.optional(),
 }).passthrough();
 
 export function defaultFormatForPlatform(platform: PlatformId): AccountFormat {

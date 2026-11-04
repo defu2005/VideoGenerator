@@ -1,6 +1,7 @@
 import type { PlatformId } from "@vg/shared";
 import { MockPublisher } from "./mockPublisher.js";
 import type { Publisher } from "./types.js";
+import type { TikTokPublisher } from "./tiktokPublisher.js";
 import type { YouTubePublisher } from "./youtubePublisher.js";
 
 export class PublisherRegistry {
@@ -34,6 +35,7 @@ export class PublisherRegistry {
 export function createPublisherRegistry(options: {
   enableMock: boolean;
   youtube?: YouTubePublisher;
+  tiktok?: TikTokPublisher;
 }): {
   registry: PublisherRegistry;
   mock: MockPublisher | null;
@@ -42,6 +44,9 @@ export function createPublisherRegistry(options: {
   let mock: MockPublisher | null = null;
   if (options.youtube) {
     registry.register(options.youtube);
+  }
+  if (options.tiktok) {
+    registry.register(options.tiktok);
   }
   if (options.enableMock) {
     mock = new MockPublisher();

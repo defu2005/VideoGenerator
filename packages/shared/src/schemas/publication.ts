@@ -84,8 +84,10 @@ export const PublishInputSchema = z.object({
   categoryId: z.string().optional(),
   /** YouTube playlist id — requires the broader `youtube` OAuth scope. */
   playlistId: z.string().optional(),
-  /** Known duration of the file; used for Shorts rules. */
+  /** Known duration of the file; used for Shorts / TikTok duration limits. */
   durationSec: z.number().nonnegative().optional(),
+  /** TikTok: Direct Post vs inbox draft. Default direct_post when omitted. */
+  tiktokUploadMode: z.enum(["direct_post", "inbox"]).optional(),
 }).strict();
 export type PublishInput = z.infer<typeof PublishInputSchema>;
 

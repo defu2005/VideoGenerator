@@ -248,4 +248,32 @@ describe("ProfileDetailPage accounts tab", () => {
     expect(await screen.findByText(/YouTube Data API v3/)).toBeInTheDocument();
     expect(screen.getByText(/xin quyền đầy đủ youtube/i)).toBeInTheDocument();
   });
+
+  it("shows TikTok setup help and inbox mode hint", async () => {
+    const tiktokAccount: PlatformAccount = {
+      ...account,
+      platform: "tiktok",
+      format: "vertical",
+      publishSettings: { visibility: "public", autoPublish: false, tiktokUploadMode: "inbox" },
+    };
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.endsWith(`/profiles/${profileId}`) && (!init || !init.method || init.method === "GET")) {
+        return jsonResponse({ ...profile, accounts: [tiktokAccount] });
+      }
+      if (url.includes(`/accounts/${accountId}/connection`)) {
+        return jsonResponse(connectionDetail({
+          redirectUri: "http://127.0.0.1:3001/api/oauth/tiktok/callback",
+        }));
+      }
+      return jsonResponse({ error: { code: "NOT_FOUND", message: url } }, 404);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    renderAccountsTab();
+    expect(await screen.findByText("Hướng dẫn kết nối TikTok")).toBeInTheDocument();
+    fireEvent.click(screen.getByText("Hướng dẫn kết nối TikTok"));
+    expect(await screen.findByText(/Content Posting API/)).toBeInTheDocument();
+    expect(screen.getByText(/Chế độ: Gửi vào hộp thư nháp/i)).toBeInTheDocument();
+  });
 });

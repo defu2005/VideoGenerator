@@ -41,6 +41,8 @@ export function registerOAuthRoutes(
       accountId,
       platform,
       redirectUri,
+      // TikTok docs: code_challenge = lowercase hex of SHA-256(verifier).
+      ...(platform === "tiktok" ? { challengeEncoding: "hex" as const } : {}),
     });
     const authUrl = publisher.oauth.buildAuthUrl({
       accountId,
