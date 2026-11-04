@@ -17,7 +17,7 @@
 | 2 | [TASK-018](TASK-018.md) | Optional pre-render review chat with the LLM | docs/tasks/TASK-018.md |
 | 3 | [TASK-013](TASK-013.md) | Render versions, history, export/download | docs/tasks/TASK-013.md |
 | 4 | [TASK-004G](TASK-004G.md) | MAX mode: vision-checked images + vision check of rendered frames | docs/tasks/TASK-004G.md |
-| 5 | [TASK-007C](TASK-007C.md) | "Nhờ AI tìm ảnh": LLM web search for images | docs/tasks/TASK-007C.md |
+| 5 | [TASK-007C](TASK-007C.md) | Web image search: Brave API + Gemini grounding (free) + code crawl (guide replaces the LLM-agent spec) | docs/tasks/TASK-007C.md |
 | 6 | [TASK-007B](TASK-007B.md) | More image/video sources | docs/tasks/TASK-007B.md |
 
 The spec in `docs/tasks/` is the requirement. The guide in `docs/cursor/` gives the current code state, the file map and the steps. When they disagree, the guide wins (it is newer). Each task depends on the ones above it; don't skip ahead.
