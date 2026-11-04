@@ -73,3 +73,80 @@ export function ensureFileDirectory(filePath: string): string {
   const folder = dirname(path);
   return folder;
 }
+
+export type MediaProbe = { durationSec: number; width: number; height: number; hasVideo: boolean; hasAudio: boolean };
+
+export type FfmpegRunOptions = { cwd?: string; signal?: AbortSignal; onStdout?: (chunk: string) => void };
+
+/** Runs ffmpeg; rejects with the stderr tail on a non-zero exit. Abort kills the process. */
+export function runFfmpeg(args: string[], options: FfmpegRunOptions = {}): Promise<{ stdout: string; stderr: string }> {
+  return runTool(resolveFfmpegPath(), args, options);
+}
+
+function runTool(command: string, args: string[], options: FfmpegRunOptions): Promise<{ stdout: string; stderr: string }> {
+  return new Promise((resolvePromise, rejectPromise) => {
+    const { signal } = options;
+    if (signal?.aborted) {
+      rejectPromise(new DOMException("aborted", "AbortError"));
+      return;
+    }
+    const child = spawn(command, args, { cwd: options.cwd, stdio: ["ignore", "pipe", "pipe"], windowsHide: true });
+    let settled = false;
+    const onAbort = () => {
+      child.kill("SIGKILL");
+      if (!settled) {
+        settled = true;
+        rejectPromise(new DOMException("aborted", "AbortError"));
+      }
+    };
+    signal?.addEventListener("abort", onAbort, { once: true });
+    let stdout = "";
+    let stderr = "";
+    child.stdout.on("data", (chunk: Buffer) => {
+      const text = chunk.toString();
+      if (stdout.length < 1_000_000) stdout += text;
+      options.onStdout?.(text);
+    });
+    child.stderr.on("data", (chunk: Buffer) => {
+      stderr += chunk.toString();
+      if (stderr.length > 2_000_000) stderr = stderr.slice(-1_000_000);
+    });
+    child.on("error", (error) => {
+      signal?.removeEventListener("abort", onAbort);
+      if (!settled) {
+        settled = true;
+        rejectPromise(error);
+      }
+    });
+    child.on("close", (code) => {
+      signal?.removeEventListener("abort", onAbort);
+      if (settled) return;
+      settled = true;
+      if (code !== 0) {
+        const tail = stderr.trim().split(/\r?\n/).slice(-8).join("\n");
+        rejectPromise(new Error(tail || `${command} exited with code ${code}`));
+        return;
+      }
+      resolvePromise({ stdout, stderr });
+    });
+  });
+}
+
+export async function probeMedia(file: string, signal?: AbortSignal): Promise<MediaProbe> {
+  const { stdout } = await runTool(resolveFfprobePath(), [
+    "-v", "error", "-show_entries", "format=duration:stream=codec_type,width,height", "-of", "json", file,
+  ], { signal });
+  const data = JSON.parse(stdout || "{}") as {
+    format?: { duration?: string };
+    streams?: { codec_type?: string; width?: number; height?: number }[];
+  };
+  const streams = data.streams ?? [];
+  const video = streams.find((stream) => stream.codec_type === "video");
+  return {
+    durationSec: Number.parseFloat(data.format?.duration ?? "0") || 0,
+    width: video?.width ?? 0,
+    height: video?.height ?? 0,
+    hasVideo: Boolean(video),
+    hasAudio: streams.some((stream) => stream.codec_type === "audio"),
+  };
+}

@@ -25,3 +25,5 @@ export * from "./schemas/music.js";
 export * from "./music/rank.js";
 export * from "./schemas/timeline.js";
 export * from "./timeline/build.js";
+export * from "./schemas/render.js";
+export * from "./render/plan.js";

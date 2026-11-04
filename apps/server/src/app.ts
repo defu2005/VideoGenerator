@@ -44,6 +44,9 @@ import { MusicService } from "./services/musicService.js";
 import { TimelineService } from "./services/timelineService.js";
 import { TimelineExecutor } from "./stages/timeline/timelineExecutor.js";
 import { registerTimelineRoutes } from "./api/timeline.js";
+import { RenderService } from "./services/renderService.js";
+import { RenderExecutor } from "./stages/render/renderExecutor.js";
+import { registerRenderRoutes } from "./api/render.js";
 import { AudioStore, MAX_AUDIO_BYTES } from "./services/audioStore.js";
 import { createMusicProviders } from "./providers/music/registry.js";
 import { probeDurationSec } from "./media/ffmpeg.js";
@@ -84,6 +87,7 @@ export function buildApp({ config }: { config: AppConfig }) {
     probeDurationSec,
   );
   const timelineService = new TimelineService(database.sqlite, config);
+  const renderService = new RenderService(database.sqlite, config, timelineService);
   const orchestrator = new PipelineOrchestrator(
     jobRepository,
     config,
@@ -115,6 +119,7 @@ export function buildApp({ config }: { config: AppConfig }) {
         SUBTITLE: new SubtitleExecutor(database.sqlite, config),
         MUSIC_SEARCH: new MusicSearchExecutor(musicService),
         TIMELINE: new TimelineExecutor(timelineService),
+        RENDER: new RenderExecutor(renderService),
       },
     ),
     config,
@@ -137,6 +142,7 @@ export function buildApp({ config }: { config: AppConfig }) {
   registerSubtitleRoutes(server, database.sqlite, jobRepository, config);
   registerMusicRoutes(server, musicService, projectService, jobRepository);
   registerTimelineRoutes(server, timelineService, projectService);
+  registerRenderRoutes(server, renderService, projectService);
 
   server.addHook("onReady", async () => worker.start());
   server.addHook("onClose", async () => {

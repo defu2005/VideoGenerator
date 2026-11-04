@@ -299,3 +299,21 @@ export const timelines = sqliteTable("timelines", {
   createdAt: text("created_at").notNull(),
   updatedAt: text("updated_at").notNull(),
 });
+
+export const renders = sqliteTable("renders", {
+  id: text("id").primaryKey(),
+  projectId: text("project_id").notNull().references(() => projects.id, { onDelete: "cascade" }),
+  inputHash: text("input_hash").notNull(),
+  status: text("status", { enum: ["DONE", "FAILED"] }).notNull(),
+  outputPath: text("output_path").notNull(),
+  creditsPath: text("credits_path"),
+  srtPath: text("srt_path"),
+  durationSec: real("duration_sec").notNull(),
+  sizeBytes: integer("size_bytes").notNull(),
+  width: integer("width").notNull(),
+  height: integer("height").notNull(),
+  report: text("report", { mode: "json" }).$type<Record<string, unknown>>().notNull(),
+  createdAt: text("created_at").notNull(),
+}, (table) => [
+  index("renders_project_created_idx").on(table.projectId, table.createdAt),
+]);
