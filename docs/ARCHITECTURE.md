@@ -61,7 +61,7 @@ videoGenerator/
 └── data/                       # gitignored: app.db, projects/<id>/...
 ```
 
-## 4. Chế độ Hybrid (agent ↔ user) — trọng tâm tiết kiệm token
+## 4. Chế độ Hybrid (agent ↔ user) — chất lượng video trước, token sau
 
 Mỗi project có `mode`, và mỗi stage có thể override `executor`.
 
@@ -99,7 +99,7 @@ Mọi LLM call ghi `usage` (tokens/requests, cost ước tính) vào job để U
 
 ### Quy tắc LLM (bắt buộc cho mọi task)
 1. **Ở mọi chế độ, việc code làm tốt tương đương thì viết code**, không gọi LLM: tách câu/scene, tính thời lượng, lọc trùng, format, subtitle, timeline, render, validate, chuẩn hóa output.
-2. LLM chỉ dùng ở chỗ **tăng chất lượng thật** (viết, biên tập, hiểu ngữ nghĩa). Mỗi tính năng LLM khai báo **bật ở chế độ nào** và **số call**.
+2. **Chỗ nào LLM làm video tốt hơn thì được gọi** (viết, biên tập, hiểu ngữ nghĩa, kiểm tra chính sách/định hướng kênh, góp ý trước render — quyết định của user 2026-11-04). Mỗi tính năng LLM khai báo **bật ở chế độ nào** và **số call**; ECO vẫn là lựa chọn tiết kiệm. Tác vụ do user chủ động bấm (chat góp ý) được phép ở mọi chế độ và hiện chi phí từng tin nhắn.
 3. Trước khi chạy, UI hiển thị **ước tính số call/token** theo chế độ đang chọn; không bao giờ vượt chế độ đã chọn một cách âm thầm.
 4. LLM vision luôn opt-in, báo chi phí trước; việc cần "mắt" vẫn có đường giao cho user ở review gate.
 5. Cache theo hash input; chạy lại không đổi input = 0 token. Pre-flight theo giới hạn provider.
@@ -226,6 +226,8 @@ Lỗi luôn có dạng: `{ "error": { "code": "PROJECT_NOT_FOUND", "message": ".
 | TASK-011 | Timeline builder + Timeline view cơ bản | 007, 009, 010 | 7 |
 | TASK-012 | FFmpeg render (Ken Burns, concat, ducking, subtitle, credits) + progress UI + kiểm tra render (ffprobe, frame đen/đứng, sync phụ đề; MAX: vision trên frame mỗi scene, theo hợp đồng TASK-004G §6) | 011 | 8 |
 | TASK-013 | Versioning + history, export/download | 012 | 9 |
+| TASK-017 | Bộ nguyên tắc nội dung: chính sách nền tảng (YouTube/TikTok/Facebook) + định hướng kênh (drama, storytelling…) + luật riêng; REMIND (chèn vào prompt) / FILTER (kiểm tra bằng code + LLM `guidelineCheck`, finding MUST → NEEDS_ATTENTION, không chặn cứng) | 004F | 9 |
+| TASK-018 | Chat góp ý với LLM trước render (tùy chọn): context do code dựng, LLM trả lời + đề xuất sửa có cấu trúc, user bấm áp dụng → stage liên quan STALE; không chặn render; có đường MCP 0 token | 011, 017 | 9 |
 
 ```
 001 ─┬─► 002
