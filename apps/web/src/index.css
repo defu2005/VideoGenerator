@@ -644,6 +644,13 @@ button:disabled { cursor: not-allowed; opacity: .58; }
 
 /* AI model settings (TASK-004F) */
 .ai-settings-page { max-width: 1180px; }
+.model-advisor { display: grid; gap: 0.85rem; margin-bottom: 1.25rem; }
+.model-advisor-head { display: flex; justify-content: space-between; gap: 1rem; align-items: flex-start; flex-wrap: wrap; }
+.model-advisor-head h2 { margin: 0 0 0.35rem; }
+.model-advisor-table-wrap { overflow-x: auto; }
+.model-advisor-table { width: 100%; border-collapse: collapse; font-size: 0.92rem; }
+.model-advisor-table th, .model-advisor-table td { text-align: left; padding: 0.55rem 0.65rem; border-bottom: 1px solid #d7dde8; vertical-align: top; }
+.model-advisor-table th { color: #5b667b; font-weight: 600; }
 .ai-gateway { display: grid; gap: 1rem; margin-bottom: 1.25rem; }
 .ai-gateway-head h2 { margin: 0 0 0.35rem; }
 .ai-gateway-status { display: flex; gap: 0.75rem; align-items: flex-start; }

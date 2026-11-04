@@ -3,12 +3,20 @@ import {
   LlmGatewaySettingsSchema,
   LlmProviderInfoSchema,
   LlmSettingsSchema,
+  ModelAdvisorApplyBodySchema,
+  ModelAdvisorApplyResultSchema,
+  ModelAdvisorProposeBodySchema,
+  ModelAdvisorProposalSchema,
   OmniRouteCatalogSchema,
   OmniRouteHealthSchema,
   type LlmGatewaySettings,
   type LlmProviderInfo,
   type LlmSettings,
   type LlmTaskId,
+  type ModelAdvisorApplyBody,
+  type ModelAdvisorApplyResult,
+  type ModelAdvisorProposeBody,
+  type ModelAdvisorProposal,
   type OmniRouteCatalog,
   type OmniRouteHealth,
 } from "@vg/shared";
@@ -106,6 +114,30 @@ export function refreshOmnirouteCatalog(): Promise<OmniRouteCatalog> {
   return apiRequest<unknown>("/llm/providers/omniroute/catalog/refresh", { method: "POST" }).then((response) => {
     const parsed = OmniRouteCatalogSchema.safeParse(response);
     if (!parsed.success) throw new Error("Máy chủ trả về catalog OmniRoute không hợp lệ");
+    return parsed.data;
+  });
+}
+
+export function proposeLlmAdvisor(body: ModelAdvisorProposeBody): Promise<ModelAdvisorProposal> {
+  const payload = ModelAdvisorProposeBodySchema.parse(body);
+  return apiRequest<unknown>("/llm/advisor/propose", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  }).then((response) => {
+    const parsed = ModelAdvisorProposalSchema.safeParse(response);
+    if (!parsed.success) throw new Error("Máy chủ trả về đề xuất model không hợp lệ");
+    return parsed.data;
+  });
+}
+
+export function applyLlmAdvisor(body: ModelAdvisorApplyBody): Promise<ModelAdvisorApplyResult> {
+  const payload = ModelAdvisorApplyBodySchema.parse(body);
+  return apiRequest<unknown>("/llm/advisor/apply", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  }).then((response) => {
+    const parsed = ModelAdvisorApplyResultSchema.safeParse(response);
+    if (!parsed.success) throw new Error("Máy chủ trả về kết quả áp dụng không hợp lệ");
     return parsed.data;
   });
 }

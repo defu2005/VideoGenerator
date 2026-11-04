@@ -228,7 +228,7 @@ export function buildApp({ config }: { config: AppConfig }) {
   registerDashboardRoutes(server, projectService);
   registerUsageRoutes(server, usageService, projectService);
   registerPipelineRoutes(server, projectService, jobRepository, orchestrator, events, sceneService);
-  registerLlmRoutes(server, llmProviders, database.sqlite, projectService);
+  registerLlmRoutes(server, llmProviders, database.sqlite, projectService, profileService);
   registerScriptRoutes(server, scriptService, projectService, config, guidelineService, database.sqlite);
   registerGuidelineRoutes(server, database.sqlite, projectService, guidelineService, llmProviders, config);
   registerSceneRoutes(server, sceneService);

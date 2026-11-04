@@ -5,6 +5,10 @@ import {
   LlmProviderIdSchema,
   LlmProviderInfoSchema,
   LlmSettingsSchema,
+  ModelAdvisorApplyBodySchema,
+  ModelAdvisorApplyResultSchema,
+  ModelAdvisorProposeBodySchema,
+  ModelAdvisorProposalSchema,
   OmniRouteCatalogSchema,
   OmniRouteHealthSchema,
   type LlmTaskId,
@@ -14,8 +18,10 @@ import type { FastifyInstance } from "fastify";
 import type Database from "better-sqlite3";
 import type { LlmProviderRegistry } from "../providers/llm/registry.js";
 import type { ProjectService } from "../services/projectService.js";
+import type { ProfileService } from "../services/profileService.js";
 import { getAppLlmSettings, saveAppLlmSettings } from "../providers/llm/settings.js";
 import { getLlmGatewaySettings, saveLlmGatewaySettings } from "../providers/llm/gatewaySettings.js";
+import { applyModelRoutes, proposeModelRoutes } from "../services/modelAdvisor.js";
 import { JobUsageSchema } from "@vg/shared";
 import { AppError } from "../lib/errors.js";
 import { LlmError } from "../providers/llm/types.js";
@@ -26,6 +32,9 @@ const TaskCatalogSchema = z.array(z.object({
   stage: z.string(),
   purpose: z.string(),
   tier: z.enum(["strong", "fast"]),
+  qualityWeight: z.union([z.literal(1), z.literal(2), z.literal(3)]),
+  needsVision: z.boolean().optional(),
+  needsLongContext: z.boolean().optional(),
   budgetFeature: z.string().optional(),
 }).strict());
 const ModelSuggestionsSchema = z.object({
@@ -48,6 +57,7 @@ export function registerLlmRoutes(
   registry: LlmProviderRegistry,
   sqlite: Database.Database,
   projects?: ProjectService,
+  profiles?: ProfileService,
   fetchImpl: typeof fetch = fetch,
 ): void {
   app.get("/api/llm/providers", {
@@ -168,6 +178,69 @@ export function registerLlmRoutes(
       }
     }
     return { routes };
+  });
+
+  app.post("/api/llm/advisor/propose", {
+    schema: {
+      body: ModelAdvisorProposeBodySchema,
+      response: {
+        200: ModelAdvisorProposalSchema,
+        400: ApiErrorSchema,
+        404: ApiErrorSchema,
+      },
+    },
+  }, async (request) => {
+    const body = ModelAdvisorProposeBodySchema.parse(request.body);
+    try {
+      return await proposeModelRoutes({
+        registry,
+        sqlite,
+        projects,
+        profiles,
+        scope: body.scope,
+        id: body.id,
+        budgetMode: body.budgetMode,
+        fetchImpl,
+      });
+    } catch (error) {
+      if (error instanceof AppError) throw error;
+      if (error instanceof LlmError) {
+        throw new AppError(
+          error.code === "LLM_NOT_CONFIGURED" ? 400 : 502,
+          error.code,
+          error.message,
+        );
+      }
+      throw error;
+    }
+  });
+
+  app.post("/api/llm/advisor/apply", {
+    schema: {
+      body: ModelAdvisorApplyBodySchema,
+      response: {
+        200: ModelAdvisorApplyResultSchema,
+        400: ApiErrorSchema,
+        404: ApiErrorSchema,
+      },
+    },
+  }, async (request) => {
+    const body = ModelAdvisorApplyBodySchema.parse(request.body);
+    try {
+      return await applyModelRoutes({
+        registry,
+        sqlite,
+        projects,
+        profiles,
+        scope: body.scope,
+        id: body.id,
+        proposalId: body.proposalId,
+        taskIds: body.taskIds,
+      });
+    } catch (error) {
+      if (error instanceof AppError) throw error;
+      throw error;
+    }
   });
 }
 

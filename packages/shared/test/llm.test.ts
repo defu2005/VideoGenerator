@@ -5,8 +5,11 @@ import {
   LlmRouteSchema,
   LlmSettingsInputSchema,
   LlmSettingsSchema,
+  ModelAdvisorOutputSchema,
+  ModelAdvisorProposalSchema,
   OmniRouteHealthSchema,
   OmniRouteModelInfoSchema,
+  ProfileLlmSettingsSchema,
 } from "../src/index.js";
 
 describe("LLM routing schemas", () => {
@@ -42,16 +45,18 @@ describe("LLM routing schemas", () => {
   });
 
   it("catalogs the task tiers and budget feature controls", () => {
-    expect(LLM_TASKS).toHaveLength(16);
-    expect(LLM_TASKS.find((task) => task.id === "research")).toMatchObject({ stage: "RESEARCH", tier: "strong" });
+    expect(LLM_TASKS).toHaveLength(17);
+    expect(LLM_TASKS.find((task) => task.id === "research")).toMatchObject({ stage: "RESEARCH", tier: "strong", qualityWeight: 3 });
     expect(LLM_TASKS.find((task) => task.id === "sceneQueries")).toMatchObject({
       stage: "SCENE_PLAN",
       tier: "fast",
+      qualityWeight: 2,
       budgetFeature: "sceneQueryAssist",
     });
     expect(LLM_TASKS.find((task) => task.id === "reviewChat")).toMatchObject({
       stage: "FINAL_APPROVAL",
       tier: "strong",
+      qualityWeight: 2,
     });
     expect(LLM_TASKS.find((task) => task.id === "reviewChat")?.budgetFeature).toBeUndefined();
     expect(LLM_TASKS.find((task) => task.id === "webImageGrounding")).toMatchObject({
@@ -59,6 +64,14 @@ describe("LLM routing schemas", () => {
       tier: "fast",
       budgetFeature: "webImageSearch",
     });
+    expect(LLM_TASKS.find((task) => task.id === "modelAdvisor")).toMatchObject({
+      stage: "SETTINGS",
+      qualityWeight: 1,
+      budgetFeature: "modelAdvisor",
+    });
+    expect(LLM_TASKS.find((task) => task.id === "visionCheck")?.needsVision).toBe(true);
+    expect(LLM_TASKS.find((task) => task.id === "script")?.qualityWeight).toBe(3);
+    expect(LLM_TASKS.find((task) => task.id === "musicAssist")?.qualityWeight).toBe(1);
   });
 
   it("defaults reviewChat to the script route when unset", () => {
@@ -70,6 +83,34 @@ describe("LLM routing schemas", () => {
         reviewChat: { provider: "mock", model: "script-model" },
       },
     });
+  });
+
+  it("parses model advisor output/proposal and profile autoModel settings", () => {
+    expect(ModelAdvisorOutputSchema.parse({
+      routes: { script: { provider: "mock", model: "mock-v1", reason: "Nhanh và đủ." } },
+      notes: "ok",
+    }).routes.script?.model).toBe("mock-v1");
+    expect(ModelAdvisorProposalSchema.parse({
+      proposalId: "p1",
+      scope: "app",
+      budgetMode: "ECO",
+      language: "vi",
+      routes: { musicAssist: { provider: "mock", model: "mock-v1", reason: "Rẻ." } },
+      notes: "",
+      diff: [{
+        taskId: "musicAssist",
+        current: null,
+        proposed: { provider: "mock", model: "mock-v1", reason: "Rẻ." },
+        changed: true,
+      }],
+      cached: false,
+      createdAt: "2026-11-04T00:00:00.000Z",
+    }).proposalId).toBe("p1");
+    expect(ProfileLlmSettingsSchema.parse({})).toEqual({ autoModel: true });
+    expect(ProfileLlmSettingsSchema.parse({
+      autoModel: false,
+      tasks: { script: { provider: "mock", model: "m" } },
+    }).autoModel).toBe(false);
   });
 
   it("parses OmniRoute gateway settings, catalog models, and health payloads", () => {

@@ -70,6 +70,7 @@ export function BriefFields({
       metadata: "Publishing metadata (BALANCED/QUALITY/CUSTOM)",
       guidelineCheck: "Kiểm tra định hướng nội dung bằng AI",
       webImageSearch: "Tìm ảnh trên web (số scene tối đa; 999 = tất cả)",
+      modelAdvisor: "Gợi ý model bằng AI (mọi chế độ)",
     };
     const label = labels[key] ?? key;
     if (typeof value === "boolean") {
@@ -155,6 +156,7 @@ export function BriefFields({
           {customFeature("metadata", budgetFeatures.metadata)}
           {customFeature("guidelineCheck", budgetFeatures.guidelineCheck)}
           {customFeature("webImageSearch", budgetFeatures.webImageSearch)}
+          {customFeature("modelAdvisor", budgetFeatures.modelAdvisor)}
         </fieldset>
       )}
       {select("platform", "Platform", ["youtube", "youtube_shorts", "tiktok", "facebook_reels", "custom"])}

@@ -374,7 +374,7 @@ describe("OmniRoute gateway API", () => {
     const app = Fastify().withTypeProvider<ZodTypeProvider>();
     app.setValidatorCompiler(validatorCompiler);
     app.setSerializerCompiler(serializerCompiler);
-    registerLlmRoutes(app, registry, sqlite, undefined, fetchImpl);
+    registerLlmRoutes(app, registry, sqlite, undefined, undefined, fetchImpl);
     try {
       const health = await app.inject({ method: "GET", url: "/api/llm/providers/omniroute/health" });
       expect(health.statusCode).toBe(200);

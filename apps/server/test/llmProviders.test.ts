@@ -331,7 +331,7 @@ describe("LLM registry", () => {
         },
       });
     });
-    registerLlmRoutes(app, registry, sqlite, undefined, fetchImpl);
+    registerLlmRoutes(app, registry, sqlite, undefined, undefined, fetchImpl);
     try {
       const saved = await app.inject({
         method: "PUT",

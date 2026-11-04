@@ -35,6 +35,7 @@ import {
   saveAppCredentials,
 } from "../../services/publishApi";
 import { BriefFields } from "../projects/BriefFields";
+import { ModelAdvisorPanel } from "../settings/ModelAdvisorPanel";
 import {
   GuidelineFieldset,
   guidelineDraftFromSettings,
@@ -183,6 +184,7 @@ function BriefTab({ profile }: { profile: ProfileDetail }) {
   const [brief, setBrief] = useState<BriefSettings>(() => briefFromProfile(profile));
   const [mode, setMode] = useState(profile.defaultBrief.mode);
   const [autoRender, setAutoRender] = useState(profile.defaultBrief.autoRender);
+  const [autoModel, setAutoModel] = useState(profile.llm?.autoModel ?? true);
   const [voice, setVoice] = useState(profile.voice?.voice ?? "");
   const [rate, setRate] = useState(profile.voice?.rate ?? "+0%");
   const [guidelineDraft, setGuidelineDraft] = useState<GuidelineDraft>(() =>
@@ -194,6 +196,7 @@ function BriefTab({ profile }: { profile: ProfileDetail }) {
     setBrief(briefFromProfile(profile));
     setMode(profile.defaultBrief.mode);
     setAutoRender(profile.defaultBrief.autoRender);
+    setAutoModel(profile.llm?.autoModel ?? true);
     setVoice(profile.voice?.voice ?? "");
     setRate(profile.voice?.rate ?? "+0%");
     setGuidelineDraft(guidelineDraftFromSettings({ guidelines: profile.guidelines }));
@@ -234,6 +237,10 @@ function BriefTab({ profile }: { profile: ProfileDetail }) {
           defaultBrief,
           voice: voice.trim() ? { voice: voice.trim(), ...(rate ? { rate } : {}) } : null,
           ...(guidelines ? { guidelines } : {}),
+          llm: {
+            ...(profile.llm ?? {}),
+            autoModel,
+          },
         },
       });
       setMessage("Đã lưu brief mặc định.");
@@ -260,7 +267,17 @@ function BriefTab({ profile }: { profile: ProfileDetail }) {
           <input type="checkbox" checked={autoRender} onChange={(event) => setAutoRender(event.target.checked)} />
           Tự render
         </label>
+        <label className="checkbox-field" style={{ alignSelf: "end", marginBottom: 12 }}>
+          <input
+            type="checkbox"
+            aria-label="Tự chọn model"
+            checked={autoModel}
+            onChange={(event) => setAutoModel(event.target.checked)}
+          />
+          Tự chọn model
+        </label>
       </div>
+      <ModelAdvisorPanel scope="profile" id={profile.id} budgetMode={brief.budget.mode} />
       <div className="form-row">
         <label className="form-field">
           <span>Giọng đọc</span>

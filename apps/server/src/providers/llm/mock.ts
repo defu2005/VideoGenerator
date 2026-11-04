@@ -199,6 +199,37 @@ export class MockLlmProvider implements LlmProvider {
     if (req.schemaName === "ResearchNotes") return response(research, req.model);
     if (req.schemaName === "MergedStory") return response({ research, script: scriptFixture }, req.model);
     if (req.schemaName === "Script") return response(scriptFixture, req.model);
+    if (req.schemaName === "ModelAdvisor") {
+      const catalog = Array.isArray(payload.catalog)
+        ? payload.catalog as Array<{ provider: string; model: string; vision?: boolean }>
+        : [];
+      const tasks = Array.isArray(payload.tasks)
+        ? payload.tasks as Array<{ id: string; needsVision?: boolean; qualityWeight?: number }>
+        : [];
+      const strong = catalog.find((row) => !/flash|haiku|mini/i.test(row.model)) ?? catalog[0];
+      const fast = catalog.find((row) => /flash|haiku|mini/i.test(row.model)) ?? catalog[0] ?? strong;
+      const vision = catalog.find((row) => row.vision) ?? strong;
+      const routes: Record<string, { provider: string; model: string; reason: string }> = {};
+      for (const task of tasks) {
+        const pick = task.needsVision
+          ? vision
+          : (task.qualityWeight ?? 1) >= 3 ? strong : fast;
+        if (!pick) continue;
+        routes[task.id] = {
+          provider: pick.provider,
+          model: pick.model,
+          reason: task.needsVision
+            ? "Model có vision, phù hợp kiểm tra ảnh."
+            : (task.qualityWeight ?? 1) >= 3
+              ? "Model mạnh cho tác vụ cần chất lượng cao."
+              : "Model nhanh, đủ cho tác vụ phụ.",
+        };
+      }
+      return response({
+        routes,
+        notes: "Đề xuất mock dựa trên catalog hiện có.",
+      }, req.model);
+    }
     if (req.schemaName === "GuidelineCheck") {
       return response({ findings: [] }, req.model);
     }

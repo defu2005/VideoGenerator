@@ -1,10 +1,10 @@
 import { randomUUID } from "node:crypto";
 import { and, asc, count, desc, eq, isNull } from "drizzle-orm";
 import {
-  LlmSettingsSchema,
   ProfileDefaultBriefSchema,
   ProfileDetailSchema,
   ProfileListItemSchema,
+  ProfileLlmSettingsSchema,
   ProfileSchema,
   PlatformAccountSchema,
   PublishSettingsSchema,
@@ -70,7 +70,7 @@ function toAccount(row: PlatformAccountRow): PlatformAccount {
 function normalizeLlm(value: ProfileInput["llm"] | ProfileUpdate["llm"]): Profile["llm"] {
   if (value === null) return null;
   if (value === undefined) return undefined;
-  return LlmSettingsSchema.parse({
+  return ProfileLlmSettingsSchema.parse({
     ...value,
     tasks: Object.fromEntries(Object.entries(value.tasks ?? {}).filter(([, route]) => route !== null)),
   });
@@ -347,7 +347,12 @@ export function createProfileService(db: AppDatabase) {
       autoRender,
       ...(profile.voice ? { voice: profile.voice } : {}),
       guidelines: profile.guidelines,
-      ...(profile.llm ? { llm: profile.llm } : {}),
+      ...(profile.llm ? {
+        llm: {
+          ...(profile.llm.default ? { default: profile.llm.default } : {}),
+          ...(profile.llm.tasks ? { tasks: profile.llm.tasks } : {}),
+        },
+      } : {}),
     };
     const aspect = mainAspectFromFormats(accounts.map((account) => account.format));
     if (aspect && settings.aspectRatio === undefined) {

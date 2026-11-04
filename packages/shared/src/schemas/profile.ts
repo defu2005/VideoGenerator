@@ -1,7 +1,10 @@
 import { z } from "zod";
 import { AutonomyModeSchema } from "../enums.js";
 import { GuidelineSettingsInputSchema, GuidelineSettingsSchema } from "../guidelines/schema.js";
-import { LlmSettingsInputSchema, LlmSettingsSchema } from "./llm.js";
+import {
+  ProfileLlmSettingsInputSchema,
+  ProfileLlmSettingsSchema,
+} from "./llm.js";
 import { VideoBriefSettingsInputSchema, VideoBriefSettingsSchema } from "./project.js";
 
 export const PlatformIdSchema = z.enum(["youtube", "tiktok", "facebook_reels", "instagram_reels", "mock"]);
@@ -122,7 +125,7 @@ export const ProfileSchema = z.object({
   defaultBrief: ProfileDefaultBriefSchema,
   voice: VoiceSettingsSchema.nullable(),
   guidelines: GuidelineSettingsSchema,
-  llm: LlmSettingsSchema.nullable().optional(),
+  llm: ProfileLlmSettingsSchema.nullable().optional(),
   avatarPath: z.string().nullable(),
   color: HexColorSchema,
   archivedAt: z.string().datetime({ offset: true }).nullable(),
@@ -185,7 +188,7 @@ export const ProfileInputSchema = z.object({
   defaultBrief: ProfileDefaultBriefInputSchema.optional(),
   voice: VoiceSettingsSchema.nullable().optional(),
   guidelines: GuidelineSettingsInputSchema.optional(),
-  llm: LlmSettingsInputSchema.nullable().optional(),
+  llm: ProfileLlmSettingsInputSchema.nullable().optional(),
   color: HexColorSchema.optional(),
   avatarPath: z.string().nullable().optional(),
 }).strict();
@@ -199,7 +202,7 @@ export const ProfileUpdateSchema = z.object({
   defaultBrief: ProfileDefaultBriefInputSchema.optional(),
   voice: VoiceSettingsSchema.nullable().optional(),
   guidelines: GuidelineSettingsInputSchema.optional(),
-  llm: LlmSettingsInputSchema.nullable().optional(),
+  llm: ProfileLlmSettingsInputSchema.nullable().optional(),
   color: HexColorSchema.optional(),
   avatarPath: z.string().nullable().optional(),
 }).strict().refine((value) => Object.keys(value).length > 0, {
