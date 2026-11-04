@@ -5,6 +5,7 @@ import { ErrorState } from "../../components/ErrorState";
 import { Spinner } from "../../components/Spinner";
 import { StatusBadge } from "../../components/StatusBadge";
 import { useDashboardStats } from "../../hooks/useProjects";
+import { useSetAutomationPaused } from "../../hooks/useAutomation";
 import { useState } from "react";
 import { CreateProjectDialog } from "../projects/CreateProjectDialog";
 
@@ -24,6 +25,7 @@ function formatUpdated(value: string): string {
 export function DashboardPage() {
   const navigate = useNavigate();
   const stats = useDashboardStats();
+  const pauseAutomation = useSetAutomationPaused();
   const [createOpen, setCreateOpen] = useState(false);
 
   if (stats.isPending) return <Spinner label="Loading dashboard" />;
@@ -32,6 +34,7 @@ export function DashboardPage() {
   }
 
   const data = stats.data;
+  const automation = data.automation;
   return (
     <div className="page-stack">
       <div className="page-heading dashboard-heading">
@@ -42,6 +45,57 @@ export function DashboardPage() {
         </div>
         <button className="button button-primary" type="button" onClick={() => setCreateOpen(true)}>＋ New project</button>
       </div>
+
+      {automation && (
+        <section className="panel automation-dash-card" aria-label="Tự động hóa">
+          <div className="section-heading">
+            <div>
+              <p className="eyebrow">AUTOMATION</p>
+              <h2>Tự động hóa</h2>
+            </div>
+            <button
+              className="button"
+              type="button"
+              disabled={pauseAutomation.isPending}
+              onClick={() => void pauseAutomation.mutateAsync(!automation.paused).then(() => stats.refetch())}
+            >
+              {automation.paused ? "Tiếp tục tất cả" : "Tạm dừng tất cả"}
+            </button>
+          </div>
+          <div className="automation-dash-grid">
+            <div>
+              <span className="stat-label">Đang chạy</span>
+              <strong>{automation.runningProfileName ?? "—"}</strong>
+            </div>
+            <div>
+              <span className="stat-label">Sản xuất tới</span>
+              <strong>
+                {automation.nextProductionAt
+                  ? new Date(automation.nextProductionAt).toLocaleString("vi-VN")
+                  : "—"}
+              </strong>
+            </div>
+            <div>
+              <span className="stat-label">Hôm nay</span>
+              <strong>{automation.todayCount}</strong>
+            </div>
+            <div>
+              <span className="stat-label">Trạng thái</span>
+              <strong>{automation.paused ? "Tạm dừng" : "Đang bật"}</strong>
+            </div>
+          </div>
+          {automation.recentErrors.length > 0 && (
+            <ul className="recent-error-list">
+              {automation.recentErrors.map((error) => (
+                <li key={error.id}>
+                  <p>{error.message}</p>
+                  <time dateTime={error.at}>{new Date(error.at).toLocaleString("vi-VN")}</time>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+      )}
 
       <section className="stats-grid" aria-label="Project statistics">
         <button className="stat-tile total-tile" type="button" onClick={() => navigate("/projects")}>

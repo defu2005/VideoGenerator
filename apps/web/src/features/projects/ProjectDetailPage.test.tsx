@@ -229,6 +229,7 @@ describe("ProjectDetailPage", () => {
           guidelineCheck: "check",
           webImageSearch: 3,
           modelAdvisor: true,
+          topicSuggest: true,
           outputHeadroom: 1.5,
         },
         perStage: [],

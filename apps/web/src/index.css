@@ -863,3 +863,19 @@ button:disabled { cursor: not-allowed; opacity: .58; }
 .guideline-pack-list, .guideline-profiles, .guideline-pack-editor { padding: 14px; }
 .guideline-rule-editor { display: grid; gap: 6px; margin: 8px 0; }
 .guideline-params { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+
+.form-stack { display: grid; gap: 12px; padding: 16px 18px; }
+.form-stack label { display: grid; gap: 6px; font-size: 12px; color: #5b667b; }
+.form-stack input[type="text"], .form-stack input:not([type]), .form-stack input[type="number"] { height: 36px; border: 1px solid #e2e6ee; border-radius: 7px; padding: 0 10px; font-size: 13px; }
+.field-checkbox { display: flex !important; align-items: center; gap: 8px; }
+.form-actions { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.form-hint { color: #6f7786; font-size: 12px; }
+.automation-slot-list, .topic-queue-list { display: grid; }
+.automation-slot-row, .topic-queue-row { display: grid; grid-template-columns: 180px minmax(0, 1fr) 120px 120px; gap: 10px; align-items: center; border-top: 1px solid #f0f1f5; padding: 10px 16px; font-size: 12px; }
+.topic-queue-row { grid-template-columns: 24px minmax(0, 1fr) auto; }
+.topic-queue-main { display: grid; gap: 2px; min-width: 0; }
+.topic-queue-main small, .topic-meta { color: #929bad; font-size: 11px; }
+.topic-queue-actions { display: flex; gap: 8px; align-items: center; }
+.automation-dash-card { padding: 16px 18px; }
+.automation-dash-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin-bottom: 12px; }
+.automation-dash-grid .stat-label { display: block; color: #929bad; font-size: 10px; margin-bottom: 4px; }

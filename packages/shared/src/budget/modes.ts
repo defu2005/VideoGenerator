@@ -35,6 +35,8 @@ export const BudgetFeaturesSchema = z.object({
   webImageSearch: z.union([z.literal(0), z.literal(3), z.literal(8), z.literal(999)]),
   /** LLM call that proposes a model route per task (settings UI / profile automation). */
   modelAdvisor: z.boolean(),
+  /** LLM call that suggests profile topic queue items (settings / automation, not pipeline). */
+  topicSuggest: z.boolean(),
   outputHeadroom: z.union([z.literal(1), z.literal(1.5), z.literal(2)]),
 }).strict();
 export type BudgetFeatures = z.infer<typeof BudgetFeaturesSchema>;
@@ -79,6 +81,7 @@ const PRESETS: Record<Exclude<BudgetMode, "CUSTOM">, BudgetFeatures> = {
     guidelineCheck: "off",
     webImageSearch: 0,
     modelAdvisor: true,
+    topicSuggest: true,
     outputHeadroom: 1,
   },
   BALANCED: {
@@ -101,6 +104,7 @@ const PRESETS: Record<Exclude<BudgetMode, "CUSTOM">, BudgetFeatures> = {
     guidelineCheck: "check",
     webImageSearch: 3,
     modelAdvisor: true,
+    topicSuggest: true,
     outputHeadroom: 1.5,
   },
   QUALITY: {
@@ -123,6 +127,7 @@ const PRESETS: Record<Exclude<BudgetMode, "CUSTOM">, BudgetFeatures> = {
     guidelineCheck: "checkAndFix",
     webImageSearch: 8,
     modelAdvisor: true,
+    topicSuggest: true,
     outputHeadroom: 2,
   },
   MAX: {
@@ -145,6 +150,7 @@ const PRESETS: Record<Exclude<BudgetMode, "CUSTOM">, BudgetFeatures> = {
     guidelineCheck: "checkAndFix",
     webImageSearch: 999,
     modelAdvisor: true,
+    topicSuggest: true,
     outputHeadroom: 2,
   },
 };

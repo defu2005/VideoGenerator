@@ -71,6 +71,7 @@ export function BriefFields({
       guidelineCheck: "Kiểm tra định hướng nội dung bằng AI",
       webImageSearch: "Tìm ảnh trên web (số scene tối đa; 999 = tất cả)",
       modelAdvisor: "Gợi ý model bằng AI (mọi chế độ)",
+      topicSuggest: "Gợi ý chủ đề hồ sơ (mọi chế độ)",
     };
     const label = labels[key] ?? key;
     if (typeof value === "boolean") {
@@ -157,6 +158,7 @@ export function BriefFields({
           {customFeature("guidelineCheck", budgetFeatures.guidelineCheck)}
           {customFeature("webImageSearch", budgetFeatures.webImageSearch)}
           {customFeature("modelAdvisor", budgetFeatures.modelAdvisor)}
+          {customFeature("topicSuggest", budgetFeatures.topicSuggest)}
         </fieldset>
       )}
       {select("platform", "Platform", ["youtube", "youtube_shorts", "tiktok", "facebook_reels", "custom"])}

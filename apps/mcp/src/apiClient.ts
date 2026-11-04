@@ -233,6 +233,38 @@ export class VideoAgentApiClient {
     return this.request(`/api/publications${qs ? `?${qs}` : ""}`);
   }
 
+  listTopics(profileId: string, status?: string): Promise<{ items: unknown[] }> {
+    const params = new URLSearchParams();
+    if (status) params.set("status", status);
+    const qs = params.toString();
+    return this.request(`/api/profiles/${encodeURIComponent(profileId)}/topics${qs ? `?${qs}` : ""}`);
+  }
+
+  addTopic(profileId: string, input: { topic: string; notes?: string | null; priority?: number; status?: string }): Promise<unknown> {
+    return this.request(`/api/profiles/${encodeURIComponent(profileId)}/topics`, {
+      method: "POST",
+      body: JSON.stringify(input),
+    });
+  }
+
+  suggestTopics(profileId: string, input: { hint?: string; count?: number }): Promise<unknown> {
+    return this.request(`/api/profiles/${encodeURIComponent(profileId)}/topics/suggest`, {
+      method: "POST",
+      body: JSON.stringify(input),
+    });
+  }
+
+  approveTopics(profileId: string, input: { ids: string[]; status: "APPROVED" | "REJECTED" }): Promise<unknown> {
+    return this.request(`/api/profiles/${encodeURIComponent(profileId)}/topics/approve`, {
+      method: "POST",
+      body: JSON.stringify(input),
+    });
+  }
+
+  automationStatus(): Promise<unknown> {
+    return this.request("/api/automation/status");
+  }
+
   private async request<T>(path: string, init?: RequestInit): Promise<T> {
     let response: Response;
     try {

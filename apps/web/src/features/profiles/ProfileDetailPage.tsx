@@ -42,9 +42,13 @@ import {
   guidelineSettingsFromDraft,
   type GuidelineDraft,
 } from "../projects/GuidelineFieldset";
+import { AutomationTab } from "./AutomationTab";
+import { TopicsTab } from "./TopicsTab";
 const TABS = [
   { id: "direction", label: "Định hướng" },
   { id: "brief", label: "Brief mặc định" },
+  { id: "topics", label: "Chủ đề" },
+  { id: "automation", label: "Tự động" },
   { id: "accounts", label: "Tài khoản" },
   { id: "projects", label: "Dự án" },
 ] as const;
@@ -862,6 +866,10 @@ export function ProfileDetailPage() {
         <DirectionTab profile={profile.data} />
       ) : activeTab === "brief" ? (
         <BriefTab profile={profile.data} />
+      ) : activeTab === "topics" ? (
+        <TopicsTab profile={profile.data} />
+      ) : activeTab === "automation" ? (
+        <AutomationTab profile={profile.data} />
       ) : activeTab === "accounts" ? (
         <AccountsTab profile={profile.data} />
       ) : (

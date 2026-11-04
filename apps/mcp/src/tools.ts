@@ -278,6 +278,40 @@ export function registerVideoAgentTools(
     profileId: z.string().uuid().optional(),
   }, ({ status, profileId }) => invoke(() => api.listPublications({ status, profileId })));
 
+  server.tool("list_topics", "List topic-queue items for a profile.", {
+    profileId: z.string().uuid(),
+    status: z.enum(["PENDING", "APPROVED", "IN_PRODUCTION", "DONE", "REJECTED", "FAILED"]).optional(),
+  }, ({ profileId, status }) => invoke(() => api.listTopics(profileId, status)));
+
+  server.tool("add_topic", "Add a topic to a profile queue.", {
+    profileId: z.string().uuid(),
+    topic: z.string().min(1).max(500),
+    notes: z.string().max(2000).nullable().optional(),
+    status: z.enum(["PENDING", "APPROVED"]).optional(),
+  }, ({ profileId, topic, notes, status }) => invoke(() => api.addTopic(profileId, {
+    topic,
+    ...(notes === undefined ? {} : { notes }),
+    ...(status === undefined ? {} : { status }),
+  })));
+
+  server.tool("suggest_topics", "Ask the LLM to suggest topics for a profile (mock in tests).", {
+    profileId: z.string().uuid(),
+    hint: z.string().max(1000).optional(),
+    count: z.number().int().min(1).max(20).optional(),
+  }, ({ profileId, hint, count }) => invoke(() => api.suggestTopics(profileId, {
+    ...(hint === undefined ? {} : { hint }),
+    ...(count === undefined ? {} : { count }),
+  })));
+
+  server.tool("approve_topics", "Approve or reject topic-queue items in bulk.", {
+    profileId: z.string().uuid(),
+    ids: z.array(z.string().uuid()).min(1),
+    status: z.enum(["APPROVED", "REJECTED"]),
+  }, ({ profileId, ids, status }) => invoke(() => api.approveTopics(profileId, { ids, status })));
+
+  server.tool("automation_status", "Read global automation pause state and per-profile queue/slot summary.", {}, () =>
+    invoke(() => api.automationStatus()));
+
   server.tool("get_render_export_url", "Return the local HTTP URL to download a render export zip (does not stream the zip).", {
     ...projectIdShape,
     renderId: z.string().uuid(),

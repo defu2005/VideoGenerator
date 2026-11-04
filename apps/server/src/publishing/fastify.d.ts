@@ -6,6 +6,8 @@ import type { PublisherRegistry } from "./registry.js";
 import type { PublishTicker } from "./ticker.js";
 import type { TokenVault } from "./tokenVault.js";
 import type { YouTubePublisher } from "./youtubePublisher.js";
+import type { AutomationService } from "../services/automationService.js";
+import type { TopicService } from "../services/topicService.js";
 
 declare module "fastify" {
   interface FastifyInstance {
@@ -18,6 +20,10 @@ declare module "fastify" {
       oauthState: OAuthStateStore;
       worker: JobWorker;
       registry: PublisherRegistry;
+    };
+    vgAutomation: {
+      service: AutomationService;
+      topics: TopicService;
     };
   }
 }

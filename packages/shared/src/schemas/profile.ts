@@ -2,6 +2,11 @@ import { z } from "zod";
 import { AutonomyModeSchema } from "../enums.js";
 import { GuidelineSettingsInputSchema, GuidelineSettingsSchema } from "../guidelines/schema.js";
 import {
+  DEFAULT_PROFILE_AUTOMATION,
+  ProfileAutomationInputSchema,
+  ProfileAutomationSchema,
+} from "./automation.js";
+import {
   ProfileLlmSettingsInputSchema,
   ProfileLlmSettingsSchema,
 } from "./llm.js";
@@ -126,6 +131,7 @@ export const ProfileSchema = z.object({
   voice: VoiceSettingsSchema.nullable(),
   guidelines: GuidelineSettingsSchema,
   llm: ProfileLlmSettingsSchema.nullable().optional(),
+  automation: ProfileAutomationSchema.default(DEFAULT_PROFILE_AUTOMATION),
   avatarPath: z.string().nullable(),
   color: HexColorSchema,
   archivedAt: z.string().datetime({ offset: true }).nullable(),
@@ -189,6 +195,7 @@ export const ProfileInputSchema = z.object({
   voice: VoiceSettingsSchema.nullable().optional(),
   guidelines: GuidelineSettingsInputSchema.optional(),
   llm: ProfileLlmSettingsInputSchema.nullable().optional(),
+  automation: ProfileAutomationInputSchema.optional(),
   color: HexColorSchema.optional(),
   avatarPath: z.string().nullable().optional(),
 }).strict();
@@ -203,6 +210,7 @@ export const ProfileUpdateSchema = z.object({
   voice: VoiceSettingsSchema.nullable().optional(),
   guidelines: GuidelineSettingsInputSchema.optional(),
   llm: ProfileLlmSettingsInputSchema.nullable().optional(),
+  automation: ProfileAutomationInputSchema.optional(),
   color: HexColorSchema.optional(),
   avatarPath: z.string().nullable().optional(),
 }).strict().refine((value) => Object.keys(value).length > 0, {

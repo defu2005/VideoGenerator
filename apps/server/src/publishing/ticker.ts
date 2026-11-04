@@ -1,11 +1,13 @@
 import type { FastifyBaseLogger } from "fastify";
 import type { PublishService } from "./publishService.js";
+import type { AutomationService } from "../services/automationService.js";
 
 const INTERVAL_MS = 60_000;
 
 /**
- * In-process ticker: promote due SCHEDULED publications and run daily connection checks.
- * Survives restarts because SCHEDULED state lives in the DB.
+ * In-process ticker: promote due SCHEDULED publications, run daily connection checks,
+ * and drive profile automation (topic → AUTO project → publish).
+ * Survives restarts because SCHEDULED / topic state lives in the DB.
  */
 export class PublishTicker {
   private timer: NodeJS.Timeout | undefined;
@@ -13,6 +15,7 @@ export class PublishTicker {
   private running = false;
   private readonly controller = new AbortController();
   private lastDailyCheckDay = "";
+  private automation: AutomationService | undefined;
 
   constructor(
     private readonly publish: PublishService,
@@ -20,6 +23,11 @@ export class PublishTicker {
     private readonly intervalMs = INTERVAL_MS,
     private readonly now: () => Date = () => new Date(),
   ) {}
+
+  /** Wire automation after construction (avoids circular init in buildApp). */
+  setAutomation(automation: AutomationService): void {
+    this.automation = automation;
+  }
 
   start(): void {
     if (this.started) return;
@@ -50,6 +58,9 @@ export class PublishTicker {
         if (checked > 0) {
           this.logger.info({ checked }, "Daily connection checks completed");
         }
+      }
+      if (this.automation) {
+        await this.automation.tick();
       }
     } catch (error) {
       this.logger.warn({ err: error }, "Publish ticker tick failed");

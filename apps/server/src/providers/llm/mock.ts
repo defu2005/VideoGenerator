@@ -199,6 +199,17 @@ export class MockLlmProvider implements LlmProvider {
     if (req.schemaName === "ResearchNotes") return response(research, req.model);
     if (req.schemaName === "MergedStory") return response({ research, script: scriptFixture }, req.model);
     if (req.schemaName === "Script") return response(scriptFixture, req.model);
+    if (req.schemaName === "TopicSuggest") {
+      const count = typeof payload.count === "number" ? Math.min(20, Math.max(1, payload.count)) : 5;
+      const hint = typeof payload.hint === "string" && payload.hint.trim() ? payload.hint.trim() : topic;
+      const direction = typeof payload.direction === "string" ? payload.direction.slice(0, 80) : "";
+      return response({
+        topics: Array.from({ length: count }, (_, index) => ({
+          topic: `${hint} — góc ${index + 1}${direction ? ` (${direction.slice(0, 40)})` : ""}`.slice(0, 500),
+          angle: `One-line angle ${index + 1} for ${hint}`.slice(0, 500),
+        })),
+      }, req.model);
+    }
     if (req.schemaName === "ModelAdvisor") {
       const catalog = Array.isArray(payload.catalog)
         ? payload.catalog as Array<{ provider: string; model: string; vision?: boolean }>

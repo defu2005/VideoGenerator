@@ -73,6 +73,7 @@ export const LlmTaskIdSchema = z.enum([
   "metadata",
   "reviewChat",
   "modelAdvisor",
+  "topicSuggest",
 ]);
 export type LlmTaskId = z.infer<typeof LlmTaskIdSchema>;
 
@@ -105,6 +106,7 @@ export const LLM_TASKS: {
   { id: "metadata", label: "Tiêu đề, mô tả, hashtag", stage: "TIMELINE", purpose: "Generate publishing metadata.", tier: "fast", qualityWeight: 2, budgetFeature: "metadata" },
   { id: "reviewChat", label: "Góp ý trước render", stage: "FINAL_APPROVAL", purpose: "Optional pre-render review chat with structured proposals.", tier: "strong", qualityWeight: 2, needsLongContext: true },
   { id: "modelAdvisor", label: "Gợi ý model bằng AI", stage: "SETTINGS", purpose: "Propose an LLM route for every task given available models and budget mode.", tier: "fast", qualityWeight: 1, budgetFeature: "modelAdvisor" },
+  { id: "topicSuggest", label: "Gợi ý chủ đề", stage: "SETTINGS", purpose: "Suggest video topics from a profile direction without repeating past topics.", tier: "fast", qualityWeight: 1, budgetFeature: "topicSuggest" },
 ];
 
 function normalizeLlmSettings(value: unknown): unknown {

@@ -1,6 +1,8 @@
 import { randomUUID } from "node:crypto";
 import { and, asc, count, desc, eq, isNull } from "drizzle-orm";
 import {
+  DEFAULT_PROFILE_AUTOMATION,
+  ProfileAutomationSchema,
   ProfileDefaultBriefSchema,
   ProfileDetailSchema,
   ProfileListItemSchema,
@@ -15,6 +17,7 @@ import {
   type PlatformAccountInput,
   type PlatformAccountUpdate,
   type Profile,
+  type ProfileAutomation,
   type ProfileDetail,
   type ProfileInput,
   type ProfileListItem,
@@ -29,6 +32,10 @@ import { platformAccounts, profiles, projects, type PlatformAccountRow, type Pro
 import { AppError } from "../lib/errors.js";
 import { normalizeGuidelineSettings } from "../guidelines/settings.js";
 
+function parseAutomation(value: ProfileAutomation | null | undefined): ProfileAutomation {
+  return ProfileAutomationSchema.parse(value ?? DEFAULT_PROFILE_AUTOMATION);
+}
+
 function toProfile(row: ProfileRow): Profile {
   return ProfileSchema.parse({
     id: row.id,
@@ -40,6 +47,7 @@ function toProfile(row: ProfileRow): Profile {
     voice: row.voice ?? null,
     guidelines: row.guidelines,
     llm: row.llm ?? null,
+    automation: parseAutomation(row.automation),
     avatarPath: row.avatarPath ?? null,
     color: row.color,
     archivedAt: row.archivedAt,
@@ -162,6 +170,10 @@ export function createProfileService(db: AppDatabase) {
       ? normalizeGuidelineSettings(input.guidelines)
       : { platformPack: "auto" as const, customRules: [] as string[] };
     const llm = normalizeLlm(input.llm) ?? null;
+    const automation = ProfileAutomationSchema.parse({
+      ...DEFAULT_PROFILE_AUTOMATION,
+      ...input.automation,
+    });
 
     try {
       await db.insert(profiles).values({
@@ -174,6 +186,7 @@ export function createProfileService(db: AppDatabase) {
         voice: input.voice === undefined ? null : input.voice,
         guidelines,
         llm,
+        automation,
         avatarPath: input.avatarPath ?? null,
         color: input.color ?? "#3B82F6",
         archivedAt: null,
@@ -221,6 +234,12 @@ export function createProfileService(db: AppDatabase) {
     }
     if (input.llm !== undefined) {
       updates.llm = input.llm === null ? null : (normalizeLlm(input.llm) ?? null);
+    }
+    if (input.automation !== undefined) {
+      updates.automation = ProfileAutomationSchema.parse({
+        ...current.automation,
+        ...input.automation,
+      });
     }
 
     try {

@@ -2,12 +2,16 @@ import { integer, index, primaryKey, real, sqliteTable, text, uniqueIndex } from
 import type {
   AccountConnection,
   AccountFormat,
+  AutomationLogLevel,
   GuidelineSettings,
   PlatformId,
+  ProfileAutomation,
   ProfileDefaultBrief,
   ProfileLlmSettings,
   ProjectSettings,
   PublishSettings,
+  TopicSource,
+  TopicStatus,
 } from "@vg/shared";
 
 export const profiles = sqliteTable("profiles", {
@@ -20,6 +24,7 @@ export const profiles = sqliteTable("profiles", {
   voice: text("voice", { mode: "json" }).$type<{ voice?: string; rate?: string } | null>(),
   guidelines: text("guidelines", { mode: "json" }).$type<GuidelineSettings>().notNull(),
   llm: text("llm", { mode: "json" }).$type<ProfileLlmSettings | null>(),
+  automation: text("automation", { mode: "json" }).$type<ProfileAutomation>(),
   avatarPath: text("avatar_path"),
   color: text("color").notNull().default("#3B82F6"),
   archivedAt: text("archived_at"),
@@ -53,6 +58,41 @@ export const platformAccounts = sqliteTable("platform_accounts", {
 ]);
 
 export type PlatformAccountRow = typeof platformAccounts.$inferSelect;
+
+export const profileTopics = sqliteTable("profile_topics", {
+  id: text("id").primaryKey(),
+  profileId: text("profile_id").notNull().references(() => profiles.id, { onDelete: "cascade" }),
+  topic: text("topic").notNull(),
+  notes: text("notes"),
+  source: text("source").$type<TopicSource>().notNull(),
+  status: text("status").$type<TopicStatus>().notNull(),
+  priority: integer("priority").notNull().default(0),
+  projectId: text("project_id"),
+  scheduledFor: text("scheduled_for"),
+  error: text("error"),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+}, (table) => [
+  index("profile_topics_profile_status_idx").on(table.profileId, table.status),
+  index("profile_topics_profile_priority_idx").on(table.profileId, table.priority),
+  index("profile_topics_scheduled_idx").on(table.scheduledFor),
+]);
+
+export type ProfileTopicRow = typeof profileTopics.$inferSelect;
+
+export const automationLog = sqliteTable("automation_log", {
+  id: text("id").primaryKey(),
+  profileId: text("profile_id").references(() => profiles.id, { onDelete: "set null" }),
+  at: text("at").notNull(),
+  level: text("level").$type<AutomationLogLevel>().notNull(),
+  message: text("message").notNull(),
+  data: text("data", { mode: "json" }).$type<Record<string, unknown> | null>(),
+}, (table) => [
+  index("automation_log_at_idx").on(table.at),
+  index("automation_log_profile_idx").on(table.profileId),
+]);
+
+export type AutomationLogRow = typeof automationLog.$inferSelect;
 
 /** OAuth tokens — only TokenVault reads/writes this table. */
 export const platformCredentials = sqliteTable("platform_credentials", {

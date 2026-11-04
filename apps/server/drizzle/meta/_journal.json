@@ -176,6 +176,13 @@
       "when": 1793808978095,
       "tag": "0024_first_umar",
       "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "6",
+      "when": 1793812009656,
+      "tag": "0025_fat_lucky_pierre",
+      "breakpoints": true
     }
   ]
 }

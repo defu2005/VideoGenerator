@@ -72,6 +72,9 @@ import { YouTubePublisher } from "./publishing/youtubePublisher.js";
 import { PublishExecutor } from "./stages/publish/publishExecutor.js";
 import { registerOAuthRoutes } from "./api/oauth.js";
 import { registerPublicationRoutes } from "./api/publications.js";
+import { createTopicService } from "./services/topicService.js";
+import { createAutomationService } from "./services/automationService.js";
+import { registerAutomationRoutes } from "./api/automation.js";
 
 export function buildApp({ config }: { config: AppConfig }) {
   const server = Fastify({
@@ -185,6 +188,19 @@ export function buildApp({ config }: { config: AppConfig }) {
     renderService,
   );
   const publishTicker = new PublishTicker(publishService, server.log);
+  const topicService = createTopicService(database.db, database.sqlite, profileService, llmProviders);
+  const automationService = createAutomationService({
+    db: database.db,
+    sqlite: database.sqlite,
+    profiles: profileService,
+    projects: projectService,
+    topics: topicService,
+    orchestrator,
+    publish: publishService,
+    render: renderService,
+    logger: server.log,
+  });
+  publishTicker.setAutomation(automationService);
   const worker = new JobWorker(
     jobRepository,
     orchestrator,
@@ -216,16 +232,25 @@ export function buildApp({ config }: { config: AppConfig }) {
     worker,
     registry: publisherRegistry,
   });
+  server.decorate("vgAutomation", {
+    service: automationService,
+    topics: topicService,
+  });
 
   server.register(cors, { origin: config.CORS_ORIGIN });
   registerHealthRoutes(server, database.sqlite);
   registerProjectRoutes(server, projectService);
   registerProfileRoutes(server, profileService);
+  registerAutomationRoutes(server, {
+    topics: topicService,
+    automation: automationService,
+    sqlite: database.sqlite,
+  });
   registerOAuthRoutes(server, { publish: publishService, registry: publisherRegistry, oauthState });
   registerPublicationRoutes(server, { publish: publishService, vault: tokenVault });
   registerRecommendationRoutes(server);
   registerBudgetRoutes(server, projectService, jobRepository, config, llmProviders);
-  registerDashboardRoutes(server, projectService);
+  registerDashboardRoutes(server, projectService, automationService);
   registerUsageRoutes(server, usageService, projectService);
   registerPipelineRoutes(server, projectService, jobRepository, orchestrator, events, sceneService);
   registerLlmRoutes(server, llmProviders, database.sqlite, projectService, profileService);
