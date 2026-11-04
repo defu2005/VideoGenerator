@@ -22,8 +22,11 @@ const fixtures = {
   html: readFileSync(join(fixtureDir, "not-image.html")),
 };
 
-function imageResponse(body: Buffer, status = 200): Response {
-  return new Response(body, { status, headers: { "content-type": "application/octet-stream" } });
+function imageResponse(body: Buffer, status = 200, headers: Record<string, string> = {}): Response {
+  return new Response(body, {
+    status,
+    headers: { "content-type": "application/octet-stream", ...headers },
+  });
 }
 
 afterEach(() => {
@@ -86,17 +89,91 @@ describe("image downloader", () => {
     expect(fetchImpl).toHaveBeenCalledTimes(2);
   });
 
-  it("retries one server error and sends the configured User-Agent", async () => {
-    const fetchImpl = vi.fn()
-      .mockResolvedValueOnce(imageResponse(Buffer.alloc(0), 503))
-      .mockResolvedValueOnce(imageResponse(fixtures.png));
-    const store = new ImageStore(root, "task-agent/1.0", {
+  it("retries rate-limited downloads and sends the configured User-Agent", async () => {
+    vi.useFakeTimers();
+    try {
+      const fetchImpl = vi.fn()
+        .mockResolvedValueOnce(imageResponse(Buffer.alloc(0), 429, { "retry-after": "2" }))
+        .mockResolvedValueOnce(imageResponse(fixtures.png));
+      const store = new ImageStore(root, "task-agent/1.0", {
+        fetchImpl,
+        resolveHost: async () => ["203.0.113.10"],
+        minIntervalMs: 0,
+      });
+      const pending = store.download(projectId, "https://images.example.test/photo.png");
+      await vi.advanceTimersByTimeAsync(2_000);
+      await expect(pending).resolves.toMatchObject({ sha256: createHash("sha256").update(fixtures.png).digest("hex") });
+      expect(fetchImpl).toHaveBeenCalledTimes(2);
+      expect(fetchImpl.mock.calls[0][1]?.headers).toMatchObject({ "User-Agent": "task-agent/1.0" });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("stops retrying after four 429s and leaves 404s non-retryable", async () => {
+    vi.useFakeTimers();
+    try {
+      const rateLimited = vi.fn().mockResolvedValue(imageResponse(Buffer.alloc(0), 429, { "retry-after": "2" }));
+      const rateLimitedStore = new ImageStore(root, "fixture", {
+        fetchImpl: rateLimited,
+        resolveHost: async () => ["203.0.113.10"],
+        minIntervalMs: 0,
+      });
+      const pending = rateLimitedStore.download(projectId, "https://images.example.test/rate-limit");
+      const rejection = expect(pending).rejects.toThrow("Máy chủ ảnh đang giới hạn tốc độ");
+      await vi.advanceTimersByTimeAsync(10_000);
+      await rejection;
+      expect(rateLimited).toHaveBeenCalledTimes(4);
+
+      const notFound = vi.fn().mockResolvedValue(imageResponse(Buffer.alloc(0), 404));
+      const notFoundStore = new ImageStore(root, "fixture", {
+        fetchImpl: notFound,
+        resolveHost: async () => ["203.0.113.10"],
+        minIntervalMs: 0,
+      });
+      await expect(notFoundStore.download(projectId, "https://images.example.test/missing")).rejects.toThrow("HTTP 404");
+      expect(notFound).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("aborts during a backoff wait", async () => {
+    const fetchImpl = vi.fn().mockResolvedValueOnce(imageResponse(Buffer.alloc(0), 429, { "retry-after": "2" }));
+    const store = new ImageStore(root, "fixture", {
       fetchImpl,
       resolveHost: async () => ["203.0.113.10"],
+      minIntervalMs: 0,
     });
-    await store.download(projectId, "https://images.example.test/photo.png");
-    expect(fetchImpl).toHaveBeenCalledTimes(2);
-    expect(fetchImpl.mock.calls[0][1]?.headers).toMatchObject({ "User-Agent": "task-agent/1.0" });
+    const controller = new AbortController();
+    const pending = store.download(projectId, "https://images.example.test/abort", controller.signal);
+    await Promise.resolve();
+    controller.abort(new Error("Request aborted"));
+    await expect(pending).rejects.toThrow(/Request aborted|aborted/i);
+  });
+
+  it("paces repeated downloads to the same host and extends the cooldown after 429", async () => {
+    vi.useFakeTimers();
+    try {
+      const fetchImpl = vi.fn()
+        .mockResolvedValueOnce(imageResponse(fixtures.png))
+        .mockResolvedValueOnce(imageResponse(Buffer.alloc(0), 429, { "retry-after": "2" }))
+        .mockResolvedValueOnce(imageResponse(fixtures.png));
+      const store = new ImageStore(root, "fixture", {
+        fetchImpl,
+        resolveHost: async () => ["203.0.113.10"],
+        minIntervalMs: 1_000,
+      });
+      const first = store.download(projectId, "https://images.example.test/a");
+      await vi.advanceTimersByTimeAsync(1_000);
+      await expect(first).resolves.toBeDefined();
+      const second = store.download(projectId, "https://images.example.test/b");
+      await vi.advanceTimersByTimeAsync(2_000);
+      await expect(second).resolves.toBeDefined();
+      expect(fetchImpl).toHaveBeenCalledTimes(3);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("applies the request timeout and retries one timeout", async () => {

@@ -1,3 +1,5 @@
+import { sleepWithAbort } from "./retry.js";
+
 export class TokenBucketRateLimiter {
   private readonly nextAvailable = new Map<string, number>();
 
@@ -8,7 +10,7 @@ export class TokenBucketRateLimiter {
       pexels: 180,
     },
     private readonly now: () => number = Date.now,
-    private readonly wait: (milliseconds: number, signal?: AbortSignal) => Promise<void> = delay,
+    private readonly wait: (milliseconds: number, signal?: AbortSignal) => Promise<void> = sleepWithAbort,
   ) {}
 
   async acquire(provider: string, signal?: AbortSignal): Promise<void> {
@@ -22,20 +24,26 @@ export class TokenBucketRateLimiter {
   }
 }
 
-function delay(milliseconds: number, signal?: AbortSignal): Promise<void> {
-  return new Promise((resolve, reject) => {
-    if (signal?.aborted) {
-      reject(signal.reason ?? new Error("Request aborted"));
-      return;
-    }
-    const timer = setTimeout(() => {
-      signal?.removeEventListener("abort", onAbort);
-      resolve();
-    }, milliseconds);
-    const onAbort = () => {
-      clearTimeout(timer);
-      reject(signal?.reason ?? new Error("Request aborted"));
-    };
-    signal?.addEventListener("abort", onAbort, { once: true });
-  });
+export class HostDownloadRateLimiter {
+  private readonly nextAvailable = new Map<string, number>();
+  private readonly cooldownUntil = new Map<string, number>();
+
+  constructor(
+    private readonly minIntervalMs = 1_000,
+    private readonly now: () => number = Date.now,
+    private readonly wait: (milliseconds: number, signal?: AbortSignal) => Promise<void> = sleepWithAbort,
+  ) {}
+
+  /** Block requests to this host for `milliseconds` from now (e.g. after HTTP 429). */
+  cooldown(hostname: string, milliseconds: number): void {
+    const until = this.now() + Math.min(Math.max(0, milliseconds), 60_000);
+    this.cooldownUntil.set(hostname, Math.max(this.cooldownUntil.get(hostname) ?? 0, until));
+  }
+
+  async acquire(hostname: string, signal?: AbortSignal): Promise<void> {
+    const current = this.now();
+    const scheduled = Math.max(current, this.nextAvailable.get(hostname) ?? current, this.cooldownUntil.get(hostname) ?? current);
+    this.nextAvailable.set(hostname, scheduled + this.minIntervalMs);
+    if (scheduled > current) await this.wait(scheduled - current, signal);
+  }
 }

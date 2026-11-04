@@ -180,7 +180,7 @@ export function registerVisualRoutes(
       params: ProjectParams,
       response: { 200: z.object({
         approved: z.number().int().nonnegative(),
-        failed: z.array(z.object({ sceneId: z.string().uuid(), reason: z.string() }).strict()),
+        failed: z.array(z.object({ sceneId: z.string().uuid(), reason: z.string(), retryable: z.boolean() }).strict()),
       }).strict(), ...Errors },
     },
   }, async (request) => {

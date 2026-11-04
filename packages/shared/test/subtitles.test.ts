@@ -2,11 +2,35 @@ import { describe, expect, it } from "vitest";
 import { cuesWithoutTimings, splitCue, toAss, toSrt, wrapLines } from "../src/subtitles/index.js";
 
 describe("subtitle helpers", () => {
-  it("wraps text in balanced 2-line blocks without losing text", () => {
+  it("wraps text by word boundaries without exceeding the max width", () => {
     const wrapped = wrapLines("Câu văn dài để test wrap line", 12, 2);
-    expect(wrapped).toHaveLength(2);
     expect(wrapped.join(" ")).toBe("Câu văn dài để test wrap line");
-    expect(wrapped.every((line) => line.length <= 18)).toBe(true);
+    expect(wrapped.every((line) => line.length <= 12)).toBe(true);
+  });
+
+  it("keeps the 45-character line under the limit by splitting at a word boundary", () => {
+    const text = "stadium tours, Jisoo, Jennie, Rosé, and Lisa";
+    const wrapped = wrapLines(text, 42, 2);
+    expect(wrapped.join(" ")).toBe(text);
+    expect(wrapped.every((line) => line.length <= 42)).toBe(true);
+  });
+
+  it("wraps Vietnamese narrative text without exceeding the max width", () => {
+    const text = "Tôi đang xem một đoạn rất dài để kiểm tra cách tách câu và không bị cắt giữa từ trong một câu cực dài hơn nữa cho phụ đề.";
+    const wrapped = wrapLines(text, 42, 2);
+    expect(wrapped.join(" ")).toBe(text);
+    expect(wrapped.every((line) => line.length <= 42)).toBe(true);
+  });
+
+  it("splits cues so every wrapped line fits the limit", () => {
+    const text = "In 2019, when parent agency YG Entertainment faced a scandal, the group kept touring stadium tours, Jisoo, Jennie, Rosé, and Lisa, while religious, national, and occupational norms were debated.";
+    const cues = splitCue({ text, startSec: 0, endSec: 12 }, { maxCharsPerLine: 42, maxLines: 2 });
+    expect(cues.map((cue) => cue.text).join(" ")).toBe(text);
+    for (const cue of cues) {
+      const lines = wrapLines(cue.text, 42, 2);
+      expect(lines.length).toBeLessThanOrEqual(2);
+      expect(lines.every((line) => line.length <= 42)).toBe(true);
+    }
   });
 
   it("splits a long cue without breaking a word", () => {

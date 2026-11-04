@@ -62,13 +62,16 @@ const pipeline: PipelineState = {
   activeJob: null,
 };
 
-function setup(approveFails = false) {
+const rateLimitReason = "Máy chủ ảnh đang giới hạn tốc độ (HTTP 429) — thử lại sau ít phút";
+
+function setup(approveFails = false, approveAllResult?: unknown) {
   const calls: { url: string; init?: RequestInit }[] = [];
   vi.stubGlobal("EventSource", undefined);
   vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input);
     calls.push({ url, init });
     if (url.endsWith("/pipeline")) return jsonResponse(pipeline);
+    if (approveAllResult && url.endsWith("/visuals/approve-all")) return jsonResponse(approveAllResult);
     if (approveFails && url.endsWith("/visuals/approve")) {
       return jsonResponse({ error: { code: "IMAGE_DOWNLOAD_FAILED", message: "Image download failed", details: {} } }, 422);
     }
@@ -109,6 +112,21 @@ describe("VisualReview", () => {
     expect(dialog).toHaveTextContent("1 ảnh chưa duyệt");
     fireEvent.click(within(dialog).getByRole("button", { name: "Duyệt tất cả" }));
     await waitFor(() => expect(calls.some((call) => call.url.endsWith("/visuals/approve-all"))).toBe(true));
+  });
+
+  it("groups rate-limited approve-all failures into one line", async () => {
+    setup(false, {
+      approved: 1,
+      failed: [
+        { sceneId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", reason: rateLimitReason, retryable: true },
+        { sceneId: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb", reason: rateLimitReason, retryable: true },
+      ],
+    });
+    fireEvent.click(await screen.findByRole("button", { name: "Duyệt tất cả" }));
+    const dialog = await screen.findByRole("dialog", { name: "Duyệt tất cả ảnh?" });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Duyệt tất cả" }));
+    expect(await screen.findByText(/2 cảnh bị máy chủ ảnh giới hạn tốc độ — bấm Duyệt tất cả lần nữa sau ít phút/)).toBeInTheDocument();
+    expect(screen.queryAllByText(rateLimitReason)).toHaveLength(0);
   });
 
   it("rolls back an optimistic approval and displays the server error", async () => {

@@ -3,6 +3,8 @@ import { lookup } from "node:dns/promises";
 import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { isIP } from "node:net";
 import { join } from "node:path";
+import { HostDownloadRateLimiter } from "../providers/images/rateLimiter.js";
+import { parseRetryDelay, sleepWithAbort } from "../providers/images/retry.js";
 import { projectDir } from "../storage/paths.js";
 
 export const MAX_IMAGE_BYTES = 25 * 1024 * 1024;
@@ -25,13 +27,21 @@ export type StoredImage = ParsedImage & {
 };
 
 export class ImageDownloadError extends Error {
-  constructor(message: string) {
+  constructor(
+    message: string,
+    public readonly status?: number,
+    public readonly retryable = false,
+    public readonly retryAfterMs?: number,
+    public readonly host?: string,
+  ) {
     super(message);
     this.name = "ImageDownloadError";
   }
 }
 
 export class ImageStore {
+  private readonly hostRateLimiter: HostDownloadRateLimiter;
+
   constructor(
     private readonly dataDir: string,
     private readonly userAgent: string,
@@ -39,8 +49,12 @@ export class ImageStore {
       fetchImpl?: typeof fetch;
       resolveHost?: (hostname: string) => Promise<string[]>;
       timeoutMs?: number;
+      minIntervalMs?: number;
+      hostRateLimiter?: HostDownloadRateLimiter;
     } = {},
-  ) {}
+  ) {
+    this.hostRateLimiter = dependencies.hostRateLimiter ?? new HostDownloadRateLimiter(dependencies.minIntervalMs ?? 0);
+  }
 
   async download(projectId: string, url: string, signal?: AbortSignal): Promise<StoredImage> {
     const bytes = await this.fetchImage(url, signal);
@@ -75,16 +89,32 @@ export class ImageStore {
   }
 
   private async fetchImage(initialUrl: string, signal?: AbortSignal): Promise<Buffer> {
-    let lastNetworkError: unknown;
-    for (let attempt = 0; attempt < 2; attempt += 1) {
+    const maxAttempts = 4;
+    let networkRetried = false;
+    for (let attempt = 0; ; attempt += 1) {
       try {
         return await this.fetchAttempt(initialUrl, signal);
       } catch (error) {
-        if (error instanceof ImageDownloadError || signal?.aborted) throw error;
-        lastNetworkError = error;
+        if (signal?.aborted) throw signal.reason ?? error;
+        if (!(error instanceof ImageDownloadError)) {
+          // Network errors and timeouts: retry once.
+          if (networkRetried) throw new ImageDownloadError(`Image download failed after one retry: ${errorMessage(error)}.`);
+          networkRetried = true;
+          await sleepWithAbort(250, signal);
+          continue;
+        }
+        if (!error.retryable) throw error;
+        const host = error.host ?? new URL(initialUrl).hostname;
+        if (attempt >= maxAttempts - 1) {
+          // Still retryable: running approve-all again later may succeed.
+          throw error.status === 429
+            ? new ImageDownloadError("Máy chủ ảnh đang giới hạn tốc độ (HTTP 429) — thử lại sau ít phút", 429, true, error.retryAfterMs, host)
+            : error;
+        }
+        // Shared per-host cooldown: the next request to this host (this retry or another download) waits it out.
+        this.hostRateLimiter.cooldown(host, error.retryAfterMs ?? getRetryBackoff(attempt));
       }
     }
-    throw new ImageDownloadError(`Image download failed after one retry: ${errorMessage(lastNetworkError)}.`);
   }
 
   private async fetchAttempt(initialUrl: string, signal?: AbortSignal): Promise<Buffer> {
@@ -92,16 +122,12 @@ export class ImageStore {
     let current = initialUrl;
     for (let redirect = 0; redirect <= MAX_REDIRECTS; redirect += 1) {
       const parsed = await this.validateUrl(current);
-      let response: Response;
-      try {
-        response = await fetchImpl(parsed, {
-          headers: { "User-Agent": this.userAgent, Accept: "image/jpeg,image/png,image/webp,image/gif" },
-          redirect: "manual",
-          signal: AbortSignal.any([AbortSignal.timeout(this.dependencies.timeoutMs ?? 20_000), ...(signal ? [signal] : [])]),
-        });
-      } catch (error) {
-        throw error;
-      }
+      await this.waitForHost(parsed.hostname, signal);
+      const response = await fetchImpl(parsed, {
+        headers: { "User-Agent": this.userAgent, Accept: "image/jpeg,image/png,image/webp,image/gif" },
+        redirect: "manual",
+        signal: AbortSignal.any([AbortSignal.timeout(this.dependencies.timeoutMs ?? 20_000), ...(signal ? [signal] : [])]),
+      });
       if (response.status >= 300 && response.status < 400) {
         const location = response.headers.get("location");
         if (!location) throw new ImageDownloadError("Image redirect did not include a Location header.");
@@ -110,11 +136,22 @@ export class ImageStore {
         current = new URL(location, parsed).toString();
         continue;
       }
+      if (response.status === 429 || response.status === 503) {
+        const retryAfterMs = parseRetryDelay(response.headers.get("retry-after"));
+        await response.body?.cancel();
+        throw new ImageDownloadError(
+          `Image server returned HTTP ${response.status}.`,
+          response.status,
+          true,
+          retryAfterMs > 0 ? retryAfterMs : undefined,
+          parsed.hostname,
+        );
+      }
       if (response.status >= 500) {
         await response.body?.cancel();
-        throw new Error(`Image server returned HTTP ${response.status}`);
+        throw new ImageDownloadError(`Image server returned HTTP ${response.status}.`, response.status, true, undefined, parsed.hostname);
       }
-      if (!response.ok) throw new ImageDownloadError(`Image server returned HTTP ${response.status}.`);
+      if (!response.ok) throw new ImageDownloadError(`Image server returned HTTP ${response.status}.`, response.status, false, undefined, parsed.hostname);
       const declaredLength = Number(response.headers.get("content-length"));
       if (Number.isFinite(declaredLength) && declaredLength > MAX_IMAGE_BYTES) {
         await response.body?.cancel();
@@ -125,6 +162,10 @@ export class ImageStore {
       return bytes;
     }
     throw new ImageDownloadError("Image exceeded the maximum of 3 redirects.");
+  }
+
+  private async waitForHost(hostname: string, signal?: AbortSignal): Promise<void> {
+    await this.hostRateLimiter.acquire(hostname, signal);
   }
 
   private async validateUrl(value: string): Promise<URL> {
@@ -321,6 +362,11 @@ function expandIpv6(value: string): number[] | undefined {
 
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
+}
+
+function getRetryBackoff(attempt: number): number {
+  const backoff = [2_000, 5_000, 15_000];
+  return backoff[Math.min(attempt, backoff.length - 1)] ?? 15_000;
 }
 
 export function isVisualFileName(value: string): boolean {

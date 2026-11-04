@@ -63,7 +63,7 @@ export function editSceneVisualQuery(projectId: string, sceneId: string, input: 
   });
 }
 
-export function approveAllSceneVisuals(projectId: string): Promise<{ approved: number; failed: { sceneId: string; reason: string }[] }> {
+export function approveAllSceneVisuals(projectId: string): Promise<{ approved: number; failed: { sceneId: string; reason: string; retryable: boolean }[] }> {
   return apiRequest(`/projects/${projectId}/visuals/approve-all`, { method: "POST" });
 }
 

@@ -30,6 +30,17 @@ to send a User-Agent with contact info; ours is `VideoAgent/0.1 (local)`. The se
    "N cảnh bị máy chủ ảnh giới hạn tốc độ — bấm Duyệt tất cả lần nữa sau ít phút" instead of N
    identical lines; other errors stay per scene.
 
+6. **Also (small, from the TASK-009 review) — subtitle lines over the limit**: on project 56374fb2
+   the `.srt` has 27 lines of 43–45 chars with `maxCharsPerLine` 42, e.g.
+   "stadium tours, Jisoo, Jennie, Rosé, and Lisa" (45). Cause: `wrapLines` in
+   `packages/shared/src/subtitles/index.ts` allows `safeMaxChars + 1`, and `splitCue` only checks
+   chunk length ≤ max × 2, not whether the chunk can actually be wrapped into 2 lines ≤ max.
+   Fix: `wrapLines` must never return a line > max when a word-boundary split exists; `splitCue`
+   must split further when `wrapLines(chunk, max, 2)` gives > 2 lines or a line > max (a single
+   word longer than max is the only allowed exception). Bump `SUBTITLE_FORMAT_VERSION` in
+   `subtitleExecutor.ts` to `"v3"`. Shared tests: the 45-char example above at 42, and a property
+   test over the existing Vietnamese fixture that every wrapped line ≤ max.
+
 ## Tests (Vitest, fake fetch + fake timers, no network)
 - 429 with `Retry-After: 2` then 200 → success after one wait; HTTP-date Retry-After parsed.
 - 429 four times → the Vietnamese rate-limit error; 404 → no retry.

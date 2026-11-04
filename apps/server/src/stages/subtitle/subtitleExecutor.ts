@@ -8,7 +8,7 @@ import { StageError, type StageContext, type StageExecutor } from "../../pipelin
 import { projectDir } from "../../storage/paths.js";
 
 // Bump when the written .srt/.ass format changes, so existing files are regenerated.
-const SUBTITLE_FORMAT_VERSION = "v2";
+const SUBTITLE_FORMAT_VERSION = "v3";
 
 type VoiceTrackRow = {
   id: string;

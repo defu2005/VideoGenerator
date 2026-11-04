@@ -299,7 +299,14 @@ export function VisualReview({ project }: { project: Project }) {
     try {
       const result = await approveAllSceneVisuals(project.id);
       setNotice(`Đã duyệt ${result.approved} ảnh. ${result.failed.length ? `Thất bại: ${result.failed.length} scene.` : ""}`);
-      if (result.failed.length) setError(result.failed.map((item) => `Scene ${rows.find((row) => row.sceneId === item.sceneId)?.order! + 1}: ${item.reason}`).join(" · "));
+      if (result.failed.length) {
+        const rateLimited = result.failed.filter((item) => item.retryable && /HTTP 429|giới hạn tốc độ/i.test(item.reason));
+        const messages = [
+          ...rateLimited.length ? [`${rateLimited.length} cảnh bị máy chủ ảnh giới hạn tốc độ — bấm Duyệt tất cả lần nữa sau ít phút`] : [],
+          ...result.failed.filter((item) => !rateLimited.includes(item)).map((item) => `Scene ${rows.find((row) => row.sceneId === item.sceneId)?.order! + 1}: ${item.reason}`),
+        ];
+        setError(messages.join(" · "));
+      }
       await queryClient.invalidateQueries({ queryKey: visualKeys.project(project.id) });
       if (activeSceneId) setActiveVisuals(await getSceneVisuals(project.id, activeSceneId));
     } catch (cause) {

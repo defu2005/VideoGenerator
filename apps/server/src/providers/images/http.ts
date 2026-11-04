@@ -1,4 +1,5 @@
 import type { AppConfig } from "../../lib/config.js";
+import { parseRetryDelay, sleepWithAbort } from "./retry.js";
 import type { FetchJson } from "./types.js";
 
 export async function fetchJsonWithRetry(input: {
@@ -24,7 +25,7 @@ export async function fetchJsonWithRetry(input: {
       if (!retryableStatus(response.status) || attempt === 1) {
         throw new ImageProviderError(`Image provider returned HTTP ${response.status}`, response.status, false);
       }
-      await sleep(retryDelay(response.headers.get("retry-after")), input.signal);
+      await sleepWithAbort(parseRetryDelay(response.headers.get("retry-after")) || 250, input.signal);
       lastError = new ImageProviderError(`Image provider returned HTTP ${response.status}`, response.status, true);
     } catch (error) {
       if (input.signal?.aborted) throw input.signal.reason ?? error;
@@ -35,13 +36,13 @@ export async function fetchJsonWithRetry(input: {
         const timeoutError = new ImageProviderError("Image provider request timed out", undefined, true);
         if (attempt === 1) throw timeoutError;
         lastError = timeoutError;
-        await sleep(250, input.signal);
+        await sleepWithAbort(250, input.signal);
         continue;
       }
       lastError = error;
       const retryable = !(error instanceof ImageProviderError) || error.retryable;
       if (!retryable || attempt === 1) throw error;
-      await sleep(250, input.signal);
+      await sleepWithAbort(250, input.signal);
     } finally {
       clearTimeout(timeout);
       input.signal?.removeEventListener("abort", abort);
@@ -59,33 +60,6 @@ export class ImageProviderError extends Error {
 
 function retryableStatus(status: number): boolean {
   return status === 429 || status >= 500;
-}
-
-function retryDelay(value: string | null): number {
-  if (!value) return 250;
-  const seconds = Number(value);
-  if (Number.isFinite(seconds)) return Math.max(0, seconds * 1_000);
-  const date = Date.parse(value);
-  return Number.isNaN(date) ? 250 : Math.max(0, date - Date.now());
-}
-
-function sleep(milliseconds: number, signal?: AbortSignal): Promise<void> {
-  return new Promise((resolve, reject) => {
-    if (signal?.aborted) {
-      reject(signal.reason ?? new Error("Request aborted"));
-      return;
-    }
-    const timer = setTimeout(() => {
-      signal?.removeEventListener("abort", onAbort);
-      resolve();
-    }, milliseconds);
-    const onAbort = () => {
-      clearTimeout(timer);
-      signal?.removeEventListener("abort", onAbort);
-      reject(signal?.reason ?? new Error("Request aborted"));
-    };
-    signal?.addEventListener("abort", onAbort, { once: true });
-  });
 }
 
 export function imageSearchHeaders(config: AppConfig): HeadersInit {

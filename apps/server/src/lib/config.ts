@@ -121,6 +121,7 @@ const ConfigSchema = z.object({
   TTS_TIMEOUT_MS: z.coerce.number().int().positive().default(60_000),
   IMAGE_PROVIDERS: z.string().default("wikimedia,openverse,pexels"),
   IMAGE_SEARCH_USER_AGENT: z.string().min(1).default("VideoAgent/0.1 (https://github.com/defu2005/videoGenerator)"),
+  IMAGE_DOWNLOAD_MIN_INTERVAL_MS: z.coerce.number().int().nonnegative().default(1_000),
   IMAGE_SEARCH_TIMEOUT_MS: z.coerce.number().int().positive().default(15_000),
   IMAGE_SEARCH_CACHE_TTL_HOURS: z.coerce.number().int().positive().default(168),
   IMAGE_SEARCH_PER_MINUTE_WIKIMEDIA: z.coerce.number().int().positive().default(60),
@@ -203,6 +204,7 @@ export type AppConfig = {
   TTS_TIMEOUT_MS: number;
   IMAGE_PROVIDERS: string;
   IMAGE_SEARCH_USER_AGENT: string;
+  IMAGE_DOWNLOAD_MIN_INTERVAL_MS: number;
   IMAGE_SEARCH_TIMEOUT_MS: number;
   IMAGE_SEARCH_CACHE_TTL_HOURS: number;
   IMAGE_SEARCH_PER_MINUTE_WIKIMEDIA: number;

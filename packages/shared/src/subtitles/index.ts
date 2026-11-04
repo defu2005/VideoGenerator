@@ -86,37 +86,9 @@ function formatTime(value: number): string {
   return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")},${String(milliseconds).padStart(3, "0")}`;
 }
 
-function splitTextIntoBalancedLines(text: string, maxCharsPerLine: number, maxLines: number): string[] {
-  const trimmed = normalizeText(text);
-  if (!trimmed || maxLines <= 1) return [trimmed];
-  const words = trimmed.split(/\s+/).filter(Boolean);
-  if (words.length <= 1) return [trimmed];
-
-  let best: { score: number; lines: string[] } | null = null;
-  for (let cut = 1; cut < words.length; cut += 1) {
-    const left = words.slice(0, cut).join(" ");
-    const right = words.slice(cut).join(" ");
-    const leftLength = left.length;
-    const rightLength = right.length;
-    if (leftLength > maxCharsPerLine * 2 || rightLength > maxCharsPerLine * 2) continue;
-    const score = Math.abs(leftLength - rightLength);
-    if (!best || score < best.score || (score === best.score && Math.abs(leftLength - maxCharsPerLine) < Math.abs(best.lines[0].length - maxCharsPerLine))) {
-      best = { score, lines: [left, right] };
-    }
-  }
-
-  if (!best) {
-    const lineOne = words.slice(0, Math.ceil(words.length / 2)).join(" ");
-    const lineTwo = words.slice(Math.ceil(words.length / 2)).join(" ");
-    return [lineOne, lineTwo].filter(Boolean);
-  }
-  return best.lines;
-}
-
 export function wrapLines(text: string, maxCharsPerLine: number, maxLines: number): string[] {
   const trimmed = normalizeText(text);
   const safeMaxChars = Math.max(1, maxCharsPerLine);
-  const safeMaxLines = Math.max(1, maxLines);
   if (!trimmed) return [];
   if (trimmed.length <= safeMaxChars) return [trimmed];
 
@@ -129,7 +101,7 @@ export function wrapLines(text: string, maxCharsPerLine: number, maxLines: numbe
     const right = words.slice(cut).join(" ");
     const leftLength = left.length;
     const rightLength = right.length;
-    const withinLimit = leftLength <= safeMaxChars + 1 && rightLength <= safeMaxChars + 1;
+    const withinLimit = leftLength <= safeMaxChars && rightLength <= safeMaxChars;
     if (!withinLimit) continue;
     const score = Math.abs(leftLength - rightLength);
     if (!best || score < best.score) {
@@ -138,7 +110,9 @@ export function wrapLines(text: string, maxCharsPerLine: number, maxLines: numbe
   }
 
   if (best) return best.lines;
-  return splitTextIntoBalancedLines(trimmed, safeMaxChars, safeMaxLines);
+  // No 2-line split fits: fill lines greedily so no line exceeds the limit
+  // (callers detect > maxLines and split the cue further).
+  return splitIntoSegments(trimmed, safeMaxChars);
 }
 
 export function splitCue(cue: SubtitleCue, opts: SubtitleOptions = {}): SubtitleCue[] {
@@ -148,8 +122,16 @@ export function splitCue(cue: SubtitleCue, opts: SubtitleOptions = {}): Subtitle
   const maxCharsPerLine = Number.isFinite(opts.maxCharsPerLine) && Number(opts.maxCharsPerLine) > 0 ? Number(opts.maxCharsPerLine) : fallback;
   const maxLines = opts.maxLines ?? 2;
   const totalText = text.length;
-  const chunkLimit = Math.max(1, maxCharsPerLine * maxLines);
-  const segments = splitIntoSegments(text, chunkLimit);
+  // Shrink the chunk size until every chunk wraps into maxLines lines of at most maxCharsPerLine.
+  const fits = (segment: string) => {
+    return wrapLines(segment, maxCharsPerLine, maxLines).length <= maxLines;
+  };
+  let chunkLimit = Math.max(1, maxCharsPerLine * maxLines);
+  let segments = splitIntoSegments(text, chunkLimit);
+  while (!segments.every(fits) && chunkLimit > maxCharsPerLine) {
+    chunkLimit -= 2;
+    segments = splitIntoSegments(text, chunkLimit);
+  }
   if (segments.length === 1) {
     return [{ ...cue, text: segments[0], startSec: cue.startSec, endSec: cue.endSec }];
   }

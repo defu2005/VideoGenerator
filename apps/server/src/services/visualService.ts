@@ -99,7 +99,7 @@ export class VisualService {
       openverse: config.IMAGE_SEARCH_PER_MINUTE_OPENVERSE,
       pexels: config.IMAGE_SEARCH_PER_MINUTE_PEXELS,
     });
-    this.imageStore = dependencies.imageStore ?? new ImageStore(config.DATA_DIR, config.IMAGE_SEARCH_USER_AGENT);
+    this.imageStore = dependencies.imageStore ?? new ImageStore(config.DATA_DIR, config.IMAGE_SEARCH_USER_AGENT, { minIntervalMs: config.IMAGE_DOWNLOAD_MIN_INTERVAL_MS });
   }
 
   getProjectVisuals(projectId: string) {
@@ -316,7 +316,7 @@ export class VisualService {
       return [{ sceneId: scene.id, selection }];
     });
     let approved = 0;
-    const failed: { sceneId: string; reason: string }[] = [];
+    const failed: { sceneId: string; reason: string; retryable: boolean }[] = [];
     for (const [index, item] of eligible.entries()) {
       if (signal?.aborted) throw signal.reason ?? new Error("Visual approval was aborted");
       try {
@@ -326,6 +326,7 @@ export class VisualService {
         failed.push({
           sceneId: item.sceneId,
           reason: error instanceof Error ? error.message : String(error),
+          retryable: isRetryableDownloadError(error),
         });
       }
       this.repository.emitVisualUpdated(projectId, item.sceneId, `approve-progress:${index + 1}/${eligible.length}`);
@@ -461,7 +462,9 @@ export class VisualService {
       const reason = error instanceof Error ? error.message : String(error);
       this.sqlite.prepare("UPDATE visual_candidates SET download_error = ? WHERE id = ?").run(reason, candidate.id);
       this.repository.emitVisualUpdated(projectId, sceneId, "download-failed");
-      throw new AppError(422, "IMAGE_DOWNLOAD_FAILED", reason);
+      throw new AppError(422, "IMAGE_DOWNLOAD_FAILED", reason, {
+        retryable: error instanceof ImageDownloadError && error.retryable,
+      });
     }
     const now = new Date().toISOString();
     this.repository.atomic(() => {
@@ -1392,4 +1395,12 @@ function makeLicense(input: {
 function downloadError(error: unknown): AppError {
   const reason = error instanceof Error ? error.message : String(error);
   return new AppError(422, "IMAGE_DOWNLOAD_FAILED", reason);
+}
+
+function isRetryableDownloadError(error: unknown): boolean {
+  if (error instanceof ImageDownloadError) return error.retryable;
+  if (error instanceof AppError && error.code === "IMAGE_DOWNLOAD_FAILED") {
+    return (error.details as { retryable?: boolean } | undefined)?.retryable === true;
+  }
+  return false;
 }

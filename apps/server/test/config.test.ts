@@ -18,6 +18,8 @@ describe("server configuration", () => {
     expect(parseConfig({}).LLM_RESEARCH_MODE).toBe("merged");
     expect(parseConfig({}).USD_VND_RATE).toBe(26000);
     expect(parseConfig({ USD_VND_RATE: "25000" }).USD_VND_RATE).toBe(25000);
+    expect(parseConfig({}).IMAGE_SEARCH_USER_AGENT).toContain("http");
+    expect(parseConfig({}).IMAGE_DOWNLOAD_MIN_INTERVAL_MS).toBe(1000);
   });
 
   it("parses optional token limits and Copilot CLI configuration", () => {

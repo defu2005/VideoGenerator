@@ -13,7 +13,11 @@ import { VisualService } from "../src/services/visualService.js";
 import { LlmProviderRegistry } from "../src/providers/llm/registry.js";
 import type { ImageSearchProvider, NormalizedImageResult } from "../src/providers/images/types.js";
 import { StageError } from "../src/pipeline/stageExecutor.js";
-import { TokenBucketRateLimiter } from "../src/providers/images/rateLimiter.js";
+import { HostDownloadRateLimiter, TokenBucketRateLimiter } from "../src/providers/images/rateLimiter.js";
+import { ImageStore } from "../src/services/imageStore.js";
+import { readFileSync } from "node:fs";
+import { dirname } from "node:path";
+import { fileURLToPath } from "node:url";
 import type { StageContext } from "../src/pipeline/stageExecutor.js";
 
 const root = mkdtempSync(join(tmpdir(), "vg-visual-search-"));
@@ -365,4 +369,39 @@ describe("visual search executor", () => {
       .rejects.toMatchObject<Partial<StageError>>({ code: "IMAGE_SEARCH_UNAVAILABLE", retryable: true });
   });
 
+
+  it("approve-all keeps other scenes approved when one hits 429 and retries only that scene later", async () => {
+    await visuals.executeStage(context([]), new LlmProviderRegistry(config));
+    const png = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "fixtures", "images", "tiny.png"));
+    const firstSelection = visuals.getProjectVisuals(project.id).scenes[0].selection!;
+    const failingCandidate = visuals.getSceneVisuals(project.id, firstSelection.sceneId).candidates
+      .find((candidate) => candidate.id === firstSelection.candidateId)!;
+    let rateLimit = true;
+    const fetchImpl = async (input: string | URL) => {
+      if (rateLimit && String(input) === failingCandidate.imageUrl) {
+        return new Response(null, { status: 429, headers: { "retry-after": "0" } });
+      }
+      return new Response(png, { status: 200, headers: { "content-type": "image/png" } });
+    };
+    const imageStore = new ImageStore(dataDir, "test-agent (https://example.test)", {
+      fetchImpl: fetchImpl as typeof fetch,
+      resolveHost: async () => ["203.0.113.10"],
+      hostRateLimiter: new HostDownloadRateLimiter(0, Date.now, async () => undefined),
+    });
+    const repository = new JobRepository(sqlite, new PipelineEventBus());
+    visuals = new VisualService(sqlite, repository, config, app.log, { limiter: noWaitLimiter(), imageStore });
+
+    const first = await visuals.approveAll(project.id);
+    expect(first.approved).toBe(1);
+    expect(first.failed).toEqual([{
+      sceneId: firstSelection.sceneId,
+      reason: "Máy chủ ảnh đang giới hạn tốc độ (HTTP 429) — thử lại sau ít phút",
+      retryable: true,
+    }]);
+
+    rateLimit = false;
+    const second = await visuals.approveAll(project.id);
+    expect(second).toEqual({ approved: 1, failed: [] });
+    expect(visuals.getProjectVisuals(project.id).scenes.every((scene) => scene.selection?.status === "APPROVED")).toBe(true);
+  });
 });

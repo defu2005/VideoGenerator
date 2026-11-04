@@ -104,7 +104,7 @@ describe("subtitle API", () => {
 
     expect(patched.statusCode).toBe(200);
     expect(patched.json().cues[0]).toMatchObject({ text: "Edited subtitle line that is longer than twenty-four chars.", edited: true });
-    expect(readFileSync(files.srtPath, "utf8")).toContain("Edited subtitle line that");
+    expect(readFileSync(files.srtPath, "utf8")).toContain("Edited subtitle line");
     expect(sqlite.prepare("SELECT state FROM project_stages WHERE project_id = ? AND stage = 'TIMELINE'").get(project.id)).toEqual({ state: "STALE" });
   });
 
