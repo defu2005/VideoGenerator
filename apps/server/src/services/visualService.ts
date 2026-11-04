@@ -21,6 +21,8 @@ import {
   type ScoreBreakdown,
   type VisionCheck,
   resolveBudget,
+  webImageSearchSceneCap,
+  isUnverifiedWebCandidate,
   type LlmCallUsage,
 } from "@vg/shared";
 import type Database from "better-sqlite3";
@@ -40,6 +42,24 @@ import type {
   NormalizedImageResult,
 } from "../providers/images/types.js";
 import { ImageProviderRegistry } from "../providers/images/registry.js";
+import { BraveImageProvider } from "../providers/images/brave.js";
+import {
+  HostDownloadRateLimiter,
+} from "../providers/images/rateLimiter.js";
+import {
+  RobotsCache,
+  WEB_CRAWL_USER_AGENT,
+  parseDomainDenylist,
+} from "../providers/images/webCrawl.js";
+import {
+  crawlPagesToCandidates,
+  enrichBraveCandidates,
+} from "../providers/images/crawlToCandidates.js";
+import {
+  searchPagesWithGeminiGrounding,
+  WEB_IMAGE_GROUNDING_BATCH_SIZE,
+} from "../providers/images/webGrounding.js";
+import { getWebImageSettings } from "../settings/webImage.js";
 import { markStaleFrom } from "../pipeline/invalidation.js";
 import { StageError, type StageContext, type StageResult } from "../pipeline/stageExecutor.js";
 import type { LlmProviderRegistry } from "../providers/llm/registry.js";
@@ -117,6 +137,7 @@ export class VisualService {
       wikimedia: config.IMAGE_SEARCH_PER_MINUTE_WIKIMEDIA,
       openverse: config.IMAGE_SEARCH_PER_MINUTE_OPENVERSE,
       pexels: config.IMAGE_SEARCH_PER_MINUTE_PEXELS,
+      brave: config.WEB_IMAGE_SEARCH_PER_MINUTE,
     });
     this.imageStore = dependencies.imageStore ?? new ImageStore(config.DATA_DIR, config.IMAGE_SEARCH_USER_AGENT, { minIntervalMs: config.IMAGE_DOWNLOAD_MIN_INTERVAL_MS });
   }
@@ -233,6 +254,144 @@ export class VisualService {
     };
   }
 
+  /**
+   * Search the open web for a scene (Brave image API, then Gemini grounding if needed).
+   * Reuses the scene's existing queries — no extra LLM query-writing call.
+   */
+  async webSearch(projectId: string, sceneId: string, signal?: AbortSignal) {
+    const project = this.requireProject(projectId);
+    const scene = this.requireScene(projectId, sceneId);
+    const settings = getWebImageSettings(this.sqlite, this.config);
+    const braveKey = Boolean(this.config.BRAVE_SEARCH_API_KEY?.trim());
+    const geminiKey = Boolean(this.config.GEMINI_API_KEY?.trim());
+    const braveOn = settings.braveEnabled && braveKey;
+    const groundingOn = settings.geminiGroundingEnabled && geminiKey;
+    if (!braveOn && !groundingOn) {
+      throw new AppError(
+        503,
+        "WEB_IMAGE_SEARCH_UNAVAILABLE",
+        "Thiếu key: cấu hình BRAVE_SEARCH_API_KEY và/hoặc GEMINI_API_KEY, rồi bật nguồn ảnh web trong Cài đặt.",
+      );
+    }
+
+    const queries = [
+      scene.visualQueries.primary,
+      ...scene.visualQueries.alternatives,
+    ].map((query) => query.trim()).filter(Boolean);
+    if (!queries.length) {
+      throw new AppError(422, "WEB_IMAGE_QUERY_MISSING", "Scene chưa có từ khóa tìm ảnh.");
+    }
+
+    const denylist = settings.domainDenylist.length
+      ? settings.domainDenylist
+      : parseDomainDenylist(this.config.WEB_IMAGE_DOMAIN_DENYLIST);
+    const hostLimiter = new HostDownloadRateLimiter(this.config.IMAGE_DOWNLOAD_MIN_INTERVAL_MS);
+    const robotsCache = new RobotsCache({
+      hostRateLimiter: hostLimiter,
+      userAgent: WEB_CRAWL_USER_AGENT,
+      signal,
+    });
+    const pageCache: { get(key: string): string | undefined; put(key: string, value: string): void } = {
+      get: (key) => this.getCachedRaw(key),
+      put: (key, value) => this.putCachedRaw(key, "web-crawl", key, value),
+    };
+
+    let braveRequests = 0;
+    let groundingCalls = 0;
+    let groundingModel = "";
+    const collected: NormalizedImageResult[] = [];
+    const usable = () => collected.filter((item) => item.imageUrl).length;
+
+    if (braveOn) {
+      const brave = new BraveImageProvider(this.config);
+      await this.limiter.acquire("brave", signal);
+      const primary = queries[0]!;
+      const braveHits = await brave.search({
+        query: primary,
+        perPage: 20,
+        orientation: orientationFor(project.settings.aspectRatio),
+        signal,
+      });
+      braveRequests += 1;
+      const enriched = await enrichBraveCandidates({
+        candidates: braveHits.slice(0, 12),
+        denylist,
+        config: this.config,
+        cache: pageCache,
+        robotsCache,
+        dependencies: { hostRateLimiter: hostLimiter, signal, userAgent: WEB_CRAWL_USER_AGENT },
+        signal,
+      });
+      collected.push(...enriched);
+    }
+
+    if (usable() < 3 && groundingOn) {
+      const grounding = await searchPagesWithGeminiGrounding({
+        scenes: [{
+          sceneId: scene.id,
+          query: queries[0]!,
+          alternativeQueries: queries.slice(1),
+        }],
+        config: {
+          ...this.config,
+          WEB_IMAGE_GEMINI_MODEL: settings.geminiModel || this.config.WEB_IMAGE_GEMINI_MODEL,
+        },
+        signal,
+        redirectDependencies: { hostRateLimiter: hostLimiter, signal },
+      });
+      groundingCalls += 1;
+      groundingModel = grounding.model;
+      const pageUrls = grounding.scenes.find((item) => item.sceneId === scene.id)?.pageUrls
+        ?? grounding.scenes[0]?.pageUrls
+        ?? [];
+      const grounded = await crawlPagesToCandidates({
+        pageUrls,
+        query: queries[0]!,
+        provider: "web-grounding",
+        denylist,
+        config: this.config,
+        cache: pageCache,
+        robotsCache,
+        dependencies: { hostRateLimiter: hostLimiter, signal, userAgent: WEB_CRAWL_USER_AGENT },
+        signal,
+        whyPrefix: "Gemini grounding",
+      });
+      collected.push(...grounded);
+    }
+
+    const current = this.getSceneVisuals(projectId, sceneId, true).candidates;
+    const combined = dedupeCandidates([
+      ...current,
+      ...collected.map((result) => this.toCandidate(result, project, scene, queries[0]!, "")),
+    ]);
+    const ranked = this.rankVisuals(
+      combined,
+      scene.visualQueries.primary,
+      scene.visualDescription || scene.visualNotes,
+      project.settings.language,
+      aspectNumber(project.settings.aspectRatio),
+      [...this.registry.list().map((item) => item.id), "brave", "web-grounding"],
+    ).slice(0, 24);
+
+    this.repository.atomic(() => {
+      for (const [rank, candidate] of ranked.entries()) this.saveCandidate({ ...candidate, rank });
+      this.repository.emitVisualUpdated(projectId, sceneId, "web-searched");
+    });
+
+    return {
+      ...this.getSceneVisuals(projectId, sceneId),
+      usage: {
+        braveRequests,
+        groundingCalls,
+        ...(groundingModel ? { groundingModel } : {}),
+        features: {
+          ...(braveRequests ? { braveImageSearchRequests: braveRequests } : {}),
+          ...(groundingCalls ? { webImageGroundingCalls: groundingCalls } : {}),
+        },
+      },
+    };
+  }
+
   selectCandidate(projectId: string, sceneId: string, candidateId: string) {
     this.requireScene(projectId, sceneId);
     const candidate = this.findCandidate(candidateId);
@@ -345,6 +504,9 @@ export class VisualService {
       if (visionMeta?.needsAttention) return [];
       const selection = this.getSelection(projectId, scene.id);
       if (!selection || !["DISCOVERED", "REVIEW_REQUIRED", "REPLACED"].includes(selection.status)) return [];
+      const candidate = this.findCandidate(selection.candidateId);
+      // Never auto-approve unverified web finds — user must review license.
+      if (candidate && isUnverifiedWebCandidate(candidate)) return [];
       return [{ sceneId: scene.id, selection }];
     });
     let approved = 0;
@@ -856,6 +1018,146 @@ export class VisualService {
     }
 
     const budgetFeatures = resolveBudget(project);
+    let braveImageSearchRequests = 0;
+    let webImageGroundingCalls = 0;
+    const webCap = webImageSearchSceneCap(budgetFeatures, rankedScenes.length);
+    if (webCap > 0) {
+      const settings = getWebImageSettings(this.sqlite, this.config);
+      const braveOn = settings.braveEnabled && Boolean(this.config.BRAVE_SEARCH_API_KEY?.trim());
+      const groundingOn = settings.geminiGroundingEnabled && Boolean(this.config.GEMINI_API_KEY?.trim());
+      if (braveOn || groundingOn) {
+        const lowScenes = rankedScenes.filter((entry) => {
+          if (entry.item.unchanged || entry.item.protectedSelection) return false;
+          const relevant = entry.ranked.filter((candidate) => candidate.scoreBreakdown.lowRelevance !== true);
+          return relevant.length === 0 || (entry.ranked[0]?.scoreBreakdown.lowRelevance === true);
+        }).slice(0, webCap);
+        if (lowScenes.length) {
+          context.reportProgress(65, `Web image search for ${lowScenes.length} low-relevance scene(s)`);
+          const denylist = settings.domainDenylist.length
+            ? settings.domainDenylist
+            : parseDomainDenylist(this.config.WEB_IMAGE_DOMAIN_DENYLIST);
+          const hostLimiter = new HostDownloadRateLimiter(this.config.IMAGE_DOWNLOAD_MIN_INTERVAL_MS);
+          const robotsCache = new RobotsCache({
+            hostRateLimiter: hostLimiter,
+            userAgent: WEB_CRAWL_USER_AGENT,
+            signal: context.signal,
+          });
+          const pageCache = {
+            get: (key: string) => this.getCachedRaw(key),
+            put: (key: string, value: string) => this.putCachedRaw(key, "web-crawl", key, value),
+          };
+
+          // Brave per scene first
+          for (const entry of lowScenes) {
+            if (!braveOn) break;
+            if (context.signal.aborted) throw context.signal.reason ?? new Error("Visual search was aborted");
+            try {
+              const brave = new BraveImageProvider(this.config);
+              await this.limiter.acquire("brave", context.signal);
+              const hits = await brave.search({
+                query: entry.item.queries[0] ?? entry.item.scene.visualQueries.primary,
+                perPage: 20,
+                orientation: orientationFor(project.settings.aspectRatio),
+                signal: context.signal,
+              });
+              braveImageSearchRequests += 1;
+              const enriched = await enrichBraveCandidates({
+                candidates: hits.slice(0, 10),
+                denylist,
+                config: this.config,
+                cache: pageCache,
+                robotsCache,
+                dependencies: { hostRateLimiter: hostLimiter, signal: context.signal, userAgent: WEB_CRAWL_USER_AGENT },
+                signal: context.signal,
+              });
+              if (enriched.length) {
+                const merged = dedupeCandidates([...entry.ranked, ...enriched]);
+                entry.ranked = this.rankVisuals(
+                  merged,
+                  entry.item.scene.visualQueries.primary,
+                  entry.item.scene.visualDescription || entry.item.scene.visualNotes,
+                  project.settings.language,
+                  aspectNumber(project.settings.aspectRatio),
+                  [...enabledProviders.map((provider) => provider.id), "brave", "web-grounding"],
+                ).slice(0, 24);
+                entry.item.candidates = entry.ranked.map((candidate) => toNormalizedCandidate(candidate));
+              }
+            } catch (error) {
+              context.logger.warn({ err: error, sceneId: entry.item.scene.id }, "Brave web image search failed");
+            }
+          }
+
+          // Gemini grounding for scenes still short on usable images
+          const stillLow = lowScenes.filter((entry) => {
+            const usable = entry.ranked.filter((candidate) => candidate.scoreBreakdown.lowRelevance !== true);
+            return usable.length < 3;
+          });
+          if (groundingOn && stillLow.length) {
+            for (let offset = 0; offset < stillLow.length; offset += WEB_IMAGE_GROUNDING_BATCH_SIZE) {
+              if (context.signal.aborted) throw context.signal.reason ?? new Error("Visual search was aborted");
+              const batch = stillLow.slice(offset, offset + WEB_IMAGE_GROUNDING_BATCH_SIZE);
+              try {
+                const grounding = await searchPagesWithGeminiGrounding({
+                  scenes: batch.map((entry) => ({
+                    sceneId: entry.item.scene.id,
+                    query: entry.item.queries[0] ?? entry.item.scene.visualQueries.primary,
+                    alternativeQueries: entry.item.queries.slice(1),
+                  })),
+                  config: {
+                    ...this.config,
+                    WEB_IMAGE_GEMINI_MODEL: settings.geminiModel || this.config.WEB_IMAGE_GEMINI_MODEL,
+                  },
+                  signal: context.signal,
+                  redirectDependencies: { hostRateLimiter: hostLimiter, signal: context.signal },
+                });
+                webImageGroundingCalls += 1;
+                llmCalls += 1;
+                llmCallDetails.push({
+                  task: "webImageGrounding",
+                  provider: "gemini",
+                  model: grounding.model || settings.geminiModel || this.config.WEB_IMAGE_GEMINI_MODEL,
+                  inputTokens: 0,
+                  outputTokens: 0,
+                  cached: false,
+                  fallback: false,
+                  ok: true,
+                });
+                for (const entry of batch) {
+                  const pageUrls = grounding.scenes.find((item) => item.sceneId === entry.item.scene.id)?.pageUrls ?? [];
+                  if (!pageUrls.length) continue;
+                  const grounded = await crawlPagesToCandidates({
+                    pageUrls,
+                    query: entry.item.queries[0] ?? entry.item.scene.visualQueries.primary,
+                    provider: "web-grounding",
+                    denylist,
+                    config: this.config,
+                    cache: pageCache,
+                    robotsCache,
+                    dependencies: { hostRateLimiter: hostLimiter, signal: context.signal, userAgent: WEB_CRAWL_USER_AGENT },
+                    signal: context.signal,
+                    whyPrefix: "Gemini grounding",
+                  });
+                  if (!grounded.length) continue;
+                  const merged = dedupeCandidates([...entry.ranked, ...grounded]);
+                  entry.ranked = this.rankVisuals(
+                    merged,
+                    entry.item.scene.visualQueries.primary,
+                    entry.item.scene.visualDescription || entry.item.scene.visualNotes,
+                    project.settings.language,
+                    aspectNumber(project.settings.aspectRatio),
+                    [...enabledProviders.map((provider) => provider.id), "brave", "web-grounding"],
+                  ).slice(0, 24);
+                  entry.item.candidates = entry.ranked.map((candidate) => toNormalizedCandidate(candidate));
+                }
+              } catch (error) {
+                context.logger.warn({ err: error }, "Gemini web grounding failed");
+              }
+            }
+          }
+        }
+      }
+    }
+
     const visionMetaByScene = new Map<string, SceneVisionMeta>();
     const visionChecksByCandidateKey = new Map<string, VisionCheck>();
     if (budgetFeatures.visionCheck) {
@@ -1016,10 +1318,11 @@ export class VisualService {
       const selectedCandidate = currentSelection && (item.unchanged || item.protectedSelection)
         ? this.findCandidate(currentSelection.candidateId)
         : null;
+      // AUTO preselect must skip unverified web candidates (user reviews license).
       return {
         sceneId: item.scene.id,
         order: item.scene.order,
-        candidates: ranked,
+        candidates: ranked.filter((candidate) => !isUnverifiedWebCandidate(candidate)),
         ...(selectedCandidate ? { lockedCandidate: fromStoredCandidate(selectedCandidate) } : {}),
       };
     }));
@@ -1047,6 +1350,7 @@ export class VisualService {
               sceneId: item.scene.id,
               origin: "SEARCH",
               query: candidate.searchQuery ?? item.scene.visualQueries.primary,
+              licenseVerified: candidate.licenseVerified ?? true,
               discardedAt: null,
               createdAt: new Date().toISOString(),
               searchHash: item.searchHash,
@@ -1099,7 +1403,12 @@ export class VisualService {
       inputTokens,
       outputTokens,
       ...(llmCallDetails.length ? { calls: llmCallDetails } : {}),
-      features: { imageProviderRequests: stats.requests, imageCacheHits: stats.cacheHits },
+      features: {
+        imageProviderRequests: stats.requests,
+        imageCacheHits: stats.cacheHits,
+        ...(braveImageSearchRequests ? { braveImageSearchRequests } : {}),
+        ...(webImageGroundingCalls ? { webImageGroundingCalls } : {}),
+      },
     });
     const cacheHits = stats.cacheHits;
     const projectVisuals = this.getProjectVisuals(project.id);
@@ -1261,6 +1570,24 @@ export class VisualService {
     ).run(key, provider, query, JSON.stringify(response), new Date().toISOString());
   }
 
+  private getCachedRaw(key: string): string | undefined {
+    const row = this.sqlite.prepare("SELECT response, created_at FROM image_search_cache WHERE key = ?")
+      .get(key) as CacheRow | undefined;
+    if (!row) return undefined;
+    const age = Date.now() - Date.parse(row.created_at);
+    if (age > this.config.IMAGE_SEARCH_CACHE_TTL_HOURS * 3_600_000) {
+      this.sqlite.prepare("DELETE FROM image_search_cache WHERE key = ?").run(key);
+      return undefined;
+    }
+    return typeof row.response === "string" ? row.response : JSON.stringify(row.response);
+  }
+
+  private putCachedRaw(key: string, provider: string, query: string, response: string): void {
+    this.sqlite.prepare(
+      "INSERT INTO image_search_cache (key, provider, query, response, created_at) VALUES (?, ?, ?, ?, ?) ON CONFLICT(key) DO UPDATE SET response = excluded.response, created_at = excluded.created_at",
+    ).run(key, provider, query, response, new Date().toISOString());
+  }
+
   private loadScenes(projectId: string): Scene[] {
     const rows = this.sqlite.prepare(
       "SELECT id, project_id, \"order\", kind, section_id, label, narration, visual_notes, visual_description, no_visual, visual_queries, music_mood, energy, est_duration_sec, duration_override_sec, start_sec, transition_note, origin, edited, input_hash, created_at, updated_at FROM scenes WHERE project_id = ? ORDER BY \"order\"",
@@ -1364,19 +1691,22 @@ export class VisualService {
     ).get(candidate.sceneId, candidate.provider, candidate.providerItemId) as { id: string } | undefined;
     const id = existing?.id ?? candidate.id;
     this.sqlite.prepare(
-      `INSERT INTO visual_candidates (id, project_id, scene_id, origin, provider, provider_item_id, source_provider, query, title, description, tags, preview_url, image_url, source_url, source_site, width, height, aspect_ratio, file_type, watermark, relevance_score, score_breakdown, license, rank, discarded_at, created_at, search_hash, local_path, sha256, bytes, actual_width, actual_height, downloaded_at, download_error, vision_check)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `INSERT INTO visual_candidates (id, project_id, scene_id, origin, provider, provider_item_id, source_provider, query, title, description, tags, preview_url, image_url, source_url, source_page_url, source_site, width, height, aspect_ratio, file_type, watermark, relevance_score, score_breakdown, license, license_verified, why, rank, discarded_at, created_at, search_hash, local_path, sha256, bytes, actual_width, actual_height, downloaded_at, download_error, vision_check)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT(id) DO UPDATE SET query=excluded.query, title=excluded.title, description=excluded.description, tags=excluded.tags,
-       preview_url=excluded.preview_url, image_url=excluded.image_url, source_url=excluded.source_url, source_site=excluded.source_site,
+       preview_url=excluded.preview_url, image_url=excluded.image_url, source_url=excluded.source_url, source_page_url=excluded.source_page_url, source_site=excluded.source_site,
        width=excluded.width, height=excluded.height, aspect_ratio=excluded.aspect_ratio, file_type=excluded.file_type,
        watermark=excluded.watermark, relevance_score=excluded.relevance_score, score_breakdown=excluded.score_breakdown,
-       license=excluded.license, rank=excluded.rank, search_hash=excluded.search_hash, vision_check=COALESCE(excluded.vision_check, visual_candidates.vision_check)`,
+       license=excluded.license, license_verified=excluded.license_verified, why=excluded.why, rank=excluded.rank, search_hash=excluded.search_hash, vision_check=COALESCE(excluded.vision_check, visual_candidates.vision_check)`,
     ).run(
       id, candidate.projectId, candidate.sceneId, candidate.origin, candidate.provider, candidate.providerItemId,
       candidate.sourceProvider ?? null, candidate.query, candidate.title, candidate.description, JSON.stringify(candidate.tags),
-      candidate.previewUrl, candidate.imageUrl, candidate.sourceUrl, candidate.sourceSite, candidate.width, candidate.height,
+      candidate.previewUrl, candidate.imageUrl, candidate.sourceUrl, candidate.sourcePageUrl ?? null, candidate.sourceSite,
+      candidate.width, candidate.height,
       candidate.aspectRatio, candidate.fileType, candidate.watermark, candidate.relevanceScore,
-      JSON.stringify(candidate.scoreBreakdown), JSON.stringify(candidate.license), candidate.rank, candidate.discardedAt,
+      JSON.stringify(candidate.scoreBreakdown), JSON.stringify(candidate.license),
+      candidate.licenseVerified !== false ? 1 : 0, candidate.why ?? null,
+      candidate.rank, candidate.discardedAt,
       candidate.createdAt, candidate.searchHash ?? "",
       candidate.localPath ?? null, candidate.sha256 ?? null, candidate.bytes ?? null,
       candidate.actualWidth ?? null, candidate.actualHeight ?? null, candidate.downloadedAt ?? null,
@@ -1405,6 +1735,7 @@ export class VisualService {
       previewUrl: row.preview_url,
       imageUrl: row.image_url,
       sourceUrl: row.source_url,
+      ...(row.source_page_url ? { sourcePageUrl: row.source_page_url } : {}),
       sourceSite: row.source_site,
       width: row.width,
       height: row.height,
@@ -1414,6 +1745,10 @@ export class VisualService {
       relevanceScore: row.relevance_score,
       scoreBreakdown: parseJson(row.score_breakdown, {}),
       license: parseJson(row.license, {}),
+      licenseVerified: row.license_verified === undefined || row.license_verified === null
+        ? true
+        : Boolean(row.license_verified),
+      ...(typeof row.why === "string" && row.why ? { why: row.why } : {}),
       rank: row.rank,
       discardedAt: row.discarded_at,
       createdAt: row.created_at,
@@ -1680,12 +2015,15 @@ function fromStoredCandidate(candidate: VisualCandidate): NormalizedImageResult 
     previewUrl: candidate.previewUrl,
     imageUrl: candidate.imageUrl,
     sourceUrl: candidate.sourceUrl,
+    ...(candidate.sourcePageUrl ? { sourcePageUrl: candidate.sourcePageUrl } : {}),
     sourceSite: candidate.sourceSite,
     width: candidate.width,
     height: candidate.height,
     fileType: candidate.fileType,
     watermark: candidate.watermark,
     license: candidate.license,
+    licenseVerified: candidate.licenseVerified,
+    ...(candidate.why ? { why: candidate.why } : {}),
   };
 }
 

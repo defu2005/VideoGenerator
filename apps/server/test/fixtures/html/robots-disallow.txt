@@ -1,0 +1,6 @@
+User-agent: videoGenerator
+Disallow: /private/
+Allow: /public/
+
+User-agent: *
+Disallow: /secret/

@@ -1,0 +1,70 @@
+{
+  "type": "images",
+  "query": {
+    "original": "AlphaGo Lee Sedol",
+    "altered": null,
+    "spellcheck_off": false,
+    "show_strict_warning": false
+  },
+  "results": [
+    {
+      "type": "image_result",
+      "title": "AlphaGo versus Lee Sedol",
+      "url": "https://deepmind.google/research/alphago/",
+      "source": "deepmind.google",
+      "page_fetched": "2025-09-15T10:30:00Z",
+      "thumbnail": {
+        "src": "https://imgs.search.brave.com/thumb/alphago.jpg",
+        "width": 500,
+        "height": 333
+      },
+      "properties": {
+        "url": "https://deepmind.google/static/alphago-lee-sedol.jpg",
+        "placeholder": "https://imgs.search.brave.com/placeholder/alphago.jpg",
+        "width": 1920,
+        "height": 1280
+      },
+      "meta_url": {
+        "scheme": "https",
+        "netloc": "deepmind.google",
+        "hostname": "deepmind.google",
+        "path": "/research/alphago/"
+      },
+      "confidence": "high"
+    },
+    {
+      "type": "image_result",
+      "title": "Lee Sedol playing Go",
+      "url": "https://en.wikipedia.org/wiki/AlphaGo_versus_Lee_Sedol",
+      "source": "en.wikipedia.org",
+      "thumbnail": {
+        "src": "https://imgs.search.brave.com/thumb/lee.jpg",
+        "width": 400,
+        "height": 300
+      },
+      "properties": {
+        "url": "https://upload.wikimedia.org/wikipedia/commons/thumb/lee.jpg/1200px-lee.jpg",
+        "width": 1200,
+        "height": 900
+      },
+      "meta_url": {
+        "hostname": "en.wikipedia.org"
+      },
+      "confidence": "medium"
+    },
+    {
+      "type": "image_result",
+      "title": "Tiny icon",
+      "url": "https://example.com/icon",
+      "source": "example.com",
+      "properties": {
+        "url": "https://example.com/icon.png",
+        "width": 64,
+        "height": 64
+      }
+    }
+  ],
+  "extra": {
+    "might_be_offensive": false
+  }
+}

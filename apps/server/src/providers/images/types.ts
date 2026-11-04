@@ -13,12 +13,16 @@ export type NormalizedImageResult = {
   previewUrl: string;
   imageUrl: string;
   sourceUrl: string;
+  sourcePageUrl?: string;
   sourceSite: string;
   width: number;
   height: number;
   fileType: string;
   watermark: "NONE" | "SUSPECTED" | "UNKNOWN";
   license: LicenseMetadata;
+  /** False for web finds without a reliable CC/PD/Commons signal; stock providers omit (treated as verified). */
+  licenseVerified?: boolean;
+  why?: string;
   providerPosition?: number;
   searchQuery?: string;
 };

@@ -18,6 +18,17 @@ export function searchSceneVisuals(projectId: string, sceneId: string, query: st
   });
 }
 
+export function webSearchSceneVisuals(projectId: string, sceneId: string) {
+  return apiRequest<import("@vg/shared").SceneVisuals & {
+    usage: {
+      braveRequests: number;
+      groundingCalls: number;
+      groundingModel?: string;
+      features?: Record<string, number>;
+    };
+  }>(`${scenePath(projectId, sceneId)}/web-search`, { method: "POST" });
+}
+
 export function selectSceneVisual(projectId: string, sceneId: string, candidateId: string) {
   return apiRequest<import("@vg/shared").SceneVisuals>(`${scenePath(projectId, sceneId)}/select`, {
     method: "POST",

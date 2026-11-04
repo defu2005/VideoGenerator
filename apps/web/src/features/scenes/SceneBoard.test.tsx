@@ -207,6 +207,7 @@ describe("SceneBoard", () => {
         attributionText: "By A Photographer",
         evidence: "api",
       },
+      licenseVerified: true,
       rank: 0,
       discardedAt: null,
       createdAt: "2026-11-03T00:00:00.000Z",

@@ -1,4 +1,4 @@
-import type { Project, ProjectVisuals, SceneVisualStatus, SceneVisuals, VisualCandidate } from "@vg/shared";
+import { isWebImageProvider, type Project, type ProjectVisuals, type SceneVisualStatus, type SceneVisuals, type VisualCandidate } from "@vg/shared";
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useSearchParams } from "react-router-dom";
@@ -21,6 +21,7 @@ import {
   selectSceneVisual,
   uploadSceneVisual,
   visionCheckCandidate,
+  webSearchSceneVisuals,
 } from "../../services/visualsApi";
 import { sceneTimecode } from "../scenes/SceneCard";
 
@@ -60,10 +61,18 @@ function isHttpUrl(value: string): boolean {
 }
 
 function licenseBadge(candidate: VisualCandidate): string {
+  if (isWebImageProvider(candidate.provider) && candidate.licenseVerified === false) {
+    return "Chưa xác minh license";
+  }
   if (candidate.license.kind === "UNKNOWN") return "License chưa rõ";
   if (candidate.license.kind.includes("NC")) return "Phi thương mại";
   if (candidate.license.attributionRequired) return "Attribution required";
   return candidate.license.kind;
+}
+
+function providerBadge(candidate: VisualCandidate): string {
+  if (candidate.provider === "brave" || candidate.provider === "web-grounding") return "Web";
+  return candidate.provider;
 }
 
 function imageUrl(projectId: string, candidate: VisualCandidate | null): string | undefined {
@@ -460,6 +469,28 @@ export function VisualReview({ project }: { project: Project }) {
             <div className="visual-search-form">
               <label className="form-field"><span>Từ khóa tìm kiếm</span><input value={query} onChange={(event) => setQuery(event.target.value)} /></label>
               <button className="button button-primary" type="button" disabled={!query.trim() || mutate.isPending} onClick={() => void searchAgain()}>Tìm lại</button>
+              <button
+                className="button button-secondary"
+                type="button"
+                disabled={mutate.isPending}
+                onClick={() => {
+                  if (!activeSceneId) return;
+                  setError("");
+                  void webSearchSceneVisuals(project.id, activeSceneId)
+                    .then(async (result) => {
+                      setActiveVisuals(result);
+                      await queryClient.invalidateQueries({ queryKey: visualKeys.project(project.id) });
+                      const brave = result.usage?.braveRequests ?? 0;
+                      const grounding = result.usage?.groundingCalls ?? 0;
+                      setNotice(`Đã tìm trên web (Brave ${brave}, grounding ${grounding}).`);
+                    })
+                    .catch((cause: unknown) => {
+                      setError(cause instanceof Error ? cause.message : "Không tìm được ảnh trên web.");
+                    });
+                }}
+              >
+                Tìm trên web
+              </button>
             </div>
             {recentQueries.length > 0 && <div className="visual-recent-queries" aria-label="Các từ khóa gần đây">
               {recentQueries.map((recent) => <button className="visual-query-chip" type="button" key={recent} onClick={() => setQuery(recent)}>{recent}</button>)}
@@ -469,7 +500,8 @@ export function VisualReview({ project }: { project: Project }) {
                 <article className={`visual-candidate${item.id === activeVisuals?.selection?.candidateId ? " is-selected" : ""}`} key={item.id}>
                   <img src={imageUrl(project.id, item)} loading="lazy" alt={item.title} />
                   <strong>{item.title || `Candidate ${index + 1}`}</strong>
-                  <small>{item.provider} · {item.width}×{item.height} · {Math.round(item.relevanceScore * 100)}% · {licenseBadge(item)}</small>
+                  <small>{providerBadge(item)} · {item.width}×{item.height} · {Math.round(item.relevanceScore * 100)}% · {licenseBadge(item)}</small>
+                  {item.why && <small className="visual-why">{item.why}</small>}
                   {item.visionCheck && (
                     <div className="visual-vision-check">
                       <span className="visual-chip">AI nhìn: {item.visionCheck.fit}/10</span>
@@ -480,6 +512,8 @@ export function VisualReview({ project }: { project: Project }) {
                     </div>
                   )}
                   <div className="visual-candidate-marks">
+                    {isWebImageProvider(item.provider) && <span>Web</span>}
+                    {isWebImageProvider(item.provider) && item.licenseVerified === false && <span>Chưa xác minh license</span>}
                     {item.scoreBreakdown.lowRelevance === true && <span>Ít liên quan</span>}
                     {(item.scoreBreakdown.reusedAcrossScenes === true || rows.some((row) => row.sceneId !== activeSceneId
                       && row.selectedCandidate?.sourceUrl === item.sourceUrl)) && <span>Dùng lại</span>}
@@ -518,9 +552,13 @@ export function VisualReview({ project }: { project: Project }) {
               <p>Tác giả: {selectedCandidate.license.author || "Chưa rõ"} · {selectedCandidate.license.name || selectedCandidate.license.kind}
                 · {selectedCandidate.license.attributionRequired ? "cần attribution" : "không ghi nhận yêu cầu attribution"}</p>
               <p>{selectedCandidate.license.attributionText || "Không có thông tin attribution."}</p>
-              <a href={selectedCandidate.sourceUrl} target="_blank" rel="noopener noreferrer">Mở nguồn</a>
+              {isWebImageProvider(selectedCandidate.provider) && selectedCandidate.licenseVerified === false && (
+                <p role="alert">Chưa xác minh license — kiểm tra trang nguồn trước khi đăng tải công khai.</p>
+              )}
+              <a href={selectedCandidate.sourcePageUrl || selectedCandidate.sourceUrl} target="_blank" rel="noopener noreferrer">Mở trang nguồn</a>
               <a href={selectedCandidate.imageUrl} target="_blank" rel="noopener noreferrer">Mở URL ảnh</a>
               {selectedCandidate.license.url && <a href={selectedCandidate.license.url} target="_blank" rel="noopener noreferrer">Mở license</a>}
+              {selectedCandidate.why && <p>{selectedCandidate.why}</p>}
               {selectedCandidate.license.authorUrl && <a href={selectedCandidate.license.authorUrl} target="_blank" rel="noopener noreferrer">Mở trang tác giả</a>}
               {selectedCandidate.license.attributionText && <button className="button button-secondary" type="button" onClick={() => {
                 void navigator.clipboard.writeText(selectedCandidate.license.attributionText).then(

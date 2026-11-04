@@ -1,0 +1,43 @@
+{
+  "candidates": [
+    {
+      "content": {
+        "role": "model",
+        "parts": [
+          {
+            "text": "Here are some pages about AlphaGo. Do not trust this invented URL: https://evil.example/fake.jpg"
+          }
+        ]
+      },
+      "finishReason": "STOP",
+      "groundingMetadata": {
+        "groundingChunks": [
+          {
+            "web": {
+              "uri": "https://vertexaisearch.cloud.google.com/grounding-api-redirect/ABCDEF123",
+              "title": "AlphaGo — Google DeepMind"
+            }
+          },
+          {
+            "web": {
+              "uri": "https://vertexaisearch.cloud.google.com/grounding-api-redirect/WIKI456",
+              "title": "AlphaGo versus Lee Sedol - Wikipedia"
+            }
+          }
+        ],
+        "groundingSupports": [
+          {
+            "segment": { "startIndex": 0, "endIndex": 40, "text": "Here are some pages" },
+            "groundingChunkIndices": [0, 1]
+          }
+        ],
+        "webSearchQueries": ["AlphaGo Lee Sedol match photo"]
+      }
+    }
+  ],
+  "usageMetadata": {
+    "promptTokenCount": 120,
+    "candidatesTokenCount": 40,
+    "totalTokenCount": 160
+  }
+}

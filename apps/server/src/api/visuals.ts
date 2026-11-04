@@ -108,6 +108,27 @@ export function registerVisualRoutes(
     return service.searchScene(id, sceneId, body.query, body.providers);
   });
 
+  app.post("/api/projects/:id/scenes/:sceneId/visuals/web-search", {
+    schema: {
+      params: SceneParams,
+      response: {
+        200: SceneVisualsSchema.extend({
+          usage: z.object({
+            braveRequests: z.number().int().nonnegative(),
+            groundingCalls: z.number().int().nonnegative(),
+            groundingModel: z.string().optional(),
+            features: z.record(z.string(), z.number()).optional(),
+          }).strict(),
+        }),
+        ...Errors,
+      },
+    },
+  }, async (request) => {
+    const { id, sceneId } = SceneParams.parse(request.params);
+    ensureSceneMutationAllowed(id, sceneId);
+    return service.webSearch(id, sceneId);
+  });
+
   app.post("/api/projects/:id/scenes/:sceneId/visuals/select", {
     schema: {
       params: SceneParams,

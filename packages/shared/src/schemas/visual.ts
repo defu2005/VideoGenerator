@@ -20,8 +20,31 @@ export const LicenseMetadataSchema = z.object({
 }).strict();
 export type LicenseMetadata = z.infer<typeof LicenseMetadataSchema>;
 
-export const VisualProviderSchema = z.enum(["wikimedia", "openverse", "pexels", "mock", "custom"]);
+export const VisualProviderSchema = z.enum([
+  "wikimedia",
+  "openverse",
+  "pexels",
+  "mock",
+  "custom",
+  "brave",
+  "web-grounding",
+]);
 export type VisualProvider = z.infer<typeof VisualProviderSchema>;
+
+export const WEB_IMAGE_PROVIDERS = ["brave", "web-grounding"] as const;
+export type WebImageProvider = (typeof WEB_IMAGE_PROVIDERS)[number];
+
+export function isWebImageProvider(provider: string): provider is WebImageProvider {
+  return provider === "brave" || provider === "web-grounding";
+}
+
+/** True when AUTO / approve-all must not pick this candidate. */
+export function isUnverifiedWebCandidate(candidate: {
+  provider: string;
+  licenseVerified?: boolean;
+}): boolean {
+  return isWebImageProvider(candidate.provider) && candidate.licenseVerified === false;
+}
 
 export const VisualCandidateSchema = z.object({
   id: z.string().uuid(),
@@ -38,6 +61,7 @@ export const VisualCandidateSchema = z.object({
   previewUrl: z.string().url(),
   imageUrl: z.string().url(),
   sourceUrl: z.string().url(),
+  sourcePageUrl: z.string().url().optional(),
   sourceSite: z.string(),
   width: z.number().int().positive(),
   height: z.number().int().positive(),
@@ -47,6 +71,9 @@ export const VisualCandidateSchema = z.object({
   relevanceScore: z.number().min(0).max(1),
   scoreBreakdown: z.record(z.string(), z.unknown()),
   license: LicenseMetadataSchema,
+  /** False for web finds without a reliable CC/PD/Commons signal; stock providers default true. */
+  licenseVerified: z.boolean().default(true),
+  why: z.string().optional(),
   rank: z.number().int().nonnegative(),
   discardedAt: z.string().datetime({ offset: true }).nullable(),
   localPath: z.string().nullable().optional(),

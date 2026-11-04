@@ -33,6 +33,7 @@ const candidate: VisualCandidate = {
     kind: "UNKNOWN", name: "", url: null, author: null, authorUrl: null,
     attributionRequired: false, attributionText: "", evidence: "none",
   },
+  licenseVerified: true,
   rank: 0, discardedAt: null, createdAt: "2026-11-03T00:00:00.000Z",
 };
 const selection: NonNullable<SceneVisuals["selection"]> = {
@@ -135,5 +136,13 @@ describe("VisualReview", () => {
     fireEvent.click(screen.getByRole("button", { name: /^Duyệt$/ }));
     expect(await screen.findByRole("alert")).toHaveTextContent("Image download failed");
     expect(screen.getAllByText("Cần xem").length).toBeGreaterThan(0);
+  });
+
+  it("sends web-search from the scene panel", async () => {
+    const calls = setup();
+    fireEvent.click(await screen.findByRole("button", { name: "Đổi ảnh" }));
+    await screen.findByRole("dialog", { name: "Chọn hình ảnh" });
+    fireEvent.click(screen.getByRole("button", { name: "Tìm trên web" }));
+    await waitFor(() => expect(calls.some((call) => call.url.endsWith("/visuals/web-search") && call.init?.method === "POST")).toBe(true));
   });
 });

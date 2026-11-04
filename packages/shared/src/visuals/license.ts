@@ -112,6 +112,59 @@ export function normalizeLicense(input: {
   return normalizePexelsLicense(input.photographer ?? "", input.photographerUrl);
 }
 
+/** Map a Creative Commons / PD license URL (or nearby text) to metadata. Returns null if unrecognized. */
+export function licenseFromCcUrl(
+  urlOrText: string,
+  author?: string | null,
+): { license: LicenseMetadata; verified: boolean } | null {
+  const raw = urlOrText.trim();
+  if (!raw) return null;
+  let kind: LicenseKind | null = null;
+  let name = "";
+  let url: string | null = null;
+  const lower = raw.toLowerCase();
+  if (/creativecommons\.org\/publicdomain\/zero/i.test(lower) || /\/publicdomain\/zero\//i.test(lower)) {
+    kind = "CC0";
+    name = "CC0 1.0";
+  } else if (/creativecommons\.org\/publicdomain\/mark/i.test(lower) || /\bpublic.?domain\b/i.test(lower) && /creativecommons\.org/i.test(lower)) {
+    kind = "PUBLIC_DOMAIN";
+    name = "Public Domain Mark";
+  } else if (/creativecommons\.org\/licenses\//i.test(lower)) {
+    const match = lower.match(/creativecommons\.org\/licenses\/([a-z0-9-]+)/i);
+    const slug = match?.[1] ?? "";
+    kind = licenseKind(slug.replace(/-/g, " "));
+    if (kind === "UNKNOWN") return null;
+    name = `CC ${slug.toUpperCase().replace(/-/g, "-")}`;
+  } else {
+    const guessed = licenseKind(raw);
+    if (guessed === "UNKNOWN" || guessed === "ALL_RIGHTS_RESERVED" || guessed === "ROYALTY_FREE" || guessed === "USER_PROVIDED") {
+      return null;
+    }
+    kind = guessed;
+    name = raw;
+  }
+  try {
+    const parsed = new URL(raw);
+    if (parsed.protocol === "http:" || parsed.protocol === "https:") url = parsed.toString();
+  } catch {
+    url = null;
+  }
+  const authorText = author?.trim() || null;
+  return {
+    verified: true,
+    license: {
+      kind,
+      name: name || kind,
+      url,
+      author: authorText,
+      authorUrl: null,
+      attributionRequired: isAttributionRequired(kind),
+      attributionText: authorText ? `By ${authorText}` : "",
+      evidence: "page_meta",
+    },
+  };
+}
+
 function isUrl(value: string | null | undefined): value is string {
   if (!value) return false;
   try {

@@ -69,6 +69,7 @@ export function BriefFields({
       musicAssist: "Music assist (BALANCED/QUALITY/CUSTOM)",
       metadata: "Publishing metadata (BALANCED/QUALITY/CUSTOM)",
       guidelineCheck: "Kiểm tra định hướng nội dung bằng AI",
+      webImageSearch: "Tìm ảnh trên web (số scene tối đa; 999 = tất cả)",
     };
     const label = labels[key] ?? key;
     if (typeof value === "boolean") {
@@ -84,7 +85,7 @@ export function BriefFields({
     return field(path, label, (
       <select aria-label={key} value={String(value)} onChange={(event) => onChange(
         path,
-        key === "repairAttempts" || key === "scriptReviewPasses" || key === "visionRetryRounds" || key === "visionThreshold" || key === "visualSearchBreadth"
+        key === "repairAttempts" || key === "scriptReviewPasses" || key === "visionRetryRounds" || key === "visionThreshold" || key === "visualSearchBreadth" || key === "webImageSearch"
           ? Number(event.target.value)
           : event.target.value,
       )}>
@@ -92,6 +93,7 @@ export function BriefFields({
           key === "storyMode" ? ["merged", "separate"]
             : key === "guidelineCheck" ? ["off", "check", "checkAndFix"]
               : key === "visualSearchBreadth" ? ["8", "16"]
+                : key === "webImageSearch" ? ["0", "3", "8", "999"]
                 : key === "visionThreshold" ? ["5", "6", "7", "8", "9"]
                   : ["0", "1", "2"]
         ).map((choice) => (
@@ -109,7 +111,7 @@ export function BriefFields({
           onChange={(event) => onChange("budget.mode", event.target.value)}
         >
           <option value="ECO">ECO — Rẻ nhất (~1 lượt gọi AI/video)</option>
-          <option value="BALANCED">BALANCED — Cân bằng chất lượng/chi phí (~8–13 lượt)</option>
+          <option value="BALANCED">BALANCED — Cân bằng chất lượng/chi phí (~8–14 lượt)</option>
           <option value="QUALITY">QUALITY — Chất lượng cao: AI tự review &amp; sửa script (~9–26 lượt)</option>
           <option value="MAX">MAX — Không tiết kiệm token — kiểm tra ảnh bằng AI nhìn</option>
           <option value="CUSTOM">CUSTOM</option>
@@ -127,6 +129,9 @@ export function BriefFields({
         Visual Search: {budgetEstimate.perStage.find((item) => item.stage === "VISUAL_SEARCH")?.calls.max
           ? `up to ${budgetEstimate.perStage.find((item) => item.stage === "VISUAL_SEARCH")?.calls.max} LLM calls`
           : "0 LLM calls"}
+        {budgetFeatures.webImageSearch > 0
+          ? ` · Web ảnh: tối đa ${budgetFeatures.webImageSearch >= 999 ? "mọi" : budgetFeatures.webImageSearch} scene yếu (Brave + grounding)`
+          : ""}
         {budgetEstimate.perStage.find((item) => item.stage === "RENDER")?.calls.max
           ? ` · Render vision up to ${budgetEstimate.perStage.find((item) => item.stage === "RENDER")?.calls.max}`
           : ""}
@@ -149,6 +154,7 @@ export function BriefFields({
           {customFeature("musicAssist", budgetFeatures.musicAssist)}
           {customFeature("metadata", budgetFeatures.metadata)}
           {customFeature("guidelineCheck", budgetFeatures.guidelineCheck)}
+          {customFeature("webImageSearch", budgetFeatures.webImageSearch)}
         </fieldset>
       )}
       {select("platform", "Platform", ["youtube", "youtube_shorts", "tiktok", "facebook_reels", "custom"])}

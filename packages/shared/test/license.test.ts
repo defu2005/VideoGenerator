@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  licenseFromCcUrl,
   normalizeOpenverseLicense,
   normalizePexelsLicense,
   normalizeWikimediaLicense,
@@ -54,5 +55,17 @@ describe("license normalization", () => {
       attributionText: "Photo by Alex on Pexels",
       authorUrl: "https://pexels.test/alex",
     });
+  });
+
+  it("maps Creative Commons license URLs for web crawl verification", () => {
+    expect(licenseFromCcUrl("https://creativecommons.org/licenses/by/4.0/", "Ada")).toMatchObject({
+      verified: true,
+      license: { kind: "CC_BY", evidence: "page_meta", author: "Ada" },
+    });
+    expect(licenseFromCcUrl("https://creativecommons.org/publicdomain/zero/1.0/")).toMatchObject({
+      verified: true,
+      license: { kind: "CC0" },
+    });
+    expect(licenseFromCcUrl("https://example.test/terms")).toBeNull();
   });
 });

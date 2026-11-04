@@ -12,6 +12,7 @@ export * from "./schemas/project.js";
 export * from "./schemas/script.js";
 export * from "./schemas/scene.js";
 export * from "./schemas/visual.js";
+export * from "./schemas/webImage.js";
 export * from "./schemas/vision.js";
 export * from "./schemas/usage.js";
 export * from "./schemas/voice.js";

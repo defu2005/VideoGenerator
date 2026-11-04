@@ -132,7 +132,7 @@ describe("ProjectDetailPage", () => {
     expect(await screen.findByText("WAITING USER")).toBeInTheDocument();
     expect(screen.getAllByText("VISUAL REVIEW")).toHaveLength(2);
     expect(screen.getByRole("heading", { name: "Production stages" })).toBeInTheDocument();
-    expect(await screen.findByText("Ước tính: ~8–13 lượt gọi AI (BALANCED)")).toBeInTheDocument();
+    expect(await screen.findByText("Ước tính: ~8–14 lượt gọi AI (BALANCED)")).toBeInTheDocument();
   });
 
   it("renders token totals, stage-specific tasks, runs, and the budget comparison", async () => {
@@ -222,6 +222,7 @@ describe("ProjectDetailPage", () => {
           musicAssist: true,
           metadata: true,
           guidelineCheck: "check",
+          webImageSearch: 3,
           outputHeadroom: 1.5,
         },
         perStage: [],

@@ -139,6 +139,10 @@ const ConfigSchema = z.object({
   OPENVERSE_CLIENT_ID: z.string().trim().min(1).optional(),
   OPENVERSE_CLIENT_SECRET: z.string().trim().min(1).optional(),
   PEXELS_API_KEY: z.string().optional(),
+  BRAVE_SEARCH_API_KEY: z.string().optional(),
+  WEB_IMAGE_GEMINI_MODEL: z.string().min(1).default("gemini-2.5-flash"),
+  WEB_IMAGE_SEARCH_PER_MINUTE: z.coerce.number().int().positive().default(30),
+  WEB_IMAGE_DOMAIN_DENYLIST: z.string().default("pinterest.com,pinimg.com,pinterest.co.uk"),
   MUSIC_PROVIDERS: z.string().default("openverse,local"),
   MUSIC_LIBRARY_DIR: z.string().optional(),
   MUSIC_SEARCH_TIMEOUT_MS: z.coerce.number().int().positive().default(30_000),
@@ -234,6 +238,10 @@ export type AppConfig = {
   OPENVERSE_CLIENT_ID?: string;
   OPENVERSE_CLIENT_SECRET?: string;
   PEXELS_API_KEY?: string;
+  BRAVE_SEARCH_API_KEY?: string;
+  WEB_IMAGE_GEMINI_MODEL: string;
+  WEB_IMAGE_SEARCH_PER_MINUTE: number;
+  WEB_IMAGE_DOMAIN_DENYLIST: string;
   MUSIC_PROVIDERS: string;
   MUSIC_LIBRARY_DIR: string;
   MUSIC_SEARCH_TIMEOUT_MS: number;

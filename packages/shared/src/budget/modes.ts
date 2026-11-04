@@ -28,9 +28,21 @@ export const BudgetFeaturesSchema = z.object({
   metadata: z.boolean(),
   /** LLM check against guideline packs after the script review; checkAndFix adds one fix pass. */
   guidelineCheck: z.enum(["off", "check", "checkAndFix"]),
+  /**
+   * Max low-relevance scenes that get a web image search (Brave / Gemini grounding).
+   * 0 = off, 999 = all low scenes (MAX).
+   */
+  webImageSearch: z.union([z.literal(0), z.literal(3), z.literal(8), z.literal(999)]),
   outputHeadroom: z.union([z.literal(1), z.literal(1.5), z.literal(2)]),
 }).strict();
 export type BudgetFeatures = z.infer<typeof BudgetFeaturesSchema>;
+
+/** Cap scenes for web image search; 999 means every low-relevance scene. */
+export function webImageSearchSceneCap(features: Pick<BudgetFeatures, "webImageSearch">, lowSceneCount: number): number {
+  if (features.webImageSearch <= 0 || lowSceneCount <= 0) return 0;
+  if (features.webImageSearch >= 999) return lowSceneCount;
+  return Math.min(features.webImageSearch, lowSceneCount);
+}
 
 export const BudgetSettingsSchema = z.object({
   mode: BudgetModeSchema.default("BALANCED"),
@@ -63,6 +75,7 @@ const PRESETS: Record<Exclude<BudgetMode, "CUSTOM">, BudgetFeatures> = {
     musicAssist: false,
     metadata: false,
     guidelineCheck: "off",
+    webImageSearch: 0,
     outputHeadroom: 1,
   },
   BALANCED: {
@@ -83,6 +96,7 @@ const PRESETS: Record<Exclude<BudgetMode, "CUSTOM">, BudgetFeatures> = {
     musicAssist: true,
     metadata: true,
     guidelineCheck: "check",
+    webImageSearch: 3,
     outputHeadroom: 1.5,
   },
   QUALITY: {
@@ -103,6 +117,7 @@ const PRESETS: Record<Exclude<BudgetMode, "CUSTOM">, BudgetFeatures> = {
     musicAssist: true,
     metadata: true,
     guidelineCheck: "checkAndFix",
+    webImageSearch: 8,
     outputHeadroom: 2,
   },
   MAX: {
@@ -123,6 +138,7 @@ const PRESETS: Record<Exclude<BudgetMode, "CUSTOM">, BudgetFeatures> = {
     musicAssist: true,
     metadata: true,
     guidelineCheck: "checkAndFix",
+    webImageSearch: 999,
     outputHeadroom: 2,
   },
 };
@@ -271,16 +287,26 @@ export function estimateBudget(
   const consistencyCalls = features.visionCheck && !visualSearchDone
     ? Math.max(1, Math.ceil(sceneCount / imagesPerCall))
     : 0;
+  const webCapScenes = !visualSearchDone
+    ? webImageSearchSceneCap(features, sceneCount)
+    : 0;
+  // Gemini grounding batches up to 5 scenes per call; Brave requests are not LLM calls.
+  const webGroundingMax = webCapScenes > 0 ? Math.ceil(webCapScenes / imagesPerCall) : 0;
+  const braveRequestMax = webCapScenes;
   const visualMin = rerankCalls + visionMin + (features.visionCheck && !visualSearchDone ? consistencyCalls : 0);
-  const visualMax = visualAssistMax + rerankCalls + visionMin + visionRetryMax + visionResearchMax + consistencyCalls;
+  const visualMax = visualAssistMax + rerankCalls + visionMin + visionRetryMax + visionResearchMax
+    + consistencyCalls + webGroundingMax;
+  const webReason = webCapScenes > 0
+    ? ` Web image search: up to ${braveRequestMax} Brave request(s) and up to ${webGroundingMax} Gemini grounding call(s) for low-relevance scenes.`
+    : "";
   perStage.push({
     stage: "VISUAL_SEARCH",
     calls: { min: visualMin, max: visualMax },
     reason: visualSearchDone
       ? "Visual search is already complete and unchanged."
       : features.visionCheck
-        ? `Code ranks images; vision checks ~${sceneCount} scenes (batches of ${imagesPerCall}), optional re-search, and one consistency pass.`
-        : "Code ranks images; optional batched query assistance and semantic reranking use the selected budget features.",
+        ? `Code ranks images; vision checks ~${sceneCount} scenes (batches of ${imagesPerCall}), optional re-search, and one consistency pass.${webReason}`
+        : `Code ranks images; optional batched query assistance and semantic reranking use the selected budget features.${webReason}`,
   });
 
   const scriptBaseCalls = storyMode === "merged"
@@ -388,6 +414,7 @@ export function estimateBudget(
       min: features.visionCheck && !visualSearchDone ? consistencyCalls : 0,
       max: features.visionCheck && !visualSearchDone ? consistencyCalls : 0,
     },
+    webImageGrounding: { min: 0, max: webGroundingMax },
     renderVision: { min: renderVisionCalls, max: renderVisionCalls },
     musicAssist: { min: musicAssistCalls, max: musicAssistCalls },
     metadata: { min: metadataCalls, max: metadataCalls },
@@ -399,7 +426,7 @@ export function estimateBudget(
           : stage.stage === "MUSIC_SEARCH" ? ["musicAssist"]
             : stage.stage === "TIMELINE" ? ["metadata"]
               : stage.stage === "RENDER" ? ["renderVision"]
-                : ["visualAltQueries", "visualRerank", "visionCheck", "visionResearch", "visionConsistency"];
+                : ["visualAltQueries", "visualRerank", "visionCheck", "visionResearch", "visionConsistency", "webImageGrounding"];
     stage.tasks = taskIds.map((task) => {
       const route = routes?.[task];
       return {
