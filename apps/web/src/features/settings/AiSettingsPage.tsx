@@ -11,6 +11,7 @@ import {
   type LlmTask,
 } from "../../services/llmApi";
 import type { LlmRoute, LlmSettings } from "@vg/shared";
+import { OmniRouteGatewaySection } from "./OmniRouteGatewaySection";
 
 type RouteUpdate = Partial<LlmRoute>;
 
@@ -220,6 +221,7 @@ export function AiSettingsPage() {
       </header>
       {mutation.isError && <p className="request-error" role="alert">{mutation.error instanceof Error ? mutation.error.message : "Không lưu được cài đặt AI"}</p>}
       {mutation.isSuccess && <p className="success-message" role="status">Đã lưu cài đặt mô hình AI.</p>}
+      <OmniRouteGatewaySection />
       <form className="panel ai-routing-form" onSubmit={submit}>
         <section className="ai-presets" aria-label="Mẫu cấu hình nhanh">
           <h2>Mẫu cấu hình nhanh</h2>

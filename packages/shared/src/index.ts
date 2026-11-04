@@ -9,6 +9,7 @@ export * from "./schemas/dashboard.js";
 export * from "./schemas/errors.js";
 export * from "./schemas/job.js";
 export * from "./schemas/llm.js";
+export * from "./schemas/llmGateway.js";
 export * from "./schemas/project.js";
 export * from "./schemas/profile.js";
 export * from "./schemas/publication.js";

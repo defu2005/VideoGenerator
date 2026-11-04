@@ -1,4 +1,5 @@
 import type { AppConfig } from "../../lib/config.js";
+import { getCachedOmniroutePricing } from "./omnirouteCatalog.js";
 import { LlmError } from "./types.js";
 
 type ModelPrice = { inputPerMTok: number; outputPerMTok: number };
@@ -10,6 +11,13 @@ export function estimateLlmCost(
   usage: { inputTokens: number; outputTokens: number },
 ): number {
   if (provider === "claude-cli" || provider === "copilot-cli" || provider === "antigravity-cli") return 0;
+  if (provider === "omniroute") {
+    const catalogPrice = getCachedOmniroutePricing(model);
+    if (catalogPrice) {
+      return usage.inputTokens * catalogPrice.inputPerMTok / 1_000_000
+        + usage.outputTokens * catalogPrice.outputPerMTok / 1_000_000;
+    }
+  }
   if (!config.LLM_PRICES_JSON) return 0;
   let prices: Record<string, ModelPrice>;
   try {

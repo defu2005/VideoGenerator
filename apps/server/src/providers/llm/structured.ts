@@ -1,12 +1,19 @@
 import type { FastifyBaseLogger } from "fastify";
 import { join } from "node:path";
 import { z } from "zod";
-import type { LlmCallUsage, LlmTaskId } from "@vg/shared";
+import type { LlmCallUsage, LlmGatewaySettings, LlmTaskId } from "@vg/shared";
 import type { LlmProviderRegistry, ResolvedLlmRoute } from "./registry.js";
 import { LlmCache, createLlmCacheKey } from "./cache.js";
 import type { LlmImageAttachment, LlmProvider } from "./types.js";
 import { LlmError } from "./types.js";
 import { prepareVisionImages, visionCacheKeyExtra } from "./visionImages.js";
+import {
+  envOmnirouteVision,
+  providerWithCapabilities,
+  shouldGatewayFallback,
+} from "./omnirouteCatalog.js";
+
+const gatewayFallbackLogged = new WeakSet<AbortSignal>();
 
 export async function generateStructured<T>(input: {
   provider: LlmProvider;
@@ -244,8 +251,33 @@ export async function generateRoutedStructured<T>(input: {
   registry: LlmProviderRegistry;
   route: ResolvedLlmRoute;
   task: LlmTaskId;
+  gatewaySettings?: LlmGatewaySettings;
 } & Omit<Parameters<typeof generateStructured<T>>[0], "provider" | "model" | "task">): Promise<Awaited<ReturnType<typeof generateStructured<T>>>> {
-  const { registry, route, task, ...request } = input;
+  const { registry, route: originalRoute, task, gatewaySettings, ...request } = input;
+  const settings = gatewaySettings ?? registry.getGatewaySettings();
+  const applied = await applyOmnirouteGateway(registry, originalRoute, settings, task);
+  const route = applied.route;
+  const gatewayDirect = applied.directFallback;
+
+  const mergeFallbackUsage = (
+    firstCalls: LlmCallUsage[],
+    firstUsage: { llmCalls: number; inputTokens: number; outputTokens: number; tokensUnknown?: boolean },
+    generated: Awaited<ReturnType<typeof generateStructured<T>>>,
+  ) => ({
+    ...generated,
+    usage: {
+      ...generated.usage,
+      llmCalls: firstUsage.llmCalls + generated.usage.llmCalls,
+      inputTokens: firstUsage.inputTokens + generated.usage.inputTokens,
+      outputTokens: firstUsage.outputTokens + generated.usage.outputTokens,
+      ...((firstUsage.tokensUnknown || generated.usage.tokensUnknown) ? { tokensUnknown: true } : {}),
+      calls: [
+        ...firstCalls,
+        ...generated.usage.calls.map((call) => ({ ...call, fallback: true })),
+      ],
+    },
+  });
+
   const fallbackAttempt = async (
     firstCalls: LlmCallUsage[],
     firstUsage: { llmCalls: number; inputTokens: number; outputTokens: number; tokensUnknown?: boolean },
@@ -262,20 +294,7 @@ export async function generateRoutedStructured<T>(input: {
         task,
         maxOutputTokens: route.maxOutputTokens ?? request.maxOutputTokens,
       });
-      return {
-        ...generated,
-        usage: {
-          ...generated.usage,
-          llmCalls: firstUsage.llmCalls + generated.usage.llmCalls,
-          inputTokens: firstUsage.inputTokens + generated.usage.inputTokens,
-          outputTokens: firstUsage.outputTokens + generated.usage.outputTokens,
-          ...((firstUsage.tokensUnknown || generated.usage.tokensUnknown) ? { tokensUnknown: true } : {}),
-          calls: [
-            ...firstCalls,
-            ...generated.usage.calls.map((call) => ({ ...call, fallback: true })),
-          ],
-        },
-      };
+      return mergeFallbackUsage(firstCalls, firstUsage, generated);
     } catch (error) {
       if (!(error instanceof LlmError)) throw error;
       const fallbackUsage = error.usage;
@@ -314,12 +333,124 @@ export async function generateRoutedStructured<T>(input: {
       task,
     });
   } catch (error) {
-    if (!(error instanceof LlmError) || !shouldFallback(error) || !route.fallback) throw error;
+    if (!(error instanceof LlmError)) throw error;
+
+    if (gatewayDirect && shouldGatewayFallback(error)) {
+      logGatewayFallbackOnce(request.signal, request.logger, {
+        task,
+        from: `${route.provider}/${route.model}`,
+        to: `${gatewayDirect.provider.id}/${gatewayDirect.model}`,
+        code: error.code,
+        status: error.status,
+      });
+      try {
+        const generated = await generateStructured({
+          ...request,
+          provider: gatewayDirect.provider,
+          model: gatewayDirect.model,
+          task,
+          maxOutputTokens: gatewayDirect.maxOutputTokens ?? request.maxOutputTokens,
+        });
+        return mergeFallbackUsage(
+          error.usage?.calls ?? [],
+          error.usage ?? { llmCalls: 0, inputTokens: 0, outputTokens: 0 },
+          generated,
+        );
+      } catch (fallbackError) {
+        if (!(fallbackError instanceof LlmError)) throw fallbackError;
+        const firstUsage = error.usage ?? { llmCalls: 0, inputTokens: 0, outputTokens: 0 };
+        const fallbackUsage = fallbackError.usage;
+        throw new LlmError(fallbackError.message, fallbackError.code, fallbackError.retryable, fallbackError.status, {
+          llmCalls: firstUsage.llmCalls + (fallbackUsage?.llmCalls ?? 0),
+          inputTokens: firstUsage.inputTokens + (fallbackUsage?.inputTokens ?? 0),
+          outputTokens: firstUsage.outputTokens + (fallbackUsage?.outputTokens ?? 0),
+          ...(firstUsage.tokensUnknown || fallbackUsage?.tokensUnknown ? { tokensUnknown: true } : {}),
+          calls: [
+            ...(error.usage?.calls ?? []),
+            ...(fallbackUsage?.calls ?? []).map((call) => ({ ...call, fallback: true })),
+          ],
+        });
+      }
+    }
+
+    if (!shouldFallback(error) || !route.fallback) throw error;
     return fallbackAttempt(
       error.usage?.calls ?? [],
       error.usage ?? { llmCalls: 0, inputTokens: 0, outputTokens: 0 },
     );
   }
+}
+
+async function applyOmnirouteGateway(
+  registry: LlmProviderRegistry,
+  route: ResolvedLlmRoute,
+  settings: LlmGatewaySettings,
+  task: LlmTaskId,
+): Promise<{ route: ResolvedLlmRoute; directFallback?: ResolvedLlmRoute }> {
+  if (settings.mode === "off" || route.provider.id === "omniroute") {
+    return { route };
+  }
+
+  const target = await registry.omnirouteCatalog.resolveGatewayTarget(
+    route.provider.id,
+    route.model,
+    settings,
+  );
+
+  if (!target) {
+    if (settings.mode === "only") {
+      throw new LlmError(
+        `Gateway OmniRoute (only): tác vụ "${task}" dùng ${route.provider.id}/${route.model || "(không có model)"} nhưng OmniRoute không có model tương ứng. Thêm mapping hoặc đổi model.`,
+        "LLM_NOT_CONFIGURED",
+        false,
+      );
+    }
+    return { route };
+  }
+
+  const omni = registry.get("omniroute");
+  if (!omni) {
+    if (settings.mode === "only") {
+      throw new LlmError(
+        "Gateway OmniRoute (only): OmniRoute chưa được cấu hình. Đặt OMNIROUTE_API_KEY (hoặc OMNIROUTE_BASE_URL) trong .env.",
+        "LLM_NOT_CONFIGURED",
+        false,
+      );
+    }
+    return { route };
+  }
+
+  const catalogVision = target.catalogModel?.vision;
+  const capabilities = catalogVision === undefined
+    ? (omni.capabilities ?? envOmnirouteVision())
+    : catalogVision
+      ? { vision: true, maxImagesPerCall: Math.max(1, omni.capabilities?.maxImagesPerCall ?? 10) }
+      : { vision: false, maxImagesPerCall: 0 };
+  const provider = providerWithCapabilities(omni, capabilities);
+
+  const gatewayRoute: ResolvedLlmRoute = {
+    provider,
+    model: target.omnirouteModel,
+    maxOutputTokens: route.maxOutputTokens,
+    // prefer: the direct route is the fallback (directFallback below); only: no fallback at all.
+    fallback: undefined,
+    source: route.source,
+  };
+
+  return {
+    route: gatewayRoute,
+    directFallback: settings.mode === "prefer" ? route : undefined,
+  };
+}
+
+function logGatewayFallbackOnce(
+  signal: AbortSignal,
+  logger: FastifyBaseLogger | undefined,
+  details: { task: string; from: string; to: string; code: string; status?: number },
+): void {
+  if (gatewayFallbackLogged.has(signal)) return;
+  gatewayFallbackLogged.add(signal);
+  logger?.warn(details, "OmniRoute gateway unavailable; falling back to direct provider");
 }
 
 function shouldFallback(error: LlmError): boolean {

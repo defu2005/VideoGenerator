@@ -1,10 +1,16 @@
 import {
   LLM_TASKS,
+  LlmGatewaySettingsSchema,
   LlmProviderInfoSchema,
   LlmSettingsSchema,
+  OmniRouteCatalogSchema,
+  OmniRouteHealthSchema,
+  type LlmGatewaySettings,
   type LlmProviderInfo,
   type LlmSettings,
   type LlmTaskId,
+  type OmniRouteCatalog,
+  type OmniRouteHealth,
 } from "@vg/shared";
 import { apiRequest } from "./apiClient";
 
@@ -59,4 +65,47 @@ export function getProviderModels(provider: string): Promise<string[]> {
 export function getProjectLlmRoutes(projectId: string): Promise<ProjectLlmRoutes> {
   return apiRequest<{ routes: ProjectLlmRoutes }>(`/projects/${encodeURIComponent(projectId)}/llm-routes`)
     .then(({ routes }) => routes);
+}
+
+export function getLlmGatewaySettings(): Promise<LlmGatewaySettings> {
+  return apiRequest<unknown>("/settings/llm-gateway").then((response) => {
+    const parsed = LlmGatewaySettingsSchema.safeParse(response);
+    if (!parsed.success) throw new Error("Máy chủ trả về cài đặt gateway không hợp lệ");
+    return parsed.data;
+  });
+}
+
+export function saveLlmGatewaySettings(settings: LlmGatewaySettings): Promise<LlmGatewaySettings> {
+  return apiRequest<unknown>("/settings/llm-gateway", {
+    method: "PUT",
+    body: JSON.stringify(settings),
+  }).then((response) => {
+    const parsed = LlmGatewaySettingsSchema.safeParse(response);
+    if (!parsed.success) throw new Error("Máy chủ trả về cài đặt gateway không hợp lệ");
+    return parsed.data;
+  });
+}
+
+export function getOmnirouteHealth(): Promise<OmniRouteHealth> {
+  return apiRequest<unknown>("/llm/providers/omniroute/health").then((response) => {
+    const parsed = OmniRouteHealthSchema.safeParse(response);
+    if (!parsed.success) throw new Error("Máy chủ trả về trạng thái OmniRoute không hợp lệ");
+    return parsed.data;
+  });
+}
+
+export function getOmnirouteCatalog(): Promise<OmniRouteCatalog> {
+  return apiRequest<unknown>("/llm/providers/omniroute/catalog").then((response) => {
+    const parsed = OmniRouteCatalogSchema.safeParse(response);
+    if (!parsed.success) throw new Error("Máy chủ trả về catalog OmniRoute không hợp lệ");
+    return parsed.data;
+  });
+}
+
+export function refreshOmnirouteCatalog(): Promise<OmniRouteCatalog> {
+  return apiRequest<unknown>("/llm/providers/omniroute/catalog/refresh", { method: "POST" }).then((response) => {
+    const parsed = OmniRouteCatalogSchema.safeParse(response);
+    if (!parsed.success) throw new Error("Máy chủ trả về catalog OmniRoute không hợp lệ");
+    return parsed.data;
+  });
 }

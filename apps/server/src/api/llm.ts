@@ -1,9 +1,12 @@
 import {
   ApiErrorSchema,
   LLM_TASKS,
+  LlmGatewaySettingsSchema,
   LlmProviderIdSchema,
   LlmProviderInfoSchema,
   LlmSettingsSchema,
+  OmniRouteCatalogSchema,
+  OmniRouteHealthSchema,
   type LlmTaskId,
 } from "@vg/shared";
 import { z } from "zod";
@@ -12,6 +15,7 @@ import type Database from "better-sqlite3";
 import type { LlmProviderRegistry } from "../providers/llm/registry.js";
 import type { ProjectService } from "../services/projectService.js";
 import { getAppLlmSettings, saveAppLlmSettings } from "../providers/llm/settings.js";
+import { getLlmGatewaySettings, saveLlmGatewaySettings } from "../providers/llm/gatewaySettings.js";
 import { JobUsageSchema } from "@vg/shared";
 import { AppError } from "../lib/errors.js";
 import { LlmError } from "../providers/llm/types.js";
@@ -79,6 +83,56 @@ export function registerLlmRoutes(
     }
     saveAppLlmSettings(sqlite, settings);
     return settings;
+  });
+
+  app.get("/api/settings/llm-gateway", {
+    schema: { response: { 200: LlmGatewaySettingsSchema } },
+  }, async () => getLlmGatewaySettings(sqlite));
+
+  app.put("/api/settings/llm-gateway", {
+    schema: {
+      body: LlmGatewaySettingsSchema,
+      response: { 200: LlmGatewaySettingsSchema, 400: ApiErrorSchema },
+    },
+  }, async (request) => {
+    const settings = LlmGatewaySettingsSchema.parse(request.body);
+    for (const mapping of settings.mappings) {
+      if (!registry.isSupportedProvider(mapping.provider)) {
+        throw new AppError(400, "INVALID_LLM_PROVIDER", "A gateway mapping references an unsupported provider.");
+      }
+    }
+    return saveLlmGatewaySettings(sqlite, settings);
+  });
+
+  app.get("/api/llm/providers/omniroute/health", {
+    schema: { response: { 200: OmniRouteHealthSchema } },
+  }, async () => registry.omnirouteCatalog.health(fetchImpl));
+
+  app.get("/api/llm/providers/omniroute/catalog", {
+    schema: { response: { 200: OmniRouteCatalogSchema } },
+  }, async () => {
+    try {
+      await registry.omnirouteCatalog.getModels({ fetchImpl });
+    } catch {
+      // Return the cached/empty snapshot when OmniRoute is down.
+    }
+    return registry.omnirouteCatalog.getCatalogSnapshot();
+  });
+
+  app.post("/api/llm/providers/omniroute/catalog/refresh", {
+    schema: { response: { 200: OmniRouteCatalogSchema, 502: ApiErrorSchema } },
+  }, async () => {
+    registry.omnirouteCatalog.invalidate();
+    try {
+      await registry.omnirouteCatalog.getModels({ forceRefresh: true, fetchImpl });
+    } catch (error) {
+      throw new AppError(
+        502,
+        "OMNIROUTE_UNAVAILABLE",
+        error instanceof Error ? error.message : "Không tải được danh sách model OmniRoute",
+      );
+    }
+    return registry.omnirouteCatalog.getCatalogSnapshot();
   });
 
   app.get("/api/llm/providers/:id/models", {

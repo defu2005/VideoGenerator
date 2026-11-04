@@ -11,6 +11,9 @@ import { OllamaNativeProvider } from "./ollamaNative.js";
 import { OpenAiCompatibleProvider } from "./openaiCompatible.js";
 import { LlmError, type LlmProvider } from "./types.js";
 import { fetchAnthropicModels, fetchGeminiModels, readCopilotAccountModels } from "./modelLists.js";
+import { OmniRouteCatalogService, omniRouteBaseUrl } from "./omnirouteCatalog.js";
+import { defaultLlmGatewaySettings } from "./gatewaySettings.js";
+import type { LlmGatewaySettings } from "@vg/shared";
 
 // Active Claude models, newest first within each family. Deprecated ones are left out.
 const CLAUDE_MODELS = [
@@ -23,11 +26,14 @@ const CLAUDE_MODELS = [
 export class LlmProviderRegistry {
   private readonly providers = new Map<string, LlmProvider & { configured?: boolean; hint?: string }>();
   private readonly modelCache = new Map<string, { expiresAt: number; models: string[] }>();
+  readonly omnirouteCatalog: OmniRouteCatalogService;
+  private loadGatewaySettings: () => LlmGatewaySettings = defaultLlmGatewaySettings;
 
   constructor(
     private readonly config: AppConfig,
-    private readonly options: { copilotHome?: string } = {},
+    private readonly options: { copilotHome?: string; fetchImpl?: typeof fetch } = {},
   ) {
+    this.omnirouteCatalog = new OmniRouteCatalogService(config, options.fetchImpl ?? fetch);
     const timeoutMs = Math.min(config.LLM_TIMEOUT_MS, Math.max(1, config.STAGE_TIMEOUT_MS - 1));
     if (config.ANTHROPIC_API_KEY) {
       this.addProvider(new AnthropicProvider(config.ANTHROPIC_API_KEY, config.ANTHROPIC_MODEL || null, timeoutMs));
@@ -93,6 +99,14 @@ export class LlmProviderRegistry {
 
   get(id: string): LlmProvider | undefined {
     return this.providers.get(id);
+  }
+
+  setGatewaySettingsLoader(loader: () => LlmGatewaySettings): void {
+    this.loadGatewaySettings = loader;
+  }
+
+  getGatewaySettings(): LlmGatewaySettings {
+    return this.loadGatewaySettings();
   }
 
   isSupportedProvider(id: string): boolean {
@@ -172,12 +186,19 @@ export class LlmProviderRegistry {
       const payload = await response.json() as { models?: { name?: unknown }[] };
       return (payload.models ?? []).flatMap((item) => typeof item.name === "string" ? [item.name] : []);
     }
+    if (id === "omniroute" && this.providers.has("omniroute")) {
+      try {
+        const models = await this.omnirouteCatalog.getModels({ fetchImpl });
+        return models.map((model) => model.id);
+      } catch {
+        return this.omnirouteCatalog.peekModels().map((model) => model.id);
+      }
+    }
     const baseUrl = id === "openai" ? this.config.OPENAI_BASE_URL
       : id === "ollama" ? this.config.OLLAMA_BASE_URL
         : id === "openrouter" ? "https://openrouter.ai/api/v1"
           : id === "deepseek" ? "https://api.deepseek.com/v1"
             : id === "groq" ? "https://api.groq.com/openai/v1"
-              : id === "omniroute" && this.providers.has("omniroute") ? omniRouteBaseUrl(this.config)
               : id === "opencode" ? this.config.OPENCODE_BASE_URL
               : id === "custom" ? this.config.CUSTOM_LLM_BASE_URL
                 : undefined;
@@ -186,7 +207,6 @@ export class LlmProviderRegistry {
       : id === "openrouter" ? this.config.OPENROUTER_API_KEY
         : id === "deepseek" ? this.config.DEEPSEEK_API_KEY
           : id === "groq" ? this.config.GROQ_API_KEY
-          : id === "omniroute" ? this.config.OMNIROUTE_API_KEY
           : id === "opencode" ? this.config.OPENCODE_API_KEY
             : id === "custom" ? this.config.CUSTOM_LLM_API_KEY
               : undefined;
@@ -464,9 +484,7 @@ export function resolveLlmRoute(
   return selected as { route: LlmRoute; source: LlmRouteSource };
 }
 
-export function omniRouteBaseUrl(config: Pick<AppConfig, "OMNIROUTE_BASE_URL">): string {
-  return config.OMNIROUTE_BASE_URL || "http://127.0.0.1:20128/v1";
-}
+export { omniRouteBaseUrl } from "./omnirouteCatalog.js";
 
 function createNotConfiguredError(message: string): LlmError {
   return new LlmError(message, "LLM_NOT_CONFIGURED", false);

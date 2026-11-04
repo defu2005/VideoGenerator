@@ -1,9 +1,12 @@
 import { describe, expect, it } from "vitest";
 import {
   LLM_TASKS,
+  LlmGatewaySettingsSchema,
   LlmRouteSchema,
   LlmSettingsInputSchema,
   LlmSettingsSchema,
+  OmniRouteHealthSchema,
+  OmniRouteModelInfoSchema,
 } from "../src/index.js";
 
 describe("LLM routing schemas", () => {
@@ -67,5 +70,43 @@ describe("LLM routing schemas", () => {
         reviewChat: { provider: "mock", model: "script-model" },
       },
     });
+  });
+
+  it("parses OmniRoute gateway settings, catalog models, and health payloads", () => {
+    expect(LlmGatewaySettingsSchema.parse({})).toEqual({ mode: "off", mappings: [] });
+    expect(LlmGatewaySettingsSchema.parse({
+      mode: "prefer",
+      mappings: [{ provider: "anthropic", model: "claude-sonnet-5-5", omnirouteModel: "cc/claude-sonnet" }],
+    })).toMatchObject({ mode: "prefer", mappings: [{ omnirouteModel: "cc/claude-sonnet" }] });
+    expect(LlmGatewaySettingsSchema.safeParse({ mode: "always" }).success).toBe(false);
+
+    expect(OmniRouteModelInfoSchema.parse({
+      id: "cc/claude-sonnet",
+      ownedBy: "omniroute",
+      contextWindow: 200_000,
+      vision: true,
+      pricing: { inputPerMTok: 3, outputPerMTok: 15 },
+    })).toEqual({
+      id: "cc/claude-sonnet",
+      ownedBy: "omniroute",
+      contextWindow: 200_000,
+      vision: true,
+      pricing: { inputPerMTok: 3, outputPerMTok: 15 },
+    });
+    expect(OmniRouteModelInfoSchema.safeParse({
+      id: "x",
+      ownedBy: "omniroute",
+      unknownField: true,
+    }).success).toBe(false);
+
+    expect(OmniRouteHealthSchema.parse({
+      reachable: false,
+      latencyMs: null,
+      modelCount: 0,
+      lastError: "fetch failed",
+      baseUrl: "http://127.0.0.1:20128/v1",
+      configured: false,
+      setupHint: "hint",
+    }).reachable).toBe(false);
   });
 });

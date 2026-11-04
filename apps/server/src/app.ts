@@ -21,6 +21,7 @@ import { JobWorker } from "./jobs/worker.js";
 import { createExecutorRegistry } from "./pipeline/executorRegistry.js";
 import { PipelineOrchestrator } from "./pipeline/orchestrator.js";
 import { LlmProviderRegistry } from "./providers/llm/registry.js";
+import { getLlmGatewaySettings } from "./providers/llm/gatewaySettings.js";
 import { ResearchExecutor } from "./stages/research/researchExecutor.js";
 import { ScriptExecutor } from "./stages/script/scriptExecutor.js";
 import { ScriptService } from "./services/scriptService.js";
@@ -114,6 +115,7 @@ export function buildApp({ config }: { config: AppConfig }) {
   );
   const timelineService = new TimelineService(database.sqlite, config);
   const llmProviders = new LlmProviderRegistry(config);
+  llmProviders.setGatewaySettingsLoader(() => getLlmGatewaySettings(database.sqlite));
   const renderService = new RenderService(database.sqlite, config, timelineService, undefined, undefined, llmProviders, autoReportService);
   const metadataService = new MetadataService(database.sqlite, config, llmProviders, timelineService, renderService);
   const orchestrator = new PipelineOrchestrator(
