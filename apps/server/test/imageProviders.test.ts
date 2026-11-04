@@ -146,8 +146,53 @@ describe("image providers", () => {
       provider: "nasa",
       providerItemId: "as11-40-5874",
       license: { kind: "PUBLIC_DOMAIN", author: "Neil A. Armstrong" },
+      // Only ~thumb is listed — never guess ~large.
+      imageUrl: "https://images-assets.nasa.gov/image/as11-40-5874/as11-40-5874~thumb.jpg",
+      previewUrl: "https://images-assets.nasa.gov/image/as11-40-5874/as11-40-5874~thumb.jpg",
     });
     expect(results[0]?.license.attributionText).toContain("JSC");
+  });
+
+  it("picks NASA imageUrl only from listed sizes (prefer ≥1920, drop tiny, suffix when no width)", async () => {
+    const results = await new NasaImageProvider(config, fixtureFetch("nasa-search-sizes.json")).search({
+      query: "moon", perPage: 10, orientation: "landscape", signal,
+    });
+    expect(results.map((row) => row.providerItemId)).toEqual(["big-item", "suffix-only"]);
+
+    const big = results.find((row) => row.providerItemId === "big-item");
+    expect(big).toMatchObject({
+      imageUrl: "https://images-assets.nasa.gov/image/big-item/big-item~large.jpg",
+      previewUrl: "https://images-assets.nasa.gov/image/big-item/big-item~thumb.jpg",
+      width: 2880,
+      height: 2160,
+    });
+
+    const suffix = results.find((row) => row.providerItemId === "suffix-only");
+    expect(suffix).toMatchObject({
+      imageUrl: "https://images-assets.nasa.gov/image/suffix-only/suffix-only~medium.jpg",
+      previewUrl: "https://images-assets.nasa.gov/image/suffix-only/suffix-only~thumb.jpg",
+      width: 1280,
+      height: 720,
+    });
+
+    const listedHrefs = new Set([
+      "https://images-assets.nasa.gov/image/big-item/big-item~thumb.jpg",
+      "https://images-assets.nasa.gov/image/big-item/big-item~small.jpg",
+      "https://images-assets.nasa.gov/image/big-item/big-item~medium.jpg",
+      "https://images-assets.nasa.gov/image/big-item/big-item~large.jpg",
+      "https://images-assets.nasa.gov/image/tiny-orig/tiny-orig~thumb.jpg",
+      "https://images-assets.nasa.gov/image/tiny-orig/tiny-orig~orig.jpg",
+      "https://images-assets.nasa.gov/image/suffix-only/suffix-only~thumb.jpg",
+      "https://images-assets.nasa.gov/image/suffix-only/suffix-only~small.jpg",
+      "https://images-assets.nasa.gov/image/suffix-only/suffix-only~orig.jpg",
+      "https://images-assets.nasa.gov/image/suffix-only/suffix-only~medium.jpg",
+    ]);
+    for (const row of results) {
+      expect(listedHrefs.has(row.imageUrl)).toBe(true);
+      expect(listedHrefs.has(row.previewUrl)).toBe(true);
+    }
+    // No guessed sizes: suffix-only never invents ~large
+    expect(suffix!.imageUrl).not.toContain("~large");
   });
 
   it("keeps only Met public-domain objects and drops restricted ones", async () => {

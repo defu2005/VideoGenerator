@@ -1,0 +1,114 @@
+{
+  "collection": {
+    "items": [
+      {
+        "href": "https://images-assets.nasa.gov/image/big-item/collection.json",
+        "data": [{
+          "center": "JSC",
+          "description": "Full size set with dimensions",
+          "keywords": ["MOON"],
+          "media_type": "image",
+          "nasa_id": "big-item",
+          "photographer": "NASA",
+          "title": "Big item with listed sizes"
+        }],
+        "links": [
+          {
+            "href": "https://images-assets.nasa.gov/image/big-item/big-item~thumb.jpg",
+            "rel": "preview",
+            "render": "image",
+            "width": 150,
+            "height": 100,
+            "size": 12000
+          },
+          {
+            "href": "https://images-assets.nasa.gov/image/big-item/big-item~small.jpg",
+            "rel": "alternate",
+            "render": "image",
+            "width": 800,
+            "height": 600,
+            "size": 90000
+          },
+          {
+            "href": "https://images-assets.nasa.gov/image/big-item/big-item~medium.jpg",
+            "rel": "alternate",
+            "render": "image",
+            "width": 1600,
+            "height": 1200,
+            "size": 350000
+          },
+          {
+            "href": "https://images-assets.nasa.gov/image/big-item/big-item~large.jpg",
+            "rel": "alternate",
+            "render": "image",
+            "width": 2880,
+            "height": 2160,
+            "size": 1200000
+          }
+        ]
+      },
+      {
+        "href": "https://images-assets.nasa.gov/image/tiny-orig/collection.json",
+        "data": [{
+          "center": "HQ",
+          "description": "Only thumb preview and a tiny orig",
+          "keywords": ["TINY"],
+          "media_type": "image",
+          "nasa_id": "tiny-orig",
+          "title": "Too small for 1080p"
+        }],
+        "links": [
+          {
+            "href": "https://images-assets.nasa.gov/image/tiny-orig/tiny-orig~thumb.jpg",
+            "rel": "preview",
+            "render": "image",
+            "width": 80,
+            "height": 80,
+            "size": 4000
+          },
+          {
+            "href": "https://images-assets.nasa.gov/image/tiny-orig/tiny-orig~orig.jpg",
+            "rel": "canonical",
+            "render": "image",
+            "width": 232,
+            "height": 232,
+            "size": 18000
+          }
+        ]
+      },
+      {
+        "href": "https://images-assets.nasa.gov/image/suffix-only/collection.json",
+        "data": [{
+          "center": "GSFC",
+          "description": "Links without width/height",
+          "keywords": ["SUFFIX"],
+          "media_type": "image",
+          "nasa_id": "suffix-only",
+          "title": "Suffix ranked item"
+        }],
+        "links": [
+          {
+            "href": "https://images-assets.nasa.gov/image/suffix-only/suffix-only~thumb.jpg",
+            "rel": "preview",
+            "render": "image"
+          },
+          {
+            "href": "https://images-assets.nasa.gov/image/suffix-only/suffix-only~small.jpg",
+            "rel": "alternate",
+            "render": "image"
+          },
+          {
+            "href": "https://images-assets.nasa.gov/image/suffix-only/suffix-only~orig.jpg",
+            "rel": "canonical",
+            "render": "image"
+          },
+          {
+            "href": "https://images-assets.nasa.gov/image/suffix-only/suffix-only~medium.jpg",
+            "rel": "alternate",
+            "render": "image"
+          }
+        ]
+      }
+    ]
+  }
+}

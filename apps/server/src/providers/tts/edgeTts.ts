@@ -1,6 +1,6 @@
 import { spawn } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { basename, dirname, join } from "node:path";
 import { randomUUID } from "node:crypto";
 import { StageError } from "../../pipeline/stageExecutor.js";
 import { probeDurationSec } from "../../media/ffmpeg.js";
@@ -17,6 +17,14 @@ const defaultDependencies: EdgeTtsDependencies = {
   probeDuration: probeDurationSec,
   sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
 };
+
+/** Backoff between the 6 NoAudioReceived attempts (5 waits). */
+const NO_AUDIO_BACKOFF_MS = [3000, 10000, 20000, 40000, 60000] as const;
+
+/** Inaudible pitch nudges for retries 2–6 (attempt index 1–5). */
+const RETRY_PITCHES = ["+1Hz", "-1Hz", "+2Hz", "-1Hz", "+1Hz"] as const;
+
+const MAX_NO_AUDIO_ATTEMPTS = NO_AUDIO_BACKOFF_MS.length + 1;
 
 const STATIC_VOICES: TtsVoice[] = [
   { language: "vi", gender: "female", name: "vi-VN-HoaiMyNeural" },
@@ -105,23 +113,31 @@ export class EdgeTtsProvider implements TtsProvider {
     const srtPath = `${outPath}.srt`;
     writeFileSync(textPath, text, "utf8");
     try {
-      for (let attempt = 0; attempt <= 3; attempt += 1) {
+      for (let attempt = 0; attempt < MAX_NO_AUDIO_ATTEMPTS; attempt += 1) {
         if (signal?.aborted) throw new DOMException("aborted", "AbortError");
         rmSync(outPath, { force: true });
         rmSync(srtPath, { force: true });
+        const pitch = attempt > 0 ? RETRY_PITCHES[attempt - 1] : undefined;
+        if (attempt > 0) {
+          console.warn(
+            `[edge-tts] retry file=${basename(outPath)} attempt=${attempt + 1} pitch=${pitch ?? "none"}`,
+          );
+        }
         try {
-          const status = await this.runCli([
+          const args = [
             "--voice",
             voice,
             "--rate",
             rate,
+            ...(pitch ? ["--pitch", pitch] : []),
             "--file",
             textPath,
             "--write-media",
             outPath,
             "--write-subtitles",
             srtPath,
-          ], signal);
+          ];
+          const status = await this.runCli(args, signal);
           const isEmpty = !existsSync(outPath) || statSync(outPath).size === 0;
           const noAudio = status.toLowerCase().includes("noaudioreceived") || status.toLowerCase().includes("no audio received");
           if (!isEmpty && !noAudio) {
@@ -138,11 +154,16 @@ export class EdgeTtsProvider implements TtsProvider {
           const noAudio = /noaudioreceived|no audio received/i.test(message);
           if (!noAudio) throw error;
         }
-        if (attempt < 3) {
-          await this.dependencies.sleep([2000, 5000, 10000][attempt]);
+        if (attempt < MAX_NO_AUDIO_ATTEMPTS - 1) {
+          await this.dependencies.sleep(NO_AUDIO_BACKOFF_MS[attempt]);
+          if (signal?.aborted) throw new DOMException("aborted", "AbortError");
         }
       }
-      throw new StageError("edge-tts did not return audio after 3 retries.", "TTS_NO_AUDIO", true);
+      throw new StageError(
+        "edge-tts không trả về âm thanh sau 6 lần thử (dịch vụ Microsoft tạm lỗi). Thử lại bước Giọng đọc sau ít phút.",
+        "TTS_NO_AUDIO",
+        true,
+      );
     } finally {
       rmSync(textPath, { force: true });
     }
