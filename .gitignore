@@ -7,3 +7,8 @@ data/
 *.db-shm
 *.db-wal
 
+# Local inference runtime (weights and credentials stay off git)
+.ollama/
+.secrets/
+*.log
+
