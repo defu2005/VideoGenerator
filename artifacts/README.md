@@ -1,5 +1,7 @@
 # Remote Ollama on a Cursor Cloud Agent VM
 
+Tài liệu kết nối đầy đủ, bằng tiếng Việt: [KET-NOI.md](KET-NOI.md). File đó gồm sơ đồ, biến môi trường Windows, Python, PowerShell, curl, hợp đồng `/api/generate` và `/api/chat`, mã lỗi, cách bật lại sau khi VM dừng, và phần dữ liệu nào còn sau khi máy bị thay.
+
 This directory is a small client and the scripts that keep a CPU copy of `llama3.2:1b` behind an authenticated HTTPS tunnel. Inference runs in Ollama on the VM. Later prompts do not go through the Cursor Agent.
 
 The VM is not a permanent server. Sleep, recycle, or a new Cloud Agent session stops the process and drops the public URL. Plan on starting the services again after the machine is back.
