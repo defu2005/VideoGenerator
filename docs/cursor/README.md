@@ -20,6 +20,16 @@
 | 5 | [TASK-007C](TASK-007C.md) | Web image search: Brave API + Gemini grounding (free) + code crawl (guide replaces the LLM-agent spec) | docs/tasks/TASK-007C.md |
 | 6 | [TASK-020](TASK-020.md) | AUTO never pauses (auto decisions + AUTO report) + realistic token estimate | (guide only) |
 | 7 | [TASK-007B](TASK-007B.md) | More image/video sources | docs/tasks/TASK-007B.md |
+| 8 | [TASK-021](TASK-021.md) | Fixes from the first live AUTO run (download fallback, blocked-source circuit breaker) | (guide only) |
+| 9 | [TASK-022](TASK-022.md) | Profiles (Hồ sơ) with their own direction + platform accounts | (guide only) |
+| 10 | [TASK-023](TASK-023.md) | Render variants 16:9 / 9:16 from one project | (guide only) |
+| 11 | [TASK-024](TASK-024.md) | Publishing framework: encrypted token vault, OAuth, publish jobs + schedule, mock publisher | (guide only) |
+| 12 | [TASK-025](TASK-025.md) | YouTube publisher (long videos + Shorts) | (guide only) |
+| 13 | [TASK-026](TASK-026.md) | OmniRoute as the LLM gateway (catalog, health, prefer/only mode) | (guide only) |
+| 14 | [TASK-027](TASK-027.md) | LLM model advisor (picks a model per task) | (guide only) |
+| 15 | [TASK-028](TASK-028.md) | Topic queue + automation scheduler per profile | (guide only) |
+| 16 | [TASK-029](TASK-029.md) | TikTok publisher | (guide only) |
+| 17 | [TASK-030](TASK-030.md) | Facebook Reels + Instagram Reels publishers | (guide only) |
 
 The spec in `docs/tasks/` is the requirement. The guide in `docs/cursor/` gives the current code state, the file map and the steps. When they disagree, the guide wins (it is newer). Each task depends on the ones above it; don't skip ahead.
 
