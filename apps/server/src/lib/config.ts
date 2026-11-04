@@ -98,6 +98,9 @@ const ConfigSchema = z.object({
   OPENAI_MODEL: z.string().optional(),
   OLLAMA_BASE_URL: z.string().default("http://127.0.0.1:11434/v1"),
   OLLAMA_MODEL: z.string().optional(),
+  REMOTE_OLLAMA_BASE_URL: z.string().optional(),
+  REMOTE_OLLAMA_TOKEN: z.string().optional(),
+  REMOTE_OLLAMA_MODEL: z.string().optional(),
   OPENROUTER_API_KEY: z.string().optional(),
   OPENROUTER_MODEL: z.string().optional(),
   DEEPSEEK_API_KEY: z.string().optional(),
@@ -190,6 +193,9 @@ export type AppConfig = {
   OPENAI_MODEL?: string;
   OLLAMA_BASE_URL?: string;
   OLLAMA_MODEL?: string;
+  REMOTE_OLLAMA_BASE_URL?: string;
+  REMOTE_OLLAMA_TOKEN?: string;
+  REMOTE_OLLAMA_MODEL?: string;
   OPENROUTER_API_KEY?: string;
   OPENROUTER_MODEL?: string;
   DEEPSEEK_API_KEY?: string;
@@ -238,6 +244,7 @@ const providerLimitPrefixes: Partial<Record<LlmProviderId, string>> = {
   gemini: "GEMINI",
   openai: "OPENAI",
   ollama: "OLLAMA",
+  "remote-ollama": "REMOTE_OLLAMA",
   openrouter: "OPENROUTER",
   deepseek: "DEEPSEEK",
   groq: "GROQ",

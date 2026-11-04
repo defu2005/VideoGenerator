@@ -6,6 +6,7 @@ export const LlmProviderIdSchema = z.enum([
   "gemini",
   "openai",
   "ollama",
+  "remote-ollama",
   "openrouter",
   "deepseek",
   "groq",

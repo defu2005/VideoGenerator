@@ -417,4 +417,43 @@ describe("LLM registry", () => {
     expect(fetchMock.mock.calls[0]?.[0]).toBe("http://127.0.0.1:20128/v1/chat/completions");
     expect(JSON.parse(String((fetchMock.mock.calls[0]?.[1] as RequestInit).body)).model).toBe("my-combo");
   });
+
+  it("calls remote Ollama through the native chat API with a bearer token", async () => {
+    const off = new LlmProviderRegistry(parseConfig({ LLM_ENABLE_MOCK: "false" }));
+    expect(off.list().find((item) => item.id === "remote-ollama")?.configured).toBe(false);
+
+    const registry = new LlmProviderRegistry(parseConfig({
+      LLM_ENABLE_MOCK: "false",
+      REMOTE_OLLAMA_BASE_URL: "https://llama.test",
+      REMOTE_OLLAMA_TOKEN: "remote-token",
+    }));
+    expect(registry.list().find((item) => item.id === "remote-ollama")).toMatchObject({
+      configured: true,
+      label: "Ollama từ xa",
+      defaultModel: "llama3.2:1b",
+    });
+    expect(JSON.stringify(registry.list())).not.toContain("remote-token");
+
+    const tags = vi.fn(async () => jsonResponse({ models: [{ name: "llama3.2:1b" }, { name: "other" }] }));
+    expect(await registry.suggestModels("remote-ollama", tags as typeof fetch)).toEqual(["llama3.2:1b", "other"]);
+    expect(String(tags.mock.calls[0]?.[0])).toBe("https://llama.test/api/tags");
+    expect(new Headers((tags.mock.calls[0]?.[1] as RequestInit | undefined)?.headers).get("authorization")).toBe("Bearer remote-token");
+
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse({
+      model: "llama3.2:1b",
+      message: { role: "assistant", content: "{\"queries\":[\"ocean\"]}" },
+      done_reason: "stop",
+      prompt_eval_count: 4,
+      eval_count: 6,
+    }));
+    vi.stubGlobal("fetch", fetchMock);
+    const project = { settings: { llm: { default: { provider: "remote-ollama" } } } } as never;
+    const route = registry.resolveTask("visualAltQueries", project);
+    const generated = await route.provider.generate({ ...request, model: route.model }, new AbortController().signal);
+    expect(generated).toMatchObject({ text: "{\"queries\":[\"ocean\"]}", usage: { inputTokens: 4, outputTokens: 6 }, finishReason: "stop" });
+    expect(fetchMock.mock.calls[0]?.[0]).toBe("https://llama.test/api/chat");
+    const sent = JSON.parse(String((fetchMock.mock.calls[0]?.[1] as RequestInit).body)) as { format?: string; model: string; stream: boolean };
+    expect(sent).toMatchObject({ model: "llama3.2:1b", stream: false, format: "json" });
+    expect(new Headers((fetchMock.mock.calls[0]?.[1] as RequestInit).headers).get("authorization")).toBe("Bearer remote-token");
+  });
 });

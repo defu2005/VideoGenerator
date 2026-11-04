@@ -7,6 +7,7 @@ import { CopilotCliProvider } from "./copilotCli.js";
 import { resolveCopilotCliLaunch } from "./cliProvider.js";
 import { GeminiProvider } from "./gemini.js";
 import { MockLlmProvider } from "./mock.js";
+import { OllamaNativeProvider } from "./ollamaNative.js";
 import { OpenAiCompatibleProvider } from "./openaiCompatible.js";
 import { LlmError, type LlmProvider } from "./types.js";
 import { fetchAnthropicModels, fetchGeminiModels, readCopilotAccountModels } from "./modelLists.js";
@@ -37,6 +38,16 @@ export class LlmProviderRegistry {
 
     if (config.OPENAI_API_KEY) this.addCompatible("openai", "OpenAI", config.OPENAI_BASE_URL, config.OPENAI_API_KEY, config.OPENAI_MODEL);
     if (config.OLLAMA_BASE_URL) this.addCompatible("ollama", "Ollama", config.OLLAMA_BASE_URL, undefined, config.OLLAMA_MODEL, false);
+    if (config.REMOTE_OLLAMA_BASE_URL && config.REMOTE_OLLAMA_TOKEN) {
+      this.addProvider(new OllamaNativeProvider(
+        "remote-ollama",
+        "Ollama từ xa",
+        config.REMOTE_OLLAMA_BASE_URL,
+        config.REMOTE_OLLAMA_TOKEN,
+        config.REMOTE_OLLAMA_MODEL || "llama3.2:1b",
+        timeoutMs,
+      ));
+    }
     if (config.OPENROUTER_API_KEY) this.addCompatible("openrouter", "OpenRouter", "https://openrouter.ai/api/v1", config.OPENROUTER_API_KEY, config.OPENROUTER_MODEL);
     if (config.DEEPSEEK_API_KEY) this.addCompatible("deepseek", "DeepSeek", "https://api.deepseek.com/v1", config.DEEPSEEK_API_KEY, config.DEEPSEEK_MODEL);
     if (config.GROQ_API_KEY) this.addCompatible("groq", "Groq", "https://api.groq.com/openai/v1", config.GROQ_API_KEY, config.GROQ_MODEL);
@@ -96,6 +107,7 @@ export class LlmProviderRegistry {
       gemini: ["gemini-2.5-pro", "gemini-2.5-flash"],
       openai: ["gpt-5", "gpt-5-mini", "gpt-4.1"],
       ollama: [],
+      "remote-ollama": ["llama3.2:1b"],
       openrouter: [],
       deepseek: ["deepseek-chat", "deepseek-reasoner"],
       groq: ["llama-3.3-70b-versatile", "openai/gpt-oss-120b"],
@@ -151,6 +163,14 @@ export class LlmProviderRegistry {
       const provider = this.providers.get(id);
       return provider instanceof AntgravityCliProvider ? provider.listModels() : [];
     }
+    if (id === "remote-ollama" && this.config.REMOTE_OLLAMA_BASE_URL && this.config.REMOTE_OLLAMA_TOKEN) {
+      const response = await fetchImpl(new URL("/api/tags", `${this.config.REMOTE_OLLAMA_BASE_URL.replace(/\/+$/, "")}/`), {
+        headers: { Authorization: `Bearer ${this.config.REMOTE_OLLAMA_TOKEN}` },
+      });
+      if (!response.ok) return [];
+      const payload = await response.json() as { models?: { name?: unknown }[] };
+      return (payload.models ?? []).flatMap((item) => typeof item.name === "string" ? [item.name] : []);
+    }
     const baseUrl = id === "openai" ? this.config.OPENAI_BASE_URL
       : id === "ollama" ? this.config.OLLAMA_BASE_URL
         : id === "openrouter" ? "https://openrouter.ai/api/v1"
@@ -190,6 +210,7 @@ export class LlmProviderRegistry {
       gemini: "Gemini API",
       openai: "OpenAI API",
       ollama: "Ollama",
+      "remote-ollama": "Ollama từ xa",
       openrouter: "OpenRouter",
       deepseek: "DeepSeek",
       groq: "Groq",
@@ -206,6 +227,7 @@ export class LlmProviderRegistry {
       gemini: "Set GEMINI_API_KEY to configure Gemini API.",
       openai: "Set OPENAI_API_KEY to configure OpenAI API.",
       ollama: "Set OLLAMA_BASE_URL and OLLAMA_MODEL to configure Ollama.",
+      "remote-ollama": "Đặt REMOTE_OLLAMA_BASE_URL và REMOTE_OLLAMA_TOKEN (tunnel HTTPS của Ollama, API /api/chat).",
       openrouter: "Set OPENROUTER_API_KEY to configure OpenRouter.",
       deepseek: "Set DEEPSEEK_API_KEY to configure DeepSeek.",
       groq: "Set GROQ_API_KEY to configure Groq.",
