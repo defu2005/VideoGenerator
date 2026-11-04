@@ -1,8 +1,15 @@
 import { describe, expect, it } from "vitest";
 import {
   licenseFromCcUrl,
+  normalizeFlickrLicense,
+  normalizeLocLicense,
+  normalizeMetLicense,
+  normalizeNasaLicense,
   normalizeOpenverseLicense,
   normalizePexelsLicense,
+  normalizePixabayLicense,
+  normalizeSmithsonianLicense,
+  normalizeUnsplashLicense,
   normalizeWikimediaLicense,
 } from "../src/index.js";
 
@@ -67,5 +74,34 @@ describe("license normalization", () => {
       license: { kind: "CC0" },
     });
     expect(licenseFromCcUrl("https://example.test/terms")).toBeNull();
+  });
+
+  it("maps Pixabay and Unsplash stock licenses", () => {
+    expect(normalizePixabayLicense("Sam")).toMatchObject({
+      kind: "PIXABAY",
+      attributionText: "Image by Sam on Pixabay",
+    });
+    expect(normalizeUnsplashLicense("Alex", "https://unsplash.com/@alex")).toMatchObject({
+      kind: "ROYALTY_FREE",
+      name: "Unsplash License",
+      attributionRequired: true,
+      attributionText: "Photo by Alex on Unsplash",
+    });
+  });
+
+  it("maps NASA / Met / LoC / Smithsonian / Flickr licenses and drops restricted items", () => {
+    expect(normalizeNasaLicense({ photographer: "Neil", center: "JSC", nasaId: "as11" })).toMatchObject({
+      kind: "PUBLIC_DOMAIN",
+      author: "Neil",
+    });
+    expect(normalizeMetLicense("Van Gogh")).toMatchObject({ kind: "CC0" });
+    expect(normalizeLocLicense("No known restrictions on publication.", "Brady")).toMatchObject({
+      kind: "PUBLIC_DOMAIN",
+    });
+    expect(normalizeLocLicense("Publication may be restricted.")).toBeNull();
+    expect(normalizeSmithsonianLicense("CC0", "SI")).toMatchObject({ kind: "CC0" });
+    expect(normalizeSmithsonianLicense("Usage Conditions Apply")).toBeNull();
+    expect(normalizeFlickrLicense(4, "Pat")).toMatchObject({ kind: "CC_BY" });
+    expect(normalizeFlickrLicense(0, "Pat")).toBeNull();
   });
 });

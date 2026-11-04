@@ -1,0 +1,24 @@
+{
+  "total": 1,
+  "total_pages": 1,
+  "results": [{
+    "id": "abc123",
+    "description": "Mountain lake",
+    "alt_description": "A calm mountain lake at dawn",
+    "width": 4000,
+    "height": 2667,
+    "urls": {
+      "small": "https://images.unsplash.com/photo-abc123?w=400",
+      "regular": "https://images.unsplash.com/photo-abc123?w=1080",
+      "full": "https://images.unsplash.com/photo-abc123"
+    },
+    "links": {
+      "html": "https://unsplash.com/photos/abc123",
+      "download_location": "https://api.unsplash.com/photos/abc123/download?ixid=test"
+    },
+    "user": {
+      "name": "Alex Rivera",
+      "links": { "html": "https://unsplash.com/@alex" }
+    }
+  }]
+}

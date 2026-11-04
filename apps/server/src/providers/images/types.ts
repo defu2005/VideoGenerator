@@ -25,6 +25,8 @@ export type NormalizedImageResult = {
   why?: string;
   providerPosition?: number;
   searchQuery?: string;
+  /** Unsplash download_location — pinged once when the image is selected. */
+  downloadLocation?: string;
 };
 
 export type ImageSearchInput = {

@@ -1,0 +1,29 @@
+{
+  "stat": "ok",
+  "photos": {
+    "photo": [
+      {
+        "id": "50123456789",
+        "owner": "123456@N00",
+        "title": "Street market",
+        "license": "4",
+        "ownername": "Pat Photographer",
+        "url_m": "https://live.staticflickr.com/m.jpg",
+        "url_l": "https://live.staticflickr.com/l.jpg",
+        "width_l": "1600",
+        "height_l": "1067"
+      },
+      {
+        "id": "50123456790",
+        "owner": "123456@N00",
+        "title": "All rights reserved shot",
+        "license": "0",
+        "ownername": "Pat Photographer",
+        "url_m": "https://live.staticflickr.com/arr-m.jpg",
+        "url_l": "https://live.staticflickr.com/arr-l.jpg",
+        "width_l": "1600",
+        "height_l": "1067"
+      }
+    ]
+  }
+}

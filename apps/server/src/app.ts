@@ -31,6 +31,7 @@ import { VisualService } from "./services/visualService.js";
 import { VisualSearchExecutor } from "./stages/visuals/visualSearchExecutor.js";
 import { registerVisualRoutes } from "./api/visuals.js";
 import { registerWebImageSettingsRoutes } from "./api/webImageSettings.js";
+import { registerImageSourcesSettingsRoutes } from "./api/imageSourcesSettings.js";
 import { MAX_IMAGE_BYTES } from "./services/imageStore.js";
 import { UsageService } from "./services/usageService.js";
 import { registerUsageRoutes } from "./api/usage.js";
@@ -185,6 +186,7 @@ export function buildApp({ config }: { config: AppConfig }) {
   registerSceneRoutes(server, sceneService);
   registerVisualRoutes(server, visualService, jobRepository, llmProviders);
   registerWebImageSettingsRoutes(server, database.sqlite, config);
+  registerImageSourcesSettingsRoutes(server, database.sqlite, config);
   registerVoiceRoutes(server, ttsProviders, database.sqlite, projectService, jobRepository, config);
   registerSubtitleRoutes(server, database.sqlite, jobRepository, config);
   registerMusicRoutes(server, musicService, projectService, jobRepository);

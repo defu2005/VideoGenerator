@@ -1,0 +1,22 @@
+{
+  "collection": {
+    "items": [{
+      "href": "https://images-assets.nasa.gov/image/as11-40-5874/collection.json",
+      "data": [{
+        "center": "JSC",
+        "date_created": "1969-07-21T00:00:00Z",
+        "description": "Aldrin beside the US flag on the Moon",
+        "keywords": ["APOLLO 11", "MOON"],
+        "media_type": "image",
+        "nasa_id": "as11-40-5874",
+        "photographer": "Neil A. Armstrong",
+        "title": "Apollo 11 Aldrin and flag"
+      }],
+      "links": [{
+        "href": "https://images-assets.nasa.gov/image/as11-40-5874/as11-40-5874~thumb.jpg",
+        "rel": "preview",
+        "render": "image"
+      }]
+    }]
+  }
+}

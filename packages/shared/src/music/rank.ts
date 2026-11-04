@@ -36,7 +36,7 @@ const ENERGY_WORDS: Record<string, string[]> = {
   medium: ["warm", "uplifting", "hopeful", "light", "positive", "inspiring", "moderate"],
   high: ["energetic", "epic", "upbeat", "powerful", "fast", "action", "dramatic", "intense", "driving", "rock"],
 };
-const COMMERCIAL_OK: LicenseKind[] = ["CC0", "PUBLIC_DOMAIN", "CC_BY", "CC_BY_SA", "ROYALTY_FREE"];
+const COMMERCIAL_OK: LicenseKind[] = ["CC0", "PUBLIC_DOMAIN", "CC_BY", "CC_BY_SA", "ROYALTY_FREE", "PIXABAY"];
 
 export function musicWords(text: string): string[] {
   return text

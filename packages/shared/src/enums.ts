@@ -80,6 +80,7 @@ export const LICENSE_KINDS = [
   "CC_BY_NC_SA",
   "CC_BY_NC_ND",
   "ROYALTY_FREE",
+  "PIXABAY",
   "ALL_RIGHTS_RESERVED",
   "UNKNOWN",
   "USER_PROVIDED",

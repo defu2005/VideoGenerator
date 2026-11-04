@@ -23,6 +23,7 @@ import {
   resolveBudget,
   webImageSearchSceneCap,
   isUnverifiedWebCandidate,
+  preferredSources,
   type LlmCallUsage,
 } from "@vg/shared";
 import type Database from "better-sqlite3";
@@ -60,6 +61,8 @@ import {
   WEB_IMAGE_GROUNDING_BATCH_SIZE,
 } from "../providers/images/webGrounding.js";
 import { getWebImageSettings } from "../settings/webImage.js";
+import { isImageSourceEnabledInSettings } from "../settings/imageSources.js";
+import { UnsplashImageProvider } from "../providers/images/unsplash.js";
 import { markStaleFrom } from "../pipeline/invalidation.js";
 import { StageError, type StageContext, type StageResult } from "../pipeline/stageExecutor.js";
 import type { LlmProviderRegistry } from "../providers/llm/registry.js";
@@ -141,6 +144,14 @@ export class VisualService {
       wikimedia: config.IMAGE_SEARCH_PER_MINUTE_WIKIMEDIA,
       openverse: config.IMAGE_SEARCH_PER_MINUTE_OPENVERSE,
       pexels: config.IMAGE_SEARCH_PER_MINUTE_PEXELS,
+      pixabay: config.IMAGE_SEARCH_PER_MINUTE_PIXABAY,
+      unsplash: config.IMAGE_SEARCH_PER_MINUTE_UNSPLASH,
+      nasa: config.IMAGE_SEARCH_PER_MINUTE_NASA,
+      met: config.IMAGE_SEARCH_PER_MINUTE_MET,
+      loc: config.IMAGE_SEARCH_PER_MINUTE_LOC,
+      smithsonian: config.IMAGE_SEARCH_PER_MINUTE_SMITHSONIAN,
+      europeana: config.IMAGE_SEARCH_PER_MINUTE_EUROPEANA,
+      flickr: config.IMAGE_SEARCH_PER_MINUTE_FLICKR,
       brave: config.WEB_IMAGE_SEARCH_PER_MINUTE,
     });
     this.imageStore = dependencies.imageStore ?? new ImageStore(config.DATA_DIR, config.IMAGE_SEARCH_USER_AGENT, { minIntervalMs: config.IMAGE_DOWNLOAD_MIN_INTERVAL_MS });
@@ -235,9 +246,17 @@ export class VisualService {
   ) {
     const project = this.requireProject(projectId);
     const scene = this.requireScene(projectId, sceneId);
-    const providers = this.resolveProviders(providerIds);
+    const sceneText = [scene.visualDescription, scene.visualNotes, scene.narration, query].filter(Boolean).join(" ");
+    const { providers, limits } = this.resolveProviders(providerIds, project, sceneText);
     const stats = createSearchStats();
-    const results = await this.searchAcrossProviders(query, providers, orientationFor(project.settings.aspectRatio), signal, stats);
+    const results = await this.searchAcrossProviders(
+      query,
+      providers,
+      orientationFor(project.settings.aspectRatio),
+      signal,
+      stats,
+      limits,
+    );
     const current = this.getSceneVisuals(projectId, sceneId, true).candidates;
     const combined = dedupeCandidates([...current, ...results.map((result) => this.toCandidate(result, project, scene, query, ""))]);
     const ranked = this.rankVisuals(
@@ -397,7 +416,7 @@ export class VisualService {
     };
   }
 
-  selectCandidate(projectId: string, sceneId: string, candidateId: string) {
+  async selectCandidate(projectId: string, sceneId: string, candidateId: string) {
     this.requireScene(projectId, sceneId);
     const candidate = this.findCandidate(candidateId);
     if (!candidate || candidate.projectId !== projectId || candidate.sceneId !== sceneId || candidate.discardedAt) {
@@ -422,6 +441,7 @@ export class VisualService {
       this.markTimelineStale(projectId);
       this.repository.emitVisualUpdated(projectId, sceneId, "selected");
     });
+    await this.pingUnsplashDownload(candidate);
     return this.getSceneVisuals(projectId, sceneId);
   }
 
@@ -1030,7 +1050,7 @@ export class VisualService {
     const project = context.project;
     const startedAt = Date.now();
     const scenes = this.loadScenes(project.id);
-    const enabledProviders = this.registry.list();
+    const enabledProviders = this.resolveProviders(undefined, project).providers;
     const featureSettings = resolveFeatures(project);
     const stats = createSearchStats();
     let llmCalls = 0;
@@ -1073,15 +1093,18 @@ export class VisualService {
           protectedSelection,
         });
       } else {
+        const sceneText = [scene.visualDescription, scene.visualNotes, scene.narration].filter(Boolean).join(" ");
+        const { providers: sceneProviders, limits } = this.resolveProviders(undefined, project, sceneText);
         const { queries, candidates } = await this.resolveQueries(
           scene,
           sectionQueries.get(scene.sectionId ?? ""),
           project.settings.aspectRatio,
           project.settings.language,
-          enabledProviders,
+          sceneProviders,
           stats,
           context.signal,
           featureSettings.visualSearchBreadth,
+          limits,
         );
         sceneSearches.push({
           scene,
@@ -1559,6 +1582,7 @@ export class VisualService {
       };
     }));
     let candidateCount = 0;
+    const autoSelectedUnsplash: VisualCandidate[] = [];
     this.repository.atomic(() => {
       for (const { item, ranked } of rankedScenes) {
         if (!item.unchanged) {
@@ -1627,8 +1651,12 @@ export class VisualService {
           createdAt: now,
           updatedAt: now,
         });
+        autoSelectedUnsplash.push(selected);
       }
     });
+    for (const selected of autoSelectedUnsplash) {
+      await this.pingUnsplashDownload(selected);
+    }
 
     context.recordUsage({
       llmCalls,
@@ -1667,6 +1695,7 @@ export class VisualService {
     stats: SearchStats,
     signal: AbortSignal,
     breadth = 8,
+    limits?: Partial<Record<string, number>>,
   ): Promise<{ queries: string[]; candidates: NormalizedImageResult[] }> {
     const queries: string[] = [];
     const results: NormalizedImageResult[] = [];
@@ -1695,6 +1724,7 @@ export class VisualService {
         orientationFor(aspectRatio),
         signal,
         stats,
+        limits,
       ));
     };
     await search(primary, 1);
@@ -1729,13 +1759,15 @@ export class VisualService {
     orientation: ImageOrientation,
     signal: AbortSignal | undefined,
     stats: SearchStats,
+    limits?: Partial<Record<string, number>>,
   ): Promise<NormalizedImageResult[]> {
     const providerResults = await Promise.all(providers.map(async (provider) => {
       if (signal?.aborted) throw signal.reason ?? new Error("Visual search was aborted");
+      const perPage = limits?.[provider.id] ?? 10;
       const cacheKey = createHash("sha256").update(JSON.stringify([
         provider.id,
         normalizeQuery(query),
-        10,
+        perPage,
         orientation,
       ])).digest("hex");
       const cached = this.getCached(cacheKey);
@@ -1747,7 +1779,7 @@ export class VisualService {
       stats.requestsByProvider[provider.id] = (stats.requestsByProvider[provider.id] ?? 0) + 1;
       try {
         await this.limiter.acquire(provider.id, signal);
-        const found = await provider.search({ query, perPage: 10, orientation, signal });
+        const found = await provider.search({ query, perPage, orientation, signal });
         const filtered = found.filter((item) =>
           item.width >= 1 && item.height >= 1 && Math.min(item.width, item.height) >= 320
           && (item.fileType.toLowerCase() === "svg"
@@ -1772,16 +1804,69 @@ export class VisualService {
       })));
   }
 
-  private resolveProviders(ids?: string[]): ImageSearchProvider[] {
-    const providers = ids
+  private resolveProviders(
+    ids?: string[],
+    project?: Project,
+    sceneText?: string,
+  ): { providers: ImageSearchProvider[]; limits?: Partial<Record<string, number>> } {
+    const settingsFiltered = this.registry.list().filter((provider) =>
+      isImageSourceEnabledInSettings(this.sqlite, provider.id));
+    let providers = ids
       ? ids.map((id) => {
         const provider = this.registry.get(id);
         if (!provider) throw new AppError(400, "INVALID_IMAGE_PROVIDER", `Image provider "${id}" is not enabled.`);
+        if (!isImageSourceEnabledInSettings(this.sqlite, id)) {
+          throw new AppError(400, "INVALID_IMAGE_PROVIDER", `Image provider "${id}" is disabled in settings.`);
+        }
         return provider;
       })
-      : this.registry.list();
+      : settingsFiltered;
+    let limits: Partial<Record<string, number>> | undefined;
+    if (project && !ids) {
+      const plan = preferredSources(
+        {
+          topic: project.topic,
+          style: project.settings.style,
+          sceneText,
+        },
+        { sceneText },
+      );
+      const byId = new Map(providers.map((provider) => [provider.id, provider]));
+      const ordered: ImageSearchProvider[] = [];
+      for (const id of plan.order) {
+        const provider = byId.get(id);
+        if (provider) {
+          ordered.push(provider);
+          byId.delete(id);
+        }
+      }
+      for (const provider of byId.values()) ordered.push(provider);
+      providers = ordered;
+      limits = plan.limits;
+    }
     if (providers.length === 0) throw new AppError(503, "IMAGE_SEARCH_UNAVAILABLE", "No image search providers are enabled.");
-    return providers;
+    return { providers, limits };
+  }
+
+  private async pingUnsplashDownload(candidate: VisualCandidate): Promise<void> {
+    if (candidate.provider !== "unsplash") return;
+    if (candidate.scoreBreakdown.unsplashDownloadPinged === true) return;
+    const location = typeof candidate.scoreBreakdown.unsplashDownloadLocation === "string"
+      ? candidate.scoreBreakdown.unsplashDownloadLocation
+      : undefined;
+    if (!location || !this.config.UNSPLASH_ACCESS_KEY?.trim()) return;
+    try {
+      const provider = new UnsplashImageProvider(this.config);
+      await provider.trackDownload(location);
+      const nextBreakdown = {
+        ...candidate.scoreBreakdown,
+        unsplashDownloadPinged: true,
+      };
+      this.sqlite.prepare("UPDATE visual_candidates SET score_breakdown = ? WHERE id = ?")
+        .run(JSON.stringify(nextBreakdown), candidate.id);
+    } catch (error) {
+      this.logger?.warn({ err: error, candidateId: candidate.id }, "Unsplash download ping failed");
+    }
   }
 
   private getCached(key: string): NormalizedImageResult[] | undefined {
@@ -1869,6 +1954,19 @@ export class VisualService {
     targetAspect: number,
     providerOrder: string[],
   ) {
+    const unsplashMeta = new Map<string, { location?: string; pinged?: boolean }>();
+    for (const candidate of candidates) {
+      const key = `${candidate.provider}:${candidate.providerItemId}`;
+      const fromResult = "downloadLocation" in candidate
+        && typeof candidate.downloadLocation === "string"
+        ? candidate.downloadLocation
+        : undefined;
+      const breakdown = "scoreBreakdown" in candidate ? candidate.scoreBreakdown : undefined;
+      const location = fromResult
+        ?? (typeof breakdown?.unsplashDownloadLocation === "string" ? breakdown.unsplashDownloadLocation : undefined);
+      const pinged = breakdown?.unsplashDownloadPinged === true;
+      if (location || pinged) unsplashMeta.set(key, { location, pinged });
+    }
     const rankable = candidates.map((candidate) => {
       const savedPosition = "scoreBreakdown" in candidate
         && typeof candidate.scoreBreakdown.providerPosition === "number"
@@ -1889,7 +1987,18 @@ export class VisualService {
         targetAspect,
         providerOrder,
       },
-    );
+    ).map((item) => {
+      const meta = unsplashMeta.get(`${item.provider}:${item.providerItemId}`);
+      if (!meta) return item;
+      return {
+        ...item,
+        scoreBreakdown: {
+          ...item.scoreBreakdown,
+          ...(meta.location ? { unsplashDownloadLocation: meta.location } : {}),
+          ...(meta.pinged ? { unsplashDownloadPinged: true } : {}),
+        },
+      };
+    });
   }
 
   private toCandidate(
@@ -1899,7 +2008,7 @@ export class VisualService {
     query: string,
     searchHash: string,
   ): VisualCandidate {
-    const { providerPosition = 0, searchQuery, ...candidateResult } = result;
+    const { providerPosition = 0, searchQuery, downloadLocation, ...candidateResult } = result;
     return VisualCandidateSchema.parse({
       id: randomUUID(),
       projectId: project.id,
@@ -1909,7 +2018,10 @@ export class VisualService {
       query: searchQuery ?? query,
       aspectRatio: result.width / result.height,
       relevanceScore: 0,
-      scoreBreakdown: { providerPosition },
+      scoreBreakdown: {
+        providerPosition,
+        ...(downloadLocation ? { unsplashDownloadLocation: downloadLocation } : {}),
+      },
       rank: 0,
       discardedAt: null,
       createdAt: new Date().toISOString(),
@@ -2235,6 +2347,9 @@ function resolveFeatures(project: Project): {
 
 function fromStoredCandidate(candidate: VisualCandidate): NormalizedImageResult {
   const providerPosition = candidate.scoreBreakdown.providerPosition;
+  const downloadLocation = typeof candidate.scoreBreakdown.unsplashDownloadLocation === "string"
+    ? candidate.scoreBreakdown.unsplashDownloadLocation
+    : undefined;
   return {
     provider: candidate.provider,
     providerItemId: candidate.providerItemId,
@@ -2256,6 +2371,7 @@ function fromStoredCandidate(candidate: VisualCandidate): NormalizedImageResult 
     license: candidate.license,
     licenseVerified: candidate.licenseVerified,
     ...(candidate.why ? { why: candidate.why } : {}),
+    ...(downloadLocation ? { downloadLocation } : {}),
   };
 }
 

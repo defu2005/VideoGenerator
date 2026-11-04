@@ -1,0 +1,12 @@
+{
+  "items": [{
+    "id": "/9200397/BibliographicResource_3000126281234",
+    "guid": "https://www.europeana.eu/item/9200397/BibliographicResource_3000126281234",
+    "title": ["Medieval manuscript page"],
+    "dcCreator": ["Unknown scribe"],
+    "edmPreview": ["https://api.europeana.eu/thumbnail/v2/preview.jpg"],
+    "edmIsShownBy": ["https://www.example-museum.eu/full/manuscript.jpg"],
+    "rights": ["http://creativecommons.org/publicdomain/zero/1.0/"],
+    "dataProvider": ["National Library"]
+  }]
+}

@@ -24,12 +24,36 @@ export const VisualProviderSchema = z.enum([
   "wikimedia",
   "openverse",
   "pexels",
+  "pixabay",
+  "unsplash",
+  "nasa",
+  "met",
+  "loc",
+  "smithsonian",
+  "europeana",
+  "flickr",
   "mock",
   "custom",
   "brave",
   "web-grounding",
 ]);
 export type VisualProvider = z.infer<typeof VisualProviderSchema>;
+
+/** Stock / museum image sources controllable from Settings → Nguồn ảnh (excludes mock/custom/web). */
+export const STOCK_IMAGE_PROVIDERS = [
+  "wikimedia",
+  "openverse",
+  "pexels",
+  "pixabay",
+  "unsplash",
+  "nasa",
+  "met",
+  "loc",
+  "smithsonian",
+  "europeana",
+  "flickr",
+] as const;
+export type StockImageProvider = (typeof STOCK_IMAGE_PROVIDERS)[number];
 
 export const WEB_IMAGE_PROVIDERS = ["brave", "web-grounding"] as const;
 export type WebImageProvider = (typeof WEB_IMAGE_PROVIDERS)[number];

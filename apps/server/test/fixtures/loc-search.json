@@ -1,0 +1,24 @@
+{
+  "results": [
+    {
+      "id": "https://www.loc.gov/item/2002719180/",
+      "title": "Civil War soldiers",
+      "description": ["Union troops near a river"],
+      "image_url": [
+        "https://tile.loc.gov/storage-services/service/pnp/cwpb/00100/00123r.jpg",
+        "https://tile.loc.gov/storage-services/service/pnp/cwpb/00100/00123v.jpg"
+      ],
+      "url": "https://www.loc.gov/item/2002719180/",
+      "rights_advisory": ["No known restrictions on publication."],
+      "contributor": ["Brady, Mathew B."]
+    },
+    {
+      "id": "https://www.loc.gov/item/restricted/",
+      "title": "Restricted photo",
+      "image_url": ["https://tile.loc.gov/restricted.jpg"],
+      "url": "https://www.loc.gov/item/restricted/",
+      "rights_advisory": ["Publication may be restricted."],
+      "contributor": ["Unknown"]
+    }
+  ]
+}

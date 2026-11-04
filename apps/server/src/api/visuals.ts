@@ -139,7 +139,7 @@ export function registerVisualRoutes(
     const { id, sceneId } = SceneParams.parse(request.params);
     const { candidateId } = z.object({ candidateId: z.string().uuid() }).strict().parse(request.body);
     ensureSceneMutationAllowed(id, sceneId);
-    return service.selectCandidate(id, sceneId, candidateId);
+    return await service.selectCandidate(id, sceneId, candidateId);
   });
 
   app.post("/api/projects/:id/scenes/:sceneId/visuals/:candidateId/discard", {

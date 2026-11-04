@@ -32,7 +32,8 @@ function licenseKind(value: string): LicenseKind {
   if (/cc by nc|by nc/.test(normalized)) return "CC_BY_NC";
   if (/cc by sa|by sa/.test(normalized)) return "CC_BY_SA";
   if (/cc by|^by$/.test(normalized)) return "CC_BY";
-  if (/royalty free|pexels/.test(normalized)) return "ROYALTY_FREE";
+  if (/royalty free|pexels|unsplash/.test(normalized)) return "ROYALTY_FREE";
+  if (/pixabay/.test(normalized)) return "PIXABAY";
   if (/all rights reserved/.test(normalized)) return "ALL_RIGHTS_RESERVED";
   return "UNKNOWN";
 }
@@ -100,15 +101,204 @@ export function normalizePexelsLicense(photographer: string, photographerUrl?: s
   };
 }
 
+export function normalizePixabayLicense(user: string, pageUrl?: string): LicenseMetadata {
+  const author = user.trim() || null;
+  return {
+    kind: "PIXABAY",
+    name: "Pixabay Content License",
+    url: "https://pixabay.com/service/license/",
+    author,
+    authorUrl: isUrl(pageUrl) ? pageUrl : null,
+    attributionRequired: false,
+    attributionText: author ? `Image by ${author} on Pixabay` : "Pixabay Content License",
+    evidence: "api",
+  };
+}
+
+export function normalizeUnsplashLicense(
+  photographer: string,
+  photographerUrl?: string,
+  photoUrl?: string,
+): LicenseMetadata {
+  const author = photographer.trim() || null;
+  const profile = isUrl(photographerUrl) ? photographerUrl : null;
+  const withUtm = (url: string | null) => {
+    if (!url) return null;
+    try {
+      const parsed = new URL(url);
+      if (!parsed.searchParams.has("utm_source")) parsed.searchParams.set("utm_source", "videoagent");
+      if (!parsed.searchParams.has("utm_medium")) parsed.searchParams.set("utm_medium", "referral");
+      return parsed.toString();
+    } catch {
+      return url;
+    }
+  };
+  const authorLink = withUtm(profile);
+  void photoUrl;
+  return {
+    kind: "ROYALTY_FREE",
+    name: "Unsplash License",
+    url: "https://unsplash.com/license",
+    author,
+    authorUrl: authorLink,
+    attributionRequired: true,
+    attributionText: author
+      ? `Photo by ${author} on Unsplash`
+      : "Photo on Unsplash",
+    evidence: "api",
+  };
+}
+
+/** Flickr license ids that are CC or public-domain / no known restrictions. */
+export const FLICKR_CC_PD_LICENSE_IDS = new Set([1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
+
+export function normalizeFlickrLicense(
+  licenseId: number,
+  ownerName?: string,
+  photoUrl?: string,
+): LicenseMetadata | null {
+  if (!FLICKR_CC_PD_LICENSE_IDS.has(licenseId)) return null;
+  const map: Record<number, { kind: LicenseKind; name: string; url: string | null }> = {
+    1: { kind: "CC_BY_NC_SA", name: "CC BY-NC-SA 2.0", url: "https://creativecommons.org/licenses/by-nc-sa/2.0/" },
+    2: { kind: "CC_BY_NC", name: "CC BY-NC 2.0", url: "https://creativecommons.org/licenses/by-nc/2.0/" },
+    3: { kind: "CC_BY_NC_ND", name: "CC BY-NC-ND 2.0", url: "https://creativecommons.org/licenses/by-nc-nd/2.0/" },
+    4: { kind: "CC_BY", name: "CC BY 2.0", url: "https://creativecommons.org/licenses/by/2.0/" },
+    5: { kind: "CC_BY_SA", name: "CC BY-SA 2.0", url: "https://creativecommons.org/licenses/by-sa/2.0/" },
+    6: { kind: "CC_BY_ND", name: "CC BY-ND 2.0", url: "https://creativecommons.org/licenses/by-nd/2.0/" },
+    7: { kind: "PUBLIC_DOMAIN", name: "No known copyright restrictions", url: null },
+    8: { kind: "PUBLIC_DOMAIN", name: "United States Government Work", url: null },
+    9: { kind: "CC0", name: "CC0 1.0", url: "https://creativecommons.org/publicdomain/zero/1.0/" },
+    10: { kind: "PUBLIC_DOMAIN", name: "Public Domain Mark", url: "https://creativecommons.org/publicdomain/mark/1.0/" },
+  };
+  const mapped = map[licenseId];
+  if (!mapped) return null;
+  const author = ownerName?.trim() || null;
+  return {
+    kind: mapped.kind,
+    name: mapped.name,
+    url: mapped.url,
+    author,
+    authorUrl: null,
+    attributionRequired: isAttributionRequired(mapped.kind),
+    attributionText: author
+      ? `Photo by ${author} on Flickr${isUrl(photoUrl) ? ` (${photoUrl})` : ""}`
+      : mapped.name,
+    evidence: "api",
+  };
+}
+
+export function normalizeNasaLicense(input: {
+  photographer?: string | null;
+  center?: string | null;
+  title?: string | null;
+  nasaId?: string | null;
+}): LicenseMetadata {
+  const photographer = input.photographer?.trim() || null;
+  const center = input.center?.trim() || null;
+  const parts = [
+    photographer ? `Photographer: ${photographer}` : null,
+    center ? `NASA/${center}` : "NASA",
+    input.title?.trim() || null,
+  ].filter(Boolean);
+  return {
+    kind: "PUBLIC_DOMAIN",
+    name: "NASA Image (public domain)",
+    url: input.nasaId
+      ? `https://images.nasa.gov/details/${encodeURIComponent(input.nasaId)}`
+      : "https://www.nasa.gov/nasa-brand-center/images-and-media/",
+    author: photographer ?? (center ? `NASA/${center}` : "NASA"),
+    authorUrl: null,
+    attributionRequired: false,
+    attributionText: parts.join(" · "),
+    evidence: "api",
+  };
+}
+
+export function normalizeMetLicense(artist?: string | null, objectUrl?: string): LicenseMetadata {
+  const author = artist?.trim() || null;
+  return {
+    kind: "CC0",
+    name: "CC0 1.0 (The Met Open Access)",
+    url: "https://www.metmuseum.org/about-the-met/policies-and-documents/open-access",
+    author,
+    authorUrl: isUrl(objectUrl) ? objectUrl : null,
+    attributionRequired: false,
+    attributionText: author
+      ? `${author} · The Metropolitan Museum of Art (CC0)`
+      : "The Metropolitan Museum of Art (CC0)",
+    evidence: "api",
+  };
+}
+
+export function normalizeLocLicense(rightsText: string, creator?: string | null): LicenseMetadata | null {
+  if (!/no known restrictions/i.test(rightsText)) return null;
+  const author = creator?.trim() || null;
+  return {
+    kind: "PUBLIC_DOMAIN",
+    name: "No known restrictions on publication",
+    url: "https://www.loc.gov/rr/print/195_copr.html",
+    author,
+    authorUrl: null,
+    attributionRequired: false,
+    attributionText: author
+      ? `${author} · Library of Congress (No known restrictions)`
+      : "Library of Congress (No known restrictions)",
+    evidence: "api",
+  };
+}
+
+export function normalizeSmithsonianLicense(access: string, credit?: string | null): LicenseMetadata | null {
+  if (access.trim().toUpperCase() !== "CC0") return null;
+  const author = credit?.trim() || null;
+  return {
+    kind: "CC0",
+    name: "CC0 (Smithsonian Open Access)",
+    url: "https://www.si.edu/openaccess/licenses",
+    author,
+    authorUrl: null,
+    attributionRequired: false,
+    attributionText: author
+      ? `${author} · Smithsonian Open Access (CC0)`
+      : "Smithsonian Open Access (CC0)",
+    evidence: "api",
+  };
+}
+
+export function normalizeEuropeanaLicense(
+  rightsUrl: string | undefined,
+  creator?: string | null,
+): LicenseMetadata {
+  const fromUrl = rightsUrl ? licenseFromCcUrl(rightsUrl, creator) : null;
+  if (fromUrl) return fromUrl.license;
+  const author = creator?.trim() || null;
+  return {
+    kind: "UNKNOWN",
+    name: rightsUrl?.trim() || "Europeana open reuse",
+    url: isUrl(rightsUrl) ? rightsUrl : null,
+    author,
+    authorUrl: null,
+    attributionRequired: false,
+    attributionText: author ? `By ${author} via Europeana` : "via Europeana",
+    evidence: "api",
+  };
+}
+
 export function normalizeLicense(input: {
-  provider: "wikimedia" | "openverse" | "pexels";
+  provider: "wikimedia" | "openverse" | "pexels" | "pixabay" | "unsplash";
   metadata?: Record<string, RawValue>;
 } & Parameters<typeof normalizeOpenverseLicense>[0] & {
   photographer?: string;
   photographerUrl?: string;
+  photoUrl?: string;
+  user?: string;
+  pageUrl?: string;
 }): LicenseMetadata {
   if (input.provider === "wikimedia") return normalizeWikimediaLicense(input.metadata);
   if (input.provider === "openverse") return normalizeOpenverseLicense(input);
+  if (input.provider === "pixabay") return normalizePixabayLicense(input.user ?? "", input.pageUrl);
+  if (input.provider === "unsplash") {
+    return normalizeUnsplashLicense(input.photographer ?? "", input.photographerUrl, input.photoUrl);
+  }
   return normalizePexelsLicense(input.photographer ?? "", input.photographerUrl);
 }
 

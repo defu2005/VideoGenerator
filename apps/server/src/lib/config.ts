@@ -128,7 +128,9 @@ const ConfigSchema = z.object({
   TTS_VOICE_EN: z.string().min(1).default("en-US-AriaNeural"),
   TTS_RATE: z.string().regex(/^[+-]\d{1,3}%$/).default("+0%"),
   TTS_TIMEOUT_MS: z.coerce.number().int().positive().default(60_000),
-  IMAGE_PROVIDERS: z.string().default("wikimedia,openverse,pexels"),
+  IMAGE_PROVIDERS: z.string().default(
+    "wikimedia,openverse,pexels,pixabay,unsplash,nasa,met,loc,smithsonian,europeana,flickr",
+  ),
   IMAGE_SEARCH_USER_AGENT: z.string().min(1).default("VideoAgent/0.1 (https://github.com/defu2005/videoGenerator)"),
   IMAGE_DOWNLOAD_MIN_INTERVAL_MS: z.coerce.number().int().nonnegative().default(1_000),
   IMAGE_SEARCH_TIMEOUT_MS: z.coerce.number().int().positive().default(30_000),
@@ -136,9 +138,22 @@ const ConfigSchema = z.object({
   IMAGE_SEARCH_PER_MINUTE_WIKIMEDIA: z.coerce.number().int().positive().default(60),
   IMAGE_SEARCH_PER_MINUTE_OPENVERSE: z.coerce.number().int().positive().default(20),
   IMAGE_SEARCH_PER_MINUTE_PEXELS: z.coerce.number().int().positive().default(180),
+  IMAGE_SEARCH_PER_MINUTE_PIXABAY: z.coerce.number().int().positive().default(100),
+  IMAGE_SEARCH_PER_MINUTE_UNSPLASH: z.coerce.number().int().positive().default(50),
+  IMAGE_SEARCH_PER_MINUTE_NASA: z.coerce.number().int().positive().default(60),
+  IMAGE_SEARCH_PER_MINUTE_MET: z.coerce.number().int().positive().default(40),
+  IMAGE_SEARCH_PER_MINUTE_LOC: z.coerce.number().int().positive().default(40),
+  IMAGE_SEARCH_PER_MINUTE_SMITHSONIAN: z.coerce.number().int().positive().default(60),
+  IMAGE_SEARCH_PER_MINUTE_EUROPEANA: z.coerce.number().int().positive().default(60),
+  IMAGE_SEARCH_PER_MINUTE_FLICKR: z.coerce.number().int().positive().default(60),
   OPENVERSE_CLIENT_ID: z.string().trim().min(1).optional(),
   OPENVERSE_CLIENT_SECRET: z.string().trim().min(1).optional(),
   PEXELS_API_KEY: z.string().optional(),
+  PIXABAY_API_KEY: z.string().optional(),
+  UNSPLASH_ACCESS_KEY: z.string().optional(),
+  SMITHSONIAN_API_KEY: z.string().optional(),
+  EUROPEANA_API_KEY: z.string().optional(),
+  FLICKR_API_KEY: z.string().optional(),
   BRAVE_SEARCH_API_KEY: z.string().optional(),
   WEB_IMAGE_GEMINI_MODEL: z.string().min(1).default("gemini-2.5-flash"),
   WEB_IMAGE_SEARCH_PER_MINUTE: z.coerce.number().int().positive().default(30),
@@ -235,9 +250,22 @@ export type AppConfig = {
   IMAGE_SEARCH_PER_MINUTE_WIKIMEDIA: number;
   IMAGE_SEARCH_PER_MINUTE_OPENVERSE: number;
   IMAGE_SEARCH_PER_MINUTE_PEXELS: number;
+  IMAGE_SEARCH_PER_MINUTE_PIXABAY: number;
+  IMAGE_SEARCH_PER_MINUTE_UNSPLASH: number;
+  IMAGE_SEARCH_PER_MINUTE_NASA: number;
+  IMAGE_SEARCH_PER_MINUTE_MET: number;
+  IMAGE_SEARCH_PER_MINUTE_LOC: number;
+  IMAGE_SEARCH_PER_MINUTE_SMITHSONIAN: number;
+  IMAGE_SEARCH_PER_MINUTE_EUROPEANA: number;
+  IMAGE_SEARCH_PER_MINUTE_FLICKR: number;
   OPENVERSE_CLIENT_ID?: string;
   OPENVERSE_CLIENT_SECRET?: string;
   PEXELS_API_KEY?: string;
+  PIXABAY_API_KEY?: string;
+  UNSPLASH_ACCESS_KEY?: string;
+  SMITHSONIAN_API_KEY?: string;
+  EUROPEANA_API_KEY?: string;
+  FLICKR_API_KEY?: string;
   BRAVE_SEARCH_API_KEY?: string;
   WEB_IMAGE_GEMINI_MODEL: string;
   WEB_IMAGE_SEARCH_PER_MINUTE: number;
