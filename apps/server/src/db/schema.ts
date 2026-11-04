@@ -251,3 +251,42 @@ export const llmCache = sqliteTable("llm_cache", {
   responseText: text("response_text").notNull(),
   createdAt: text("created_at").notNull(),
 });
+
+export const musicCandidates = sqliteTable("music_candidates", {
+  id: text("id").primaryKey(),
+  projectId: text("project_id").notNull().references(() => projects.id, { onDelete: "cascade" }),
+  provider: text("provider").notNull(),
+  providerItemId: text("provider_item_id").notNull(),
+  title: text("title").notNull(),
+  artist: text("artist"),
+  sourceUrl: text("source_url"),
+  audioUrl: text("audio_url"),
+  durationSec: real("duration_sec"),
+  genres: text("genres", { mode: "json" }).$type<string[]>().notNull().default([]),
+  tags: text("tags", { mode: "json" }).$type<string[]>().notNull().default([]),
+  license: text("license", { mode: "json" }).$type<Record<string, unknown>>().notNull(),
+  relevanceScore: real("relevance_score").notNull().default(0),
+  scoreBreakdown: text("score_breakdown", { mode: "json" }).$type<Record<string, number>>().notNull().default({}),
+  rank: integer("rank").notNull().default(0),
+  localPath: text("local_path"),
+  inputHash: text("input_hash").notNull().default(""),
+  createdAt: text("created_at").notNull(),
+}, (table) => [
+  index("music_candidates_project_idx").on(table.projectId),
+  uniqueIndex("music_candidates_item_uq").on(table.projectId, table.provider, table.providerItemId),
+]);
+
+export const musicSelections = sqliteTable("music_selections", {
+  projectId: text("project_id").primaryKey().references(() => projects.id, { onDelete: "cascade" }),
+  candidateId: text("candidate_id").references(() => musicCandidates.id, { onDelete: "set null" }),
+  status: text("status", { enum: ["REVIEW_REQUIRED", "APPROVED", "NONE"] }).notNull(),
+  selectedBy: text("selected_by", { enum: ["AGENT", "USER"] }).notNull(),
+  volume: real("volume").notNull(),
+  fadeInSec: real("fade_in_sec").notNull().default(2),
+  fadeOutSec: real("fade_out_sec").notNull().default(3),
+  duckingDb: real("ducking_db").notNull().default(-12),
+  startOffsetSec: real("start_offset_sec").notNull().default(0),
+  queryOverride: text("query_override"),
+  searchHash: text("search_hash").notNull().default(""),
+  updatedAt: text("updated_at").notNull(),
+});

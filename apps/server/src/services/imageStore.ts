@@ -308,11 +308,11 @@ async function readBoundedBody(response: Response, limit: number): Promise<Buffe
   return Buffer.concat(chunks, total);
 }
 
-async function defaultResolveHost(hostname: string): Promise<string[]> {
+export async function defaultResolveHost(hostname: string): Promise<string[]> {
   return (await lookup(hostname, { all: true, verbatim: true })).map(({ address }) => address);
 }
 
-function isBlockedHostname(hostname: string): boolean {
+export function isBlockedHostname(hostname: string): boolean {
   const host = hostname.toLowerCase().replace(/^\[|\]$/g, "").replace(/\.$/, "");
   if (host === "localhost" || host.endsWith(".localhost") || host.endsWith(".local") || host.endsWith(".internal")
     || host === "metadata.google.internal") return true;

@@ -122,7 +122,7 @@ const ConfigSchema = z.object({
   IMAGE_PROVIDERS: z.string().default("wikimedia,openverse,pexels"),
   IMAGE_SEARCH_USER_AGENT: z.string().min(1).default("VideoAgent/0.1 (https://github.com/defu2005/videoGenerator)"),
   IMAGE_DOWNLOAD_MIN_INTERVAL_MS: z.coerce.number().int().nonnegative().default(1_000),
-  IMAGE_SEARCH_TIMEOUT_MS: z.coerce.number().int().positive().default(15_000),
+  IMAGE_SEARCH_TIMEOUT_MS: z.coerce.number().int().positive().default(30_000),
   IMAGE_SEARCH_CACHE_TTL_HOURS: z.coerce.number().int().positive().default(168),
   IMAGE_SEARCH_PER_MINUTE_WIKIMEDIA: z.coerce.number().int().positive().default(60),
   IMAGE_SEARCH_PER_MINUTE_OPENVERSE: z.coerce.number().int().positive().default(20),
@@ -130,6 +130,9 @@ const ConfigSchema = z.object({
   OPENVERSE_CLIENT_ID: z.string().trim().min(1).optional(),
   OPENVERSE_CLIENT_SECRET: z.string().trim().min(1).optional(),
   PEXELS_API_KEY: z.string().optional(),
+  MUSIC_PROVIDERS: z.string().default("openverse,local"),
+  MUSIC_LIBRARY_DIR: z.string().optional(),
+  MUSIC_SEARCH_TIMEOUT_MS: z.coerce.number().int().positive().default(30_000),
 }).superRefine((values, context) => {
   if (Boolean(values.OPENVERSE_CLIENT_ID) !== Boolean(values.OPENVERSE_CLIENT_SECRET)) {
     context.addIssue({
@@ -213,6 +216,9 @@ export type AppConfig = {
   OPENVERSE_CLIENT_ID?: string;
   OPENVERSE_CLIENT_SECRET?: string;
   PEXELS_API_KEY?: string;
+  MUSIC_PROVIDERS: string;
+  MUSIC_LIBRARY_DIR: string;
+  MUSIC_SEARCH_TIMEOUT_MS: number;
 };
 
 const providerLimitPrefixes: Partial<Record<LlmProviderId, string>> = {
@@ -262,6 +268,9 @@ export function parseConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
       return provider ? [[id, { provider, ...(model ? { model } : {}) }]] : [];
     })) as Partial<Record<LlmTaskId, LlmRoute>>,
     DATA_DIR: dataDirectory,
+    MUSIC_LIBRARY_DIR: values.MUSIC_LIBRARY_DIR
+      ? isAbsolute(values.MUSIC_LIBRARY_DIR) ? values.MUSIC_LIBRARY_DIR : resolve(workspaceRoot, values.MUSIC_LIBRARY_DIR)
+      : join(dataDirectory, "music"),
     LLM_ENABLE_MOCK: values.LLM_ENABLE_MOCK ?? !isProduction,
     DATABASE_PATH: values.DATABASE_PATH
       ? isAbsolute(values.DATABASE_PATH) ? values.DATABASE_PATH : resolve(workspaceRoot, values.DATABASE_PATH)

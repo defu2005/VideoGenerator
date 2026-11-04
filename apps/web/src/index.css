@@ -98,6 +98,32 @@
 .voice-duration.warning { color: #a45c17; }
 .voice-duration.warning span { font-weight: 700; }
 .voice-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.music-panel { display: grid; min-width: 0; gap: 12px; }
+.music-header { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 18px; padding: 18px 20px; }
+.music-header h2, .music-header p { margin: 4px 0 0; }
+.music-header h2 { font-size: 18px; }
+.music-header p:not(.eyebrow) { color: #78839a; font-size: 11px; }
+.music-header-actions, .music-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.music-actions a { color: #405ac5; font-size: 11px; }
+.music-current, .music-candidate { display: grid; gap: 10px; padding: 15px; }
+.music-current-heading, .music-candidate-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
+.music-current h3, .music-candidate h3 { margin: 0; font-size: 14px; }
+.music-current small, .music-candidate small, .music-tags, .music-attribution, .music-empty { margin: 0; color: #78839a; font-size: 10px; }
+.music-empty { padding: 4px 0; font-size: 12px; }
+.music-panel audio { width: 100%; }
+.music-status, .music-license { flex: none; border-radius: 999px; padding: 5px 9px; font-size: 10px; font-weight: 700; }
+.music-status.ok, .music-license.ok { background: #e7f6ed; color: #168352; }
+.music-status.warn, .music-license.warn { background: #fff4e5; color: #a45c17; }
+.music-mix { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); align-items: end; gap: 10px; }
+.music-mix label { display: grid; gap: 4px; color: #59667d; font-size: 11px; }
+.music-mix input[type="number"], .music-search input { min-width: 0; min-height: 34px; border: 1px solid #dfe4ed; border-radius: 6px; background: #fff; padding: 5px 8px; color: #344057; font-size: 12px; }
+.music-upload { position: relative; overflow: hidden; }
+.music-upload input { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
+.music-search { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; padding: 12px 15px; }
+.music-search label { color: #59667d; font-size: 11px; font-weight: 700; }
+.music-search input { flex: 1 1 220px; min-width: 0; }
+.music-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 10px; }
+.music-candidate.selected { outline: 2px solid #405ac5; }
 .voice-upload { position: relative; overflow: hidden; }
 .voice-upload input { position: absolute; width: 1px; height: 1px; opacity: 0; }
 .voice-empty { padding: 24px; }

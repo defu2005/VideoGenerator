@@ -38,6 +38,12 @@ import { registerSubtitleRoutes } from "./api/subtitles.js";
 import { TtsProviderRegistry } from "./providers/tts/registry.js";
 import { VoiceExecutor } from "./stages/voice/voiceExecutor.js";
 import { SubtitleExecutor } from "./stages/subtitle/subtitleExecutor.js";
+import { MusicSearchExecutor } from "./stages/music/musicSearchExecutor.js";
+import { registerMusicRoutes } from "./api/music.js";
+import { MusicService } from "./services/musicService.js";
+import { AudioStore, MAX_AUDIO_BYTES } from "./services/audioStore.js";
+import { createMusicProviders } from "./providers/music/registry.js";
+import { probeDurationSec } from "./media/ffmpeg.js";
 
 export function buildApp({ config }: { config: AppConfig }) {
   const server = Fastify({
@@ -50,9 +56,9 @@ export function buildApp({ config }: { config: AppConfig }) {
     parseAs: "buffer",
     bodyLimit: MAX_IMAGE_BYTES,
   }, (_request, body, done) => done(null, body));
-  server.addContentTypeParser(/^(?:audio\/(?:mpeg|wav|x-wav|mp4|ogg)|multipart\/form-data)(?:;|$)/i, {
+  server.addContentTypeParser(/^(?:audio\/(?:mpeg|wav|x-wav|mp4|x-m4a|ogg|flac|x-flac)|multipart\/form-data)(?:;|$)/i, {
     parseAs: "buffer",
-    bodyLimit: 25 * 1024 * 1024 + 64 * 1024,
+    bodyLimit: MAX_AUDIO_BYTES + 64 * 1024,
   }, (_request, body, done) => done(null, body));
 
   const database = openDatabase(config.DATABASE_PATH);
@@ -67,6 +73,13 @@ export function buildApp({ config }: { config: AppConfig }) {
   const jobRepository = new JobRepository(database.sqlite, events);
   const usageService = new UsageService(database.sqlite, config.USD_VND_RATE);
   const visualService = new VisualService(database.sqlite, jobRepository, config, server.log);
+  const musicService = new MusicService(
+    database.sqlite,
+    config,
+    createMusicProviders(config),
+    new AudioStore(config.DATA_DIR, config.IMAGE_SEARCH_USER_AGENT),
+    probeDurationSec,
+  );
   const orchestrator = new PipelineOrchestrator(
     jobRepository,
     config,
@@ -74,7 +87,9 @@ export function buildApp({ config }: { config: AppConfig }) {
     undefined,
     (project, gate) => gate === "VISUAL_REVIEW"
       ? visualService.canApproveVisualReview(project.id)
-      : { allowed: true },
+      : gate === "MUSIC_REVIEW"
+        ? musicService.canApproveMusicReview(project)
+        : { allowed: true },
   );
   const llmProviders = new LlmProviderRegistry(config);
   const ttsProviders = new TtsProviderRegistry(config);
@@ -92,6 +107,7 @@ export function buildApp({ config }: { config: AppConfig }) {
         VISUAL_SEARCH: new VisualSearchExecutor(visualService, llmProviders),
         VOICE: new VoiceExecutor(database.sqlite, ttsProviders, config),
         SUBTITLE: new SubtitleExecutor(database.sqlite, config),
+        MUSIC_SEARCH: new MusicSearchExecutor(musicService),
       },
     ),
     config,
@@ -112,6 +128,7 @@ export function buildApp({ config }: { config: AppConfig }) {
   registerVisualRoutes(server, visualService, jobRepository);
   registerVoiceRoutes(server, ttsProviders, database.sqlite, projectService, jobRepository, config);
   registerSubtitleRoutes(server, database.sqlite, jobRepository, config);
+  registerMusicRoutes(server, musicService, projectService, jobRepository);
 
   server.addHook("onReady", async () => worker.start());
   server.addHook("onClose", async () => {

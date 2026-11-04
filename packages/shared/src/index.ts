@@ -21,3 +21,5 @@ export * from "./visuals/dedupe.js";
 export * from "./visuals/assign.js";
 export * from "./scenes/sentences.js";
 export * from "./scenes/planScenes.js";
+export * from "./schemas/music.js";
+export * from "./music/rank.js";
