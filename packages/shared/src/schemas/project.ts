@@ -83,6 +83,11 @@ export const ProjectSettingsSchema = z.object({
   autoRender: z.boolean().default(false),
   /** Content guideline packs (TASK-017). */
   guidelines: GuidelineSettingsSchema.default({ platformPack: "auto", customRules: [] }),
+  /** Set on translation children (TASK-039). */
+  translation: z.object({
+    mode: z.enum(["dub", "subtitles_only"]),
+    parentLanguage: z.string(),
+  }).strict().optional(),
 }).extend({
   budget: VideoBriefSettingsSchema.shape.budget,
   platform: VideoBriefSettingsSchema.shape.platform,
@@ -135,14 +140,18 @@ export const ProjectSchema = z.object({
   durationSec: z.number().nullable(),
   version: z.number().int().positive(),
   profileId: z.string().uuid().nullable().optional(),
-  /** long = full video; clip = a Short/Reel cut from a parent. Omitted means long. */
-  kind: z.enum(["long", "clip"]).optional(),
+  /** long = full video; clip = a Short/Reel; translation = a dubbed or subtitled child. Omitted means long. */
+  kind: z.enum(["long", "clip", "translation"]).optional(),
   parentProjectId: z.string().uuid().nullable().optional(),
   createdAt: z.string().datetime({ offset: true }),
   updatedAt: z.string().datetime({ offset: true }),
   archivedAt: z.string().datetime({ offset: true }).nullable(),
 });
 export type Project = z.infer<typeof ProjectSchema>;
+
+export function normalizeProjectKind(kind: unknown): "long" | "clip" | "translation" {
+  return kind === "clip" || kind === "translation" ? kind : "long";
+}
 
 export const CreateProjectInputSchema = z.object({
   title: z.string().trim().min(1).max(200).optional(),

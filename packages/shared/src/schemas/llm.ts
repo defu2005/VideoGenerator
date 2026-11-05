@@ -91,6 +91,8 @@ export const LlmTaskIdSchema = z.enum([
   "performanceInsight",
   "clipPick",
   "commentAssist",
+  "trendMatch",
+  "translateScript",
 ]);
 export type LlmTaskId = z.infer<typeof LlmTaskIdSchema>;
 
@@ -130,6 +132,8 @@ export const LLM_TASKS: {
   { id: "performanceInsight", label: "Bài học từ số liệu", stage: "SETTINGS", purpose: "Vietnamese patterns and recommendations from past video performance for one profile.", tier: "strong", qualityWeight: 2, budgetFeature: "performanceInsight" },
   { id: "clipPick", label: "Chọn đoạn Shorts", stage: "RENDER", purpose: "Pick vertical clip ranges from a finished long video.", tier: "strong", qualityWeight: 3, budgetFeature: "clipPick" },
   { id: "commentAssist", label: "Phân loại và gợi ý trả lời bình luận", stage: "SETTINGS", purpose: "Classify comments and draft short replies in the comment's language.", tier: "fast", qualityWeight: 1, budgetFeature: "commentAssist" },
+  { id: "trendMatch", label: "Ghép xu hướng với kênh", stage: "SETTINGS", purpose: "Turn trending items into a few topic ideas that fit the channel.", tier: "fast", qualityWeight: 1, budgetFeature: "trendMatch" },
+  { id: "translateScript", label: "Dịch kịch bản", stage: "SCRIPT", purpose: "Translate a finished script scene by scene for another language.", tier: "strong", qualityWeight: 3, needsLongContext: true, budgetFeature: "translateScript" },
 ];
 
 function normalizeLlmSettings(value: unknown): unknown {

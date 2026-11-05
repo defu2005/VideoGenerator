@@ -3,6 +3,8 @@ import type { ProfileAutomation, ProfileDetail } from "@vg/shared";
 import { ErrorState } from "../../components/ErrorState";
 import { Spinner } from "../../components/Spinner";
 import { useProfileAutomation, useSaveProfileAutomation } from "../../hooks/useAutomation";
+import { TrendsSection } from "./TrendsSection";
+import { TranslationsSection } from "./TranslationsSection";
 
 function timesToText(times: string[]): string {
   return times.join(", ");
@@ -188,6 +190,8 @@ export function AutomationTab({ profile }: { profile: ProfileDetail }) {
           </ul>
         </section>
       )}
+      <TrendsSection profile={profile} />
+      <TranslationsSection profile={profile} />
     </div>
   );
 }

@@ -78,6 +78,8 @@ export function BriefFields({
       performanceInsight: "Bài học hiệu suất từ số liệu (ECO mỗi 2 tuần)",
       clipPick: "Chọn đoạn Shorts bằng AI (BALANCED+)",
       commentAssist: "Phân loại và gợi ý trả lời bình luận (BALANCED+)",
+      trendMatch: "Ghép xu hướng với kênh (mọi chế độ)",
+      translateScript: "Dịch kịch bản sang ngôn ngữ khác (BALANCED+)",
     };
     const label = labels[key] ?? key;
     if (typeof value === "boolean") {
@@ -171,6 +173,8 @@ export function BriefFields({
           {customFeature("performanceInsight", budgetFeatures.performanceInsight)}
           {customFeature("clipPick", budgetFeatures.clipPick)}
           {customFeature("commentAssist", budgetFeatures.commentAssist)}
+          {customFeature("trendMatch", budgetFeatures.trendMatch)}
+          {customFeature("translateScript", budgetFeatures.translateScript)}
         </fieldset>
       )}
       {select("platform", "Platform", ["youtube", "youtube_shorts", "tiktok", "facebook_reels", "custom"])}

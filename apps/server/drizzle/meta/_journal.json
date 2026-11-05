@@ -253,6 +253,13 @@
       "when": 1793861425863,
       "tag": "0035_comments_inbox",
       "breakpoints": true
+    },
+    {
+      "idx": 36,
+      "version": "6",
+      "when": 1793865808539,
+      "tag": "0036_clean_makkari",
+      "breakpoints": true
     }
   ]
 }

@@ -236,6 +236,8 @@ describe("ProjectDetailPage", () => {
           performanceInsight: true,
           clipPick: true,
           commentAssist: true,
+          trendMatch: true,
+          translateScript: true,
           outputHeadroom: 1.5,
         },
         perStage: [],

@@ -11,6 +11,11 @@ import {
   ProfileLlmSettingsSchema,
 } from "./llm.js";
 import { VideoBriefSettingsInputSchema, VideoBriefSettingsSchema } from "./project.js";
+import { ProfileTranslationsSchema } from "./translation.js";
+import {
+  ProfileTrendSettingsInputSchema,
+  ProfileTrendSettingsSchema,
+} from "./trends.js";
 
 export const PlatformIdSchema = z.enum(["youtube", "tiktok", "facebook_reels", "instagram_reels", "mock"]);
 export type PlatformId = z.infer<typeof PlatformIdSchema>;
@@ -139,6 +144,8 @@ export const ProfileSchema = z.object({
   guidelines: GuidelineSettingsSchema,
   llm: ProfileLlmSettingsSchema.nullable().optional(),
   automation: ProfileAutomationSchema.default(DEFAULT_PROFILE_AUTOMATION),
+  trendSettings: ProfileTrendSettingsSchema.optional(),
+  translations: ProfileTranslationsSchema.optional(),
   avatarPath: z.string().nullable(),
   color: HexColorSchema,
   archivedAt: z.string().datetime({ offset: true }).nullable(),
@@ -203,6 +210,8 @@ export const ProfileInputSchema = z.object({
   guidelines: GuidelineSettingsInputSchema.optional(),
   llm: ProfileLlmSettingsInputSchema.nullable().optional(),
   automation: ProfileAutomationInputSchema.optional(),
+  trendSettings: ProfileTrendSettingsInputSchema.optional(),
+  translations: ProfileTranslationsSchema.optional(),
   color: HexColorSchema.optional(),
   avatarPath: z.string().nullable().optional(),
 }).strict();
@@ -218,6 +227,8 @@ export const ProfileUpdateSchema = z.object({
   guidelines: GuidelineSettingsInputSchema.optional(),
   llm: ProfileLlmSettingsInputSchema.nullable().optional(),
   automation: ProfileAutomationInputSchema.optional(),
+  trendSettings: ProfileTrendSettingsInputSchema.optional(),
+  translations: ProfileTranslationsSchema.optional(),
   color: HexColorSchema.optional(),
   avatarPath: z.string().nullable().optional(),
 }).strict().refine((value) => Object.keys(value).length > 0, {

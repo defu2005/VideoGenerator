@@ -20,6 +20,7 @@ import { SubtitlePanel } from "../subtitles/SubtitlePanel";
 import { MusicPanel } from "../music/MusicPanel";
 import { TimelinePanel } from "../timeline/TimelinePanel";
 import { RenderPanel } from "../render/RenderPanel";
+import { TranslationPanel } from "./TranslationPanel";
 
 const TABS = ["overview", "script", "scenes", "visuals", "voice", "subtitles", "music", "timeline", "render", "usage"] as const;
 
@@ -80,7 +81,10 @@ function ProjectOverview({ project }: { project: Project }) {
           {project.parentProjectId && <Link to={`/projects/${project.parentProjectId}/render`}>Mở video gốc</Link>}
         </section>
       ) : (
-        <PipelinePanel projectId={project.id} project={project} />
+        <>
+          <PipelinePanel projectId={project.id} project={project} />
+          <TranslationPanel project={project} />
+        </>
       )}
     </div>
   );

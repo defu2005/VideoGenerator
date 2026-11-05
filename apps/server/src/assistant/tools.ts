@@ -73,6 +73,8 @@ export type AssistantToolContext = {
   learning?: LearningService;
   clips?: ClipService;
   comments?: CommentInboxService;
+  trends?: import("../trends/trendService.js").TrendService;
+  translations?: import("../translations/translationService.js").TranslationService;
   signal?: AbortSignal;
 };
 
@@ -1011,6 +1013,64 @@ const toolDefs: AssistantToolDef[] = [
       const ids = view.proposals.filter((item) => item.selected && item.status === "proposed").map((item) => item.id);
       if (!ids.length) return view;
       return ctx.clips.exportClips(parsed.projectId, ids);
+    },
+  }),
+  defineTool({
+    name: "trend_ideas",
+    description: "Đọc ý tưởng xu hướng đã ghép với các hồ sơ.",
+    risk: "read",
+    argsSchema: emptyObject,
+    summarize: () => "Xem xu hướng",
+    execute: async (_args, ctx) => {
+      if (!ctx.trends) throw new AppError(503, "TRENDS_UNAVAILABLE", "Xu hướng chưa sẵn sàng");
+      return { items: ctx.trends.listToday(8) };
+    },
+  }),
+  defineTool({
+    name: "add_trend_topic",
+    description: "Thêm một ý tưởng xu hướng vào hàng chờ chủ đề.",
+    risk: "safe",
+    argsSchema: z.object({
+      profileId: z.string().uuid(),
+      idea: z.object({
+        title: z.string().min(1).max(500),
+        angle: z.string().min(1).max(500),
+        whyNow: z.string().min(1).max(500),
+        sourceTitles: z.array(z.string().min(1)).min(1).max(8),
+        urgency: z.enum(["today", "this_week", "evergreen"]),
+        fitScore: z.number().min(0).max(100),
+        sensitive: z.boolean(),
+      }).strict(),
+    }).strict(),
+    summarize: (args) => {
+      const parsed = z.object({ idea: z.object({ title: z.string() }) }).parse(args);
+      return `Thêm xu hướng «${parsed.idea.title.slice(0, 80)}»`;
+    },
+    execute: async (args, ctx) => {
+      if (!ctx.trends) throw new AppError(503, "TRENDS_UNAVAILABLE", "Xu hướng chưa sẵn sàng");
+      const parsed = z.object({ profileId: z.string().uuid(), idea: z.unknown() }).parse(args);
+      return ctx.trends.addIdea(parsed.profileId, { idea: parsed.idea });
+    },
+  }),
+  defineTool({
+    name: "make_translation",
+    description: "Tạo bản dịch (lồng tiếng hoặc phụ đề) của một video đã xong.",
+    risk: "confirm",
+    argsSchema: z.object({
+      projectId: z.string().uuid(),
+      language: z.string().trim().min(2).max(16),
+    }).strict(),
+    summarize: (args) => {
+      const parsed = z.object({ language: z.string() }).parse(args);
+      return `Tạo bản dịch ${parsed.language}`;
+    },
+    execute: async (args, ctx) => {
+      if (!ctx.translations) throw new AppError(503, "TRANSLATIONS_UNAVAILABLE", "Bản dịch chưa sẵn sàng");
+      const parsed = z.object({
+        projectId: z.string().uuid(),
+        language: z.string().trim().min(2).max(16),
+      }).strict().parse(args);
+      return ctx.translations.start(parsed.projectId, parsed.language, ctx.signal ?? new AbortController().signal);
     },
   }),
 ];

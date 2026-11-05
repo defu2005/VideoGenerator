@@ -3,6 +3,7 @@ import { PROJECT_STATUSES, ProjectStatusSchema } from "../enums.js";
 import { ProjectSchema } from "./project.js";
 import { JobErrorSummarySchema } from "./job.js";
 import { AutomationLogEntrySchema } from "./automation.js";
+import { TrendIdeaCardSchema } from "./trends.js";
 
 export const DashboardAutomationCardSchema = z.object({
   paused: z.boolean(),
@@ -20,6 +21,8 @@ export const DashboardStatsSchema = z.object({
   recent: z.array(ProjectSchema).max(5),
   recentErrors: z.array(JobErrorSummarySchema).max(10),
   automation: DashboardAutomationCardSchema.optional(),
+  /** Top matched trend ideas across profiles (TASK-039). */
+  trendsToday: z.array(TrendIdeaCardSchema).max(5).optional(),
 }).superRefine((stats, context) => {
   for (const status of PROJECT_STATUSES) {
     if (!(status in stats.byStatus)) {

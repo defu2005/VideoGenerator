@@ -128,7 +128,11 @@ export class JobRepository {
       durationSec: raw.duration_sec,
       version: raw.version,
       profileId: raw.profile_id,
-      kind: (row as { kind?: string }).kind === "clip" ? "clip" : "long",
+      kind: (row as { kind?: string }).kind === "clip"
+        ? "clip"
+        : (row as { kind?: string }).kind === "translation"
+          ? "translation"
+          : "long",
       parentProjectId: (row as { parent_project_id?: string | null }).parent_project_id ?? null,
       createdAt: raw.created_at,
       updatedAt: raw.updated_at,

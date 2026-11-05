@@ -8,6 +8,8 @@ import {
   ProfileListItemSchema,
   ProfileLlmSettingsSchema,
   ProfileSchema,
+  ProfileTranslationsSchema,
+  ProfileTrendSettingsSchema,
   PlatformAccountSchema,
   PublishSettingsSchema,
   mainAspectFromFormats,
@@ -48,6 +50,8 @@ function toProfile(row: ProfileRow): Profile {
     guidelines: row.guidelines,
     llm: row.llm ?? null,
     automation: parseAutomation(row.automation),
+    trendSettings: ProfileTrendSettingsSchema.parse(row.trendSettings ?? {}),
+    translations: ProfileTranslationsSchema.parse(row.translations ?? []),
     avatarPath: row.avatarPath ?? null,
     color: row.color,
     archivedAt: row.archivedAt,
@@ -187,6 +191,8 @@ export function createProfileService(db: AppDatabase) {
         guidelines,
         llm,
         automation,
+        trendSettings: input.trendSettings ? ProfileTrendSettingsSchema.parse(input.trendSettings) : null,
+        translations: input.translations ? ProfileTranslationsSchema.parse(input.translations) : null,
         avatarPath: input.avatarPath ?? null,
         color: input.color ?? "#3B82F6",
         archivedAt: null,
@@ -240,6 +246,17 @@ export function createProfileService(db: AppDatabase) {
         ...current.automation,
         ...input.automation,
       });
+    }
+    if (input.trendSettings !== undefined) {
+      updates.trendSettings = ProfileTrendSettingsSchema.parse({
+        ...(current.trendSettings ?? {}),
+        ...input.trendSettings,
+        feeds: input.trendSettings.feeds ?? current.trendSettings?.feeds,
+        metaPages: input.trendSettings.metaPages ?? current.trendSettings?.metaPages,
+      });
+    }
+    if (input.translations !== undefined) {
+      updates.translations = ProfileTranslationsSchema.parse(input.translations);
     }
 
     try {

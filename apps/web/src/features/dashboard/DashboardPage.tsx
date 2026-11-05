@@ -46,6 +46,26 @@ export function DashboardPage() {
         <button className="button button-primary" type="button" onClick={() => setCreateOpen(true)}>＋ New project</button>
       </div>
 
+      {data.trendsToday && data.trendsToday.length > 0 && (
+        <section className="panel" aria-label="Xu hướng hôm nay">
+          <div className="section-heading">
+            <div>
+              <p className="eyebrow">TRENDS</p>
+              <h2>Xu hướng hôm nay</h2>
+            </div>
+          </div>
+          <ul>
+            {data.trendsToday.map((idea) => (
+              <li key={`${idea.profileId}-${idea.title}`}>
+                <strong>{idea.title}</strong>
+                <span> · {idea.profileName} · {idea.urgency} · {idea.fitScore}</span>
+                <p>{idea.angle}</p>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+
       {automation && (
         <section className="panel automation-dash-card" aria-label="Tự động hóa">
           <div className="section-heading">

@@ -248,6 +248,52 @@ export class MockLlmProvider implements LlmProvider {
     if (req.schemaName === "ResearchNotes") return response(research, req.model);
     if (req.schemaName === "MergedStory") return response({ research, script: scriptFixture }, req.model);
     if (req.schemaName === "Script") return response(scriptFixture, req.model);
+    if (req.schemaName === "TrendMatch") {
+      const items = Array.isArray(payload.items)
+        ? payload.items as Array<{ title?: string }>
+        : [];
+      return response({
+        ideas: items.slice(0, 8).map((item) => {
+          const title = String(item.title ?? "Xu hướng").slice(0, 180);
+          const low = /LOWFIT/i.test(title);
+          const mid = /MEDFIT/i.test(title);
+          const sensitive = /động đất|earthquake|bầu cử|\belection\b/i.test(title);
+          const today = /TODAY/i.test(title);
+          return {
+            title,
+            angle: `Góc cho ${title}`.slice(0, 180),
+            whyNow: `Nguồn: ${title}`.slice(0, 400),
+            sourceTitles: [title],
+            urgency: today ? "today" : "evergreen",
+            fitScore: low ? 40 : mid ? 70 : 88,
+            sensitive,
+          };
+        }),
+      }, req.model);
+    }
+    if (req.schemaName === "TranslateScript") {
+      const scenes = Array.isArray(payload.scenes)
+        ? payload.scenes as Array<{ id?: string; narration?: string }>
+        : [];
+      const shorten = payload.mode === "shorten";
+      return response({
+        scenes: scenes.map((scene) => ({
+          id: String(scene.id ?? "scene"),
+          narration: shorten
+            ? "Short line."
+            : `${"word ".repeat(80)}${String(scene.narration ?? "").slice(0, 40)}`.trim(),
+        })),
+      }, req.model);
+    }
+    if (req.schemaName === "TranslateMetadata") {
+      return response({
+        titles: ["T".repeat(120)],
+        description: "D".repeat(2000),
+        tags: ["alpha", "beta"],
+        hashtags: ["#dub"],
+        thumbnailText: ["Overlay text that is definitely too long for a thumbnail"],
+      }, req.model);
+    }
     if (req.schemaName === "TopicSuggest") {
       const count = typeof payload.count === "number" ? Math.min(20, Math.max(1, payload.count)) : 5;
       const hint = typeof payload.hint === "string" && payload.hint.trim() ? payload.hint.trim() : topic;

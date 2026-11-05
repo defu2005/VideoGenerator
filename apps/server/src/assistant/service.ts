@@ -91,6 +91,8 @@ export class AssistantService {
   private learning: LearningService | undefined;
   private clips: ClipService | undefined;
   private comments: CommentInboxService | undefined;
+  private trends: import("../trends/trendService.js").TrendService | undefined;
+  private translations: import("../translations/translationService.js").TranslationService | undefined;
 
   setAnalytics(service: AnalyticsSyncService): void {
     this.analytics = service;
@@ -110,6 +112,14 @@ export class AssistantService {
 
   setComments(service: CommentInboxService): void {
     this.comments = service;
+  }
+
+  setTrends(service: import("../trends/trendService.js").TrendService): void {
+    this.trends = service;
+  }
+
+  setTranslations(service: import("../translations/translationService.js").TranslationService): void {
+    this.translations = service;
   }
 
   getSettings(): AssistantSettings {
@@ -473,6 +483,8 @@ export class AssistantService {
       learning: this.learning,
       clips: this.clips,
       comments: this.comments,
+      trends: this.trends,
+      translations: this.translations,
       signal,
     };
   }

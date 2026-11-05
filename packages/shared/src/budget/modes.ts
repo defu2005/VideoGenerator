@@ -49,6 +49,10 @@ export const BudgetFeaturesSchema = z.object({
   clipPick: z.boolean(),
   /** Classify inbox comments and draft replies. Not part of the render pipeline. */
   commentAssist: z.boolean(),
+  /** Match trending items to a profile. Not part of the render pipeline. */
+  trendMatch: z.boolean(),
+  /** Translate a finished script into another language. */
+  translateScript: z.boolean(),
   outputHeadroom: z.union([z.literal(1), z.literal(1.5), z.literal(2)]),
 }).strict();
 export type BudgetFeatures = z.infer<typeof BudgetFeaturesSchema>;
@@ -100,6 +104,8 @@ const PRESETS: Record<Exclude<BudgetMode, "CUSTOM">, BudgetFeatures> = {
     performanceInsight: true,
     clipPick: false,
     commentAssist: false,
+    trendMatch: true,
+    translateScript: false,
     outputHeadroom: 1,
   },
   BALANCED: {
@@ -129,6 +135,8 @@ const PRESETS: Record<Exclude<BudgetMode, "CUSTOM">, BudgetFeatures> = {
     performanceInsight: true,
     clipPick: true,
     commentAssist: true,
+    trendMatch: true,
+    translateScript: true,
     outputHeadroom: 1.5,
   },
   QUALITY: {
@@ -158,6 +166,8 @@ const PRESETS: Record<Exclude<BudgetMode, "CUSTOM">, BudgetFeatures> = {
     performanceInsight: true,
     clipPick: true,
     commentAssist: true,
+    trendMatch: true,
+    translateScript: true,
     outputHeadroom: 2,
   },
   MAX: {
@@ -187,6 +197,8 @@ const PRESETS: Record<Exclude<BudgetMode, "CUSTOM">, BudgetFeatures> = {
     performanceInsight: true,
     clipPick: true,
     commentAssist: true,
+    trendMatch: true,
+    translateScript: true,
     outputHeadroom: 2,
   },
 };

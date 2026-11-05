@@ -7,6 +7,14 @@ export function registerDashboardRoutes(
   app: FastifyInstance,
   service: ProjectService,
   automation?: AutomationService,
+  trends?: { listToday: () => Array<{
+    profileId: string;
+    profileName: string;
+    title: string;
+    angle: string;
+    urgency: "today" | "this_week" | "evergreen";
+    fitScore: number;
+  }> },
 ): void {
   app.get("/api/dashboard/stats", {
     schema: {
@@ -17,10 +25,10 @@ export function registerDashboardRoutes(
     },
   }, async () => {
     const stats = await service.dashboardStats();
-    if (!automation) return stats;
     return DashboardStatsSchema.parse({
       ...stats,
-      automation: automation.dashboardCard(),
+      ...(automation ? { automation: automation.dashboardCard() } : {}),
+      trendsToday: trends?.listToday() ?? [],
     });
   });
 }

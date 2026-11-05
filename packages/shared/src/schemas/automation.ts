@@ -37,7 +37,7 @@ export type ProfileAutomationInput = z.infer<typeof ProfileAutomationInputSchema
 
 export const DEFAULT_PROFILE_AUTOMATION: ProfileAutomation = ProfileAutomationSchema.parse({});
 
-export const TopicSourceSchema = z.enum(["USER", "LLM"]);
+export const TopicSourceSchema = z.enum(["USER", "LLM", "trend"]);
 export type TopicSource = z.infer<typeof TopicSourceSchema>;
 
 export const TopicStatusSchema = z.enum([

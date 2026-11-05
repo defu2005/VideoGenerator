@@ -104,6 +104,10 @@ import { LearningService } from "./learning/learningService.js";
 import { registerLearningRoutes } from "./api/learning.js";
 import { CommentInboxService } from "./comments/inboxService.js";
 import { registerCommentRoutes } from "./api/comments.js";
+import { createTrendService } from "./trends/trendService.js";
+import { registerTrendRoutes } from "./api/trends.js";
+import { createTranslationService } from "./translations/translationService.js";
+import { registerTranslationRoutes } from "./api/translations.js";
 
 export function buildApp({ config }: { config: AppConfig }) {
   const server = Fastify({
@@ -377,6 +381,22 @@ export function buildApp({ config }: { config: AppConfig }) {
   });
   publishTicker.setComments(commentInbox);
   assistantService.setComments(commentInbox);
+  const trendService = createTrendService({
+    sqlite: database.sqlite,
+    profiles: profileService,
+    llm: llmProviders,
+    vault: tokenVault,
+  });
+  const translationService = createTranslationService({
+    sqlite: database.sqlite,
+    config,
+    profiles: profileService,
+    llm: llmProviders,
+    tts: ttsProviders,
+    vault: tokenVault,
+  });
+  assistantService.setTrends(trendService);
+  assistantService.setTranslations(translationService);
   ensureDefaultRates(database.sqlite, config.USD_VND_RATE);
   const financeService = new FinanceService({
     sqlite: database.sqlite,
@@ -476,7 +496,9 @@ export function buildApp({ config }: { config: AppConfig }) {
   registerLearningRoutes(server, learningService);
   registerRecommendationRoutes(server);
   registerBudgetRoutes(server, projectService, jobRepository, config, llmProviders);
-  registerDashboardRoutes(server, projectService, automationService);
+  registerDashboardRoutes(server, projectService, automationService, trendService);
+  registerTrendRoutes(server, trendService);
+  registerTranslationRoutes(server, translationService);
   registerUsageRoutes(server, usageService, projectService);
   registerPipelineRoutes(server, projectService, jobRepository, orchestrator, events, sceneService);
   registerLlmRoutes(server, llmProviders, database.sqlite, projectService, profileService, fetch, quotaSync);

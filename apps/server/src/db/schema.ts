@@ -8,6 +8,8 @@ import type {
   ProfileAutomation,
   ProfileDefaultBrief,
   ProfileLlmSettings,
+  ProfileTranslationTarget,
+  ProfileTrendSettings,
   ProjectSettings,
   ThumbnailMeta,
   ClipProposal,
@@ -34,6 +36,10 @@ export const profiles = sqliteTable("profiles", {
   learnedHints: text("learned_hints", { mode: "json" }).$type<{ topicAngles?: string[]; avoid?: string[] } | null>(),
   titleAbTest: integer("title_ab_test", { mode: "boolean" }).notNull().default(false),
   learningUndo: text("learning_undo", { mode: "json" }).$type<Record<string, unknown> | null>(),
+  /** Trend sources for this profile (TASK-039). */
+  trendSettings: text("trend_settings", { mode: "json" }).$type<ProfileTrendSettings | null>(),
+  /** Other-language dubs / subtitle versions (TASK-039). */
+  translations: text("translations", { mode: "json" }).$type<ProfileTranslationTarget[] | null>(),
   /** Inbox automation, reply style and spam phrases (TASK-038). */
   commentSettings: text("comment_settings", { mode: "json" }).$type<{
     mode: "off" | "hide_spam" | "auto_reply";
@@ -113,6 +119,33 @@ export const profileTopics = sqliteTable("profile_topics", {
 ]);
 
 export type ProfileTopicRow = typeof profileTopics.$inferSelect;
+
+/** Cached official/public trend responses. cache_key separates RSS feeds and YouTube categories. */
+export const trendCache = sqliteTable("trend_cache", {
+  source: text("source").notNull(),
+  region: text("region").notNull(),
+  language: text("language").notNull(),
+  cacheKey: text("cache_key").notNull().default(""),
+  fetchedAt: text("fetched_at").notNull(),
+  json: text("json", { mode: "json" }).$type<unknown>().notNull(),
+}, (table) => [
+  primaryKey({ columns: [table.source, table.region, table.language, table.cacheKey] }),
+]);
+
+/** Last matched trend ideas per profile, for the dashboard widget. */
+export const trendIdeas = sqliteTable("trend_ideas", {
+  id: text("id").primaryKey(),
+  profileId: text("profile_id").notNull().references(() => profiles.id, { onDelete: "cascade" }),
+  title: text("title").notNull(),
+  angle: text("angle").notNull(),
+  whyNow: text("why_now").notNull(),
+  sourceTitles: text("source_titles", { mode: "json" }).$type<string[]>().notNull(),
+  urgency: text("urgency").notNull(),
+  fitScore: integer("fit_score").notNull(),
+  createdAt: text("created_at").notNull(),
+}, (table) => [
+  index("trend_ideas_profile_created_idx").on(table.profileId, table.createdAt),
+]);
 
 export const automationLog = sqliteTable("automation_log", {
   id: text("id").primaryKey(),
@@ -283,7 +316,7 @@ export const projects = sqliteTable("projects", {
   durationSec: integer("duration_sec"),
   version: integer("version").notNull().default(1),
   profileId: text("profile_id").references(() => profiles.id, { onDelete: "set null" }),
-  /** long | clip. Clips skip the draft pipeline and point at a parent when one exists. */
+  /** long | clip | translation. Clips and translations point at a parent when one exists. */
   kind: text("kind").notNull().default("long"),
   parentProjectId: text("parent_project_id").references((): AnySQLiteColumn => projects.id, { onDelete: "set null" }),
   createdAt: text("created_at").notNull(),

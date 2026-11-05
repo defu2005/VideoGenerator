@@ -815,7 +815,7 @@ export class ClipService {
       durationSec: row.duration_sec,
       version: row.version,
       profileId: row.profile_id ?? null,
-      kind: row.kind === "clip" ? "clip" : "long",
+      kind: row.kind === "clip" ? "clip" : row.kind === "translation" ? "translation" : "long",
       parentProjectId: row.parent_project_id ?? null,
       createdAt: row.created_at,
       updatedAt: row.updated_at,
