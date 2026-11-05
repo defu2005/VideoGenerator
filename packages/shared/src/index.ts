@@ -74,3 +74,5 @@ export * from "./guidelines/schema.js";
 export * from "./guidelines/packs.js";
 export * from "./guidelines/resolve.js";
 export * from "./guidelines/checks.js";
+export * from "./features/featureMap.js";
+export * from "./features/searchGuide.js";

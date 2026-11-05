@@ -146,6 +146,7 @@ function buildSystemPrompt(input: {
     "- Tra id bằng công cụ read trước khi ghi.",
     "- Tối đa 4 công cụ mỗi bước.",
     "- delete_project và delete_topic luôn cần người dùng xác nhận riêng.",
+    "- Khi người dùng hỏi cách làm (làm sao, ở đâu, hướng dẫn): gọi search_user_guide và trả lời theo các mục tìm được, nêu tên mục.",
     `- Ngày giờ hiện tại (${input.now.toLocaleString("en-US", { timeZone: "Asia/Ho_Chi_Minh" })} Asia/Ho_Chi_Minh): ${dateStr}`,
     "Hồ sơ:",
     JSON.stringify(input.profiles),

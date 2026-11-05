@@ -109,6 +109,7 @@ import { createTrendService } from "./trends/trendService.js";
 import { registerTrendRoutes } from "./api/trends.js";
 import { createTranslationService } from "./translations/translationService.js";
 import { registerTranslationRoutes } from "./api/translations.js";
+import { registerHelpRoutes } from "./api/help.js";
 
 export function buildApp({ config }: { config: AppConfig }) {
   const server = Fastify({
@@ -483,6 +484,7 @@ export function buildApp({ config }: { config: AppConfig }) {
 
   server.register(cors, { origin: config.CORS_ORIGIN });
   registerHealthRoutes(server, database.sqlite);
+  registerHelpRoutes(server);
   registerProjectRoutes(server, projectService);
   registerProfileRoutes(server, profileService);
   registerAutomationRoutes(server, {

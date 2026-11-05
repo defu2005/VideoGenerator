@@ -1026,3 +1026,18 @@ button:disabled { cursor: not-allowed; opacity: .58; }
 .tts-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; width: 100%; }
 .tts-page .card { padding: 12px; border: 1px solid #e6e9f0; border-radius: 10px; }
 .tts-page audio { margin-top: 12px; width: min(420px, 100%); }
+.topbar-actions { display: flex; align-items: center; gap: 12px; }
+.help-context-link { display: inline-flex; width: 28px; height: 28px; align-items: center; justify-content: center; border: 1px solid #d5d8e4; border-radius: 999px; color: #243049; font-weight: 700; text-decoration: none; }
+.help-search { display: grid; gap: 6px; color: #38445a; font-size: 13px; font-weight: 600; }
+.help-search input { min-height: 36px; padding: 0 10px; border: 1px solid #d9deea; border-radius: 8px; font-size: 14px; font-weight: 400; }
+.help-doc h1, .help-doc h2, .help-doc h3 { margin: 1.1em 0 0.4em; color: #172033; }
+.help-doc p, .help-doc li { color: #243049; font-size: 15px; line-height: 1.55; }
+.help-doc ul, .help-doc ol { margin: 0.4em 0 0.8em; padding-left: 1.3em; }
+.help-doc table { width: 100%; border-collapse: collapse; margin: 0.6em 0 1em; font-size: 14px; }
+.help-doc th, .help-doc td { border: 1px solid #e4e7ef; padding: 6px 8px; text-align: left; vertical-align: top; }
+.help-doc code { padding: 0 4px; border-radius: 4px; background: #f3f5f9; font-size: 0.92em; }
+.help-doc pre { overflow: auto; padding: 10px 12px; border-radius: 8px; background: #f6f7fb; }
+.help-doc pre code { padding: 0; background: transparent; }
+.help-doc img { max-width: 100%; }
+.help-results { display: grid; gap: 12px; margin: 0; padding-left: 18px; }
+.help-results p { margin: 4px 0 0; color: #3c4a63; font-size: 13px; }

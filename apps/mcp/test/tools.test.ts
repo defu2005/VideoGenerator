@@ -83,6 +83,7 @@ describe("Video Agent MCP tools", () => {
       "save_research",
       "save_script",
       "save_story",
+      "search_user_guide",
       "select_scene_visual",
       "suggest_topics",
     ]);
@@ -387,6 +388,28 @@ describe("Video Agent MCP tools", () => {
     expect(resultText(result)).toBe(
       "Video Agent server is not running at http://127.0.0.1:3001. Start it with `npm run dev`.",
     );
+  });
+
+  it("search_user_guide calls the help search API", async () => {
+    const fetchImpl = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      expect(url).toContain("/api/help/search?");
+      expect(url).toContain("q=");
+      return jsonResponse({
+        query: "telegram",
+        sections: [{
+          page: "tro-ly-va-telegram",
+          anchor: "telegram",
+          title: "Kết nối Telegram",
+          text: "Ghép nối",
+          href: "/help/tro-ly-va-telegram#telegram",
+        }],
+      });
+    }) as typeof fetch;
+    const client = await connect(fetchImpl);
+    const result = await client.callTool({ name: "search_user_guide", arguments: { query: "kết nối Telegram" } });
+    const body = JSON.parse(resultText(result)) as { sections: Array<{ anchor: string }> };
+    expect(body.sections[0]?.anchor).toBe("telegram");
   });
 
   it("returns the prompt tools with write instructions", async () => {

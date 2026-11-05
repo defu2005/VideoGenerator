@@ -269,6 +269,11 @@ export class VideoAgentApiClient {
     return this.request("/api/automation/status");
   }
 
+  searchUserGuide(query: string): Promise<unknown> {
+    const params = new URLSearchParams({ q: query });
+    return this.request(`/api/help/search?${params.toString()}`);
+  }
+
   private async request<T>(path: string, init?: RequestInit): Promise<T> {
     let response: Response;
     try {

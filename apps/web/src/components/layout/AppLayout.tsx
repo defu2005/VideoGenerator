@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { NavLink, Outlet } from "react-router-dom";
+import { HelpLink } from "../../features/help/HelpLink";
 import { unreadCommentCount } from "../../services/commentsApi";
 
 function CommentNavLink() {
@@ -43,13 +44,17 @@ export function AppLayout() {
           <NavLink to="/settings/notifications">Thông báo</NavLink>
           <NavLink to="/settings/guidelines">Định hướng nội dung</NavLink>
           <NavLink to="/usage">Mức dùng</NavLink>
+          <NavLink to="/help">Hướng dẫn</NavLink>
         </nav>
         <div className="sidebar-footer">Control Panel <span>v0.1</span></div>
       </aside>
       <div className="main-column">
         <header className="topbar">
           <span className="topbar-label">Project workspace</span>
-          <span className="connection-indicator"><i /> Local workspace</span>
+          <span className="topbar-actions">
+            <HelpLink />
+            <span className="connection-indicator"><i /> Local workspace</span>
+          </span>
         </header>
         <main className="page-content"><Outlet /></main>
       </div>

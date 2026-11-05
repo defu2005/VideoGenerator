@@ -52,6 +52,7 @@ import type { LearningService } from "../learning/learningService.js";
 import type { ClipService } from "../services/clipService.js";
 import type { CommentInboxService } from "../comments/inboxService.js";
 import { clearLlmCooldown, readQuotaStatus } from "../providers/llm/quota.js";
+import { searchGuide } from "../help/loadGuide.js";
 
 const emptyObject = z.object({}).strict();
 
@@ -1071,6 +1072,20 @@ const toolDefs: AssistantToolDef[] = [
         language: z.string().trim().min(2).max(16),
       }).strict().parse(args);
       return ctx.translations.start(parsed.projectId, parsed.language, ctx.signal ?? new AbortController().signal);
+    },
+  }),
+  defineTool({
+    name: "search_user_guide",
+    description: "Tìm trong hướng dẫn sử dụng khi người dùng hỏi cách làm hoặc chỗ bấm. Trả về các mục khớp nhất.",
+    risk: "read",
+    argsSchema: z.object({ query: z.string().trim().min(1).max(200) }).strict(),
+    summarize: (args) => {
+      const parsed = z.object({ query: z.string() }).parse(args);
+      return `Tìm hướng dẫn: ${parsed.query.slice(0, 80)}`;
+    },
+    execute: async (args) => {
+      const parsed = z.object({ query: z.string().trim().min(1) }).parse(args);
+      return searchGuide(parsed.query);
     },
   }),
 ];

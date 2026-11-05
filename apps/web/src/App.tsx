@@ -19,6 +19,7 @@ import { AssistantPage } from "./features/assistant/AssistantPage";
 import { AnalyticsPage } from "./features/analytics/AnalyticsPage";
 import { FinancePage } from "./features/finance/FinancePage";
 import { CommentsPage } from "./features/comments/CommentsPage";
+import { HelpPage } from "./features/help/HelpPage";
 import { queryRetryDelay, shouldRetryQuery } from "./services/queryRetry";
 
 const queryClient = new QueryClient({
@@ -55,6 +56,8 @@ export function App() {
             <Route path="settings/notifications" element={<NotificationsPage />} />
             <Route path="settings/guidelines" element={<GuidelineSettingsPage />} />
             <Route path="usage" element={<UsagePage />} />
+            <Route path="help" element={<HelpPage />} />
+            <Route path="help/:page" element={<HelpPage />} />
             <Route path="projects/:id" element={<Navigate replace to="overview" />} />
             <Route path="projects/:id/:tab" element={<ProjectDetailPage />} />
             <Route path="*" element={<NotFoundPage />} />
