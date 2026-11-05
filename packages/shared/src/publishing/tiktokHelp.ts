@@ -12,7 +12,8 @@ Lưu ý quan trọng:
 • Chế độ "Gửi vào hộp thư nháp" tải video vào inbox TikTok (scope video.upload); bạn hoàn tất đăng trong app TikTok.
 • TikTok API không hỗ trợ lên lịch đăng gốc — job SCHEDULED sẽ giữ đến giờ rồi mới tải lên.
 • Chỉ đăng được bản render dọc (9:16).
-• Tài khoản đã kết nối trước khi bật thống kê cần "Kết nối lại để bật thống kê" sau khi TikTok duyệt scope video.list / user.info.stats.`;
+• Tài khoản đã kết nối trước khi bật thống kê cần "Kết nối lại để bật thống kê" sau khi TikTok duyệt scope video.list / user.info.stats.
+• TikTok chưa hỗ trợ đọc bình luận qua API công khai của loại ứng dụng này. Hộp thư chỉ hiện ghi chú và đường dẫn mở video, không thu thập bình luận.`;
 
 export const TIKTOK_AUDIT_PRIVATE_WARNING_VI =
   "Ứng dụng TikTok chưa được duyệt: video đăng ở chế độ riêng tư";

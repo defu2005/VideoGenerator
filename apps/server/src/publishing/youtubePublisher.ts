@@ -5,6 +5,7 @@ import {
   YOUTUBE_ANALYTICS_MONETARY_READONLY_SCOPE,
   YOUTUBE_ANALYTICS_READONLY_SCOPE,
   YOUTUBE_DEFAULT_CATEGORY_ID,
+  YOUTUBE_FORCE_SSL_SCOPE,
   YOUTUBE_FULL_SCOPE,
   YOUTUBE_PLAYLIST_ITEM_QUOTA_COST,
   YOUTUBE_READONLY_SCOPE,
@@ -118,7 +119,17 @@ export class YouTubePublisher implements Publisher {
     if (this.isRevenueSyncEnabled(accountId)) {
       scopes.push(YOUTUBE_ANALYTICS_MONETARY_READONLY_SCOPE);
     }
+    if (this.isCommentsEnabled(accountId)) {
+      scopes.push(YOUTUBE_FORCE_SSL_SCOPE);
+    }
     return scopes;
+  }
+
+  private isCommentsEnabled(accountId: string): boolean {
+    const row = this.options.sqlite.prepare(
+      "SELECT comments_enabled AS enabled FROM platform_accounts WHERE id = ?",
+    ).get(accountId) as { enabled: number | boolean } | undefined;
+    return Boolean(row?.enabled);
   }
 
   private isRevenueSyncEnabled(accountId: string): boolean {

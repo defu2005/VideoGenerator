@@ -5,6 +5,7 @@ import type { NotificationService } from "../notifications/notificationService.j
 import type { AnalyticsSyncService } from "../analytics/syncService.js";
 import type { FinanceService } from "../finance/financeService.js";
 import type { LearningService } from "../learning/learningService.js";
+import type { CommentInboxService } from "../comments/inboxService.js";
 
 const INTERVAL_MS = 60_000;
 
@@ -27,6 +28,8 @@ export class PublishTicker {
   private financeRunning = false;
   private learning: LearningService | undefined;
   private learningRunning = false;
+  private comments: CommentInboxService | undefined;
+  private commentsRunning = false;
 
   constructor(
     private readonly publish: PublishService,
@@ -54,6 +57,10 @@ export class PublishTicker {
 
   setLearning(service: LearningService): void {
     this.learning = service;
+  }
+
+  setComments(service: CommentInboxService): void {
+    this.comments = service;
   }
 
   start(): void {
@@ -110,6 +117,12 @@ export class PublishTicker {
         void this.learning.tick(this.controller.signal)
           .catch((error) => this.logger.warn({ err: error }, "Learning tick failed"))
           .finally(() => { this.learningRunning = false; });
+      }
+      if (this.comments && !this.commentsRunning) {
+        this.commentsRunning = true;
+        void this.comments.tick(this.controller.signal)
+          .catch((error) => this.logger.warn({ err: error }, "Comment inbox tick failed"))
+          .finally(() => { this.commentsRunning = false; });
       }
     } catch (error) {
       this.logger.warn({ err: error }, "Publish ticker tick failed");

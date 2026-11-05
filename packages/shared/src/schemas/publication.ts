@@ -162,6 +162,11 @@ export const AccountConnectionDetailSchema = z.object({
   analyticsStatus: AnalyticsStatusSchema.nullable().optional(),
   analyticsLastError: z.string().nullable().optional(),
   analyticsSyncedAt: z.string().datetime({ offset: true }).nullable().optional(),
+  /** YouTube comment management is opt-in. Other platforms ignore the flag. */
+  commentsEnabled: z.boolean().optional(),
+  /** Comment sync readiness. unsupported = TikTok (no public comment API). */
+  commentsStatus: z.enum(["ok", "needs_reconnect", "unsupported"]).nullable().optional(),
+  commentsLastError: z.string().nullable().optional(),
 }).strict();
 export type AccountConnectionDetail = z.infer<typeof AccountConnectionDetailSchema>;
 

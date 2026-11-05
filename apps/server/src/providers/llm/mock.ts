@@ -315,6 +315,14 @@ export class MockLlmProvider implements LlmProvider {
         },
       }, req.model);
     }
+    if (req.schemaName === "CommentAssist") {
+      const comments = Array.isArray(payload.comments)
+        ? payload.comments as Array<{ externalId?: string; text?: string }>
+        : [];
+      return response({
+        items: comments.map((comment) => mockCommentAssist(comment)),
+      }, req.model);
+    }
     if (req.schemaName === "FinanceInsight") {
       return response({
         bullets: [
@@ -339,6 +347,52 @@ export class MockLlmProvider implements LlmProvider {
       : /script/i.test(req.system) ? scriptFixture : research;
     return response(result, req.model);
   }
+}
+
+function mockCommentAssist(comment: { externalId?: string; text?: string }) {
+  const text = comment.text ?? "";
+  const externalId = comment.externalId ?? "comment";
+  const lower = text.toLowerCase();
+  let classification = "other";
+  let priority = 20;
+  let toxic = false;
+  let confidence: "high" | "low" = "low";
+  let suggestedReply = "Cảm ơn bạn đã xem video.";
+  if (lower.includes("toxic") || lower.includes("đồ ngốc")) {
+    classification = "toxic";
+    toxic = true;
+    priority = 15;
+    confidence = "high";
+    suggestedReply = "";
+  } else if (lower.includes("khiếu") || lower.includes("tệ")) {
+    classification = "complaint";
+    priority = 90;
+    confidence = "high";
+    suggestedReply = "Mình đã ghi nhận góp ý.";
+  } else if (lower.includes("làm giúp")) {
+    classification = "request";
+    priority = 60;
+    confidence = "low";
+    suggestedReply = "";
+  } else if (text.includes("?")) {
+    classification = "question";
+    priority = lower.includes("khẩn") ? 85 : 40;
+    confidence = "high";
+    suggestedReply = `Mình trả lời ngắn ${externalId.slice(0, 12)}.`;
+  } else if (lower.includes("hay") || lower.includes("tuyệt")) {
+    classification = "praise";
+    priority = 30;
+    confidence = "high";
+    suggestedReply = "Cảm ơn bạn nhiều!";
+  }
+  return {
+    externalId,
+    classification,
+    priority,
+    toxic,
+    confidence,
+    suggestedReply: suggestedReply.slice(0, 300),
+  };
 }
 
 function parsePromptObject(prompt: string): Record<string, unknown> {

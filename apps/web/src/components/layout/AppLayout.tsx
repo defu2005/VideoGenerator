@@ -1,4 +1,21 @@
+import { useQuery } from "@tanstack/react-query";
 import { NavLink, Outlet } from "react-router-dom";
+import { unreadCommentCount } from "../../services/commentsApi";
+
+function CommentNavLink() {
+  const unread = useQuery({
+    queryKey: ["comments", "unread"],
+    queryFn: unreadCommentCount,
+    refetchInterval: 60_000,
+  });
+  const count = unread.data?.count ?? 0;
+  return (
+    <NavLink to="/comments">
+      Bình luận
+      {count > 0 && <span className="nav-badge">{count > 99 ? "99+" : count}</span>}
+    </NavLink>
+  );
+}
 
 export function AppLayout() {
   return (
@@ -17,6 +34,7 @@ export function AppLayout() {
           <NavLink to="/publish/calendar">Lịch đăng</NavLink>
           <NavLink to="/analytics">Thống kê</NavLink>
           <NavLink to="/finance">Doanh thu</NavLink>
+          <CommentNavLink />
           <NavLink to="/settings/ai">Mô hình AI</NavLink>
           <NavLink to="/settings/render">Render</NavLink>
           <NavLink to="/settings/image-sources">Nguồn ảnh</NavLink>

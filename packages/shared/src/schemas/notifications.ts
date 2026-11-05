@@ -78,6 +78,7 @@ export const NotificationKindSchema = z.enum([
   "automation_paused",
   "daily_summary",
   "monthly_report",
+  "comment_attention",
 ]);
 export type NotificationKind = z.infer<typeof NotificationKindSchema>;
 
@@ -172,6 +173,13 @@ export const NotificationEventSchema = z.discriminatedUnion("kind", [
     text: z.string(),
     link: z.string(),
   }).strict(),
+  z.object({
+    kind: z.literal("comment_attention"),
+    profileId: z.string(),
+    profile: z.string(),
+    count: z.number().int().positive(),
+    hourKey: z.string().min(1),
+  }).strict(),
 ]);
 export type NotificationEvent = z.infer<typeof NotificationEventSchema>;
 
@@ -209,5 +217,7 @@ export function subjectKeyForEvent(event: NotificationEvent): string {
       return `daily_summary:${event.dateKey}`;
     case "monthly_report":
       return `monthly_report:${event.month}`;
+    case "comment_attention":
+      return `comments:${event.profileId}:${event.hourKey}`;
   }
 }

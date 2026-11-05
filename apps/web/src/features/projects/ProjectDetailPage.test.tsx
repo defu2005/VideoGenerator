@@ -235,6 +235,7 @@ describe("ProjectDetailPage", () => {
           financeInsight: true,
           performanceInsight: true,
           clipPick: true,
+          commentAssist: true,
           outputHeadroom: 1.5,
         },
         perStage: [],

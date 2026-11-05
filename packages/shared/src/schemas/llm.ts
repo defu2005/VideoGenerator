@@ -90,6 +90,7 @@ export const LlmTaskIdSchema = z.enum([
   "financeInsight",
   "performanceInsight",
   "clipPick",
+  "commentAssist",
 ]);
 export type LlmTaskId = z.infer<typeof LlmTaskIdSchema>;
 
@@ -128,6 +129,7 @@ export const LLM_TASKS: {
   { id: "financeInsight", label: "Nhận xét báo cáo doanh thu", stage: "SETTINGS", purpose: "3–5 Vietnamese bullet points on what went well or badly in a monthly finance report.", tier: "fast", qualityWeight: 1, budgetFeature: "financeInsight" },
   { id: "performanceInsight", label: "Bài học từ số liệu", stage: "SETTINGS", purpose: "Vietnamese patterns and recommendations from past video performance for one profile.", tier: "strong", qualityWeight: 2, budgetFeature: "performanceInsight" },
   { id: "clipPick", label: "Chọn đoạn Shorts", stage: "RENDER", purpose: "Pick vertical clip ranges from a finished long video.", tier: "strong", qualityWeight: 3, budgetFeature: "clipPick" },
+  { id: "commentAssist", label: "Phân loại và gợi ý trả lời bình luận", stage: "SETTINGS", purpose: "Classify comments and draft short replies in the comment's language.", tier: "fast", qualityWeight: 1, budgetFeature: "commentAssist" },
 ];
 
 function normalizeLlmSettings(value: unknown): unknown {

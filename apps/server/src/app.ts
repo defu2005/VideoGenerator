@@ -102,6 +102,8 @@ import { registerFinanceRoutes } from "./api/finance.js";
 import { ensureDefaultRates } from "./finance/currencySettings.js";
 import { LearningService } from "./learning/learningService.js";
 import { registerLearningRoutes } from "./api/learning.js";
+import { CommentInboxService } from "./comments/inboxService.js";
+import { registerCommentRoutes } from "./api/comments.js";
 
 export function buildApp({ config }: { config: AppConfig }) {
   const server = Fastify({
@@ -363,6 +365,18 @@ export function buildApp({ config }: { config: AppConfig }) {
   });
   publishTicker.setAnalytics(analyticsSyncService);
   assistantService.setAnalytics(analyticsSyncService);
+  const commentInbox = new CommentInboxService({
+    sqlite: database.sqlite,
+    vault: tokenVault,
+    registry: publisherRegistry,
+    llm: llmProviders,
+    notifications: notificationService,
+    youtubeQuota: youtubePublisher.quota,
+    config,
+    logger: server.log,
+  });
+  publishTicker.setComments(commentInbox);
+  assistantService.setComments(commentInbox);
   ensureDefaultRates(database.sqlite, config.USD_VND_RATE);
   const financeService = new FinanceService({
     sqlite: database.sqlite,
@@ -457,6 +471,7 @@ export function buildApp({ config }: { config: AppConfig }) {
   registerOAuthRoutes(server, { publish: publishService, registry: publisherRegistry, oauthState });
   registerPublicationRoutes(server, { publish: publishService, vault: tokenVault });
   registerAnalyticsRoutes(server, { analytics: analyticsSyncService });
+  registerCommentRoutes(server, commentInbox);
   registerFinanceRoutes(server, { finance: financeService });
   registerLearningRoutes(server, learningService);
   registerRecommendationRoutes(server);

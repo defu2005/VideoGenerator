@@ -371,12 +371,16 @@ export class PublishService {
       appCredentials.configured,
     );
     const accountExtras = this.sqlite.prepare(
-      `SELECT analytics_status, analytics_last_error, analytics_synced_at
+      `SELECT analytics_status, analytics_last_error, analytics_synced_at,
+              comments_enabled, comments_status, comments_last_error
        FROM platform_accounts WHERE id = ?`,
     ).get(accountId) as {
       analytics_status: string | null;
       analytics_last_error: string | null;
       analytics_synced_at: string | null;
+      comments_enabled: number | boolean;
+      comments_status: string | null;
+      comments_last_error: string | null;
     } | undefined;
     const analyticsStatus =
       accountExtras?.analytics_status === "ok" || accountExtras?.analytics_status === "needs_reconnect"
@@ -398,6 +402,13 @@ export class PublishService {
       analyticsStatus,
       analyticsLastError: accountExtras?.analytics_last_error ?? null,
       analyticsSyncedAt: accountExtras?.analytics_synced_at ?? null,
+      commentsEnabled: Boolean(accountExtras?.comments_enabled),
+      commentsStatus: accountExtras?.comments_status === "ok"
+        || accountExtras?.comments_status === "needs_reconnect"
+        || accountExtras?.comments_status === "unsupported"
+        ? accountExtras.comments_status
+        : null,
+      commentsLastError: accountExtras?.comments_last_error ?? null,
     };
 
     if (isMetaPlatform(account.platform) && needsMetaTargetPicker(account.external_id)) {

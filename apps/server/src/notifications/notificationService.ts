@@ -171,6 +171,8 @@ export class NotificationService {
         return `📊 <b>Tóm tắt ngày ${escapeHtml(event.dateKey)}</b>\n${event.text}`;
       case "monthly_report":
         return `📈 <b>Báo cáo tháng ${escapeHtml(event.month)}</b>\n${event.text}`;
+      case "comment_attention":
+        return `💬 ${escapeHtml(event.profile)}: ${event.count} bình luận cần trả lời`;
     }
   }
 

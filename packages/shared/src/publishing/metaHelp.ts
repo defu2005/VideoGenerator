@@ -12,6 +12,7 @@ export const META_SETUP_HELP_VI = `Cách kết nối Facebook Reels / Instagram 
 4. Trong chế độ Development, app chỉ hoạt động với tài khoản có vai trò trong app — đủ để dùng Page và Instagram của chính bạn.
 5. Sau khi đăng nhập Facebook, chọn Trang (Facebook Reels) hoặc tài khoản Instagram chuyên nghiệp liên kết với Page (Instagram Reels).
 6. Quyền thống kê: instagram_manage_insights (Instagram Reels) và read_insights (Facebook Reels / Page) — dùng để đồng bộ lượt xem, tiếp cận, thời gian xem.
+7. Quyền bình luận: instagram_manage_comments (Instagram) và pages_read_user_content + pages_manage_engagement (Facebook Page). Tài khoản kết nối trước khi có các quyền này cần "Kết nối lại" để đọc và trả lời bình luận.
 
 Lưu ý:
 • Token dài hạn hết hạn khoảng 60 ngày — ứng dụng cảnh báo trước 7 ngày ("Cần kết nối lại").
@@ -30,6 +31,9 @@ export const META_SCOPES = [
   "business_management",
   "instagram_manage_insights",
   "read_insights",
+  "instagram_manage_comments",
+  "pages_read_user_content",
+  "pages_manage_engagement",
 ] as const;
 
 export const META_OAUTH_SCOPES = META_SCOPES.join(",");

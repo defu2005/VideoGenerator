@@ -17,6 +17,7 @@ import { UsagePage } from "./features/usage/UsagePage";
 import { AssistantPage } from "./features/assistant/AssistantPage";
 import { AnalyticsPage } from "./features/analytics/AnalyticsPage";
 import { FinancePage } from "./features/finance/FinancePage";
+import { CommentsPage } from "./features/comments/CommentsPage";
 import { queryRetryDelay, shouldRetryQuery } from "./services/queryRetry";
 
 const queryClient = new QueryClient({
@@ -44,6 +45,7 @@ export function App() {
             <Route path="publish/calendar" element={<PublishCalendarPage />} />
             <Route path="analytics" element={<AnalyticsPage />} />
             <Route path="finance" element={<FinancePage />} />
+            <Route path="comments" element={<CommentsPage />} />
             <Route path="settings/ai" element={<AiSettingsPage />} />
             <Route path="settings/render" element={<RenderSettingsPage />} />
             <Route path="settings/image-sources" element={<ImageSourcesSettingsPage />} />

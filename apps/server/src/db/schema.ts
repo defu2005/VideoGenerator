@@ -34,6 +34,16 @@ export const profiles = sqliteTable("profiles", {
   learnedHints: text("learned_hints", { mode: "json" }).$type<{ topicAngles?: string[]; avoid?: string[] } | null>(),
   titleAbTest: integer("title_ab_test", { mode: "boolean" }).notNull().default(false),
   learningUndo: text("learning_undo", { mode: "json" }).$type<Record<string, unknown> | null>(),
+  /** Inbox automation, reply style and spam phrases (TASK-038). */
+  commentSettings: text("comment_settings", { mode: "json" }).$type<{
+    mode: "off" | "hide_spam" | "auto_reply";
+    repliesPerVideoPerDay: number;
+    repliesPerAccountPerDay: number;
+    tone: string;
+    emoji: boolean;
+    signature: string;
+    spamPhrases: string[];
+  } | null>(),
   avatarPath: text("avatar_path"),
   color: text("color").notNull().default("#3B82F6"),
   archivedAt: text("archived_at"),
@@ -68,6 +78,11 @@ export const platformAccounts = sqliteTable("platform_accounts", {
   revenueStatus: text("revenue_status"),
   revenueLastError: text("revenue_last_error"),
   revenueSyncedAt: text("revenue_synced_at"),
+  /** Opt-in YouTube comment management (force-ssl). Ignored for other platforms. */
+  commentsEnabled: integer("comments_enabled", { mode: "boolean" }).notNull().default(false),
+  /** ok | needs_reconnect | unsupported. */
+  commentsStatus: text("comments_status"),
+  commentsLastError: text("comments_last_error"),
   publishSettings: text("publish_settings", { mode: "json" }).$type<PublishSettings>().notNull(),
   createdAt: text("created_at").notNull(),
   updatedAt: text("updated_at").notNull(),
@@ -169,6 +184,8 @@ export const publications = sqliteTable("publications", {
   /** Denormalized latest metrics for fast lists (TASK-033). */
   latestMetrics: text("latest_metrics", { mode: "json" }).$type<Record<string, unknown> | null>(),
   metricsSyncedAt: text("metrics_synced_at"),
+  /** Last successful comment pull for this publication (TASK-038). */
+  commentsSyncedAt: text("comments_synced_at"),
   createdAt: text("created_at").notNull(),
   updatedAt: text("updated_at").notNull(),
   publishedAt: text("published_at"),
@@ -216,6 +233,39 @@ export const channelMetricsDaily = sqliteTable("channel_metrics_daily", {
 ]);
 
 export type ChannelMetricsDailyRow = typeof channelMetricsDaily.$inferSelect;
+
+/** Comments on the user's own published videos (TASK-038). */
+export const comments = sqliteTable("comments", {
+  id: text("id").primaryKey(),
+  publicationId: text("publication_id").notNull().references(() => publications.id, { onDelete: "cascade" }),
+  platform: text("platform").$type<PlatformId>().notNull(),
+  externalId: text("external_id").notNull(),
+  parentExternalId: text("parent_external_id"),
+  authorName: text("author_name").notNull().default(""),
+  authorExternalId: text("author_external_id"),
+  text: text("text").notNull().default(""),
+  likeCount: integer("like_count").notNull().default(0),
+  publishedAt: text("published_at").notNull(),
+  fetchedAt: text("fetched_at").notNull(),
+  status: text("status", {
+    enum: ["new", "read", "replied", "hidden", "spam", "ignored"],
+  }).notNull().default("new"),
+  classification: text("classification"),
+  priority: integer("priority").notNull().default(0),
+  suggestedReply: text("suggested_reply"),
+  replyExternalId: text("reply_external_id"),
+  repliedAt: text("replied_at"),
+  repliedBy: text("replied_by"),
+  toxic: integer("toxic", { mode: "boolean" }).notNull().default(false),
+  confidence: text("confidence"),
+  attentionNotifiedAt: text("attention_notified_at"),
+}, (table) => [
+  uniqueIndex("comments_platform_external_uq").on(table.platform, table.externalId),
+  index("comments_publication_idx").on(table.publicationId),
+  index("comments_status_priority_idx").on(table.status, table.priority),
+]);
+
+export type CommentRow = typeof comments.$inferSelect;
 
 export const projects = sqliteTable("projects", {
   id: text("id").primaryKey(),

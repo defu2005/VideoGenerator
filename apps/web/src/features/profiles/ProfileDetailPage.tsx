@@ -49,6 +49,8 @@ import {
 } from "../projects/GuidelineFieldset";
 import { AutomationTab } from "./AutomationTab";
 import { InsightsTab } from "./InsightsTab";
+import { CommentSettingsForm } from "../comments/CommentSettingsForm";
+import { setYoutubeCommentSync } from "../../services/commentsApi";
 import { TopicsTab } from "./TopicsTab";
 const TABS = [
   { id: "direction", label: "Định hướng" },
@@ -57,6 +59,7 @@ const TABS = [
   { id: "automation", label: "Tự động" },
   { id: "insights", label: "Bài học" },
   { id: "accounts", label: "Tài khoản" },
+  { id: "comments", label: "Bình luận" },
   { id: "projects", label: "Dự án" },
 ] as const;
 
@@ -634,6 +637,38 @@ function AccountCard({
         <div className="account-row-actions">
           {connected ? (
             <>
+              {account.platform === "youtube" && (
+                <label className="field-hint" style={{ display: "flex", gap: 8, alignItems: "center", maxWidth: 280 }}>
+                  <input
+                    type="checkbox"
+                    checked={Boolean(detail?.commentsEnabled)}
+                    onChange={(event) => {
+                      const current = detail;
+                      if (!current) return;
+                      void setYoutubeCommentSync(account.id, event.target.checked).then((result) => {
+                        queryClient.setQueryData(accountConnectionKeys.detail(profileId, account.id), {
+                          ...current,
+                          commentsEnabled: result.commentsEnabled,
+                          commentsStatus: result.commentsStatus,
+                        });
+                      }).catch((err: unknown) => {
+                        onError(err instanceof Error ? err.message : "Không bật được quản lý bình luận");
+                      });
+                    }}
+                  />
+                  Quản lý bình luận YouTube
+                </label>
+              )}
+              {detail?.commentsStatus === "needs_reconnect" && (
+                <p className="field-hint" style={{ margin: 0, maxWidth: 220 }}>
+                  Kết nối lại để quản lý bình luận
+                </p>
+              )}
+              {detail?.commentsStatus === "unsupported" && (
+                <p className="field-hint" style={{ margin: 0, maxWidth: 240 }}>
+                  TikTok chưa hỗ trợ đọc bình luận qua API
+                </p>
+              )}
               {detail?.analyticsStatus === "needs_reconnect" && (
                 <div style={{ display: "grid", gap: 4 }}>
                   <p className="field-hint" style={{ margin: 0, maxWidth: 220 }}>
@@ -1043,6 +1078,8 @@ export function ProfileDetailPage() {
         <InsightsTab profile={profile.data} />
       ) : activeTab === "accounts" ? (
         <AccountsTab profile={profile.data} />
+      ) : activeTab === "comments" ? (
+        <CommentSettingsForm profileId={profile.data.id} />
       ) : (
         <ProjectsTab profile={profile.data} />
       )}

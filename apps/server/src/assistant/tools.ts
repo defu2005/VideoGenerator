@@ -50,6 +50,7 @@ import type { AnalyticsSyncService } from "../analytics/syncService.js";
 import type { FinanceService } from "../finance/financeService.js";
 import type { LearningService } from "../learning/learningService.js";
 import type { ClipService } from "../services/clipService.js";
+import type { CommentInboxService } from "../comments/inboxService.js";
 import { clearLlmCooldown, readQuotaStatus } from "../providers/llm/quota.js";
 
 const emptyObject = z.object({}).strict();
@@ -71,6 +72,7 @@ export type AssistantToolContext = {
   finance?: FinanceService;
   learning?: LearningService;
   clips?: ClipService;
+  comments?: CommentInboxService;
   signal?: AbortSignal;
 };
 
@@ -930,6 +932,60 @@ const toolDefs: AssistantToolDef[] = [
       if (!ctx.clips) throw new AppError(503, "CLIPS_UNAVAILABLE", "Cắt Shorts chưa sẵn sàng");
       const { projectId } = z.object({ projectId: z.string().uuid() }).parse(args);
       return ctx.clips.view(projectId);
+    },
+  }),
+  defineTool({
+    name: "list_comments",
+    description: "Đọc hộp thư bình luận trên video đã đăng.",
+    risk: "read",
+    argsSchema: z.object({
+      profileId: z.string().uuid().optional(),
+      platform: z.enum(["youtube", "tiktok", "instagram_reels", "facebook_reels"]).optional(),
+      status: z.enum(["new", "read", "replied", "hidden", "spam", "ignored"]).optional(),
+      classification: z.enum(["question", "praise", "complaint", "request", "spam", "toxic", "other"]).optional(),
+    }).strict(),
+    summarize: () => "Xem bình luận",
+    execute: async (args, ctx) => {
+      if (!ctx.comments) throw new AppError(503, "COMMENTS_UNAVAILABLE", "Hộp thư bình luận chưa sẵn sàng");
+      const parsed = z.object({
+        profileId: z.string().uuid().optional(),
+        platform: z.enum(["youtube", "tiktok", "instagram_reels", "facebook_reels"]).optional(),
+        status: z.enum(["new", "read", "replied", "hidden", "spam", "ignored"]).optional(),
+        classification: z.enum(["question", "praise", "complaint", "request", "spam", "toxic", "other"]).optional(),
+      }).strict().parse(args);
+      return ctx.comments.list(parsed);
+    },
+  }),
+  defineTool({
+    name: "reply_comment",
+    description: "Gửi câu trả lời cho một bình luận (cần xác nhận).",
+    risk: "confirm",
+    argsSchema: z.object({
+      commentId: z.string().uuid(),
+      text: z.string().trim().min(1).max(300),
+    }).strict(),
+    summarize: () => "Trả lời bình luận",
+    execute: async (args, ctx) => {
+      if (!ctx.comments) throw new AppError(503, "COMMENTS_UNAVAILABLE", "Hộp thư bình luận chưa sẵn sàng");
+      const parsed = z.object({
+        commentId: z.string().uuid(),
+        text: z.string().trim().min(1).max(300),
+      }).strict().parse(args);
+      await ctx.comments.reply(parsed.commentId, parsed.text, "user", ctx.signal);
+      return { ok: true, commentId: parsed.commentId };
+    },
+  }),
+  defineTool({
+    name: "hide_comment",
+    description: "Ẩn một bình luận (cần xác nhận).",
+    risk: "confirm",
+    argsSchema: z.object({ commentId: z.string().uuid() }).strict(),
+    summarize: () => "Ẩn bình luận",
+    execute: async (args, ctx) => {
+      if (!ctx.comments) throw new AppError(503, "COMMENTS_UNAVAILABLE", "Hộp thư bình luận chưa sẵn sàng");
+      const { commentId } = z.object({ commentId: z.string().uuid() }).parse(args);
+      await ctx.comments.hide(commentId, ctx.signal);
+      return { ok: true, commentId };
     },
   }),
   defineTool({
