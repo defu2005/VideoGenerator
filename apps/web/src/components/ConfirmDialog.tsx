@@ -5,6 +5,7 @@ export function ConfirmDialog({
   title,
   message,
   confirmLabel = "Confirm",
+  cancelLabel = "Cancel",
   busy = false,
   onConfirm,
   onCancel,
@@ -13,6 +14,7 @@ export function ConfirmDialog({
   title: string;
   message: string;
   confirmLabel?: string;
+  cancelLabel?: string;
   busy?: boolean;
   onConfirm: () => void;
   onCancel: () => void;
@@ -44,7 +46,7 @@ export function ConfirmDialog({
       <h2 id="confirm-title">{title}</h2>
       <p>{message}</p>
       <div className="dialog-actions">
-        <button className="button button-secondary" type="button" onClick={onCancel} disabled={busy}>Cancel</button>
+        <button className="button button-secondary" type="button" onClick={onCancel} disabled={busy}>{cancelLabel}</button>
         <button className="button button-danger" type="button" onClick={onConfirm} disabled={busy}>
           {busy ? "Working…" : confirmLabel}
         </button>

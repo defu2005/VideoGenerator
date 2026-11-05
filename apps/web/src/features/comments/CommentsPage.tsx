@@ -1,5 +1,10 @@
 import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { ConfirmDialog } from "../../components/ConfirmDialog";
+import { ErrorState } from "../../components/ErrorState";
+import { Spinner } from "../../components/Spinner";
+import { LoadMore } from "../../components/ui/LoadMore";
+import { useToast } from "../../components/ui/Toast";
 import { useProfiles } from "../../hooks/useProfiles";
 import {
   bulkSpamComments,
@@ -56,6 +61,7 @@ const CLASS_LABEL: Record<string, string> = {
 
 export function CommentsPage() {
   const queryClient = useQueryClient();
+  const toast = useToast();
   const profiles = useProfiles();
   const [profileId, setProfileId] = useState("");
   const [platform, setPlatform] = useState("");
@@ -64,6 +70,7 @@ export function CommentsPage() {
   const [drafts, setDrafts] = useState<Record<string, string>>({});
   const [selected, setSelected] = useState<Record<string, boolean>>({});
   const [pendingDelete, setPendingDelete] = useState<CommentInboxItem | null>(null);
+  const [shown, setShown] = useState(20);
   const [error, setError] = useState("");
 
   const filters: CommentListQuery = {
@@ -96,9 +103,13 @@ export function CommentsPage() {
     mutationFn: (item: CommentInboxItem) => replyToComment(item.id, (drafts[item.id] ?? item.suggestedReply ?? "").trim()),
     onSuccess: () => {
       setError("");
+      toast.success("Đã gửi trả lời");
       refresh();
     },
-    onError: (err: Error) => setError(err.message),
+    onError: (err: Error) => {
+      setError(err.message);
+      toast.error(err.message);
+    },
   });
   const hide = useMutation({
     mutationFn: (id: string) => hideComment(id),
@@ -143,6 +154,7 @@ export function CommentsPage() {
   });
 
   const items = inbox.data?.items ?? [];
+  const visibleItems = items.slice(0, shown);
   const selectedIds = items.filter((item) => selected[item.id]).map((item) => item.id);
 
   return (
@@ -204,11 +216,17 @@ export function CommentsPage() {
           </ul>
         </section>
       ))}
-      {inbox.isPending ? <p>Đang tải bình luận…</p> : null}
-      {inbox.isError ? <p className="request-error" role="alert">Không tải được hộp thư.</p> : null}
-      {!inbox.isPending && items.length === 0 ? <p>Chưa có bình luận.</p> : null}
+      {inbox.isPending ? <Spinner label="Đang tải bình luận" /> : null}
+      {inbox.isError ? <ErrorState message="Không tải được hộp thư." onRetry={() => void inbox.refetch()} /> : null}
+      {!inbox.isPending && !inbox.isError && items.length === 0 ? (
+        <section className="state-card">
+          <h2>Chưa có bình luận</h2>
+          <p>Khi kênh đã kết nối có bình luận mới, chúng sẽ hiện ở đây.</p>
+          <button className="button button-secondary" type="button" onClick={() => void inbox.refetch()}>Tải lại</button>
+        </section>
+      ) : null}
       <ul className="comment-list">
-        {items.map((item) => (
+        {visibleItems.map((item) => (
           <li key={item.id} className="comment-card">
             <label className="comment-select">
               <input
@@ -246,7 +264,7 @@ export function CommentsPage() {
                 />
               </label>
               <div className="comment-actions">
-                <button className="button button-primary" type="button" onClick={() => reply.mutate(item)}>Gửi</button>
+                <button className="button button-primary" type="button" disabled={reply.isPending && reply.variables?.id === item.id} onClick={() => reply.mutate(item)}>Gửi</button>
                 {item.status === "hidden" ? (
                   <button className="button button-secondary" type="button" onClick={() => unhide.mutate(item.id)}>Bỏ ẩn</button>
                 ) : (
@@ -267,16 +285,17 @@ export function CommentsPage() {
           </li>
         ))}
       </ul>
-      {pendingDelete && (
-        <div className="comment-dialog" role="dialog" aria-labelledby="delete-comment-title">
-          <h2 id="delete-comment-title">Xóa bình luận Instagram?</h2>
-          <p>Bình luận của {pendingDelete.authorName} sẽ bị xóa trên Instagram.</p>
-          <div className="comment-actions">
-            <button className="button button-secondary" type="button" onClick={() => setPendingDelete(null)}>Hủy</button>
-            <button className="button button-primary" type="button" onClick={() => remove.mutate(pendingDelete.id)}>Xác nhận xóa</button>
-          </div>
-        </div>
-      )}
+      <LoadMore shown={visibleItems.length} total={items.length} onMore={() => setShown((count) => count + 20)} />
+      <ConfirmDialog
+        open={pendingDelete !== null}
+        title="Xóa bình luận Instagram?"
+        message={pendingDelete ? `Bình luận của ${pendingDelete.authorName} sẽ bị xóa trên Instagram. Thao tác này không hoàn tác được.` : ""}
+        confirmLabel="Xác nhận xóa"
+        cancelLabel="Hủy"
+        busy={remove.isPending}
+        onCancel={() => setPendingDelete(null)}
+        onConfirm={() => { if (pendingDelete) remove.mutate(pendingDelete.id); }}
+      />
     </div>
   );
 }

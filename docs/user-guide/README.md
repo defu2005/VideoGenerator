@@ -26,11 +26,11 @@ Video Agent chạy trên máy bạn. Menu bên trái mở từng khu vực. Dấ
 
 ## Bắt đầu nhanh trong 10 phút {#bat-dau-nhanh}
 
-Dùng để ra một video nháp rồi đăng khi bạn đã kết nối nền tảng. Menu: **Dashboard**.
+Dùng để ra một video nháp rồi đăng khi bạn đã kết nối nền tảng. Menu: **Bảng điều khiển**.
 
 1. Mở **Hồ sơ**, bấm **＋ Hồ sơ mới**, đặt tên, bấm nút tạo. Xem [Danh sách hồ sơ](ho-so.md#danh-sach-ho-so).
 2. Vào hồ sơ, tab **Chủ đề**, gõ chủ đề, bấm thêm. Xem [Hàng đợi chủ đề](tu-dong-hoa.md#hang-doi-chu-de).
-3. Mở **Projects**, bấm **＋ New project**, chọn hồ sơ nếu có, rồi trên tab **Overview** bấm **Generate All**. Khi cổng chờ, bấm **Approve**. Xong timeline thì mở tab **Render** và bấm **Render**. Xem [Tổng quan](du-an-va-quy-trinh.md#tong-quan).
+3. Mở **Dự án**, bấm **＋ New project**, chọn hồ sơ nếu có, rồi trên tab **Overview** bấm **Generate All**. Khi cổng chờ, bấm **Approve**. Xong timeline thì mở tab **Render** và bấm **Render**. Xem [Tổng quan](du-an-va-quy-trinh.md#tong-quan).
 4. Trên tab **Render**, mục **Đăng**, chọn tài khoản đã kết nối và bấm **Đăng**. Xem [Đăng từ dự án](dang-bai.md#dang-tu-du-an).
 
 Mặc định dự án mới dùng chế độ chạy **ASSISTED** và ngân sách **BALANCED** nếu bạn không đổi. **Generate All** không tự đăng video lên mạng. Việc đăng cần nút **Đăng** hoặc lời xác nhận của trợ lý.

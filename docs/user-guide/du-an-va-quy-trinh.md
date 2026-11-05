@@ -4,7 +4,7 @@ Một dự án là một video. Pipeline đi từ nghiên cứu tới render. S�
 
 ## Thư viện dự án {#thu-vien-du-an}
 
-Dùng để tìm và tạo video. Menu: **Projects**.
+Dùng để tìm và tạo video. Menu: **Dự án**.
 
 1. Bấm **＋ New project**. Điền chủ đề. **Cancel** đóng hộp.
 2. Ô tìm lọc theo tên. **Previous** / **Next** đổi trang.
@@ -17,7 +17,7 @@ Dự án mới ở trạng thái Draft. **Delete** xoá dữ liệu dự án sau
 
 Dùng khi video đã dựng ở chỗ khác và bạn chỉ muốn cắt đoạn ngắn.
 
-1. Trên **Projects**, bấm **Nhập video dài**.
+1. Trên **Dự án**, bấm **Nhập video dài**.
 2. Chọn file và hồ sơ.
 3. **Đóng** khi xong.
 

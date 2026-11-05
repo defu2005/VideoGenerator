@@ -54,6 +54,6 @@ Dùng để cắt vài đoạn dọc từ video dài đã render. Tab **Render**
 1. Chọn **Chế độ khung hình**: **Giữa khung**, **Làm mờ nền**, hoặc **Theo điểm nhấn**.
 2. Bấm **Tạo đề xuất**.
 3. Tick đoạn muốn giữ, sửa nếu cần, bấm **Lưu chỉnh sửa**.
-4. Bấm **Xuất … clip**. Mỗi clip là một dự án con, vào từ **Projects**.
+4. Bấm **Xuất … clip**. Mỗi clip là một dự án con, vào từ **Dự án**.
 
 Video chưa render xong thì nút đề xuất tắt. **Tự cắt Shorts từ video dài** trên lịch làm hộ bước này khi bạn đã bật. Xuất clip không tự đăng. Mặc định 3 Shorts nếu lịch tự cắt.

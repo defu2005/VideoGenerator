@@ -4,7 +4,7 @@ Số liệu chỉ có sau khi tài khoản đã cấp quyền thống kê và vi
 
 ## Thống kê {#thong-ke}
 
-Dùng để xem lượt xem và tương tác. Menu: **Thống kê**.
+Dùng để xem lượt xem và tương tác. Menu: **Phân tích**.
 
 1. Chọn khoảng thời gian và hồ sơ hoặc nền tảng.
 2. Mở một video để xem chuỗi theo ngày.
@@ -14,7 +14,7 @@ Dùng để xem lượt xem và tương tác. Menu: **Thống kê**.
 
 ## Doanh thu {#doanh-thu}
 
-Dùng để đối chiếu tiền vào với chi phí AI. Menu: **Doanh thu**.
+Dùng để đối chiếu tiền vào với chi phí AI. Menu: **Tài chính**.
 
 1. Nhập một khoản thu hoặc chi, bấm nút lưu của form đó.
 2. Dán CSV nếu bạn có bảng xuất, rồi bấm nút nhập CSV.

@@ -2,6 +2,14 @@
 
 Mục mới ở trên. Mỗi task làm đổi việc bạn thấy hoặc việc bạn bấm sẽ thêm một mục.
 
+## TASK-049 — 2026-11-05
+
+- Menu bên trái chia nhóm **Tổng quan**, **Nội dung**, **Kết quả**, **Cài đặt**, **Trợ giúp**. Mỗi nhóm thu gọn được.
+- Trên điện thoại, bấm **Menu** ở thanh trên để mở menu.
+- Bấm **Tìm nhanh** hoặc `Ctrl+K` để nhảy tới trang, hồ sơ hoặc dự án.
+- Trang chi tiết có đường dẫn (ví dụ Hồ sơ › Tên hồ sơ › Tự động hoá). Trang dự án có thanh bước hiện giai đoạn và việc tiếp theo.
+- Tên menu đổi sang tiếng Việt: **Bảng điều khiển**, **Dự án**, **Phân tích**, **Tài chính**. Trang mở nhanh hơn, thông báo thành công/lỗi hiện ở góc màn hình.
+
 ## TASK-048 — 2026-11-05
 
 - Có mục **Hướng dẫn** cuối menu, và dấu **?** trên mỗi trang để mở đúng chỗ.

@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Link } from "react-router-dom";
 import { ErrorState } from "../../components/ErrorState";
 import { Spinner } from "../../components/Spinner";
+import { KpiCard } from "../../components/ui/KpiCard";
 import { useUsage } from "../../hooks/useUsage";
 import type { UsageGroupBy, UsageQuery } from "@vg/shared";
 import { formatTokens, formatUsd, formatVnd } from "./usageFormatting";
@@ -37,12 +38,8 @@ function UsageTotalsCards({ totals, rate }: {
   ];
   return (
     <section className="usage-stat-grid" aria-label="Tổng mức dùng">
-      {cards.map(([label, value]) => <article className="panel usage-stat" key={label}>
-        <span>{label}</span><strong>{value}</strong>
-      </article>)}
-      <article className="panel usage-stat">
-        <span>Chi phí ước tính</span><strong>{formatVnd(totals.costUsd, rate)}</strong><small>{formatUsd(totals.costUsd)}</small>
-      </article>
+      {cards.map(([label, value]) => <KpiCard key={label} label={label} value={value} />)}
+      <KpiCard label="Chi phí ước tính" value={formatVnd(totals.costUsd, rate)} hint={formatUsd(totals.costUsd)} />
     </section>
   );
 }

@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { NotificationSettings, PairingCodeResponse } from "@vg/shared";
 import { ErrorState } from "../../components/ErrorState";
 import { Spinner } from "../../components/Spinner";
+import { LoadMore } from "../../components/ui/LoadMore";
 import {
   createPairingCode,
   deleteTelegramToken,
@@ -24,6 +25,7 @@ export function NotificationsPage() {
   const [quietEnabled, setQuietEnabled] = useState(false);
   const [quietFrom, setQuietFrom] = useState("22:00");
   const [quietTo, setQuietTo] = useState("07:00");
+  const [logShown, setLogShown] = useState(20);
 
   useEffect(() => {
     if (!settings.data) return;
@@ -376,7 +378,7 @@ export function NotificationsPage() {
                     <td colSpan={4}>Chưa có mục nào.</td>
                   </tr>
                 )}
-                {log.data.items.map((item) => (
+                {log.data.items.slice(0, logShown).map((item) => (
                   <tr key={item.id}>
                     <td>{new Date(item.at).toLocaleString("vi-VN")}</td>
                     <td>{item.kind}</td>
@@ -386,6 +388,7 @@ export function NotificationsPage() {
                 ))}
               </tbody>
             </table>
+            <LoadMore shown={Math.min(logShown, log.data.items.length)} total={log.data.items.length} onMore={() => setLogShown((count) => count + 20)} />
           </div>
         )}
       </section>

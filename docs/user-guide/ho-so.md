@@ -39,4 +39,4 @@ Dùng để thấy video thuộc kênh này. Tab **Dự án**.
 1. Mở tab **Dự án**.
 2. Bấm một dòng để vào dự án.
 
-Tab chỉ liệt kê. Tạo video mới ở **Projects** → **＋ New project** và chọn hồ sơ. Xoá dự án làm ở trang dự án, nút **Delete**, có hộp xác nhận.
+Tab chỉ liệt kê. Tạo video mới ở **Dự án** → **＋ New project** và chọn hồ sơ. Xoá dự án làm ở trang dự án, nút **Delete**, có hộp xác nhận.

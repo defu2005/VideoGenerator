@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { PipelineEvent, PipelineStage, PipelineState } from "@vg/shared";
 import { projectKeys } from "./useProjects";
 import { scriptKeys } from "./useScript";
+import { documentHidden } from "./usePageVisible";
 import { pipelinePollingDelay } from "./pipelinePolling";
 import {
   approvePipelineGate,
@@ -46,6 +47,7 @@ export function usePipeline(projectId: string) {
       pollingAttempt = 0;
     };
     const scheduleRefetch = () => {
+      if (documentHidden()) return;
       if (refetchTimeout) clearTimeout(refetchTimeout);
       refetchTimeout = setTimeout(() => {
         refetchTimeout = undefined;
@@ -55,12 +57,17 @@ export function usePipeline(projectId: string) {
     const startPolling = () => {
       if (polling) return;
       const poll = () => {
+        const delay = documentHidden() ? 1_000 : pipelinePollingDelay(pollingAttempt);
         polling = setTimeout(() => {
           polling = undefined;
+          if (documentHidden()) {
+            poll();
+            return;
+          }
           pollingAttempt += 1;
           void queryClient.invalidateQueries({ queryKey: pipelineKeys.detail(projectId) });
           poll();
-        }, pipelinePollingDelay(pollingAttempt));
+        }, delay);
       };
       poll();
     };

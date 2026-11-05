@@ -18,6 +18,8 @@ function appRoutes(source: string): string[] {
     if (!line.includes("<Route")) continue;
     if (line.includes("Navigate")) continue;
     if (/path="\*"/.test(line)) continue;
+    // Dev-only pages (for example the /dev/ui gallery) are not user features.
+    if (/path="dev\//.test(line)) continue;
     const path = /path="([^"]+)"/.exec(line);
     if (path) routes.push(`/${path[1].replace(/^\//, "")}`);
     else if (/\bindex\b/.test(line)) routes.push("/");
