@@ -259,6 +259,15 @@ export class MockLlmProvider implements LlmProvider {
       }
       return response({ reply: "Đã nhận.", done: true }, req.model);
     }
+    if (req.schemaName === "FinanceInsight") {
+      return response({
+        bullets: [
+          "Doanh thu ổn định so với tháng trước.",
+          "Chi phí LLM chiếm phần lớn — cân nhắc ECO cho video phụ.",
+          "Top video mang lại biên lợi nhuận tốt nhất.",
+        ],
+      }, req.model);
+    }
     if (req.schemaName === "GuidelineCheck") {
       return response({ findings: [] }, req.model);
     }

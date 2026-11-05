@@ -95,6 +95,77 @@ export function LineChart({
   );
 }
 
+export type StackedBarDatum = {
+  id: string;
+  label: string;
+  segments: Array<{ id: string; value: number; color: string }>;
+};
+
+export function StackedBarChart({
+  data,
+  width = 640,
+  height = 220,
+  ariaLabel,
+}: {
+  data: StackedBarDatum[];
+  width?: number;
+  height?: number;
+  ariaLabel: string;
+}) {
+  const maxY = niceMax(Math.max(0, ...data.map((d) => d.segments.reduce((s, seg) => s + seg.value, 0))));
+  const innerW = width - PAD.left - PAD.right;
+  const innerH = height - PAD.top - PAD.bottom;
+  const gap = 12;
+  const barW = data.length === 0 ? 0 : (innerW - gap * (data.length - 1)) / data.length;
+  const ticks = [0, 0.5, 1].map((t) => Math.round(maxY * t));
+  const yAt = (y: number) => PAD.top + innerH - (y / maxY) * innerH;
+
+  return (
+    <svg className="analytics-chart" viewBox={`0 0 ${width} ${height}`} role="img" aria-label={ariaLabel}>
+      {ticks.map((tick) => (
+        <g key={tick}>
+          <line
+            x1={PAD.left}
+            x2={width - PAD.right}
+            y1={yAt(tick)}
+            y2={yAt(tick)}
+            className="analytics-chart-grid"
+          />
+          <text x={PAD.left - 8} y={yAt(tick) + 3} textAnchor="end" className="analytics-chart-label">
+            {new Intl.NumberFormat("vi-VN").format(tick)}
+          </text>
+        </g>
+      ))}
+      {data.map((d, i) => {
+        const x = PAD.left + i * (barW + gap);
+        let stacked = 0;
+        return (
+          <g key={d.id}>
+            {d.segments.map((seg) => {
+              const barH = (seg.value / maxY) * innerH;
+              const y = PAD.top + innerH - stacked - barH;
+              stacked += barH;
+              return (
+                <rect
+                  key={seg.id}
+                  x={x}
+                  y={y}
+                  width={Math.max(barW, 1)}
+                  height={Math.max(barH, 0)}
+                  fill={seg.color}
+                />
+              );
+            })}
+            <text x={x + barW / 2} y={height - 10} textAnchor="middle" className="analytics-chart-label">
+              {d.label}
+            </text>
+          </g>
+        );
+      })}
+    </svg>
+  );
+}
+
 export function BarChart({
   data,
   width = 640,

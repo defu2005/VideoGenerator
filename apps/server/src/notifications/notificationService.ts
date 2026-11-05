@@ -168,6 +168,8 @@ export class NotificationService {
         return `⏸ Tự động hoá đã tạm dừng (kill switch).`;
       case "daily_summary":
         return `📊 <b>Tóm tắt ngày ${escapeHtml(event.dateKey)}</b>\n${event.text}`;
+      case "monthly_report":
+        return `📈 <b>Báo cáo tháng ${escapeHtml(event.month)}</b>\n${event.text}`;
     }
   }
 
@@ -194,7 +196,7 @@ export class NotificationService {
 
     if (this.wasSentRecently(subjectKey)) return;
 
-    // Quiet hours: queue published + dailySummary; attention still goes through.
+    // Quiet hours: queue published + dailySummary (+ monthly_report); attention still goes through.
     if (
       this.isInQuietHours(settings)
       && (toggle === "published" || toggle === "dailySummary")

@@ -77,6 +77,7 @@ export const NotificationKindSchema = z.enum([
   "automation_warning",
   "automation_paused",
   "daily_summary",
+  "monthly_report",
 ]);
 export type NotificationKind = z.infer<typeof NotificationKindSchema>;
 
@@ -165,6 +166,12 @@ export const NotificationEventSchema = z.discriminatedUnion("kind", [
     dateKey: z.string(),
     text: z.string(),
   }).strict(),
+  z.object({
+    kind: z.literal("monthly_report"),
+    month: z.string(),
+    text: z.string(),
+    link: z.string(),
+  }).strict(),
 ]);
 export type NotificationEvent = z.infer<typeof NotificationEventSchema>;
 
@@ -175,7 +182,7 @@ export function notificationToggleForKind(
 ): keyof NotificationEventToggle {
   if (kind === "publish_succeeded") return "published";
   if (kind === "waiting_approval" && !unexpectedAutoStop) return "waitingApproval";
-  if (kind === "daily_summary") return "dailySummary";
+  if (kind === "daily_summary" || kind === "monthly_report") return "dailySummary";
   return "attention";
 }
 
@@ -200,5 +207,7 @@ export function subjectKeyForEvent(event: NotificationEvent): string {
       return "automation:paused";
     case "daily_summary":
       return `daily_summary:${event.dateKey}`;
+    case "monthly_report":
+      return `monthly_report:${event.month}`;
   }
 }

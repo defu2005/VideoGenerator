@@ -2,6 +2,7 @@ import { statSync } from "node:fs";
 import { open as openFile } from "node:fs/promises";
 import type Database from "better-sqlite3";
 import {
+  YOUTUBE_ANALYTICS_MONETARY_READONLY_SCOPE,
   YOUTUBE_ANALYTICS_READONLY_SCOPE,
   YOUTUBE_DEFAULT_CATEGORY_ID,
   YOUTUBE_FULL_SCOPE,
@@ -109,11 +110,22 @@ export class YouTubePublisher implements Publisher {
 
   scopesForAccount(accountId: string): string[] {
     const playlistId = this.readPublishSettings(accountId).playlistId;
-    return [
+    const scopes = [
       YOUTUBE_UPLOAD_SCOPE,
       playlistId ? YOUTUBE_FULL_SCOPE : YOUTUBE_READONLY_SCOPE,
       YOUTUBE_ANALYTICS_READONLY_SCOPE,
     ];
+    if (this.isRevenueSyncEnabled(accountId)) {
+      scopes.push(YOUTUBE_ANALYTICS_MONETARY_READONLY_SCOPE);
+    }
+    return scopes;
+  }
+
+  private isRevenueSyncEnabled(accountId: string): boolean {
+    const row = this.options.sqlite.prepare(
+      "SELECT revenue_sync_enabled AS enabled FROM platform_accounts WHERE id = ?",
+    ).get(accountId) as { enabled: number | boolean } | undefined;
+    return Boolean(row?.enabled);
   }
 
   readonly oauth = {

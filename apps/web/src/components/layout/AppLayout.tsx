@@ -16,6 +16,7 @@ export function AppLayout() {
           <NavLink to="/profiles">Hồ sơ</NavLink>
           <NavLink to="/publish/calendar">Lịch đăng</NavLink>
           <NavLink to="/analytics">Thống kê</NavLink>
+          <NavLink to="/finance">Doanh thu</NavLink>
           <NavLink to="/settings/ai">Mô hình AI</NavLink>
           <NavLink to="/settings/render">Render</NavLink>
           <NavLink to="/settings/image-sources">Nguồn ảnh</NavLink>

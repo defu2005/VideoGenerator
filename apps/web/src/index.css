@@ -959,3 +959,27 @@ button:disabled { cursor: not-allowed; opacity: .58; }
 }
 .analytics-link-btn { color: #3d5fd5; }
 .analytics-sort-btn:hover, .analytics-link-btn:hover { text-decoration: underline; }
+
+/* Finance page layout */
+.finance-page { display: grid; gap: 16px; }
+.finance-page .page-header h1 { margin: 0; color: #172033; font-size: clamp(25px, 3vw, 31px); font-weight: 720; letter-spacing: -.04em; }
+.finance-page .page-header p { margin: 6px 0 0; color: #59667d; font-size: 13px; }
+.finance-page .card { margin-top: 0 !important; padding: 16px 18px; border: 1px solid #e8ebf2; border-radius: 11px; background: #fff; }
+.finance-page .card h2 { margin: 0 0 10px; color: #273046; font-size: 15px; }
+.finance-page .card form { display: flex; flex-wrap: wrap; gap: 10px 14px; align-items: flex-end; }
+.finance-page label { display: grid; gap: 4px; color: #38445a; font-size: 12px; font-weight: 600; }
+.finance-page input, .finance-page select, .finance-page textarea { min-height: 34px; padding: 0 9px; border: 1px solid #d9deea; border-radius: 8px; background: #fff; color: #172033; font-size: 13px; }
+.finance-page textarea { width: 100%; min-height: 110px; padding: 8px 9px; }
+.finance-page input[type="checkbox"] { min-height: 0; width: 16px; height: 16px; }
+.finance-page button { min-height: 34px; padding: 0 14px; border: 1px solid #d9deea; border-radius: 8px; background: #fff; color: #273046; font-size: 13px; font-weight: 600; cursor: pointer; }
+.finance-page button[type="submit"] { border-color: #4f6bed; background: #4f6bed; color: #fff; }
+.finance-page button:disabled { opacity: .5; cursor: not-allowed; }
+.finance-page .filters-row { align-items: flex-end; margin-bottom: 0 !important; }
+.finance-page .kpi-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; }
+.finance-page .kpi-tile { padding: 14px 16px; border: 1px solid #e8ebf2; border-radius: 11px; background: #fff; }
+.finance-page .kpi-label { color: #59667d; font-size: 12px; }
+.finance-page .kpi-value { margin-top: 4px; color: #172033; font-size: 22px; font-weight: 720; }
+.finance-page ul { margin: 0 0 10px; padding-left: 18px; font-size: 13px; }
+.finance-page table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.finance-page th, .finance-page td { padding: 7px 8px; border-bottom: 1px solid #eef0f5; text-align: left; }
+.finance-page th { color: #59667d; font-size: 12px; font-weight: 600; }

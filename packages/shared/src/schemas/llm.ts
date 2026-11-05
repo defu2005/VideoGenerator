@@ -75,6 +75,7 @@ export const LlmTaskIdSchema = z.enum([
   "modelAdvisor",
   "topicSuggest",
   "assistantChat",
+  "financeInsight",
 ]);
 export type LlmTaskId = z.infer<typeof LlmTaskIdSchema>;
 
@@ -109,6 +110,7 @@ export const LLM_TASKS: {
   { id: "modelAdvisor", label: "Gợi ý model bằng AI", stage: "SETTINGS", purpose: "Propose an LLM route for every task given available models and budget mode.", tier: "fast", qualityWeight: 1, budgetFeature: "modelAdvisor" },
   { id: "topicSuggest", label: "Gợi ý chủ đề", stage: "SETTINGS", purpose: "Suggest video topics from a profile direction without repeating past topics.", tier: "fast", qualityWeight: 1, budgetFeature: "topicSuggest" },
   { id: "assistantChat", label: "Trợ lý AI điều khiển app", stage: "SETTINGS", purpose: "Chat assistant that clarifies requests and runs app tools (web + Telegram).", tier: "fast", qualityWeight: 1, budgetFeature: "assistantChat" },
+  { id: "financeInsight", label: "Nhận xét báo cáo doanh thu", stage: "SETTINGS", purpose: "3–5 Vietnamese bullet points on what went well or badly in a monthly finance report.", tier: "fast", qualityWeight: 1, budgetFeature: "financeInsight" },
 ];
 
 function normalizeLlmSettings(value: unknown): unknown {

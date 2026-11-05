@@ -88,6 +88,9 @@ import { registerAssistantRoutes } from "./api/assistant.js";
 import { createFetchers } from "./analytics/registry.js";
 import { AnalyticsSyncService } from "./analytics/syncService.js";
 import { registerAnalyticsRoutes } from "./api/analytics.js";
+import { FinanceService } from "./finance/financeService.js";
+import { registerFinanceRoutes } from "./api/finance.js";
+import { ensureDefaultRates } from "./finance/currencySettings.js";
 
 export function buildApp({ config }: { config: AppConfig }) {
   const server = Fastify({
@@ -312,6 +315,19 @@ export function buildApp({ config }: { config: AppConfig }) {
   });
   publishTicker.setAnalytics(analyticsSyncService);
   assistantService.setAnalytics(analyticsSyncService);
+  ensureDefaultRates(database.sqlite, config.USD_VND_RATE);
+  const financeService = new FinanceService({
+    sqlite: database.sqlite,
+    vault: tokenVault,
+    registry: publisherRegistry,
+    usage: usageService,
+    config,
+    logger: server.log,
+    notifications: notificationService,
+    llm: llmProviders,
+  });
+  publishTicker.setFinance(financeService);
+  assistantService.setFinance(financeService);
   setAutomationNotify((event) => {
     void notificationService.notify(event);
   });
@@ -376,6 +392,7 @@ export function buildApp({ config }: { config: AppConfig }) {
   registerOAuthRoutes(server, { publish: publishService, registry: publisherRegistry, oauthState });
   registerPublicationRoutes(server, { publish: publishService, vault: tokenVault });
   registerAnalyticsRoutes(server, { analytics: analyticsSyncService });
+  registerFinanceRoutes(server, { finance: financeService });
   registerRecommendationRoutes(server);
   registerBudgetRoutes(server, projectService, jobRepository, config, llmProviders);
   registerDashboardRoutes(server, projectService, automationService);

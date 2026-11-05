@@ -28,6 +28,7 @@ import type { PipelineOrchestrator } from "../pipeline/orchestrator.js";
 import type { PublishService } from "../publishing/publishService.js";
 import type { SceneService } from "../services/sceneService.js";
 import type { AnalyticsSyncService } from "../analytics/syncService.js";
+import type { FinanceService } from "../finance/financeService.js";
 import { getAssistantSettings, saveAssistantSettings } from "../settings/assistant.js";
 import { runAssistantLoop } from "./loop.js";
 import { getToolRisk, runTool, summarizeTool, type AssistantToolContext } from "./tools.js";
@@ -83,9 +84,14 @@ export class AssistantService {
   }
 
   private analytics: AnalyticsSyncService | undefined;
+  private finance: FinanceService | undefined;
 
   setAnalytics(service: AnalyticsSyncService): void {
     this.analytics = service;
+  }
+
+  setFinance(service: FinanceService): void {
+    this.finance = service;
   }
 
   getSettings(): AssistantSettings {
@@ -445,6 +451,7 @@ export class AssistantService {
       registry: this.registry,
       scenes: this.scenes,
       analytics: this.analytics,
+      finance: this.finance,
       signal,
     };
   }

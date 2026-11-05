@@ -53,6 +53,12 @@ export const platformAccounts = sqliteTable("platform_accounts", {
   analyticsStatus: text("analytics_status"),
   analyticsLastError: text("analytics_last_error"),
   analyticsSyncedAt: text("analytics_synced_at"),
+  /** Opt-in YouTube monetary analytics (TASK-034). */
+  revenueSyncEnabled: integer("revenue_sync_enabled", { mode: "boolean" }).notNull().default(false),
+  /** Revenue sync readiness: ok | needs_reconnect | not_monetized. */
+  revenueStatus: text("revenue_status"),
+  revenueLastError: text("revenue_last_error"),
+  revenueSyncedAt: text("revenue_synced_at"),
   publishSettings: text("publish_settings", { mode: "json" }).$type<PublishSettings>().notNull(),
   createdAt: text("created_at").notNull(),
   updatedAt: text("updated_at").notNull(),
@@ -675,3 +681,77 @@ export const assistantPendingActions = sqliteTable("assistant_pending_actions", 
 }, (table) => [
   index("assistant_pending_actions_conversation_idx").on(table.conversationId),
 ]);
+
+/** Manual FX rates → app currency (TASK-034). No external FX API. */
+export const currencyRates = sqliteTable("currency_rates", {
+  currency: text("currency").primaryKey(),
+  rateToAppCurrency: real("rate_to_app_currency").notNull(),
+  updatedAt: text("updated_at").notNull(),
+});
+
+export type CurrencyRateRow = typeof currencyRates.$inferSelect;
+
+/** Revenue in (API sync + manual + CSV). */
+export const revenueEntries = sqliteTable("revenue_entries", {
+  id: text("id").primaryKey(),
+  accountId: text("account_id").references(() => platformAccounts.id, { onDelete: "set null" }),
+  publicationId: text("publication_id").references(() => publications.id, { onDelete: "set null" }),
+  profileId: text("profile_id").references(() => profiles.id, { onDelete: "set null" }),
+  source: text("source").notNull(),
+  kind: text("kind").notNull(),
+  periodStart: text("period_start").notNull(),
+  periodEnd: text("period_end").notNull(),
+  amount: real("amount").notNull(),
+  currency: text("currency").notNull(),
+  note: text("note"),
+  externalKey: text("external_key"),
+  createdAt: text("created_at").notNull(),
+}, (table) => [
+  uniqueIndex("revenue_entries_source_external_uidx").on(table.source, table.externalKey),
+  index("revenue_entries_period_idx").on(table.periodStart, table.periodEnd),
+  index("revenue_entries_account_idx").on(table.accountId),
+  index("revenue_entries_profile_idx").on(table.profileId),
+  index("revenue_entries_publication_idx").on(table.publicationId),
+]);
+
+export type RevenueEntryRow = typeof revenueEntries.$inferSelect;
+
+/** Manual cost entries (LLM/TTS usage is read live from jobs, not copied here). */
+export const costEntries = sqliteTable("cost_entries", {
+  id: text("id").primaryKey(),
+  profileId: text("profile_id").references(() => profiles.id, { onDelete: "set null" }),
+  projectId: text("project_id").references(() => projects.id, { onDelete: "set null" }),
+  kind: text("kind").notNull(),
+  date: text("date").notNull(),
+  amount: real("amount").notNull(),
+  currency: text("currency").notNull(),
+  source: text("source").notNull(),
+  note: text("note"),
+  createdAt: text("created_at").notNull(),
+}, (table) => [
+  index("cost_entries_date_idx").on(table.date),
+  index("cost_entries_profile_idx").on(table.profileId),
+  index("cost_entries_project_idx").on(table.projectId),
+]);
+
+export type CostEntryRow = typeof costEntries.$inferSelect;
+
+/** Per-account payout threshold + manual balance (TASK-034). */
+export const payoutThresholds = sqliteTable("payout_thresholds", {
+  accountId: text("account_id").primaryKey().references(() => platformAccounts.id, { onDelete: "cascade" }),
+  thresholdAmount: real("threshold_amount").notNull(),
+  currency: text("currency").notNull(),
+  currentBalance: real("current_balance"),
+  lastNotifiedAt: text("last_notified_at"),
+});
+
+export type PayoutThresholdRow = typeof payoutThresholds.$inferSelect;
+
+/** Generated monthly finance report (YYYY-MM). */
+export const monthlyReports = sqliteTable("monthly_reports", {
+  month: text("month").primaryKey(),
+  json: text("json", { mode: "json" }).$type<Record<string, unknown>>().notNull(),
+  createdAt: text("created_at").notNull(),
+});
+
+export type MonthlyReportRow = typeof monthlyReports.$inferSelect;

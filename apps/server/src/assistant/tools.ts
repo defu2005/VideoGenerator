@@ -2,6 +2,7 @@ import {
   ApproveTopicsBodySchema,
   CreateProjectInputSchema,
   CreatePublicationsBodySchema,
+  CreateRevenueEntryBodySchema,
   LlmSettingsSchema,
   ListPublicationsQuerySchema,
   ModelAdvisorApplyBodySchema,
@@ -46,6 +47,7 @@ import {
   saveNotificationSettings,
 } from "../settings/notifications.js";
 import type { AnalyticsSyncService } from "../analytics/syncService.js";
+import type { FinanceService } from "../finance/financeService.js";
 
 const emptyObject = z.object({}).strict();
 
@@ -63,6 +65,7 @@ export type AssistantToolContext = {
   registry: LlmProviderRegistry;
   scenes: SceneService;
   analytics?: AnalyticsSyncService;
+  finance?: FinanceService;
   signal?: AbortSignal;
 };
 
@@ -131,6 +134,17 @@ const analyticsOverviewArgs = z.object({
 const videoMetricsArgs = z.object({
   publicationId: z.string().uuid(),
 }).strict();
+
+const financeSummaryArgs = z.object({
+  period: z.enum(["7d", "30d", "90d"]).default("30d"),
+  profileId: z.string().uuid().optional(),
+}).strict();
+
+const monthlyReportArgs = z.object({
+  month: z.string().regex(/^\d{4}-\d{2}$/).optional(),
+}).strict();
+
+const addRevenueEntryArgs = CreateRevenueEntryBodySchema;
 
 const listAccountsArgs = z.object({ profileId: z.string().uuid() }).strict();
 
@@ -436,6 +450,68 @@ const toolDefs: AssistantToolDef[] = [
       if (!ctx.analytics) throw new AppError(503, "ANALYTICS_UNAVAILABLE", "Thống kê chưa sẵn sàng");
       const { publicationId } = videoMetricsArgs.parse(args);
       return ctx.analytics.getPublicationSeries(publicationId);
+    },
+  }),
+  defineTool({
+    name: "finance_summary",
+    description: "Tóm tắt doanh thu, chi phí, lợi nhuận theo khoảng thời gian.",
+    risk: "read",
+    argsSchema: financeSummaryArgs,
+    summarize: (args) => {
+      const parsed = financeSummaryArgs.parse(args);
+      return `Xem doanh thu ${parsed.period}`;
+    },
+    execute: async (args, ctx) => {
+      if (!ctx.finance) throw new AppError(503, "FINANCE_UNAVAILABLE", "Doanh thu chưa sẵn sàng");
+      const parsed = financeSummaryArgs.parse(args);
+      const days = parsed.period === "90d" ? 89 : parsed.period === "30d" ? 29 : 6;
+      const { from, to } = periodToRange(parsed.period === "7d" ? "7d" : "30d", new Date());
+      if (parsed.period === "90d") {
+        const end = new Date(`${to}T12:00:00.000Z`);
+        const start = new Date(end);
+        start.setUTCDate(start.getUTCDate() - days);
+        return ctx.finance.getSummary({
+          from: localDateString(start, "Asia/Ho_Chi_Minh"),
+          to,
+          profileId: parsed.profileId,
+        });
+      }
+      return ctx.finance.getSummary({ from, to, profileId: parsed.profileId });
+    },
+  }),
+  defineTool({
+    name: "monthly_report",
+    description: "Xem báo cáo doanh thu theo tháng (YYYY-MM).",
+    risk: "read",
+    argsSchema: monthlyReportArgs,
+    summarize: (args) => {
+      const parsed = monthlyReportArgs.parse(args);
+      return parsed.month ? `Xem báo cáo tháng ${parsed.month}` : "Xem danh sách báo cáo tháng";
+    },
+    execute: async (args, ctx) => {
+      if (!ctx.finance) throw new AppError(503, "FINANCE_UNAVAILABLE", "Doanh thu chưa sẵn sàng");
+      const parsed = monthlyReportArgs.parse(args);
+      if (!parsed.month) return ctx.finance.listReports();
+      try {
+        return ctx.finance.getReport(parsed.month);
+      } catch {
+        return ctx.finance.generateMonthlyReport(parsed.month, { force: false });
+      }
+    },
+  }),
+  defineTool({
+    name: "add_revenue_entry",
+    description: "Thêm một mục doanh thu thủ công (cần xác nhận).",
+    risk: "confirm",
+    argsSchema: addRevenueEntryArgs,
+    summarize: (args) => {
+      const parsed = addRevenueEntryArgs.parse(args);
+      return `Thêm doanh thu ${parsed.amount} ${parsed.currency} (${parsed.kind})`;
+    },
+    execute: async (args, ctx) => {
+      if (!ctx.finance) throw new AppError(503, "FINANCE_UNAVAILABLE", "Doanh thu chưa sẵn sàng");
+      const parsed = addRevenueEntryArgs.parse(args);
+      return ctx.finance.createRevenue(parsed);
     },
   }),
   defineTool({

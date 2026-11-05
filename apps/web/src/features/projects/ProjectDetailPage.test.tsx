@@ -231,6 +231,7 @@ describe("ProjectDetailPage", () => {
           modelAdvisor: true,
           topicSuggest: true,
           assistantChat: true,
+          financeInsight: true,
           outputHeadroom: 1.5,
         },
         perStage: [],
