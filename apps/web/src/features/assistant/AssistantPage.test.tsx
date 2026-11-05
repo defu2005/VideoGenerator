@@ -180,4 +180,37 @@ describe("AssistantPage", () => {
     });
     expect(await screen.findByText("Đã chọn hồ sơ.")).toBeInTheDocument();
   });
+
+  it("switches to the Cursor operator chat without loading it first", async () => {
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.endsWith("/assistant/settings")) return jsonResponse({ confirmMode: "risky" });
+      if (url.includes("/assistant/conversations")) return jsonResponse({ items: [conversation] });
+      if (url.includes("/operator/overview")) {
+        return jsonResponse({
+          killed: false,
+          cli: { found: true, version: "2026.11.05", loggedIn: null, model: null },
+          queue: [],
+          activeRunId: null,
+          pending: [],
+          orders: [],
+          runs: [],
+          audit: [],
+          notes: [],
+          settings: { killed: false, cursorPath: "", tickCron: null, maxRunsPerDay: 30 },
+          resumeCommand: "cursor-agent",
+          workspacePath: "C:/data/operator",
+          usage: { today: 0, month: 0, cap: 30 },
+          conversationId: conversationId,
+        });
+      }
+      if (url.includes("/operator/conversations/")) return jsonResponse({ messages: [] });
+      return jsonResponse({});
+    }));
+    renderWithProviders(<AssistantPage />);
+    expect(await screen.findByRole("button", { name: "Cursor operator" })).toBeInTheDocument();
+    expect(screen.queryByLabelText("Nhắn Cursor operator")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Cursor operator" }));
+    expect(await screen.findByLabelText("Nhắn Cursor operator")).toBeInTheDocument();
+  });
 });

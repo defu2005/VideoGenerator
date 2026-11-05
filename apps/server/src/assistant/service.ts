@@ -358,6 +358,29 @@ export class AssistantService {
     return results;
   }
 
+  private pendingListener?: (id: string, status: "confirmed" | "rejected" | "failed") => void;
+
+  setPendingListener(listener: (id: string, status: "confirmed" | "rejected" | "failed") => void): void {
+    this.pendingListener = listener;
+  }
+
+  ensureCallerConversation(title: string): string {
+    const row = this.sqlite.prepare(
+      "SELECT id FROM assistant_conversations WHERE title = ? ORDER BY updated_at DESC LIMIT 1",
+    ).get(title) as { id: string } | undefined;
+    if (row) return row.id;
+    return this.createConversation({ channel: "web", title }).id;
+  }
+
+  createCallerPending(title: string, tool: string, args: unknown, summary: string): AssistantPendingAction {
+    const conversationId = this.ensureCallerConversation(title);
+    return this.insertPendingAction(conversationId, tool, args, summary);
+  }
+
+  toolContext(): AssistantToolContext {
+    return this.buildToolContext();
+  }
+
   private async resolveAction(
     actionId: string,
     mode: "confirm" | "reject",
@@ -385,6 +408,7 @@ export class AssistantService {
       if (updated.changes === 0) {
         return this.requirePendingAction(actionId);
       }
+      this.pendingListener?.(actionId, "rejected");
       return this.requirePendingAction(actionId);
     }
 
@@ -406,12 +430,14 @@ export class AssistantService {
       this.sqlite.prepare(
         "UPDATE assistant_pending_actions SET result = ? WHERE id = ?",
       ).run(JSON.stringify(result), actionId);
+      this.pendingListener?.(actionId, "confirmed");
       return this.requirePendingAction(actionId);
     } catch (error) {
       const message = error instanceof AppError ? error.message : (error instanceof Error ? error.message : String(error));
       this.sqlite.prepare(
         "UPDATE assistant_pending_actions SET status = 'failed', result = ? WHERE id = ?",
       ).run(JSON.stringify({ error: message }), actionId);
+      this.pendingListener?.(actionId, "failed");
       throw new AppError(500, "ACTION_FAILED", message);
     }
   }

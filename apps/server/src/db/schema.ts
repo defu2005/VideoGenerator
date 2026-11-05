@@ -979,3 +979,90 @@ export const llmProviderQuotaSnapshots = sqliteTable("llm_provider_quota_snapsho
 ]);
 
 export type LlmProviderQuotaSnapshotRow = typeof llmProviderQuotaSnapshots.$inferSelect;
+
+/** Cursor operator chats (TASK-047). Separate from the built-in assistant. */
+export const operatorConversations = sqliteTable("operator_conversations", {
+  id: text("id").primaryKey(),
+  channel: text("channel", { enum: ["web", "telegram"] }).notNull(),
+  title: text("title").notNull(),
+  cursorChatId: text("cursor_chat_id"),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+});
+
+export const operatorRuns = sqliteTable("operator_runs", {
+  id: text("id").primaryKey(),
+  conversationId: text("conversation_id").notNull().references(() => operatorConversations.id, { onDelete: "cascade" }),
+  kind: text("kind").notNull(),
+  status: text("status").notNull(),
+  prompt: text("prompt").notNull(),
+  result: text("result"),
+  partialText: text("partial_text").notNull().default(""),
+  toolChips: text("tool_chips", { mode: "json" }).$type<string[]>().notNull(),
+  model: text("model"),
+  error: text("error"),
+  outcome: text("outcome"),
+  origin: text("origin").notNull(),
+  dayKey: text("day_key").notNull(),
+  pendingActionIds: text("pending_action_ids", { mode: "json" }).$type<string[]>().notNull(),
+  startedAt: text("started_at"),
+  finishedAt: text("finished_at"),
+  createdAt: text("created_at").notNull(),
+}, (table) => [
+  index("operator_runs_conversation_idx").on(table.conversationId, table.createdAt),
+  index("operator_runs_day_idx").on(table.dayKey),
+]);
+
+export const operatorMessages = sqliteTable("operator_messages", {
+  id: text("id").primaryKey(),
+  conversationId: text("conversation_id").notNull().references(() => operatorConversations.id, { onDelete: "cascade" }),
+  runId: text("run_id"),
+  role: text("role", { enum: ["user", "assistant", "system"] }).notNull(),
+  content: text("content", { mode: "json" }).$type<Record<string, unknown>>().notNull(),
+  createdAt: text("created_at").notNull(),
+}, (table) => [
+  index("operator_messages_conversation_idx").on(table.conversationId, table.createdAt),
+]);
+
+/** One row per find_skills / find_tools / run routing decision (TASK-047). */
+export const operatorRoutingLog = sqliteTable("operator_routing_log", {
+  id: text("id").primaryKey(),
+  query: text("query").notNull(),
+  candidates: text("candidates", { mode: "json" }).$type<unknown>().notNull(),
+  picked: text("picked", { mode: "json" }).$type<unknown>().notNull(),
+  runId: text("run_id"),
+  outcome: text("outcome"),
+  createdAt: text("created_at").notNull(),
+}, (table) => [
+  index("operator_routing_log_created_idx").on(table.createdAt),
+  index("operator_routing_log_run_idx").on(table.runId),
+]);
+
+export const operatorToolAudit = sqliteTable("operator_tool_audit", {
+  id: text("id").primaryKey(),
+  source: text("source").notNull(),
+  tool: text("tool").notNull(),
+  args: text("args", { mode: "json" }).$type<unknown>().notNull(),
+  risk: text("risk").notNull(),
+  decision: text("decision").notNull(),
+  summary: text("summary").notNull(),
+  pendingActionId: text("pending_action_id"),
+  runId: text("run_id"),
+  createdAt: text("created_at").notNull(),
+}, (table) => [
+  index("operator_tool_audit_created_idx").on(table.createdAt),
+]);
+
+/** User and module standing orders. Seeded rows start disabled. */
+export const standingOrders = sqliteTable("standing_orders", {
+  id: text("id").primaryKey(),
+  title: text("title").notNull(),
+  prompt: text("prompt").notNull(),
+  cron: text("cron"),
+  enabled: integer("enabled", { mode: "boolean" }).notNull().default(false),
+  seeded: integer("seeded", { mode: "boolean" }).notNull().default(false),
+  moduleId: text("module_id"),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+  lastFiredAt: text("last_fired_at"),
+});

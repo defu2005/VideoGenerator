@@ -2,6 +2,13 @@
 
 Mục mới ở trên. Mỗi task làm đổi việc bạn thấy hoặc việc bạn bấm sẽ thêm một mục.
 
+## TASK-047 — 2026-11-05
+
+- Có trang **Cursor operator** cạnh **Trợ lý AI**. Chat có thể chuyển giữa trợ lý tích hợp và operator.
+- Operator làm việc bằng công cụ của app. Việc cần duyệt thành thẻ **Duyệt** / **Từ chối**. Không có nút nào để operator tự duyệt.
+- Có lệnh thường trực, hàng đợi, nút **Dừng** và **Phiên mới**. Telegram dùng `/op`, `/tl`, `/status`, `/stop`, `/new`, `/orders`.
+- **Tắt operator** chặn mọi lượt mới. Tick theo giờ mặc định tắt.
+
 ## TASK-049 — 2026-11-05
 
 - Menu bên trái chia nhóm **Tổng quan**, **Nội dung**, **Kết quả**, **Cài đặt**, **Trợ giúp**. Mỗi nhóm thu gọn được.

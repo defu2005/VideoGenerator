@@ -18,6 +18,7 @@ export const NAV_SECTIONS: NavSection[] = [
     items: [
       { to: "/", label: "Bảng điều khiển", end: true },
       { to: "/assistant", label: "Trợ lý AI" },
+      { to: "/operator", label: "Cursor operator" },
     ],
   },
   {

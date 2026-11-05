@@ -84,8 +84,9 @@ export class TelegramClient {
     chatId: string,
     text: string,
     options: { buttons?: InlineButton[][]; signal?: AbortSignal } = {},
-  ): Promise<void> {
+  ): Promise<number | undefined> {
     const chunks = splitTelegramMessage(text);
+    let messageId: number | undefined;
     for (let i = 0; i < chunks.length; i += 1) {
       const replyMarkup = i === chunks.length - 1 && options.buttons?.length
         ? {
@@ -97,14 +98,26 @@ export class TelegramClient {
           ),
         }
         : undefined;
-      await this.call("sendMessage", {
+      const sent = await this.call<{ message_id?: number }>("sendMessage", {
         chat_id: chatId,
         text: chunks[i],
         parse_mode: "HTML",
         disable_web_page_preview: true,
         ...(replyMarkup ? { reply_markup: replyMarkup } : {}),
       }, options.signal);
+      if (typeof sent?.message_id === "number") messageId = sent.message_id;
     }
+    return messageId;
+  }
+
+  async editMessageText(chatId: string, messageId: number, text: string, signal?: AbortSignal): Promise<void> {
+    await this.call("editMessageText", {
+      chat_id: chatId,
+      message_id: messageId,
+      text: text.slice(0, MAX_MESSAGE_CHARS),
+      parse_mode: "HTML",
+      disable_web_page_preview: true,
+    }, signal);
   }
 
   async sendChatAction(chatId: string, action: "typing" | "upload_document" = "typing", signal?: AbortSignal): Promise<void> {

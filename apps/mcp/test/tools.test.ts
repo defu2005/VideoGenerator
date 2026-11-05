@@ -2,6 +2,7 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { PROTECTED_PROJECT_ID } from "@vg/shared";
 import { VideoAgentApiClient } from "../src/apiClient.js";
 import { registerVideoAgentTools } from "../src/tools.js";
 
@@ -410,6 +411,43 @@ describe("Video Agent MCP tools", () => {
     const result = await client.callTool({ name: "search_user_guide", arguments: { query: "kết nối Telegram" } });
     const body = JSON.parse(resultText(result)) as { sections: Array<{ anchor: string }> };
     expect(body.sections[0]?.anchor).toBe("telegram");
+  });
+
+  it("gates confirm tools through the registry and refuses the protected project", async () => {
+    const fetchImpl = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      expect(String(input)).toContain("/api/registry/invoke");
+      const body = JSON.parse(String(init?.body)) as { name: string };
+      expect(body.name).toBe("publish_project");
+      return jsonResponse({ pendingActionId: "pending-1", summaryVi: "Đăng video lên nền tảng" });
+    }) as typeof fetch;
+    const server = new McpServer({ name: "test-video-agent", version: "0.1.0" });
+    registerVideoAgentTools(server, new VideoAgentApiClient("http://127.0.0.1:3001", fetchImpl), [{
+      name: "find_skills",
+      description: "Tìm kỹ năng",
+      properties: { query: "string" },
+    }]);
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+    const client = new Client({ name: "test-client", version: "0.1.0" });
+    await server.connect(serverTransport);
+    await client.connect(clientTransport);
+    opened.push({ server, client });
+    const names = (await client.listTools()).tools.map((tool) => tool.name);
+    expect(names).toContain("find_skills");
+    const published = await client.callTool({
+      name: "publish_project",
+      arguments: {
+        projectId,
+        accountIds: ["22222222-2222-4222-8222-222222222222"],
+      },
+    });
+    expect(resultText(published)).toContain("pending-1");
+    const refused = await client.callTool({
+      name: "get_project",
+      arguments: { projectId: PROTECTED_PROJECT_ID },
+    });
+    expect(refused.isError).toBe(true);
+    expect(resultText(refused)).toMatch(/từ chối/);
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
   });
 
   it("returns the prompt tools with write instructions", async () => {

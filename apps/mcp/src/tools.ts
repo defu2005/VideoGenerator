@@ -1,4 +1,4 @@
-import { GUIDELINE_DISCLAIMER, PipelineStageSchema, ProjectStatusSchema, ReviewProposalSchema, activeGuidelines, guidelinePromptBlock } from "@vg/shared";
+import { GUIDELINE_DISCLAIMER, PipelineStageSchema, ProjectStatusSchema, ReviewProposalSchema, activeGuidelines, containsProtectedProject, guidelinePromptBlock } from "@vg/shared";
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { VideoAgentApiClient, VideoAgentApiError } from "./apiClient.js";
@@ -26,10 +26,32 @@ async function invoke<T>(action: () => Promise<T>, format: (value: T) => unknown
   }
 }
 
+export type RegistryCatalogTool = {
+  name: string;
+  description: string;
+  risk?: string;
+  properties?: Record<string, unknown>;
+};
+
 export function registerVideoAgentTools(
   server: McpServer,
   api: VideoAgentApiClient = new VideoAgentApiClient(),
+  catalog: RegistryCatalogTool[] = [],
 ): void {
+  const registered = new Set<string>();
+  const registerTool = server.tool.bind(server) as (
+    name: string,
+    description: string,
+    shape: object,
+    cb: (args: any) => Promise<ToolReply>,
+  ) => void;
+  function define(name: string, description: string, shape: object, handler: (args: any) => Promise<ToolReply>): void {
+    registered.add(name);
+    registerTool(name, description, shape, async (args) => {
+      if (containsProtectedProject(args)) return reply("Dự án này bị từ chối.", true);
+      return handler(args);
+    });
+  }
   const briefFields = {
     title: z.string().optional(),
     profileId: z.string().uuid().optional(),
@@ -65,7 +87,7 @@ export function registerVideoAgentTools(
     };
   }
 
-  server.tool("list_profiles", "List Video Agent profiles (Hồ sơ) with account and project counts.", {
+  define("list_profiles", "List Video Agent profiles (Hồ sơ) with account and project counts.", {
     includeArchived: z.boolean().optional(),
   }, ({ includeArchived }) => invoke(
     () => api.listProfiles({ includeArchived }),
@@ -82,7 +104,7 @@ export function registerVideoAgentTools(
     }),
   ));
 
-  server.tool("create_project", "Create a Video Agent project with deterministic video-brief recommendations.", {
+  define("create_project", "Create a Video Agent project with deterministic video-brief recommendations.", {
     topic: z.string().trim().min(1).max(2000),
     ...briefFields,
   }, (input) => invoke(
@@ -90,12 +112,12 @@ export function registerVideoAgentTools(
     ({ id, title, settings, recommendations }) => ({ id, title, brief: settings, recommendations }),
   ));
 
-  server.tool("recommend_brief", "Preview deterministic video-brief values without creating a project or using an LLM.", {
+  define("recommend_brief", "Preview deterministic video-brief values without creating a project or using an LLM.", {
     topic: z.string().trim().min(1).max(2000),
     ...briefFields,
   }, (input) => invoke(() => api.recommendBrief(briefInput(input))));
 
-  server.tool("list_projects", "List up to 20 Video Agent projects, optionally filtered by title or status.", {
+  define("list_projects", "List up to 20 Video Agent projects, optionally filtered by title or status.", {
     q: z.string().optional(),
     status: ProjectStatusSchema.optional(),
   }, ({ q, status }) => invoke(
@@ -112,7 +134,7 @@ export function registerVideoAgentTools(
     }),
   ));
 
-  server.tool("get_project", "Get one project and its pipeline stage summary.", projectIdShape, ({ projectId }) => invoke(
+  define("get_project", "Get one project and its pipeline stage summary.", projectIdShape, ({ projectId }) => invoke(
     async () => {
       const [project, pipeline] = await Promise.all([api.getProject(projectId), api.getPipeline(projectId)]);
       return {
@@ -126,7 +148,7 @@ export function registerVideoAgentTools(
     },
   ));
 
-  server.tool("get_guidelines", "Read the active content-guideline reminders for a project, plus the disclaimer. This does not call an LLM.", projectIdShape, ({ projectId }) => invoke(
+  define("get_guidelines", "Read the active content-guideline reminders for a project, plus the disclaimer. This does not call an LLM.", projectIdShape, ({ projectId }) => invoke(
     async () => {
       const [project, packs] = await Promise.all([api.getProject(projectId), api.getGuidelinePacks()]);
       const targets = ["script", "visuals", "music", "subtitles", "metadata"] as const;
@@ -137,20 +159,20 @@ export function registerVideoAgentTools(
     },
   ));
 
-  server.tool("get_llm_quota_status", "Read free-model quota usage, cool-downs, and the wait-or-paid policy.", {}, () =>
+  define("get_llm_quota_status", "Read free-model quota usage, cool-downs, and the wait-or-paid policy.", {}, () =>
     invoke(() => api.getLlmQuotaStatus()));
 
-  server.tool("search_user_guide", "Search the Vietnamese user guide and return the best-matching sections.", {
+  define("search_user_guide", "Search the Vietnamese user guide and return the best-matching sections.", {
     query: z.string().trim().min(1).max(200),
   }, ({ query }) => invoke(() => api.searchUserGuide(query)));
 
-  server.tool("get_llm_routes", "Read the resolved provider and model route for each LLM task in a project.", projectIdShape, ({ projectId }) =>
+  define("get_llm_routes", "Read the resolved provider and model route for each LLM task in a project.", projectIdShape, ({ projectId }) =>
     invoke(() => api.getLlmRoutes(projectId)));
 
-  server.tool("get_project_usage", "Read token, call, cost, provider, model, stage, task, and run usage for one project.", projectIdShape, ({ projectId }) =>
+  define("get_project_usage", "Read token, call, cost, provider, model, stage, task, and run usage for one project.", projectIdShape, ({ projectId }) =>
     invoke(() => api.getProjectUsage(projectId)));
 
-  server.tool("get_writing_brief", "Get the exact stage prompt and JSON schema for writing research, a script, or a merged story.", {
+  define("get_writing_brief", "Get the exact stage prompt and JSON schema for writing research, a script, or a merged story.", {
     ...projectIdShape,
     stage: z.enum(["RESEARCH", "SCRIPT", "STORY"]),
   }, ({ projectId, stage }) => invoke(
@@ -166,18 +188,18 @@ export function registerVideoAgentTools(
     },
   ));
 
-  server.tool("get_research", "Read the current research notes for a project.", projectIdShape, ({ projectId }) =>
+  define("get_research", "Read the current research notes for a project.", projectIdShape, ({ projectId }) =>
     invoke(async () => (await api.getScript(projectId)).research));
 
-  server.tool("save_research", "Validate and save research notes through the Video Agent API.", {
+  define("save_research", "Validate and save research notes through the Video Agent API.", {
     ...projectIdShape,
     research: z.unknown(),
   }, ({ projectId, research }) => invoke(() => api.saveResearch(projectId, research)));
 
-  server.tool("get_script", "Read the current script and its origin/version metadata.", projectIdShape, ({ projectId }) =>
+  define("get_script", "Read the current script and its origin/version metadata.", projectIdShape, ({ projectId }) =>
     invoke(async () => (await api.getScript(projectId)).script));
 
-  server.tool("get_scenes", "Read the compact storyboard and timing for a project's planned scenes.", projectIdShape, ({ projectId }) =>
+  define("get_scenes", "Read the compact storyboard and timing for a project's planned scenes.", projectIdShape, ({ projectId }) =>
     invoke(async () => {
       const { scenes, totalSec, targetSec, stale } = await api.getScenes(projectId);
       return {
@@ -194,7 +216,7 @@ export function registerVideoAgentTools(
       };
     }));
 
-  server.tool("get_scene_visuals", "Read visual selections and the top five image candidates for a project or scene.", {
+  define("get_scene_visuals", "Read visual selections and the top five image candidates for a project or scene.", {
     ...projectIdShape,
     sceneId: z.string().uuid().optional(),
   }, ({ projectId, sceneId }) => invoke(async () => {
@@ -223,23 +245,23 @@ export function registerVideoAgentTools(
     }));
   }));
 
-  server.tool("approve_scene_visual", "Download and approve the selected image for one scene.", {
+  define("approve_scene_visual", "Download and approve the selected image for one scene.", {
     ...projectIdShape,
     sceneId: z.string().uuid(),
   }, ({ projectId, sceneId }) => invoke(() => api.approveSceneVisual(projectId, sceneId)));
 
-  server.tool("select_scene_visual", "Select an existing candidate image for one scene; approval is still required.", {
+  define("select_scene_visual", "Select an existing candidate image for one scene; approval is still required.", {
     ...projectIdShape,
     sceneId: z.string().uuid(),
     candidateId: z.string().uuid(),
   }, ({ projectId, sceneId, candidateId }) => invoke(() => api.selectSceneVisual(projectId, sceneId, candidateId)));
 
-  server.tool("save_script", "Validate and save a script through the Video Agent API.", {
+  define("save_script", "Validate and save a script through the Video Agent API.", {
     ...projectIdShape,
     script: z.unknown(),
   }, ({ projectId, script }) => invoke(() => api.saveScript(projectId, script)));
 
-  server.tool("save_story", "Save merged research notes and script together; research is saved first.", {
+  define("save_story", "Save merged research notes and script together; research is saved first.", {
     ...projectIdShape,
     research: z.unknown(),
     script: z.unknown(),
@@ -248,49 +270,55 @@ export function registerVideoAgentTools(
     return api.saveScript(projectId, script);
   }));
 
-  server.tool("run_pipeline", "Start Generate All or run one non-gate pipeline stage.", {
+  define("run_pipeline", "Start Generate All or run one non-gate pipeline stage.", {
     ...projectIdShape,
     stage: PipelineStageSchema.optional(),
-  }, ({ projectId, stage }) => invoke(() => api.runPipeline(projectId, stage)));
+  }, ({ projectId, stage }) => invoke(() => api.invokeRegistry("run_pipeline", {
+    projectId,
+    ...(stage === undefined ? {} : { stage }),
+  })));
 
-  server.tool("get_pipeline", "Get pipeline status and all stage states for a project.", projectIdShape, ({ projectId }) =>
+  define("get_pipeline", "Get pipeline status and all stage states for a project.", projectIdShape, ({ projectId }) =>
     invoke(() => api.getPipeline(projectId)));
 
-  server.tool("get_video_metadata", "Read publishing metadata (titles, description, tags) for a project.", projectIdShape, ({ projectId }) =>
+  define("get_video_metadata", "Read publishing metadata (titles, description, tags) for a project.", projectIdShape, ({ projectId }) =>
     invoke(() => api.getVideoMetadata(projectId)));
 
-  server.tool("get_auto_report", "Read AUTO-mode decision report entries (grouped by stage) for a project.", projectIdShape, ({ projectId }) =>
+  define("get_auto_report", "Read AUTO-mode decision report entries (grouped by stage) for a project.", projectIdShape, ({ projectId }) =>
     invoke(() => api.getAutoReport(projectId)));
 
-  server.tool("list_renders", "List render versions for a project (newest first), including deleted ones.", projectIdShape, ({ projectId }) =>
+  define("list_renders", "List render versions for a project (newest first), including deleted ones.", projectIdShape, ({ projectId }) =>
     invoke(() => api.listRenders(projectId)));
 
-  server.tool("publish_project", "Queue publish jobs for selected platform accounts (optional schedule).", {
+  define("publish_project", "Queue publish jobs for selected platform accounts (optional schedule).", {
     ...projectIdShape,
     accountIds: z.array(z.string().uuid()).min(1),
     scheduledFor: z.string().datetime({ offset: true }).optional(),
     visibility: z.enum(["public", "unlisted", "private"]).optional(),
     force: z.boolean().optional(),
   }, ({ projectId, accountIds, scheduledFor, visibility, force }) => invoke(
-    () => api.publishProject(projectId, {
-      accountIds,
-      ...(scheduledFor === undefined ? {} : { scheduledFor }),
-      ...(visibility === undefined ? {} : { visibility }),
-      ...(force === undefined ? {} : { force }),
+    () => api.invokeRegistry("publish_project", {
+      projectId,
+      body: {
+        accountIds,
+        ...(scheduledFor === undefined ? {} : { scheduledFor }),
+        ...(visibility === undefined ? {} : { visibility }),
+        ...(force === undefined ? {} : { force }),
+      },
     }),
   ));
 
-  server.tool("list_publications", "List publications across projects, optionally filtered by status or profile.", {
+  define("list_publications", "List publications across projects, optionally filtered by status or profile.", {
     status: z.enum(["QUEUED", "SCHEDULED", "UPLOADING", "PUBLISHED", "FAILED", "CANCELLED"]).optional(),
     profileId: z.string().uuid().optional(),
   }, ({ status, profileId }) => invoke(() => api.listPublications({ status, profileId })));
 
-  server.tool("list_topics", "List topic-queue items for a profile.", {
+  define("list_topics", "List topic-queue items for a profile.", {
     profileId: z.string().uuid(),
     status: z.enum(["PENDING", "APPROVED", "IN_PRODUCTION", "DONE", "REJECTED", "FAILED"]).optional(),
   }, ({ profileId, status }) => invoke(() => api.listTopics(profileId, status)));
 
-  server.tool("add_topic", "Add a topic to a profile queue.", {
+  define("add_topic", "Add a topic to a profile queue.", {
     profileId: z.string().uuid(),
     topic: z.string().min(1).max(500),
     notes: z.string().max(2000).nullable().optional(),
@@ -301,7 +329,7 @@ export function registerVideoAgentTools(
     ...(status === undefined ? {} : { status }),
   })));
 
-  server.tool("suggest_topics", "Ask the LLM to suggest topics for a profile (mock in tests).", {
+  define("suggest_topics", "Ask the LLM to suggest topics for a profile (mock in tests).", {
     profileId: z.string().uuid(),
     hint: z.string().max(1000).optional(),
     count: z.number().int().min(1).max(20).optional(),
@@ -310,27 +338,40 @@ export function registerVideoAgentTools(
     ...(count === undefined ? {} : { count }),
   })));
 
-  server.tool("approve_topics", "Approve or reject topic-queue items in bulk.", {
+  define("approve_topics", "Approve or reject topic-queue items in bulk.", {
     profileId: z.string().uuid(),
     ids: z.array(z.string().uuid()).min(1),
     status: z.enum(["APPROVED", "REJECTED"]),
   }, ({ profileId, ids, status }) => invoke(() => api.approveTopics(profileId, { ids, status })));
 
-  server.tool("automation_status", "Read global automation pause state and per-profile queue/slot summary.", {}, () =>
+  define("automation_status", "Read global automation pause state and per-profile queue/slot summary.", {}, () =>
     invoke(() => api.automationStatus()));
 
-  server.tool("get_render_export_url", "Return the local HTTP URL to download a render export zip (does not stream the zip).", {
+  define("get_render_export_url", "Return the local HTTP URL to download a render export zip (does not stream the zip).", {
     ...projectIdShape,
     renderId: z.string().uuid(),
   }, ({ projectId, renderId }) => invoke(async () => api.getRenderExportUrl(projectId, renderId)));
 
-  server.tool("get_review_context", "Read the compact pre-render review context document for a project (0 LLM tokens).", projectIdShape, ({ projectId }) =>
+  define("get_review_context", "Read the compact pre-render review context document for a project (0 LLM tokens).", projectIdShape, ({ projectId }) =>
     invoke(() => api.getReviewContext(projectId)));
 
-  server.tool("apply_review_proposal", "Validate and apply one pre-render review proposal without storing a chat message.", {
+  define("apply_review_proposal", "Validate and apply one pre-render review proposal without storing a chat message.", {
     ...projectIdShape,
     proposal: ReviewProposalSchema,
   }, ({ projectId, proposal }) => invoke(() => api.applyReviewProposal(projectId, proposal)));
+
+  for (const tool of catalog) {
+    if (registered.has(tool.name)) continue;
+    const shape: Record<string, z.ZodType> = {};
+    for (const key of Object.keys(tool.properties ?? {})) {
+      const optional = key.endsWith("?");
+      const field = optional ? key.slice(0, -1) : key;
+      if (!field) continue;
+      shape[field] = optional ? z.any().optional() : z.any();
+    }
+    if (Object.keys(shape).length === 0) shape.payload = z.record(z.string(), z.any()).optional();
+    define(tool.name, tool.description, shape, (args) => invoke(() => api.invokeRegistry(tool.name, args)));
+  }
 
   server.prompt("write_research", "Ask Claude to write research notes and save them in Video Agent.", {
     projectId: z.string().uuid(),

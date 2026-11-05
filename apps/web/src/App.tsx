@@ -7,6 +7,7 @@ import { queryRetryDelay, shouldRetryQuery } from "./services/queryRetry";
 
 const DashboardPage = lazy(() => import("./features/dashboard/DashboardPage").then((m) => ({ default: m.DashboardPage })));
 const AssistantPage = lazy(() => import("./features/assistant/AssistantPage").then((m) => ({ default: m.AssistantPage })));
+const OperatorPage = lazy(() => import("./features/operator/OperatorPage").then((m) => ({ default: m.OperatorPage })));
 const ProjectListPage = lazy(() => import("./features/projects/ProjectListPage").then((m) => ({ default: m.ProjectListPage })));
 const ProjectDetailPage = lazy(() => import("./features/projects/ProjectDetailPage").then((m) => ({ default: m.ProjectDetailPage })));
 const ProfileListPage = lazy(() => import("./features/profiles/ProfileListPage").then((m) => ({ default: m.ProfileListPage })));
@@ -52,6 +53,7 @@ export function App() {
             <Route element={<AppLayout />}>
               <Route index element={<DashboardPage />} />
               <Route path="assistant" element={<AssistantPage />} />
+              <Route path="operator" element={<OperatorPage />} />
               <Route path="projects" element={<ProjectListPage />} />
               <Route path="profiles" element={<ProfileListPage />} />
               <Route path="profiles/:id" element={<Navigate replace to="direction" />} />

@@ -114,6 +114,16 @@ export const featureMap: readonly FeatureEntry[] = [
     settingsKeys: ["assistantChat"],
   },
   {
+    key: "cursor-operator",
+    nameVi: "Cursor operator",
+    areaVi: "Trợ lý",
+    summaryVi: "Người vận hành Cursor làm việc qua công cụ của app, có hàng đợi, lệnh thường trực và bước duyệt.",
+    webRoutes: ["/operator"],
+    docPage: "docs/user-guide/tro-ly-va-telegram.md",
+    docAnchor: "cursor-operator",
+    sinceTask: "TASK-047",
+  },
+  {
     key: "project-library",
     nameVi: "Thư viện dự án",
     areaVi: "Dự án",

@@ -269,6 +269,24 @@ export class VideoAgentApiClient {
     return this.request("/api/automation/status");
   }
 
+  listRegistryTools(): Promise<{ tools: Array<{ name: string; description: string; risk: string; properties?: Record<string, unknown> }> }> {
+    return this.request("/api/registry/tools");
+  }
+
+  invokeRegistry(name: string, args: unknown): Promise<{
+    result?: unknown;
+    pendingActionId?: string;
+    summaryVi?: string;
+  }> {
+    const headers: Record<string, string> = {};
+    if (process.env.VG_TOOL_SOURCE === "operator") headers["x-vg-tool-source"] = "operator";
+    return this.request("/api/registry/invoke", {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ name, args }),
+    });
+  }
+
   searchUserGuide(query: string): Promise<unknown> {
     const params = new URLSearchParams({ q: query });
     return this.request(`/api/help/search?${params.toString()}`);

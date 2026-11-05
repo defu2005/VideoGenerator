@@ -14,6 +14,7 @@ import type { TopicService } from "../services/topicService.js";
 import type { NotificationService } from "../notifications/notificationService.js";
 import type { TelegramPoller } from "../notifications/telegram.js";
 import type { AssistantService } from "../assistant/service.js";
+import type { OperatorService } from "../operator/service.js";
 import type { ClipService } from "../services/clipService.js";
 
 declare module "fastify" {
@@ -41,6 +42,9 @@ declare module "fastify" {
     };
     vgAssistant: {
       service: AssistantService;
+    };
+    vgOperator: {
+      service: OperatorService;
     };
     vgClips: ClipService;
   }

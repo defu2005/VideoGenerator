@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { ErrorState } from "../../components/ErrorState";
 import { Spinner } from "../../components/Spinner";
+import { OperatorChat } from "../operator/OperatorChat";
 import {
   confirmAllAssistantActions,
   confirmAssistantAction,
@@ -102,6 +103,7 @@ export function AssistantPage() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [draft, setDraft] = useState("");
   const [error, setError] = useState("");
+  const [engine, setEngine] = useState<"assistant" | "operator">("assistant");
 
   const conversations = useQuery({
     queryKey: assistantKeys.conversations,
@@ -249,17 +251,22 @@ export function AssistantPage() {
           <h1>Trợ lý AI</h1>
           <p>Chat để xem số liệu, chỉnh cài đặt và chạy thao tác trong app (có xác nhận khi cần).</p>
         </div>
+        <div className="operator-engine-switch" role="group" aria-label="Chọn người trả lời">
+          <button type="button" className="button button-secondary" aria-pressed={engine === "assistant"} onClick={() => setEngine("assistant")}>Trợ lý tích hợp</button>
+          <button type="button" className="button button-secondary" aria-pressed={engine === "operator"} onClick={() => setEngine("operator")}>Cursor operator</button>
+        </div>
         <button
           type="button"
           className="button button-primary"
-          disabled={createConversation.isPending}
+          disabled={createConversation.isPending || engine === "operator"}
           onClick={() => createConversation.mutate()}
         >
           Cuộc trò chuyện mới
         </button>
       </header>
+      {engine === "operator" ? <OperatorChat /> : null}
 
-      <section className="panel assistant-settings">
+      {engine === "assistant" && <section className="panel assistant-settings">
         <h2>Cài đặt</h2>
         <label className="field-checkbox">
           <input
@@ -273,9 +280,9 @@ export function AssistantPage() {
           />
           <span>Tự động hết (không hỏi lại, trừ thao tác xóa)</span>
         </label>
-      </section>
+      </section>}
 
-      <div className="assistant-layout">
+      {engine === "assistant" && <div className="assistant-layout">
         <aside className="panel assistant-conversations" aria-label="Danh sách cuộc trò chuyện">
           <h2>Cuộc trò chuyện</h2>
           {conversationItems.length === 0 && (
@@ -388,7 +395,7 @@ export function AssistantPage() {
             </>
           )}
         </section>
-      </div>
+      </div>}
     </section>
   );
 }

@@ -94,6 +94,9 @@ import { TelegramPoller } from "./notifications/telegram.js";
 import { registerNotificationRoutes } from "./api/notifications.js";
 import { AssistantService } from "./assistant/service.js";
 import { installAssistantTelegramHandlers } from "./assistant/telegramBridge.js";
+import { OperatorService } from "./operator/service.js";
+import { registerOperatorRoutes } from "./api/operator.js";
+import { registerRegistryRoutes } from "./api/registry.js";
 import { registerAssistantRoutes } from "./api/assistant.js";
 import { createFetchers } from "./analytics/registry.js";
 import { AnalyticsSyncService } from "./analytics/syncService.js";
@@ -298,21 +301,6 @@ export function buildApp({ config }: { config: AppConfig }) {
     sceneService,
   );
   assistantService.setClips(clipService);
-  installAssistantTelegramHandlers(telegramPoller, assistantService, {
-    sqlite: database.sqlite,
-    getAutomationStatusText: async () => {
-      const status = await automationService.getStatus();
-      const paused = getAutomationPaused(database.sqlite);
-      const lines = [
-        `<b>Tự động hoá</b>: ${paused ? "⏸ tạm dừng" : "đang chạy"}`,
-        ...status.profiles.slice(0, 8).map((p) =>
-          `• ${p.profileName}: ${p.enabled ? "bật" : "tắt"} · hôm nay ${p.todayCount}`
-        ),
-      ];
-      if (status.profiles.length === 0) lines.push("— chưa có hồ sơ");
-      return lines.join("\n");
-    },
-  });
   notificationService.setWaitingApprovalButtons((event) => {
     const action = assistantService.createPendingApproveGate({
       projectId: event.projectId,
@@ -429,6 +417,31 @@ export function buildApp({ config }: { config: AppConfig }) {
   });
   publishTicker.setLearning(learningService);
   assistantService.setLearning(learningService);
+  const apiHost = config.HOST === "0.0.0.0" || config.HOST === "::" ? "127.0.0.1" : config.HOST;
+  const operatorService = new OperatorService({
+    sqlite: database.sqlite,
+    dataDir: config.DATA_DIR,
+    apiUrl: `http://${apiHost}:${config.PORT}`,
+    assistant: assistantService,
+    logger: server.log,
+  });
+  operatorService.setTelegramClient(() => telegramPoller.createClient());
+  installAssistantTelegramHandlers(telegramPoller, assistantService, {
+    sqlite: database.sqlite,
+    operator: operatorService,
+    getAutomationStatusText: async () => {
+      const status = await automationService.getStatus();
+      const paused = getAutomationPaused(database.sqlite);
+      const lines = [
+        `<b>Tự động hoá</b>: ${paused ? "⏸ tạm dừng" : "đang chạy"}`,
+        ...status.profiles.slice(0, 8).map((p) =>
+          `• ${p.profileName}: ${p.enabled ? "bật" : "tắt"} · hôm nay ${p.todayCount}`
+        ),
+      ];
+      if (status.profiles.length === 0) lines.push("— chưa có hồ sơ");
+      return lines.join("\n");
+    },
+  });
   setAutomationNotify((event) => {
     void notificationService.notify(event);
   });
@@ -481,6 +494,9 @@ export function buildApp({ config }: { config: AppConfig }) {
   server.decorate("vgAssistant", {
     service: assistantService,
   });
+  server.decorate("vgOperator", {
+    service: operatorService,
+  });
 
   server.register(cors, { origin: config.CORS_ORIGIN });
   registerHealthRoutes(server, database.sqlite);
@@ -519,6 +535,8 @@ export function buildApp({ config }: { config: AppConfig }) {
     poller: telegramPoller,
   });
   registerAssistantRoutes(server, assistantService);
+  registerOperatorRoutes(server, operatorService);
+  registerRegistryRoutes(server, assistantService);
   registerVoiceRoutes(server, ttsProviders, database.sqlite, projectService, jobRepository, config);
   registerTtsSettingsRoutes(server, database.sqlite, config, tokenVault, ttsProviders);
   registerSubtitleRoutes(server, database.sqlite, jobRepository, config);
@@ -532,15 +550,25 @@ export function buildApp({ config }: { config: AppConfig }) {
   registerAutoReportRoutes(server, autoReportService, projectService);
   registerReviewRoutes(server, reviewService, projectService);
 
+  let stopOperatorTick = (): void => undefined;
   server.addHook("onReady", async () => {
     stopQuotaSync = quotaSync.start();
     await worker.start();
     if (config.WORKER_ENABLED) {
       publishTicker.start();
       telegramPoller.start();
+      const timer = setInterval(() => {
+        try {
+          operatorService.tick();
+        } catch (error) {
+          server.log.error({ err: error }, "operator tick failed");
+        }
+      }, 30_000);
+      stopOperatorTick = () => clearInterval(timer);
     }
   });
   server.addHook("onClose", async () => {
+    stopOperatorTick();
     stopQuotaSync();
     await telegramPoller.stop();
     await publishTicker.stop();

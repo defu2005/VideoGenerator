@@ -45,6 +45,19 @@ function sqlite(): Database.Database {
   return (app.vgPublish.service as unknown as { sqlite: Database.Database }).sqlite;
 }
 
+function seedCooldown(db: Database.Database): void {
+  db.prepare("DELETE FROM llm_cooldowns WHERE provider = 'mock' AND model = 'demo'").run();
+  db.prepare(
+    "INSERT INTO llm_cooldowns (provider, model, until, reason, set_at) VALUES ('mock', 'demo', '2099-01-01T00:00:00.000Z', 'test', '2026-01-01T00:00:00.000Z')",
+  ).run();
+}
+
+function cooldownCount(db: Database.Database): number {
+  return (db.prepare(
+    "SELECT COUNT(*) AS n FROM llm_cooldowns WHERE provider = 'mock' AND model = 'demo'",
+  ).get() as { n: number }).n;
+}
+
 beforeAll(() => {
   config = parseConfig({
     DATA_DIR: join(root, "data"),
@@ -293,34 +306,47 @@ describe("assistant API — mock LLM loop", () => {
       url: "/api/assistant/settings",
       payload: { confirmMode: "auto" },
     });
-    setAutomationPausedViaApi(true);
+    seedCooldown(sqlite());
 
     setAssistantChatScript([
       {
-        reply: "Đã bật lại.",
+        reply: "Đã xoá chờ.",
         done: true,
-        calls: [{ tool: "resume_automation_all", args: {} }],
+        calls: [{ tool: "clear_llm_cooldown", args: { provider: "mock", model: "demo" } }],
       },
     ]);
     const conversationId = await createConversation();
     const autoRes = await sendAssistantMessage(conversationId, "Làm luôn");
     expect(autoRes.statusCode).toBe(200);
     expect(autoRes.json<{ pendingActions: unknown[] }>().pendingActions).toHaveLength(0);
-    expect(getAutomationPaused(sqlite())).toBe(false);
+    expect(cooldownCount(sqlite())).toBe(0);
 
-    setAutomationPausedViaApi(true);
+    seedCooldown(sqlite());
     setAssistantChatScript([
       {
         reply: "",
         done: true,
         autoConfirm: true,
-        calls: [{ tool: "resume_automation_all", args: {} }],
+        calls: [{ tool: "clear_llm_cooldown", args: { provider: "mock", model: "demo" } }],
       },
     ]);
     const autoConfirmRes = await sendAssistantMessage(conversationId, "Tự động hết");
     expect(autoConfirmRes.statusCode).toBe(200);
     expect(autoConfirmRes.json<{ pendingActions: unknown[] }>().pendingActions).toHaveLength(0);
-    expect(getAutomationPaused(sqlite())).toBe(false);
+    expect(cooldownCount(sqlite())).toBe(0);
+
+    setAutomationPausedViaApi(true);
+    setAssistantChatScript([
+      {
+        reply: "Cần duyệt bật tự động.",
+        done: false,
+        autoConfirm: true,
+        calls: [{ tool: "resume_automation_all", args: {} }],
+      },
+    ]);
+    const resumeRes = await sendAssistantMessage(conversationId, "Tự động hết");
+    expect(resumeRes.json<{ pendingActions: Array<{ tool: string }> }>().pendingActions[0]?.tool).toBe("resume_automation_all");
+    expect(getAutomationPaused(sqlite())).toBe(true);
 
     const project = await createProject();
     setAssistantChatScript([
@@ -351,22 +377,22 @@ describe("assistant API — mock LLM loop", () => {
       reply: "",
       done: true,
       autoConfirm: true,
-      calls: [{ tool: "resume_automation_all", args: {} }],
+      calls: [{ tool: "clear_llm_cooldown", args: { provider: "mock", model: "demo" } }],
     };
     const conversationId = await createConversation();
 
-    setAutomationPausedViaApi(true);
+    seedCooldown(sqlite());
     setAssistantChatScript([step]);
-    const asked = await sendAssistantMessage(conversationId, "Bật lại tự động hoá giúp tôi");
+    const asked = await sendAssistantMessage(conversationId, "Xoá thời gian chờ giúp tôi");
     expect(asked.statusCode).toBe(200);
     expect(asked.json<{ pendingActions: unknown[] }>().pendingActions).toHaveLength(1);
-    expect(getAutomationPaused(sqlite())).toBe(true);
+    expect(cooldownCount(sqlite())).toBe(1);
 
     setAssistantChatScript([step]);
-    const allowed = await sendAssistantMessage(conversationId, "Bật lại, tự động hết không cần hỏi");
+    const allowed = await sendAssistantMessage(conversationId, "Xoá chờ, tự động hết không cần hỏi");
     expect(allowed.statusCode).toBe(200);
     expect(allowed.json<{ pendingActions: unknown[] }>().pendingActions).toHaveLength(0);
-    expect(getAutomationPaused(sqlite())).toBe(false);
+    expect(cooldownCount(sqlite())).toBe(0);
   });
 
   it("invalid tool or args retried once then error; step limit is 6", async () => {
@@ -497,7 +523,7 @@ describe("assistant Telegram bridge", () => {
           ok: true,
           result: [{
             update_id: 1,
-            message: { message_id: 1, text: "Xin chào trợ lý", chat: { id: 42, type: "private" } },
+            message: { message_id: 1, text: "/tl Xin chào trợ lý", chat: { id: 42, type: "private" } },
           }],
         });
       }

@@ -25,6 +25,8 @@ import {
 } from "./tools.js";
 import { z } from "zod";
 import { getAssistantSettings } from "../settings/assistant.js";
+import { logToolAudit } from "../registry/audit.js";
+import { hardBlockMessage, shouldCreatePending } from "../registry/policy.js";
 import type Database from "better-sqlite3";
 
 const MAX_STEPS = 6;
@@ -276,6 +278,18 @@ export async function runAssistantLoop(input: AssistantLoopInput): Promise<Assis
         return buildResult();
       }
       const risk = toolDef.risk;
+      const blocked = hardBlockMessage(call.tool, call.args);
+      if (blocked) {
+        toolActivity.push({
+          tool: call.tool,
+          summary: blocked,
+          risk,
+          ok: false,
+          error: blocked,
+        });
+        replyParts.push(blocked);
+        continue;
+      }
 
       let parsedArgs: unknown;
       try {
@@ -295,14 +309,30 @@ export async function runAssistantLoop(input: AssistantLoopInput): Promise<Assis
         return buildResult();
       }
 
-      const needsConfirm = risk === "confirm"
-        && (!autoRunConfirm || ALWAYS_CONFIRM_TOOLS.has(call.tool));
+      const needsConfirm = shouldCreatePending({
+        name: call.tool,
+        args: parsedArgs,
+        risk,
+        source: "assistant",
+        autoConfirm: autoRunConfirm,
+        alwaysConfirm: ALWAYS_CONFIRM_TOOLS.has(call.tool),
+      });
 
       if (needsConfirm) {
+        const summary = summarizeTool(call.tool, parsedArgs);
         const pending = input.createPending({
           tool: call.tool,
           args: parsedArgs,
-          summary: summarizeTool(call.tool, parsedArgs),
+          summary,
+        });
+        logToolAudit(input.sqlite, {
+          source: "assistant",
+          tool: call.tool,
+          args: parsedArgs,
+          risk,
+          decision: "pending",
+          summary,
+          pendingActionId: pending.id,
         });
         pendingActions.push(pending);
         createdPendingThisStep = true;

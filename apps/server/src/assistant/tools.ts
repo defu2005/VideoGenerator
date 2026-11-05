@@ -53,6 +53,9 @@ import type { ClipService } from "../services/clipService.js";
 import type { CommentInboxService } from "../comments/inboxService.js";
 import { clearLlmCooldown, readQuotaStatus } from "../providers/llm/quota.js";
 import { searchGuide } from "../help/loadGuide.js";
+import { operatorToolHooks } from "../operator/hooks.js";
+import { logToolAudit } from "../registry/audit.js";
+import { hardBlockMessage, type ToolSource } from "../registry/policy.js";
 
 const emptyObject = z.object({}).strict();
 
@@ -1088,6 +1091,62 @@ const toolDefs: AssistantToolDef[] = [
       return searchGuide(parsed.query);
     },
   }),
+  defineTool({
+    name: "save_standing_order",
+    description: "Lưu một lệnh thường trực. Chỉ ghi chữ, không tự chạy.",
+    risk: "read",
+    argsSchema: z.object({
+      title: z.string().trim().min(1).max(200),
+      prompt: z.string().trim().min(1).max(4000),
+      cron: z.string().trim().min(1).max(80).nullable().optional(),
+    }).strict(),
+    summarize: (args) => {
+      const parsed = z.object({ title: z.string() }).parse(args);
+      return `Lưu lệnh thường trực: ${parsed.title.slice(0, 80)}`;
+    },
+    execute: async (args) => {
+      const hooks = operatorToolHooks();
+      if (!hooks) throw new AppError(503, "OPERATOR_UNAVAILABLE", "Operator chưa sẵn sàng");
+      const parsed = z.object({
+        title: z.string(),
+        prompt: z.string(),
+        cron: z.string().nullable().optional(),
+      }).parse(args);
+      return hooks.saveStandingOrder(parsed);
+    },
+  }),
+  defineTool({
+    name: "find_skills",
+    description: "Tìm kỹ năng vận hành phù hợp với câu hỏi. Trả về bản ngắn.",
+    risk: "read",
+    argsSchema: z.object({ query: z.string().trim().min(1).max(500) }).strict(),
+    summarize: (args) => {
+      const parsed = z.object({ query: z.string() }).parse(args);
+      return `Tìm kỹ năng: ${parsed.query.slice(0, 80)}`;
+    },
+    execute: async (args) => {
+      const hooks = operatorToolHooks();
+      if (!hooks) throw new AppError(503, "OPERATOR_UNAVAILABLE", "Operator chưa sẵn sàng");
+      const parsed = z.object({ query: z.string() }).parse(args);
+      return hooks.findSkills(parsed.query);
+    },
+  }),
+  defineTool({
+    name: "find_tools",
+    description: "Tìm công cụ registry phù hợp với câu hỏi.",
+    risk: "read",
+    argsSchema: z.object({ query: z.string().trim().min(1).max(500) }).strict(),
+    summarize: (args) => {
+      const parsed = z.object({ query: z.string() }).parse(args);
+      return `Tìm công cụ: ${parsed.query.slice(0, 80)}`;
+    },
+    execute: async (args) => {
+      const hooks = operatorToolHooks();
+      if (!hooks) throw new AppError(503, "OPERATOR_UNAVAILABLE", "Operator chưa sẵn sàng");
+      const parsed = z.object({ query: z.string() }).parse(args);
+      return hooks.findTools(parsed.query);
+    },
+  }),
 ];
 
 export const ASSISTANT_TOOLS: Record<string, AssistantToolDef> = Object.fromEntries(
@@ -1172,8 +1231,23 @@ export async function runTool(
   name: string,
   args: unknown,
   ctx: AssistantToolContext,
+  meta: { source?: ToolSource; runId?: string | null } = {},
 ): Promise<unknown> {
   const tool = ASSISTANT_TOOLS[name];
+  const source = meta.source ?? "assistant";
+  const blocked = hardBlockMessage(name, args);
+  if (blocked) {
+    logToolAudit(ctx.sqlite, {
+      source,
+      tool: name,
+      args,
+      risk: tool?.risk ?? "confirm",
+      decision: "refused",
+      summary: blocked,
+      runId: meta.runId,
+    });
+    throw new AppError(403, "TOOL_BLOCKED", blocked);
+  }
   if (!tool) throw new AppError(400, "UNKNOWN_TOOL", `Công cụ không tồn tại: ${name}`);
   let parsed: unknown;
   try {
@@ -1184,7 +1258,17 @@ export async function runTool(
       : "Tham số không hợp lệ";
     throw new AppError(400, "INVALID_TOOL_ARGS", message);
   }
-  return tool.execute(parsed, ctx);
+  const result = await tool.execute(parsed, ctx);
+  logToolAudit(ctx.sqlite, {
+    source,
+    tool: name,
+    args: parsed,
+    risk: tool.risk,
+    decision: "executed",
+    summary: summarizeTool(name, parsed),
+    runId: meta.runId,
+  });
+  return result;
 }
 
 export function summarizeTool(name: string, args: unknown): string {

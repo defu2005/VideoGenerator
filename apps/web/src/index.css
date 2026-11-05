@@ -202,6 +202,9 @@
 .assistant-input { display: grid; gap: 8px; }
 .assistant-input textarea { width: 100%; resize: vertical; border: 1px solid #d8deea; border-radius: 8px; padding: 8px 10px; font: inherit; }
 .assistant-input-actions { display: flex; justify-content: flex-end; gap: 8px; }
+.operator-engine-switch { display: flex; flex-wrap: wrap; gap: 8px; }
+.operator-chat-toolbar { display: flex; gap: 8px; margin-bottom: 10px; }
+.operator-chip { margin: 0; color: #526078; font-size: 12px; }
 @media (max-width: 900px) {
   .assistant-layout { grid-template-columns: 1fr; }
 }

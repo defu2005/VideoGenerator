@@ -12,6 +12,10 @@ export function installAssistantTelegramHandlers(
   options: {
     sqlite: Database.Database;
     getAutomationStatusText?: () => Promise<string>;
+    operator?: {
+      handleTelegram: (input: { chatId: string; text: string }) => Promise<boolean>;
+      setOrderEnabled: (id: string, enabled: boolean) => void;
+    };
   },
 ): void {
   poller.setMessageHandler(async (input) => {
@@ -25,15 +29,22 @@ export function installAssistantTelegramHandlers(
         input.chatId,
         [
           "<b>Video Agent — lệnh</b>",
-          "/status — trạng thái tự động hoá",
+          "/status — lượt operator, hàng đợi, lượt hôm nay",
           "/pause — tạm dừng mọi tự động hoá",
-          "/new — cuộc trò chuyện trợ lý mới",
+          "/op — nhờ Cursor operator",
+          "/tl — hỏi trợ lý tích hợp",
+          "/stop — dừng lượt operator",
+          "/new — phiên operator mới",
+          "/orders — lệnh thường trực",
           "/help — trợ giúp",
-          "",
-          "Gõ tin nhắn tiếng Việt để nhờ trợ lý AI.",
         ].join("\n"),
       );
       return;
+    }
+
+    if (options.operator) {
+      const handled = await options.operator.handleTelegram(input);
+      if (handled) return;
     }
 
     if (base === "/status") {
@@ -110,6 +121,16 @@ export function installAssistantTelegramHandlers(
         const actions = await assistant.confirmAll(conversationId);
         await finishCallback(client, input, `Đã xác nhận ${actions.length} thao tác.`);
         return;
+      }
+      if (data.startsWith("ord:") && options.operator) {
+        const parts = data.split(":");
+        const id = parts[1] ?? "";
+        const mode = parts[2];
+        if (id && (mode === "on" || mode === "off")) {
+          options.operator.setOrderEnabled(id, mode === "on");
+          await finishCallback(client, input, mode === "on" ? "Đã bật lệnh thường trực." : "Đã tắt lệnh thường trực.");
+          return;
+        }
       }
       if (data.startsWith("ag:")) {
         // waiting_approval shortcut: ag:<pendingActionId>:y
