@@ -1,5 +1,6 @@
 import { useEffect } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { usePageVisible } from "./usePageVisible";
 import type { UsageQuery } from "@vg/shared";
 import { getProjectUsage, getUsage } from "../services/usageApi";
 
@@ -31,9 +32,11 @@ export function useProjectUsage(projectId: string) {
 }
 
 export function useUsage(query: UsageQuery) {
+  const visible = usePageVisible();
   return useQuery({
     queryKey: usageKeys.app(query),
     queryFn: () => getUsage(query),
-    refetchInterval: 5_000,
+    refetchInterval: visible ? 5_000 : false,
+    refetchIntervalInBackground: false,
   });
 }

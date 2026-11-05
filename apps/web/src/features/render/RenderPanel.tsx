@@ -4,6 +4,8 @@ import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { ErrorState } from "../../components/ErrorState";
 import { Spinner } from "../../components/Spinner";
+import { ElapsedTime } from "../../components/ui/ElapsedTime";
+import { usePageVisible } from "../../hooks/usePageVisible";
 import { pipelineKeys, usePipeline } from "../../hooks/usePipeline";
 import {
   getProjectRender,
@@ -53,12 +55,14 @@ export function RenderPanel({ project }: { project: Project }) {
   const [variantsBusy, setVariantsBusy] = useState(false);
   // Variant renders run in the background on the server: poll the history until this many finished renders exist.
   const [variantsTarget, setVariantsTarget] = useState<{ count: number; until: number } | null>(null);
+  const visible = usePageVisible();
   const pipeline = usePipeline(project.id);
   const render = useQuery({ queryKey: renderKeys.project(project.id), queryFn: () => getProjectRender(project.id) });
   const history = useQuery({
     queryKey: renderHistoryKeys.list(project.id),
     queryFn: () => listProjectRenders(project.id),
-    refetchInterval: variantsTarget ? 5000 : false,
+    refetchInterval: variantsTarget && visible ? 5000 : false,
+    refetchIntervalInBackground: false,
   });
   const timeline = useQuery({ queryKey: ["timeline", project.id], queryFn: () => getProjectTimeline(project.id) });
 
@@ -171,6 +175,7 @@ export function RenderPanel({ project }: { project: Project }) {
               <span style={{ width: `${progress}%` }} />
             </div>
           )}
+          {rendering && pipeline.data?.activeJob?.startedAt ? <ElapsedTime since={pipeline.data.activeJob.startedAt} /> : null}
         </div>
         <div className="render-actions">
           <label className="render-format">

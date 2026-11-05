@@ -2,6 +2,7 @@ import { useMemo, useState, type FormEvent } from "react";
 import type { ProfileDetail, ProfileTopic } from "@vg/shared";
 import { ErrorState } from "../../components/ErrorState";
 import { Spinner } from "../../components/Spinner";
+import { LoadMore } from "../../components/ui/LoadMore";
 import {
   useAddTopic,
   useApproveTopics,
@@ -22,6 +23,7 @@ export function TopicsTab({ profile }: { profile: ProfileDetail }) {
   const [count, setCount] = useState(5);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [message, setMessage] = useState<string | null>(null);
+  const [shown, setShown] = useState(20);
 
   const items = topics.data?.items ?? [];
   const ordered = useMemo(
@@ -151,7 +153,7 @@ export function TopicsTab({ profile }: { profile: ProfileDetail }) {
           <p className="page-subtitle">Chưa có chủ đề. Thêm tay hoặc dùng gợi ý AI.</p>
         ) : (
           <div className="topic-queue-list">
-            {ordered.map((topic) => (
+            {ordered.slice(0, shown).map((topic) => (
               <div key={topic.id} className="topic-queue-row">
                 <input
                   type="checkbox"
@@ -192,6 +194,7 @@ export function TopicsTab({ profile }: { profile: ProfileDetail }) {
             ))}
           </div>
         )}
+        <LoadMore shown={Math.min(shown, ordered.length)} total={ordered.length} onMore={() => setShown((count) => count + 20)} />
       </section>
     </div>
   );

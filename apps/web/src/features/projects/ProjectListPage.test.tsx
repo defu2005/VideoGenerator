@@ -109,7 +109,7 @@ describe("ProjectListPage", () => {
     renderWithProviders(<ProjectListPage />, ["/projects"]);
 
     expect(await screen.findByRole("alert")).toHaveTextContent("Temporary failure");
-    fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+    fireEvent.click(screen.getByRole("button", { name: "Thử lại" }));
     expect(await screen.findByRole("heading", { name: "Ocean documentary" })).toBeInTheDocument();
   });
 

@@ -8,6 +8,8 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 import { ErrorState } from "../../components/ErrorState";
 import { Spinner } from "../../components/Spinner";
+import { KpiCard } from "../../components/ui/KpiCard";
+import { formatMoney } from "../../lib/format";
 import {
   commitRevenueCsv,
   createCost,
@@ -48,18 +50,6 @@ function rangeFromDays(days: number): { from: string; to: string } {
   const from = new Date(to);
   from.setDate(from.getDate() - (days - 1));
   return { from: toDateInput(from), to: toDateInput(to) };
-}
-
-function formatMoney(value: number, currency: string): string {
-  try {
-    return new Intl.NumberFormat("vi-VN", {
-      style: "currency",
-      currency,
-      maximumFractionDigits: currency === "VND" ? 0 : 2,
-    }).format(value);
-  } catch {
-    return `${value} ${currency}`;
-  }
 }
 
 function downloadCsv(filename: string, rows: string[][]): void {
@@ -673,12 +663,7 @@ function SummarySection({
 }
 
 function Kpi({ title, value }: { title: string; value: string }) {
-  return (
-    <div className="kpi-tile" style={{ padding: 12, border: "1px solid #ddd", borderRadius: 8 }}>
-      <div className="kpi-label">{title}</div>
-      <div className="kpi-value" style={{ fontSize: "1.25rem", fontWeight: 600 }}>{value}</div>
-    </div>
-  );
+  return <KpiCard label={title} value={value} />;
 }
 
 function ReportDetail({

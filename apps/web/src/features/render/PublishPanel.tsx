@@ -1,5 +1,6 @@
 import type { PlatformAccount, Project, Publication, PublishVisibility } from "@vg/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { usePageVisible } from "../../hooks/usePageVisible";
 import { useEffect, useMemo, useState } from "react";
 import { ApiRequestError } from "../../services/apiClient";
 import { getProfile } from "../../services/profilesApi";
@@ -32,6 +33,7 @@ function toLocalInputValue(date: Date): string {
 
 export function PublishPanel({ project }: { project: Project }) {
   const queryClient = useQueryClient();
+  const visible = usePageVisible();
   const profileId = project.profileId;
   const profile = useQuery({
     queryKey: ["profile", profileId],
@@ -42,11 +44,13 @@ export function PublishPanel({ project }: { project: Project }) {
     queryKey: ["publications", project.id],
     queryFn: () => listProjectPublications(project.id),
     refetchInterval: (query) => {
+      if (!visible) return false;
       const items = query.state.data?.items ?? [];
       return items.some((item) => item.status === "QUEUED" || item.status === "UPLOADING" || item.status === "SCHEDULED")
         ? 2_000
         : false;
     },
+    refetchIntervalInBackground: false,
   });
 
   const accounts = useMemo(

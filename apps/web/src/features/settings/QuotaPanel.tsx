@@ -4,6 +4,7 @@ import type { LlmQuotaRow, LlmQuotaStatus, LiveQuotaEntry, OmniRouteLiveView, Qu
 import { relativeUntil } from "@vg/shared";
 import { ErrorState } from "../../components/ErrorState";
 import { Spinner } from "../../components/Spinner";
+import { ProgressBar } from "../../components/ui/ProgressBar";
 import {
   clearLlmCooldown,
   getLlmQuotaStatus,
@@ -203,9 +204,12 @@ export function QuotaPanel() {
                         <div key={window.window}>
                           {limit == null ? windowLabel(window.window) : window.unit === "credits_usd" ? `${windowLabel(window.window)} $${used ?? 0} / $${limit}` : `${windowLabel(window.window)} ${used} / ${limit}`}
                           {limit != null && (
-                            <span className={`quota-bar${ratio >= 1 ? " is-out" : ratio >= data.nearLimitRatio ? " is-near" : ""}`}>
-                              <span style={{ width: `${Math.round(ratio * 100)}%` }} />
-                            </span>
+                            <ProgressBar
+                              value={ratio}
+                              max={1}
+                              tone={ratio >= 1 ? "out" : ratio >= data.nearLimitRatio ? "near" : "ok"}
+                              label={`${row.provider} ${window.window}`}
+                            />
                           )}
                         </div>
                       );
@@ -399,9 +403,12 @@ function LiveQuotaSection({
                 <div key={quota.key}>
                   <div>{quota.key}: {quota.display}</div>
                   {quota.expiryLabel ? <div>{quota.expiryLabel}</div> : null}
-                  <span className={`quota-bar${quota.status === "exhausted" ? " is-out" : quota.status === "near" ? " is-near" : ""}`}>
-                    <span style={{ width: `${Math.round(ratio * 100)}%` }} />
-                  </span>
+                  <ProgressBar
+                    value={ratio}
+                    max={1}
+                    tone={quota.status === "exhausted" ? "out" : quota.status === "near" ? "near" : "ok"}
+                    label={quota.key}
+                  />
                   <div>
                     {until ? `${until}${relative ? ` (${relative})` : ""}` : "không có giờ reset"}
                     {" "}

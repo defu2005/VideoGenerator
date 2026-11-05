@@ -21,6 +21,7 @@ import { MusicPanel } from "../music/MusicPanel";
 import { TimelinePanel } from "../timeline/TimelinePanel";
 import { RenderPanel } from "../render/RenderPanel";
 import { TranslationPanel } from "./TranslationPanel";
+import { StageStepper } from "./StageStepper";
 
 const TABS = ["overview", "script", "scenes", "visuals", "voice", "subtitles", "music", "timeline", "render", "usage"] as const;
 
@@ -154,7 +155,7 @@ export function ProjectDetailPage() {
   return (
     <div className="page-stack">
       <div className="detail-back"><Link to="/projects">← Project library</Link></div>
-      <section className="detail-header panel">
+      <section className="detail-header panel detail-header-sticky">
         <div className="detail-title">
           <div><p className="eyebrow">PROJECT · V{project.version}</p><h1>{project.title}</h1></div>
           <StatusBadge status={project.status} />
@@ -169,6 +170,7 @@ export function ProjectDetailPage() {
           )}
           <span>Updated {formatUpdated(project.updatedAt)}</span>
         </div>
+        <StageStepper project={project} />
         <div className="detail-actions">
           <button className="button button-secondary" type="button" onClick={() => setEditing(true)}>Edit</button>
           <button className="button button-secondary" type="button" onClick={() => void duplicateCurrent()}>Duplicate</button>

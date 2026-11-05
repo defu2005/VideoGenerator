@@ -11,6 +11,7 @@ import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { ErrorState } from "../../components/ErrorState";
 import { Spinner } from "../../components/Spinner";
+import { LoadMore } from "../../components/ui/LoadMore";
 import { ApiRequestError } from "../../services/apiClient";
 import {
   analyticsKeys,
@@ -337,6 +338,7 @@ function VideosTable({
   onSelect: (video: AnalyticsVideoRankItem) => void;
 }) {
   const [sortKey, setSortKey] = useState<SortKey>("views");
+  const [shown, setShown] = useState(20);
   const [sortDir, setSortDir] = useState<SortDir>("desc");
 
   const sorted = useMemo(
@@ -391,7 +393,7 @@ function VideosTable({
           </tr>
         </thead>
         <tbody>
-          {sorted.map((video) => (
+          {sorted.slice(0, shown).map((video) => (
             <tr key={video.publicationId}>
               <th scope="row">
                 <button type="button" className="analytics-link-btn" onClick={() => onSelect(video)}>
@@ -414,6 +416,7 @@ function VideosTable({
           ))}
         </tbody>
       </table>
+      <LoadMore shown={Math.min(shown, sorted.length)} total={sorted.length} onMore={() => setShown((count) => count + 20)} />
     </div>
   );
 }

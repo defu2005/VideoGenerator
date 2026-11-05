@@ -4,6 +4,7 @@ import { Link } from "react-router-dom";
 import { useEffect, useState } from "react";
 import { ErrorState } from "../../components/ErrorState";
 import { Spinner } from "../../components/Spinner";
+import { LoadMore } from "../../components/ui/LoadMore";
 import { renderFileUrl } from "../../services/renderApi";
 import { exportClips, getClips, proposeClips, updateClips, type ClipView } from "../../services/clipsApi";
 
@@ -18,6 +19,7 @@ export function ShortsPanel({ projectId, renderId }: { projectId: string; render
   const [reframe, setReframe] = useState<ReframeMode>("center");
   const [drafts, setDrafts] = useState<ClipView["proposals"]>([]);
   const [message, setMessage] = useState<string | null>(null);
+  const [jobsShown, setJobsShown] = useState(20);
 
   useEffect(() => {
     if (!clips.data) return;
@@ -131,9 +133,10 @@ export function ShortsPanel({ projectId, renderId }: { projectId: string; render
       )}
       {view.jobs.some((job) => job.status === "QUEUED" || job.status === "RUNNING") && (
         <ul aria-label="Tiến độ xuất clip">
-          {view.jobs.map((job) => <li key={job.id}>{job.status} · {job.progress}% {job.message ?? ""}</li>)}
+          {view.jobs.slice(0, jobsShown).map((job) => <li key={job.id}>{job.status} · {job.progress}% {job.message ?? ""}</li>)}
         </ul>
       )}
+      <LoadMore shown={Math.min(jobsShown, view.jobs.length)} total={view.jobs.length} onMore={() => setJobsShown((count) => count + 20)} />
       {view.children.length > 0 && (
         <ul aria-label="Clip đã tạo">
           {view.children.map((child) => (
