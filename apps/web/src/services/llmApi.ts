@@ -2,6 +2,7 @@ import {
   LLM_TASKS,
   LlmGatewaySettingsSchema,
   LlmProviderInfoSchema,
+  LlmQuotaStatusSchema,
   LlmSettingsSchema,
   ModelAdvisorApplyBodySchema,
   ModelAdvisorApplyResultSchema,
@@ -11,6 +12,9 @@ import {
   OmniRouteHealthSchema,
   type LlmGatewaySettings,
   type LlmProviderInfo,
+  type LlmQuotaPolicyBody,
+  type LlmQuotaRule,
+  type LlmQuotaStatus,
   type LlmSettings,
   type LlmTaskId,
   type ModelAdvisorApplyBody,
@@ -73,6 +77,58 @@ export function getProviderModels(provider: string): Promise<string[]> {
 export function getProjectLlmRoutes(projectId: string): Promise<ProjectLlmRoutes> {
   return apiRequest<{ routes: ProjectLlmRoutes }>(`/projects/${encodeURIComponent(projectId)}/llm-routes`)
     .then(({ routes }) => routes);
+}
+
+export function getLlmQuotaStatus(): Promise<LlmQuotaStatus> {
+  return apiRequest<unknown>("/llm/quota").then((response) => {
+    const parsed = LlmQuotaStatusSchema.safeParse(response);
+    if (!parsed.success) throw new Error("Máy chủ trả về quota LLM không hợp lệ");
+    return parsed.data;
+  });
+}
+
+export function saveLlmQuotaPolicy(body: LlmQuotaPolicyBody): Promise<LlmQuotaStatus> {
+  return apiRequest<unknown>("/llm/quota/policy", {
+    method: "PUT",
+    body: JSON.stringify(body),
+  }).then((response) => {
+    const parsed = LlmQuotaStatusSchema.safeParse(response);
+    if (!parsed.success) throw new Error("Máy chủ trả về quota LLM không hợp lệ");
+    return parsed.data;
+  });
+}
+
+export function saveLlmQuotaRule(rule: LlmQuotaRule): Promise<LlmQuotaStatus> {
+  return apiRequest<unknown>("/llm/quota/rules", {
+    method: "PUT",
+    body: JSON.stringify(rule),
+  }).then((response) => {
+    const parsed = LlmQuotaStatusSchema.safeParse(response);
+    if (!parsed.success) throw new Error("Máy chủ trả về quota LLM không hợp lệ");
+    return parsed.data;
+  });
+}
+
+export function setLlmQuotaRuleEnabled(provider: string, model: string, enabled: boolean): Promise<LlmQuotaStatus> {
+  return apiRequest<unknown>("/llm/quota/rules/enabled", {
+    method: "POST",
+    body: JSON.stringify({ provider, model, enabled }),
+  }).then((response) => {
+    const parsed = LlmQuotaStatusSchema.safeParse(response);
+    if (!parsed.success) throw new Error("Máy chủ trả về quota LLM không hợp lệ");
+    return parsed.data;
+  });
+}
+
+export function clearLlmCooldown(provider: string, model: string): Promise<LlmQuotaStatus> {
+  return apiRequest<unknown>("/llm/quota/cooldowns/clear", {
+    method: "POST",
+    body: JSON.stringify({ provider, model }),
+  }).then((response) => {
+    const parsed = LlmQuotaStatusSchema.safeParse(response);
+    if (!parsed.success) throw new Error("Máy chủ trả về quota LLM không hợp lệ");
+    return parsed.data;
+  });
 }
 
 export function getLlmGatewaySettings(): Promise<LlmGatewaySettings> {

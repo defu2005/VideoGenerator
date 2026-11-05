@@ -706,7 +706,19 @@ button:disabled { cursor: not-allowed; opacity: .58; }
 .ai-chip-fast { background: #e6f5ef; color: #237a55; }
 .ai-reset, .ai-inherited { margin-left: auto; }
 .ai-inherited { color: #929bac; font-size: 11px; }
-.ai-task-fields { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 1.3fr) minmax(0, 0.8fr) minmax(0, 1.3fr); gap: 0 12px; }
+.ai-task-fields { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 1.3fr) minmax(0, 0.8fr); gap: 0 12px; }
+.ai-fallback-chain { display: grid; gap: 8px; margin: 0 0 12px; }
+.ai-fallback-chain ol { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.ai-fallback-chain li { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.quota-panel { display: grid; gap: 12px; }
+.quota-bar { display: block; height: 8px; margin-top: 4px; background: #eef1f7; border-radius: 99px; overflow: hidden; }
+.quota-bar > span { display: block; height: 100%; background: #237a55; }
+.quota-bar.is-near > span { background: #b8860b; }
+.quota-bar.is-out > span { background: #b42318; }
+.quota-chip-ok { background: #e6f5ef; color: #237a55; }
+.quota-chip-near { background: #fff4d6; color: #8a5b00; }
+.quota-chip-out { background: #fde8e8; color: #b42318; }
+.quota-actions { display: flex; flex-wrap: wrap; gap: 6px; }
 .ai-task-fields .form-field { min-width: 0; margin-bottom: 10px; }
 .model-field { display: grid; gap: 5px; min-width: 0; }
 .ai-task-fields .form-field .model-field select + input { margin-top: 0; }

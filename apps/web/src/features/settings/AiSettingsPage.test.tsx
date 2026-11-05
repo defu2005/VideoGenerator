@@ -30,6 +30,21 @@ function stubGatewayApis(
     if (url === "/api/llm/providers/omniroute/health") return jsonResponse(health);
     if (url === "/api/llm/providers/omniroute/catalog/refresh") return jsonResponse(catalog);
     if (url === "/api/llm/providers/omniroute/catalog") return jsonResponse(catalog);
+    const emptyQuota = {
+      quotaPolicy: "wait",
+      paidFallbackDailyUsd: 1,
+      nearLimitRatio: 0.9,
+      todaySpendUsd: 0,
+      paidFallbackSpendToday: 0,
+      rows: [],
+      cooldowns: [],
+    };
+    if (url === "/api/llm/quota/policy" && init?.method === "PUT") {
+      const body = JSON.parse(String(init.body)) as { quotaPolicy: string; paidFallbackDailyUsd: number };
+      (overrides as { savedPolicy?: unknown }).savedPolicy = body;
+      return jsonResponse({ ...(overrides.quota as object ?? emptyQuota), ...body });
+    }
+    if (url.startsWith("/api/llm/quota")) return jsonResponse(overrides.quota ?? emptyQuota);
     return fetchMock(input, init);
   };
 }
@@ -165,4 +180,91 @@ describe("AiSettingsPage", () => {
     await waitFor(() => expect(overrides.savedGateway).toEqual({ mode: "prefer", mappings: [] }));
     expect(await screen.findByText("Đã lưu cài đặt gateway.")).toBeInTheDocument();
   });
+
+  it("renders quota statuses, reorders the fallback chain, and saves the wait policy", async () => {
+    const until = new Date(Date.now() + 60 * 60 * 1000).toISOString();
+    const overrides: Record<string, unknown> = {
+      quota: {
+        quotaPolicy: "wait",
+        paidFallbackDailyUsd: 1,
+        nearLimitRatio: 0.9,
+        todaySpendUsd: 0,
+        paidFallbackSpendToday: 0,
+        cooldowns: [],
+        rows: [
+          row("gemini", "gemini-2.5-flash", "ok", 10, 250, null),
+          row("groq", "*", "near", 90, 100, null),
+          row("gemini", "gemini-2.5-pro", "exhausted", 100, 100, until),
+        ],
+      },
+    };
+    let saved: { tasks?: { research?: { fallbacks?: { model?: string }[] } } } | undefined;
+    const inner = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url === "/api/llm/tasks") return jsonResponse(LLM_TASKS);
+      if (url === "/api/llm/providers") return jsonResponse([{ id: "mock", label: "Mock", configured: true, defaultModel: "mock-v1" }]);
+      if (url === "/api/settings/llm-routing" && init?.method === "PUT") {
+        saved = JSON.parse(String(init.body));
+        return jsonResponse(saved);
+      }
+      if (url === "/api/settings/llm-routing") {
+        return jsonResponse({
+          tasks: {
+            research: {
+              provider: "mock",
+              model: "primary",
+              fallbacks: [{ provider: "mock", model: "one" }, { provider: "mock", model: "two" }],
+            },
+          },
+        });
+      }
+      if (url.includes("/models")) return jsonResponse({ provider: "mock", models: ["one", "two", "mock-v1"] });
+      throw new Error(`Unexpected offline test request: ${url}`);
+    });
+    vi.stubGlobal("fetch", stubGatewayApis(inner, overrides));
+    renderWithProviders(<AiSettingsPage />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "Quota" }));
+    expect(await screen.findByText("Còn")).toBeInTheDocument();
+    expect(screen.getByText("Sắp hết")).toBeInTheDocument();
+    expect(screen.getByText(/Hết – chờ đến/)).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText("Chính sách quota"), { target: { value: "paid_fallback" } });
+    fireEvent.change(screen.getByLabelText("Trần chi phí trả phí"), { target: { value: "2.5" } });
+    fireEvent.click(screen.getByRole("button", { name: "Lưu chính sách quota" }));
+    await waitFor(() => expect(overrides.savedPolicy).toEqual({ quotaPolicy: "paid_fallback", paidFallbackDailyUsd: 2.5 }));
+
+    fireEvent.click(screen.getByRole("button", { name: "Định tuyến" }));
+    const down = await screen.findByRole("button", { name: "Đưa mock/one xuống" });
+    fireEvent.click(down);
+    fireEvent.click(screen.getByRole("button", { name: "Lưu cài đặt" }));
+    await waitFor(() => expect(saved?.tasks?.research?.fallbacks?.map((item) => item.model)).toEqual(["two", "one"]));
+  });
 });
+
+function row(provider: string, model: string, status: "ok" | "near" | "exhausted", used: number, limit: number, until: string | null) {
+  return {
+    provider,
+    model,
+    kind: "free_tier" as const,
+    source: "preset" as const,
+    enabled: true,
+    note: "ước tính",
+    resetTz: "America/Los_Angeles",
+    limits: [{ window: "day" as const, requests: limit }],
+    windows: [{
+      window: "day" as const,
+      requestsUsed: used,
+      requestsLimit: limit,
+      inputTokensUsed: 0,
+      inputTokensLimit: null,
+      outputTokensUsed: 0,
+      outputTokensLimit: null,
+      ratio: used / limit,
+    }],
+    nextReset: until,
+    status,
+    cooldownUntil: status === "exhausted" ? until : null,
+    cooldownReason: status === "exhausted" ? "daily-reset" : null,
+  };
+}

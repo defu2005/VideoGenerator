@@ -286,7 +286,7 @@ export const jobs = sqliteTable("jobs", {
   message: text("message"),
   attempt: integer("attempt").notNull().default(1),
   maxAttempts: integer("max_attempts").notNull().default(3),
-  error: text("error", { mode: "json" }).$type<{ code: string; message: string; retryable: boolean } | null>(),
+  error: text("error", { mode: "json" }).$type<{ code: string; message: string; retryable: boolean; retryAt?: string } | null>(),
   usage: text("usage", { mode: "json" }).$type<{
     llmCalls: number;
     inputTokens: number;
@@ -302,6 +302,7 @@ export const jobs = sqliteTable("jobs", {
       premiumRequests?: number;
       cached: boolean;
       fallback: boolean;
+      fallbackReason?: "quota";
       ok: boolean;
     }[];
   } | null>(),
@@ -323,7 +324,7 @@ export const projectStages = sqliteTable("project_stages", {
   message: text("message"),
   jobId: text("job_id"),
   updatedAt: text("updated_at").notNull(),
-  error: text("error", { mode: "json" }).$type<{ code: string; message: string; retryable: boolean } | null>(),
+  error: text("error", { mode: "json" }).$type<{ code: string; message: string; retryable: boolean; retryAt?: string } | null>(),
 }, (table) => [
   primaryKey({ columns: [table.projectId, table.stage] }),
   index("project_stages_state_idx").on(table.projectId, table.state),
@@ -800,3 +801,33 @@ export const titleExperiments = sqliteTable("title_experiments", {
 ]);
 
 export type TitleExperimentRow = typeof titleExperiments.$inferSelect;
+
+/** Aggregated LLM calls per quota window (TASK-044). Rolling windows store one row per call. */
+export const llmQuotaUsage = sqliteTable("llm_quota_usage", {
+  id: text("id").primaryKey(),
+  provider: text("provider").notNull(),
+  model: text("model").notNull(),
+  windowStart: text("window_start").notNull(),
+  window: text("window").notNull(),
+  requests: integer("requests").notNull().default(0),
+  inputTokens: integer("input_tokens").notNull().default(0),
+  outputTokens: integer("output_tokens").notNull().default(0),
+}, (table) => [
+  uniqueIndex("llm_quota_usage_bucket_uq").on(table.provider, table.model, table.window, table.windowStart),
+  index("llm_quota_usage_window_start_idx").on(table.windowStart),
+]);
+
+export type LlmQuotaUsageRow = typeof llmQuotaUsage.$inferSelect;
+
+/** Provider+model pause after a quota or rate-limit error (TASK-044). */
+export const llmCooldowns = sqliteTable("llm_cooldowns", {
+  provider: text("provider").notNull(),
+  model: text("model").notNull(),
+  until: text("until").notNull(),
+  reason: text("reason").notNull(),
+  setAt: text("set_at").notNull(),
+}, (table) => [
+  primaryKey({ columns: [table.provider, table.model] }),
+]);
+
+export type LlmCooldownRow = typeof llmCooldowns.$inferSelect;

@@ -1,7 +1,15 @@
 import type { FastifyBaseLogger } from "fastify";
 import { join } from "node:path";
 import { z } from "zod";
-import type { LlmCallUsage, LlmGatewaySettings, LlmTaskId } from "@vg/shared";
+import {
+  fallbackChainOf,
+  formatHourMinute,
+  orderChainForBudget,
+  type LlmCallUsage,
+  type LlmGatewaySettings,
+  type LlmQuotaKind,
+  type LlmTaskId,
+} from "@vg/shared";
 import type { LlmProviderRegistry, ResolvedLlmRoute } from "./registry.js";
 import { LlmCache, createLlmCacheKey } from "./cache.js";
 import type { LlmImageAttachment, LlmProvider } from "./types.js";
@@ -33,6 +41,8 @@ export async function generateStructured<T>(input: {
   images?: LlmImageAttachment[];
   /** Project data dir used to cache resized vision JPEGs. */
   visionCacheDir?: string;
+  /** Real provider attempts only. Cache hits and preflight errors do not call this. */
+  onRealCall?: (call: { provider: string; model: string; inputTokens: number; outputTokens: number }) => void;
 } ): Promise<{
   value: T;
   usage: { llmCalls: number; inputTokens: number; outputTokens: number; tokensUnknown?: boolean; calls: LlmCallUsage[] };
@@ -133,12 +143,26 @@ export async function generateStructured<T>(input: {
       fallback: false,
       ok: false,
     });
+    if (attemptedCalls(error) > 0) {
+      input.onRealCall?.({
+        provider: input.provider.id,
+        model: input.model,
+        inputTokens: errorUsage?.inputTokens ?? 0,
+        outputTokens: errorUsage?.outputTokens ?? 0,
+      });
+    }
     throw withUsage(error, { ...usage(), llmCalls: calls + attemptedCalls(error) }, input.provider.id === "copilot-cli");
   }
   calls += 1;
   totalInputTokens += response.usage.inputTokens;
   totalOutputTokens += response.usage.outputTokens;
   tokensUnknown ||= response.usage.tokensUnknown === true;
+  input.onRealCall?.({
+    provider: input.provider.id,
+    model: input.model,
+    inputTokens: response.usage.inputTokens,
+    outputTokens: response.usage.outputTokens,
+  });
   callDetails.push({
     task: input.task ?? "unknown",
     provider: input.provider.id,
@@ -195,10 +219,24 @@ export async function generateStructured<T>(input: {
         fallback: false,
         ok: false,
       });
+      if (attemptedCalls(error) > 0) {
+        input.onRealCall?.({
+          provider: input.provider.id,
+          model: input.model,
+          inputTokens: errorUsage?.inputTokens ?? 0,
+          outputTokens: errorUsage?.outputTokens ?? 0,
+        });
+      }
       throw withUsage(error, { ...usage(), llmCalls: calls + attemptedCalls(error) }, input.provider.id === "copilot-cli");
     }
     calls += 1;
     repairs += 1;
+    input.onRealCall?.({
+      provider: input.provider.id,
+      model: input.model,
+      inputTokens: response.usage.inputTokens,
+      outputTokens: response.usage.outputTokens,
+    });
     totalInputTokens += response.usage.inputTokens;
     totalOutputTokens += response.usage.outputTokens;
     tokensUnknown ||= response.usage.tokensUnknown === true;
@@ -247,23 +285,45 @@ export async function generateStructured<T>(input: {
   };
 }
 
+type RoutedResult<T> = Awaited<ReturnType<typeof generateStructured<T>>>;
+type UsageSlice = { llmCalls: number; inputTokens: number; outputTokens: number; tokensUnknown?: boolean };
+
 export async function generateRoutedStructured<T>(input: {
   registry: LlmProviderRegistry;
   route: ResolvedLlmRoute;
   task: LlmTaskId;
   gatewaySettings?: LlmGatewaySettings;
-} & Omit<Parameters<typeof generateStructured<T>>[0], "provider" | "model" | "task">): Promise<Awaited<ReturnType<typeof generateStructured<T>>>> {
+} & Omit<Parameters<typeof generateStructured<T>>[0], "provider" | "model" | "task">): Promise<RoutedResult<T>> {
   const { registry, route: originalRoute, task, gatewaySettings, ...request } = input;
   const settings = gatewaySettings ?? registry.getGatewaySettings();
   const applied = await applyOmnirouteGateway(registry, originalRoute, settings, task);
   const route = applied.route;
   const gatewayDirect = applied.directFallback;
+  const quota = registry.quota;
+  const gatewayOnly = settings.mode === "only" && route.provider.id === "omniroute";
+  const onRealCall = quota
+    ? (call: { provider: string; model: string; inputTokens: number; outputTokens: number }) => quota.recordCall(call)
+    : undefined;
 
-  const mergeFallbackUsage = (
+  const callModel = (provider: ResolvedLlmRoute["provider"], model: string, maxOutputTokens?: number) => generateStructured({
+    ...request,
+    provider,
+    model,
+    task,
+    maxOutputTokens: maxOutputTokens ?? route.maxOutputTokens ?? request.maxOutputTokens,
+    ...(onRealCall ? { onRealCall } : {}),
+  });
+
+  const tagCalls = (calls: LlmCallUsage[], fallback: boolean, reason?: "quota") => calls.map((call) => (
+    fallback ? { ...call, fallback: true, ...(reason ? { fallbackReason: reason } : {}) } : call
+  ));
+
+  const mergeUsage = (
     firstCalls: LlmCallUsage[],
-    firstUsage: { llmCalls: number; inputTokens: number; outputTokens: number; tokensUnknown?: boolean },
-    generated: Awaited<ReturnType<typeof generateStructured<T>>>,
-  ) => ({
+    firstUsage: UsageSlice,
+    generated: RoutedResult<T>,
+    reason?: "quota",
+  ): RoutedResult<T> => ({
     ...generated,
     usage: {
       ...generated.usage,
@@ -271,48 +331,31 @@ export async function generateRoutedStructured<T>(input: {
       inputTokens: firstUsage.inputTokens + generated.usage.inputTokens,
       outputTokens: firstUsage.outputTokens + generated.usage.outputTokens,
       ...((firstUsage.tokensUnknown || generated.usage.tokensUnknown) ? { tokensUnknown: true } : {}),
-      calls: [
-        ...firstCalls,
-        ...generated.usage.calls.map((call) => ({ ...call, fallback: true })),
-      ],
+      calls: [...firstCalls, ...tagCalls(generated.usage.calls, true, reason)],
     },
   });
 
-  const fallbackAttempt = async (
+  const mergedError = (
+    message: string,
+    code: LlmError["code"],
+    retryable: boolean,
+    status: number | undefined,
     firstCalls: LlmCallUsage[],
-    firstUsage: { llmCalls: number; inputTokens: number; outputTokens: number; tokensUnknown?: boolean },
-  ) => {
-    if (!route.fallback) throw new LlmError("No fallback route is configured.", "LLM_NOT_CONFIGURED", false);
-    const fallback = route.failedRoute
-      ? { provider: route.provider, model: route.model }
-      : registry.resolveFallback(route.fallback);
-    try {
-      const generated = await generateStructured({
-        ...request,
-        provider: fallback.provider,
-        model: fallback.model,
-        task,
-        maxOutputTokens: route.maxOutputTokens ?? request.maxOutputTokens,
-      });
-      return mergeFallbackUsage(firstCalls, firstUsage, generated);
-    } catch (error) {
-      if (!(error instanceof LlmError)) throw error;
-      const fallbackUsage = error.usage;
-      throw new LlmError(error.message, error.code, error.retryable, error.status, {
-        llmCalls: firstUsage.llmCalls + (fallbackUsage?.llmCalls ?? 0),
-        inputTokens: firstUsage.inputTokens + (fallbackUsage?.inputTokens ?? 0),
-        outputTokens: firstUsage.outputTokens + (fallbackUsage?.outputTokens ?? 0),
-        ...(firstUsage.tokensUnknown || fallbackUsage?.tokensUnknown ? { tokensUnknown: true } : {}),
-        calls: [
-          ...firstCalls,
-          ...(fallbackUsage?.calls ?? []).map((call) => ({ ...call, fallback: true })),
-        ],
-      });
-    }
-  };
+    firstUsage: UsageSlice,
+    extra: LlmCallUsage[],
+    extraUsage?: UsageSlice,
+    retryAfterMs?: number,
+    retryAt?: string,
+  ) => new LlmError(message, code, retryable, status, {
+    llmCalls: firstUsage.llmCalls + (extraUsage?.llmCalls ?? 0),
+    inputTokens: firstUsage.inputTokens + (extraUsage?.inputTokens ?? 0),
+    outputTokens: firstUsage.outputTokens + (extraUsage?.outputTokens ?? 0),
+    ...(firstUsage.tokensUnknown || extraUsage?.tokensUnknown ? { tokensUnknown: true } : {}),
+    calls: [...firstCalls, ...extra],
+  }, retryAfterMs, retryAt);
 
   if (route.failedRoute) {
-    return fallbackAttempt([{
+    const firstCalls: LlmCallUsage[] = [{
       task,
       provider: route.failedRoute.provider,
       model: route.failedRoute.model,
@@ -321,64 +364,196 @@ export async function generateRoutedStructured<T>(input: {
       cached: false,
       fallback: false,
       ok: false,
-    }], { llmCalls: 0, inputTokens: 0, outputTokens: 0 });
+    }];
+    const firstUsage: UsageSlice = { llmCalls: 0, inputTokens: 0, outputTokens: 0 };
+    if (!route.provider) throw new LlmError("No fallback route is configured.", "LLM_NOT_CONFIGURED", false);
+    try {
+      const generated = await callModel(route.provider, route.model, route.maxOutputTokens);
+      return mergeUsage(firstCalls, firstUsage, generated);
+    } catch (error) {
+      if (!(error instanceof LlmError)) throw error;
+      throw mergedError(
+        error.message,
+        error.code,
+        error.retryable,
+        error.status,
+        firstCalls,
+        firstUsage,
+        tagCalls(error.usage?.calls ?? [], true),
+        error.usage,
+        error.retryAfterMs,
+        error.retryAt,
+      );
+    }
   }
 
-  try {
-    return await generateStructured({
-      ...request,
-      provider: route.provider,
-      model: route.model,
-      maxOutputTokens: route.maxOutputTokens ?? request.maxOutputTokens,
-      task,
-    });
-  } catch (error) {
-    if (!(error instanceof LlmError)) throw error;
+  type Step = {
+    provider: ResolvedLlmRoute["provider"];
+    model: string;
+    maxOutputTokens?: number;
+    originalPrimary: boolean;
+    kind: LlmQuotaKind | null;
+  };
 
-    if (gatewayDirect && shouldGatewayFallback(error)) {
-      logGatewayFallbackOnce(request.signal, request.logger, {
-        task,
-        from: `${route.provider}/${route.model}`,
-        to: `${gatewayDirect.provider.id}/${gatewayDirect.model}`,
-        code: error.code,
-        status: error.status,
+  const userChain = gatewayOnly ? [] : fallbackChainOf(originalRoute);
+  const steps: Step[] = [{
+    provider: route.provider,
+    model: route.model,
+    maxOutputTokens: route.maxOutputTokens,
+    originalPrimary: true,
+    kind: quota?.kindOf(route.provider.id, route.model) ?? null,
+  }];
+  for (const entry of userChain) {
+    if (entry.provider === route.provider.id && (entry.model ?? route.provider.defaultModel ?? "") === route.model) continue;
+    try {
+      const resolved = registry.resolveFallback(entry);
+      steps.push({
+        provider: resolved.provider,
+        model: resolved.model,
+        maxOutputTokens: route.maxOutputTokens,
+        originalPrimary: false,
+        kind: quota?.kindOf(resolved.provider.id, resolved.model) ?? null,
       });
-      try {
-        const generated = await generateStructured({
-          ...request,
-          provider: gatewayDirect.provider,
-          model: gatewayDirect.model,
+    } catch (error) {
+      if (!(error instanceof LlmError)) throw error;
+    }
+  }
+  const ordered = orderChainForBudget(steps, route.budgetMode);
+  const policy = quota?.policyFor(route.profileId) ?? {
+    policy: "wait" as const,
+    paidFallbackDailyUsd: 1,
+    timeZone: "Asia/Ho_Chi_Minh",
+  };
+
+  let priorCalls: LlmCallUsage[] = [];
+  let priorUsage: UsageSlice = { llmCalls: 0, inputTokens: 0, outputTokens: 0 };
+  let quotaPressure = false;
+  let lastError: LlmError | undefined;
+
+  const quotaWait = () => {
+    const retryAt = quota?.earliestRetryAt(ordered.map((step) => ({ provider: step.provider.id, model: step.model })))
+      ?? new Date(Date.now() + 60_000).toISOString();
+    const when = formatHourMinute(new Date(retryAt), policy.timeZone);
+    const message = route.autonomy === "AUTO"
+      ? `Chờ quota reset lúc ${when}`
+      : `Hết quota miễn phí. Chờ đến ${when}.`;
+    return mergedError(message, "LLM_QUOTA_WAIT", true, undefined, priorCalls, priorUsage, [], undefined, undefined, retryAt);
+  };
+
+  for (const step of ordered) {
+    const paidFallback = step.kind === "paid" && !step.originalPrimary;
+    if (paidFallback) {
+      const underCap = policy.policy === "paid_fallback" && (quota?.todaySpendUsd() ?? 0) < policy.paidFallbackDailyUsd;
+      if (!underCap) continue;
+    }
+    if (quota?.isUnavailable(step.provider.id, step.model)) {
+      quotaPressure = true;
+      if (step.originalPrimary && gatewayDirect && !gatewayOnly) {
+        try {
+          const generated = await callModel(gatewayDirect.provider, gatewayDirect.model, gatewayDirect.maxOutputTokens);
+          return mergeUsage(priorCalls, priorUsage, generated, "quota");
+        } catch (error) {
+          if (!(error instanceof LlmError)) throw error;
+          if (isQuotaSignal(error)) quota.onQuotaFailure({ provider: gatewayDirect.provider.id, model: gatewayDirect.model, error });
+          priorCalls = [...priorCalls, ...tagCalls(error.usage?.calls ?? [], true, "quota")];
+          priorUsage = {
+            llmCalls: priorUsage.llmCalls + (error.usage?.llmCalls ?? 0),
+            inputTokens: priorUsage.inputTokens + (error.usage?.inputTokens ?? 0),
+            outputTokens: priorUsage.outputTokens + (error.usage?.outputTokens ?? 0),
+          };
+          lastError = error;
+          if (!shouldFallback(error)) throw error;
+        }
+      }
+      continue;
+    }
+    try {
+      const generated = await callModel(step.provider, step.model, step.maxOutputTokens);
+      const asFallback = priorCalls.length > 0 || !step.originalPrimary;
+      if (paidFallback) {
+        const fresh = generated.usage.calls.filter((call) => !call.cached).at(-1);
+        quota?.notePaidFallback({
           task,
-          maxOutputTokens: gatewayDirect.maxOutputTokens ?? request.maxOutputTokens,
-        });
-        return mergeFallbackUsage(
-          error.usage?.calls ?? [],
-          error.usage ?? { llmCalls: 0, inputTokens: 0, outputTokens: 0 },
-          generated,
-        );
-      } catch (fallbackError) {
-        if (!(fallbackError instanceof LlmError)) throw fallbackError;
-        const firstUsage = error.usage ?? { llmCalls: 0, inputTokens: 0, outputTokens: 0 };
-        const fallbackUsage = fallbackError.usage;
-        throw new LlmError(fallbackError.message, fallbackError.code, fallbackError.retryable, fallbackError.status, {
-          llmCalls: firstUsage.llmCalls + (fallbackUsage?.llmCalls ?? 0),
-          inputTokens: firstUsage.inputTokens + (fallbackUsage?.inputTokens ?? 0),
-          outputTokens: firstUsage.outputTokens + (fallbackUsage?.outputTokens ?? 0),
-          ...(firstUsage.tokensUnknown || fallbackUsage?.tokensUnknown ? { tokensUnknown: true } : {}),
-          calls: [
-            ...(error.usage?.calls ?? []),
-            ...(fallbackUsage?.calls ?? []).map((call) => ({ ...call, fallback: true })),
-          ],
+          provider: step.provider.id,
+          model: step.model,
+          inputTokens: fresh?.inputTokens ?? generated.usage.inputTokens,
+          outputTokens: fresh?.outputTokens ?? generated.usage.outputTokens,
         });
       }
+      if (!asFallback) return generated;
+      return mergeUsage(priorCalls, priorUsage, generated, quotaPressure ? "quota" : undefined);
+    } catch (error) {
+      if (!(error instanceof LlmError)) throw error;
+      if (step.originalPrimary && gatewayDirect && shouldGatewayFallback(error) && priorCalls.length === 0) {
+        logGatewayFallbackOnce(request.signal, request.logger, {
+          task,
+          from: `${route.provider.id}/${route.model}`,
+          to: `${gatewayDirect.provider.id}/${gatewayDirect.model}`,
+          code: error.code,
+          status: error.status,
+        });
+        try {
+          const generated = await callModel(gatewayDirect.provider, gatewayDirect.model, gatewayDirect.maxOutputTokens);
+          return mergeUsage(error.usage?.calls ?? [], error.usage ?? priorUsage, generated);
+        } catch (fallbackError) {
+          if (!(fallbackError instanceof LlmError)) throw fallbackError;
+          const firstUsage = error.usage ?? priorUsage;
+          throw mergedError(
+            fallbackError.message,
+            fallbackError.code,
+            fallbackError.retryable,
+            fallbackError.status,
+            error.usage?.calls ?? [],
+            firstUsage,
+            tagCalls(fallbackError.usage?.calls ?? [], true),
+            fallbackError.usage,
+            fallbackError.retryAfterMs,
+            fallbackError.retryAt,
+          );
+        }
+      }
+      const reason = quota && isQuotaSignal(error) ? "quota" as const : undefined;
+      if (reason && quota) {
+        quota.onQuotaFailure({ provider: step.provider.id, model: step.model, error });
+        quotaPressure = true;
+      }
+      const tagged = tagCalls(error.usage?.calls ?? [], priorCalls.length > 0 || !step.originalPrimary, reason);
+      priorCalls = [...priorCalls, ...tagged];
+      priorUsage = {
+        llmCalls: priorUsage.llmCalls + (error.usage?.llmCalls ?? 0),
+        inputTokens: priorUsage.inputTokens + (error.usage?.inputTokens ?? 0),
+        outputTokens: priorUsage.outputTokens + (error.usage?.outputTokens ?? 0),
+        ...(priorUsage.tokensUnknown || error.usage?.tokensUnknown ? { tokensUnknown: true } : {}),
+      };
+      lastError = mergedError(
+        error.message,
+        error.code,
+        error.retryable,
+        error.status,
+        priorCalls.slice(0, -tagged.length),
+        {
+          llmCalls: priorUsage.llmCalls - (error.usage?.llmCalls ?? 0),
+          inputTokens: priorUsage.inputTokens - (error.usage?.inputTokens ?? 0),
+          outputTokens: priorUsage.outputTokens - (error.usage?.outputTokens ?? 0),
+          ...(priorUsage.tokensUnknown ? { tokensUnknown: true } : {}),
+        },
+        tagged,
+        error.usage,
+        error.retryAfterMs,
+        error.retryAt,
+      );
+      if (!shouldFallback(error) || gatewayOnly) throw lastError;
     }
-
-    if (!shouldFallback(error) || !route.fallback) throw error;
-    return fallbackAttempt(
-      error.usage?.calls ?? [],
-      error.usage ?? { llmCalls: 0, inputTokens: 0, outputTokens: 0 },
-    );
   }
+
+  if (quota && quotaPressure) throw quotaWait();
+  if (lastError) throw lastError;
+  if (quota) throw quotaWait();
+  throw new LlmError("No LLM provider is available for this task.", "LLM_NOT_CONFIGURED", false);
+}
+
+function isQuotaSignal(error: LlmError): boolean {
+  return error.code === "LLM_QUOTA_EXHAUSTED" || error.code === "LLM_RATE_LIMIT" || error.code === "LLM_QUOTA_WAIT";
 }
 
 async function applyOmnirouteGateway(
@@ -435,6 +610,9 @@ async function applyOmnirouteGateway(
     // prefer: the direct route is the fallback (directFallback below); only: no fallback at all.
     fallback: undefined,
     source: route.source,
+    budgetMode: route.budgetMode,
+    autonomy: route.autonomy,
+    profileId: route.profileId,
   };
 
   return {
@@ -501,7 +679,7 @@ function withUsage(
       ...((usage.calls || error.usage?.calls) ? {
         calls: [...(usage.calls ?? []), ...(error.usage?.calls ?? [])],
       } : {}),
-    });
+    }, error.retryAfterMs, error.retryAt);
   }
   return new LlmError(
     error instanceof Error ? error.message : String(error),

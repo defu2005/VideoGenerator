@@ -23,6 +23,7 @@ import {
   TELEGRAM_BOT_TOKEN_KEY,
 } from "../settings/notifications.js";
 import { escapeHtml, maskTelegramSecret, TelegramClient, type InlineButton } from "./telegram.js";
+import { quotaDailySummaryLine } from "../providers/llm/quota.js";
 
 const DEDUP_MS = 6 * 60 * 60 * 1000;
 const RETENTION_DAYS = 30;
@@ -358,6 +359,8 @@ export class NotificationService {
       }
     }
     lines.push(`<b>Chi phí LLM hôm nay</b>: $${costUsd.toFixed(4)}`);
+    const quotaLine = quotaDailySummaryLine(this.deps.sqlite, this.now());
+    if (quotaLine) lines.push(quotaLine);
 
     const nextDay = new Date(this.now().getTime() + 24 * 60 * 60 * 1000).toISOString();
     const scheduled = this.deps.sqlite.prepare(

@@ -196,6 +196,8 @@ function BriefTab({ profile }: { profile: ProfileDetail }) {
   const [mode, setMode] = useState(profile.defaultBrief.mode);
   const [autoRender, setAutoRender] = useState(profile.defaultBrief.autoRender);
   const [autoModel, setAutoModel] = useState(profile.llm?.autoModel ?? true);
+  const [quotaPolicy, setQuotaPolicy] = useState(profile.llm?.quotaPolicy ?? "");
+  const [paidCap, setPaidCap] = useState(profile.llm?.paidFallbackDailyUsd === undefined ? "" : String(profile.llm.paidFallbackDailyUsd));
   const [voice, setVoice] = useState(profile.voice?.voice ?? "");
   const [rate, setRate] = useState(profile.voice?.rate ?? "+0%");
   const [guidelineDraft, setGuidelineDraft] = useState<GuidelineDraft>(() =>
@@ -208,6 +210,8 @@ function BriefTab({ profile }: { profile: ProfileDetail }) {
     setMode(profile.defaultBrief.mode);
     setAutoRender(profile.defaultBrief.autoRender);
     setAutoModel(profile.llm?.autoModel ?? true);
+    setQuotaPolicy(profile.llm?.quotaPolicy ?? "");
+    setPaidCap(profile.llm?.paidFallbackDailyUsd === undefined ? "" : String(profile.llm.paidFallbackDailyUsd));
     setVoice(profile.voice?.voice ?? "");
     setRate(profile.voice?.rate ?? "+0%");
     setGuidelineDraft(guidelineDraftFromSettings({ guidelines: profile.guidelines }));
@@ -248,10 +252,15 @@ function BriefTab({ profile }: { profile: ProfileDetail }) {
           defaultBrief,
           voice: voice.trim() ? { voice: voice.trim(), ...(rate ? { rate } : {}) } : null,
           ...(guidelines ? { guidelines } : {}),
-          llm: {
-            ...(profile.llm ?? {}),
-            autoModel,
-          },
+          llm: (() => {
+            const { quotaPolicy: _policy, paidFallbackDailyUsd: _cap, ...rest } = profile.llm ?? {};
+            return {
+              ...rest,
+              autoModel,
+              ...(quotaPolicy === "wait" || quotaPolicy === "paid_fallback" ? { quotaPolicy } : {}),
+              ...(paidCap.trim() ? { paidFallbackDailyUsd: Number(paidCap) } : {}),
+            };
+          })(),
         },
       });
       setMessage("Đã lưu brief mặc định.");
@@ -286,6 +295,18 @@ function BriefTab({ profile }: { profile: ProfileDetail }) {
             onChange={(event) => setAutoModel(event.target.checked)}
           />
           Tự chọn model
+        </label>
+        <label className="form-field">
+          <span>Khi hết quota miễn phí</span>
+          <select aria-label="Chính sách quota của hồ sơ" value={quotaPolicy} onChange={(event) => setQuotaPolicy(event.target.value as typeof quotaPolicy)}>
+            <option value="">Theo cài đặt app</option>
+            <option value="wait">Chờ reset</option>
+            <option value="paid_fallback">Dùng model trả phí</option>
+          </select>
+        </label>
+        <label className="form-field">
+          <span>Trần trả phí của hồ sơ (USD/ngày)</span>
+          <input aria-label="Trần trả phí của hồ sơ" type="number" min={0} step="0.01" value={paidCap} placeholder="Theo app" onChange={(event) => setPaidCap(event.target.value)} />
         </label>
       </div>
       <ModelAdvisorPanel scope="profile" id={profile.id} budgetMode={brief.budget.mode} />

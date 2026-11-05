@@ -22,6 +22,8 @@ import { createExecutorRegistry } from "./pipeline/executorRegistry.js";
 import { PipelineOrchestrator } from "./pipeline/orchestrator.js";
 import { LlmProviderRegistry } from "./providers/llm/registry.js";
 import { getLlmGatewaySettings } from "./providers/llm/gatewaySettings.js";
+import { attachLlmQuota } from "./providers/llm/quota.js";
+import { estimateLlmCost } from "./providers/llm/pricing.js";
 import { ResearchExecutor } from "./stages/research/researchExecutor.js";
 import { ScriptExecutor } from "./stages/script/scriptExecutor.js";
 import { ScriptService } from "./services/scriptService.js";
@@ -305,6 +307,30 @@ export function buildApp({ config }: { config: AppConfig }) {
   });
   publishService.setNotificationService(notificationService);
   orchestrator.setNotificationService(notificationService);
+  attachLlmQuota(llmProviders, {
+    sqlite: database.sqlite,
+    spendToday: (dateKey) => {
+      try {
+        return usageService.getAppUsage({ from: dateKey, to: dateKey, groupBy: "day" }).totals.costUsd;
+      } catch {
+        return 0;
+      }
+    },
+    costOf: (provider, model, inputTokens, outputTokens) => {
+      try {
+        return estimateLlmCost(config, provider, model, { inputTokens, outputTokens });
+      } catch {
+        return 0;
+      }
+    },
+    notifyPaid: (message) => {
+      void notificationService.notify({
+        kind: "automation_warning",
+        profile: "LLM",
+        message,
+      });
+    },
+  });
   publishTicker.setNotifications(notificationService);
   const analyticsFetchers = createFetchers({
     youtubeQuota: youtubePublisher.quota,

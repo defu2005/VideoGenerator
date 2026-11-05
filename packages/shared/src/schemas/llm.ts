@@ -46,14 +46,25 @@ const LlmFallbackSchema = z.object({
   provider: z.string().min(1),
   model: z.string().optional(),
 }).strict();
+export type LlmFallback = z.infer<typeof LlmFallbackSchema>;
 
 export const LlmRouteSchema = z.object({
   provider: z.string().min(1),
   model: z.string().optional(),
   maxOutputTokens: z.number().int().min(256).max(32_000).optional(),
+  /** @deprecated Prefer `fallbacks`. Still accepted as a chain of one. */
   fallback: LlmFallbackSchema.optional(),
+  fallbacks: z.array(LlmFallbackSchema).max(4).optional(),
 }).strict();
 export type LlmRoute = z.infer<typeof LlmRouteSchema>;
+
+/** Ordered fallback chain. `fallbacks` wins; a lone `fallback` is a chain of one. */
+export function fallbackChainOf(route: { fallback?: LlmFallback; fallbacks?: LlmFallback[] } | null | undefined): LlmFallback[] {
+  if (!route) return [];
+  if (route.fallbacks && route.fallbacks.length > 0) return route.fallbacks.slice(0, 4);
+  if (route.fallback) return [route.fallback];
+  return [];
+}
 
 export const LlmTaskIdSchema = z.enum([
   "research",
@@ -139,6 +150,8 @@ function normalizeLlmSettings(value: unknown): unknown {
     ...(legacy.default === undefined ? {} : { default: legacy.default }),
     ...(Object.keys(tasks).length === 0 ? {} : { tasks }),
     ...(typeof legacy.autoModel === "boolean" ? { autoModel: legacy.autoModel } : {}),
+    ...(legacy.quotaPolicy === "wait" || legacy.quotaPolicy === "paid_fallback" ? { quotaPolicy: legacy.quotaPolicy } : {}),
+    ...(typeof legacy.paidFallbackDailyUsd === "number" ? { paidFallbackDailyUsd: legacy.paidFallbackDailyUsd } : {}),
   };
 }
 
@@ -159,6 +172,8 @@ export const ProfileLlmSettingsSchema = z.preprocess(normalizeLlmSettings, z.obj
   default: LlmRouteSchema.optional(),
   tasks: z.partialRecord(LlmTaskIdSchema, LlmRouteSchema).optional(),
   autoModel: z.boolean().default(true),
+  quotaPolicy: z.enum(["wait", "paid_fallback"]).optional(),
+  paidFallbackDailyUsd: z.number().nonnegative().max(10_000).optional(),
 }).strict());
 export type ProfileLlmSettings = z.infer<typeof ProfileLlmSettingsSchema>;
 
@@ -166,6 +181,8 @@ export const ProfileLlmSettingsInputSchema = z.preprocess(normalizeLlmSettings, 
   default: LlmRouteSchema.optional(),
   tasks: z.partialRecord(LlmTaskIdSchema, LlmRouteSchema.nullable()).optional(),
   autoModel: z.boolean().optional(),
+  quotaPolicy: z.enum(["wait", "paid_fallback"]).nullable().optional(),
+  paidFallbackDailyUsd: z.number().nonnegative().max(10_000).nullable().optional(),
 }).strict());
 export type ProfileLlmSettingsInput = z.infer<typeof ProfileLlmSettingsInputSchema>;
 

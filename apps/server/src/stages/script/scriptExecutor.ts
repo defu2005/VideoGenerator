@@ -557,7 +557,7 @@ function addUsage(
 }
 
 function asStageError(error: unknown): Error {
-  if (error instanceof LlmError) return new StageError(error.message, error.code, error.retryable);
+  if (error instanceof LlmError) return new StageError(error.message, error.code, error.retryable, error.retryAt);
   if (error instanceof z.ZodError) return new StageError(error.message, "LLM_INVALID_OUTPUT", false);
   return error instanceof Error ? error : new Error(String(error));
 }

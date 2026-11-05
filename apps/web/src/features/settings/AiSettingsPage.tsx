@@ -6,15 +6,19 @@ import { ModelField } from "../llm/ModelField";
 import {
   getAppLlmRouting,
   getLlmProviders,
+  getLlmQuotaStatus,
   getLlmTasks,
   saveAppLlmRouting,
   type LlmTask,
 } from "../../services/llmApi";
-import type { LlmRoute, LlmSettings } from "@vg/shared";
+import type { LlmQuotaStatus, LlmRoute, LlmSettings } from "@vg/shared";
 import { OmniRouteGatewaySection } from "./OmniRouteGatewaySection";
 import { ModelAdvisorPanel } from "./ModelAdvisorPanel";
+import { FallbackChainEditor, routeWithChain } from "./FallbackChainEditor";
+import { QuotaPanel } from "./QuotaPanel";
 
 type RouteUpdate = Partial<LlmRoute>;
+type SettingsTab = "routes" | "quota";
 
 const DEFAULT_STRONG_MODEL = "claude-sonnet-4-6";
 const DEFAULT_FAST_MODEL = "gemini-3.8-flash-low";
@@ -58,12 +62,14 @@ function TaskRoutingRow({
   task,
   providers,
   route,
+  quota,
   onChange,
   onReset,
 }: {
   task: LlmTask;
   providers: Awaited<ReturnType<typeof getLlmProviders>>;
   route?: LlmRoute;
+  quota?: LlmQuotaStatus;
   onChange: (patch: RouteUpdate) => void;
   onReset: () => void;
 }) {
@@ -98,27 +104,20 @@ function TaskRoutingRow({
             onChange={(event) => onChange({ maxOutputTokens: event.target.value ? Number(event.target.value) : undefined })}
           />
         </label>
-        <label className="form-field"><span>Dự phòng khi lỗi</span>
-          <ProviderField
-            providers={providers}
-            value={route?.fallback?.provider ?? ""}
-            label={`${task.label} — dự phòng`}
-            onChange={(provider) => route && onChange({
-              fallback: provider ? { ...route.fallback, provider } : undefined,
-            })}
-          />
-          {route?.fallback?.provider && (
-            <ModelField
-              provider={route.fallback.provider}
-              value={route.fallback.model ?? ""}
-              label={`${task.label} — model dự phòng`}
-              onChange={(model) => onChange({
-                fallback: { provider: route.fallback!.provider, model: model || undefined },
-              })}
-            />
-          )}
-        </label>
       </div>
+      <FallbackChainEditor
+        route={route}
+        providers={providers}
+        quota={quota}
+        onChange={(chain) => {
+          if (!route) return;
+          const next = routeWithChain(route, chain);
+          onChange({
+            fallback: next.fallback,
+            fallbacks: next.fallbacks,
+          });
+        }}
+      />
     </article>
   );
 }
@@ -128,6 +127,8 @@ export function AiSettingsPage() {
   const settings = useQuery({ queryKey: ["llm-routing"], queryFn: getAppLlmRouting });
   const providers = useQuery({ queryKey: ["llm-providers"], queryFn: getLlmProviders });
   const tasks = useQuery({ queryKey: ["llm-tasks"], queryFn: getLlmTasks });
+  const [tab, setTab] = useState<SettingsTab>("routes");
+  const quota = useQuery({ queryKey: ["llm-quota"], queryFn: getLlmQuotaStatus });
   const [draft, setDraft] = useState<LlmSettings>({});
   const [strongProvider, setStrongProvider] = useState("");
   const [strongModel, setStrongModel] = useState("");
@@ -220,8 +221,14 @@ export function AiSettingsPage() {
       <header className="page-heading">
         <div><p className="eyebrow">CÀI ĐẶT</p><h1>Mô hình AI</h1><p>Chọn nhà cung cấp và model cho từng tác vụ AI. Áp dụng cho mọi dự án; từng dự án có thể ghi đè trong phần sửa dự án.</p></div>
       </header>
+      <div className="button-row" role="tablist" aria-label="Mục cài đặt AI">
+        <button type="button" className={tab === "routes" ? "button button-primary" : "button button-secondary"} onClick={() => setTab("routes")}>Định tuyến</button>
+        <button type="button" className={tab === "quota" ? "button button-primary" : "button button-secondary"} onClick={() => setTab("quota")}>Quota</button>
+      </div>
+      {tab === "quota" ? <QuotaPanel /> : null}
       {mutation.isError && <p className="request-error" role="alert">{mutation.error instanceof Error ? mutation.error.message : "Không lưu được cài đặt AI"}</p>}
       {mutation.isSuccess && <p className="success-message" role="status">Đã lưu cài đặt mô hình AI.</p>}
+      {tab === "routes" && <>
       <OmniRouteGatewaySection />
       <ModelAdvisorPanel scope="app" />
       <form className="panel ai-routing-form" onSubmit={submit}>
@@ -276,6 +283,7 @@ export function AiSettingsPage() {
               task={task}
               providers={allProviders}
               route={draft.tasks?.[task.id]}
+              quota={quota.data}
               onChange={(patch) => updateTask(task.id, patch)}
               onReset={() => resetTask(task.id)}
             />
@@ -287,6 +295,7 @@ export function AiSettingsPage() {
           </button>
         </div>
       </form>
+      </>}
     </section>
   );
 }

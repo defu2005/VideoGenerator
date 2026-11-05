@@ -7,6 +7,8 @@ export const JobErrorSchema = z.object({
   code: z.string(),
   message: z.string(),
   retryable: z.boolean(),
+  /** When set, the worker waits until this instant without spending an attempt. */
+  retryAt: z.string().datetime({ offset: true }).optional(),
 });
 export type JobError = z.infer<typeof JobErrorSchema>;
 
@@ -19,6 +21,8 @@ export const LlmCallUsageSchema = z.object({
   premiumRequests: z.number().int().nonnegative().optional(),
   cached: z.boolean(),
   fallback: z.boolean(),
+  /** Set when this call ran because an earlier model was out of quota. */
+  fallbackReason: z.literal("quota").optional(),
   ok: z.boolean(),
 }).strict();
 export type LlmCallUsage = z.infer<typeof LlmCallUsageSchema>;

@@ -4,6 +4,10 @@ import {
   LlmGatewaySettingsSchema,
   LlmProviderIdSchema,
   LlmProviderInfoSchema,
+  LlmQuotaModelRefSchema,
+  LlmQuotaPolicyBodySchema,
+  LlmQuotaRuleSchema,
+  LlmQuotaStatusSchema,
   LlmSettingsSchema,
   ModelAdvisorApplyBodySchema,
   ModelAdvisorApplyResultSchema,
@@ -20,6 +24,13 @@ import type { LlmProviderRegistry } from "../providers/llm/registry.js";
 import type { ProjectService } from "../services/projectService.js";
 import type { ProfileService } from "../services/profileService.js";
 import { getAppLlmSettings, saveAppLlmSettings } from "../providers/llm/settings.js";
+import {
+  clearLlmCooldown,
+  readQuotaStatus,
+  saveQuotaPolicy,
+  saveUserQuotaRule,
+  setQuotaRuleEnabled,
+} from "../providers/llm/quota.js";
 import { getLlmGatewaySettings, saveLlmGatewaySettings } from "../providers/llm/gatewaySettings.js";
 import { applyModelRoutes, proposeModelRoutes } from "../services/modelAdvisor.js";
 import { JobUsageSchema } from "@vg/shared";
@@ -47,6 +58,7 @@ const ProjectRoutesSchema = z.object({
     model: z.string(),
     maxOutputTokens: z.number().int().optional(),
     fallback: z.object({ provider: z.string(), model: z.string().optional() }).optional(),
+    fallbacks: z.array(z.object({ provider: z.string(), model: z.string().optional() }).strict()).max(4).optional(),
     source: z.enum(["project-task", "project-default", "app-task", "app-default", "env-task", "env-default"]),
   }).strict().nullable()),
 }).strict();
@@ -86,13 +98,64 @@ export function registerLlmRoutes(
       ...Object.values(settings.tasks ?? {}),
     ]) {
       if (!route) continue;
-      if (!registry.isSupportedProvider(route.provider)
-        || (route.fallback && !registry.isSupportedProvider(route.fallback.provider))) {
+      const chain = [...(route.fallback ? [route.fallback] : []), ...(route.fallbacks ?? [])];
+      if (!registry.isSupportedProvider(route.provider) || chain.some((entry) => !registry.isSupportedProvider(entry.provider))) {
         throw new AppError(400, "INVALID_LLM_PROVIDER", "An LLM route references an unsupported provider.");
       }
     }
     saveAppLlmSettings(sqlite, settings);
     return settings;
+  });
+
+  app.get("/api/llm/quota", {
+    schema: { response: { 200: LlmQuotaStatusSchema } },
+  }, async () => readQuotaStatus(sqlite));
+
+  app.put("/api/llm/quota/policy", {
+    schema: {
+      body: LlmQuotaPolicyBodySchema,
+      response: { 200: LlmQuotaStatusSchema, 400: ApiErrorSchema },
+    },
+  }, async (request) => {
+    const body = LlmQuotaPolicyBodySchema.parse(request.body);
+    saveQuotaPolicy(sqlite, body);
+    return readQuotaStatus(sqlite);
+  });
+
+  app.put("/api/llm/quota/rules", {
+    schema: {
+      body: LlmQuotaRuleSchema,
+      response: { 200: LlmQuotaStatusSchema, 400: ApiErrorSchema },
+    },
+  }, async (request) => {
+    const rule = LlmQuotaRuleSchema.parse(request.body);
+    if (!registry.isSupportedProvider(rule.provider)) {
+      throw new AppError(400, "INVALID_LLM_PROVIDER", "A quota rule references an unsupported provider.");
+    }
+    saveUserQuotaRule(sqlite, rule);
+    return readQuotaStatus(sqlite);
+  });
+
+  app.post("/api/llm/quota/rules/enabled", {
+    schema: {
+      body: LlmQuotaModelRefSchema.extend({ enabled: z.boolean() }),
+      response: { 200: LlmQuotaStatusSchema, 400: ApiErrorSchema },
+    },
+  }, async (request) => {
+    const body = LlmQuotaModelRefSchema.extend({ enabled: z.boolean() }).parse(request.body);
+    setQuotaRuleEnabled(sqlite, body.provider, body.model, body.enabled);
+    return readQuotaStatus(sqlite);
+  });
+
+  app.post("/api/llm/quota/cooldowns/clear", {
+    schema: {
+      body: LlmQuotaModelRefSchema,
+      response: { 200: LlmQuotaStatusSchema, 400: ApiErrorSchema },
+    },
+  }, async (request) => {
+    const body = LlmQuotaModelRefSchema.parse(request.body);
+    clearLlmCooldown(sqlite, body.provider, body.model);
+    return readQuotaStatus(sqlite);
   });
 
   app.get("/api/settings/llm-gateway", {

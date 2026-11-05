@@ -19,6 +19,7 @@ import type Database from "better-sqlite3";
 import type { LlmProviderRegistry } from "../providers/llm/registry.js";
 import { generateRoutedStructured } from "../providers/llm/structured.js";
 import { getAppLlmSettings, saveAppLlmSettings } from "../providers/llm/settings.js";
+import { advisorQuotaFor } from "../providers/llm/quota.js";
 import { LlmCache } from "../providers/llm/cache.js";
 import { AppError } from "../lib/errors.js";
 import type { ProjectService } from "./projectService.js";
@@ -37,6 +38,9 @@ export type AdvisorCatalogModel = {
   subscription: boolean;
   pricing?: { inputPerMTok: number; outputPerMTok: number };
   contextWindow?: number;
+  kind?: "free_tier" | "subscription" | "paid" | "unknown";
+  remainingRequestsToday?: number | null;
+  quotaStatus?: "available" | "near_limit" | "exhausted" | "cooldown";
 };
 
 export type AdvisorHealthBucket = {
@@ -227,7 +231,7 @@ export function advisorCacheHash(input: {
   health: AdvisorHealthBucket[];
 }): string {
   const catalogKey = input.catalog
-    .map((row) => `${row.provider}|${row.model}|${row.vision ? 1 : 0}|${row.subscription ? 1 : 0}`)
+    .map((row) => `${row.provider}|${row.model}|${row.vision ? 1 : 0}|${row.subscription ? 1 : 0}|${row.kind ?? ""}|${row.quotaStatus ?? ""}|${row.remainingRequestsToday ?? ""}`)
     .sort();
   return createHash("sha256").update(JSON.stringify({
     catalog: catalogKey,
@@ -527,7 +531,13 @@ export async function proposeModelRoutes(input: {
     }
   }
 
-  const catalog = buildAdvisorCatalog(input.registry, modelLists);
+  const catalog = buildAdvisorCatalog(input.registry, modelLists).map((row) => {
+    try {
+      return { ...row, ...advisorQuotaFor(input.sqlite, row.provider, row.model, now) };
+    } catch {
+      return row;
+    }
+  });
   if (catalog.length === 0) {
     throw new AppError(400, "NO_LLM_PROVIDERS", "Không có nhà cung cấp LLM nào được cấu hình.");
   }
@@ -569,6 +579,7 @@ export async function proposeModelRoutes(input: {
       "You are an LLM model advisor for a video generation app.",
       "Pick one provider+model from the catalog for each task.",
       "Respect budgetMode: ECO prefers cheap/subscription/fast; QUALITY/MAX prefer higher qualityWeight.",
+      "For cheap tasks, prefer free models that still have allowance left (kind free_tier or subscription, quotaStatus available).",
       "Vision tasks must use vision-capable models.",
       "reason must be one short Vietnamese sentence.",
       "Never invent providers or models outside the catalog.",

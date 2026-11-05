@@ -292,9 +292,12 @@ export function classifyAgyFailure(message: string): LlmError {
   if (/not eligible|sign in|login|ineligibletier/.test(normalized)) {
     return new LlmError("Chạy `agy` một lần để đăng nhập Google", "LLM_NOT_CONFIGURED", false);
   }
-  // Quota / rate limit
-  if (/quota|resource_exhausted|rate limit|429/.test(normalized)) {
-    return new LlmError("Antigravity CLI rate limit hoặc quota exhausted.", "LLM_RATE_LIMIT", true);
+  // Quota text is exhausted (not retryable). A plain 429 / rate limit stays retryable.
+  if (/quota|resource_exhausted|exhausted/.test(normalized)) {
+    return new LlmError("Antigravity CLI quota exhausted.", "LLM_QUOTA_EXHAUSTED", false);
+  }
+  if (/rate limit|429/.test(normalized)) {
+    return new LlmError("Antigravity CLI rate limit.", "LLM_RATE_LIMIT", true);
   }
   // Unknown / invalid model
   if (/unknown model|model not found|invalid model/.test(normalized)) {

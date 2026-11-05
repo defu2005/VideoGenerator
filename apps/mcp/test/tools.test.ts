@@ -59,6 +59,7 @@ describe("Video Agent MCP tools", () => {
       "create_project",
       "get_auto_report",
       "get_guidelines",
+      "get_llm_quota_status",
       "get_llm_routes",
       "get_pipeline",
       "get_project",

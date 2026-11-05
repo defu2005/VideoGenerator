@@ -142,16 +142,16 @@ describe("classifyAgyFailure", () => {
     expect(err.code).toBe("LLM_NOT_CONFIGURED");
   });
 
-  it("maps quota → LLM_RATE_LIMIT, retryable", () => {
+  it("maps quota → LLM_QUOTA_EXHAUSTED, not retryable", () => {
     const err = classifyAgyFailure("quota exceeded");
-    expect(err.code).toBe("LLM_RATE_LIMIT");
-    expect(err.retryable).toBe(true);
+    expect(err.code).toBe("LLM_QUOTA_EXHAUSTED");
+    expect(err.retryable).toBe(false);
   });
 
-  it("maps RESOURCE_EXHAUSTED → LLM_RATE_LIMIT, retryable", () => {
+  it("maps RESOURCE_EXHAUSTED → LLM_QUOTA_EXHAUSTED, not retryable", () => {
     const err = classifyAgyFailure("RESOURCE_EXHAUSTED: quota hit");
-    expect(err.code).toBe("LLM_RATE_LIMIT");
-    expect(err.retryable).toBe(true);
+    expect(err.code).toBe("LLM_QUOTA_EXHAUSTED");
+    expect(err.retryable).toBe(false);
   });
 
   it("maps 429 → LLM_RATE_LIMIT", () => {
@@ -390,7 +390,7 @@ process.stdin.on("end", () => {
 `;
     const cli = provider({ spawnProcess: makeFakeSpawn(source) });
     await expect(cli.generate(request("q"), new AbortController().signal))
-      .rejects.toMatchObject({ code: "LLM_RATE_LIMIT", retryable: true });
+      .rejects.toMatchObject({ code: "LLM_QUOTA_EXHAUSTED", retryable: false });
   });
 
   it("raises LLM_INVALID_OUTPUT for denied_actions with empty response", async () => {

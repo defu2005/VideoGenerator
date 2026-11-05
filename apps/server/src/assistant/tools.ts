@@ -49,6 +49,7 @@ import {
 import type { AnalyticsSyncService } from "../analytics/syncService.js";
 import type { FinanceService } from "../finance/financeService.js";
 import type { LearningService } from "../learning/learningService.js";
+import { clearLlmCooldown, readQuotaStatus } from "../providers/llm/quota.js";
 
 const emptyObject = z.object({}).strict();
 
@@ -221,6 +222,11 @@ const deleteTopicArgs = z.object({
 const deleteProjectArgs = projectIdArgs;
 
 const profileInsightsArgs = z.object({ profileId: z.string().uuid() }).strict();
+
+const quotaRefArgs = z.object({
+  provider: z.string().min(1),
+  model: z.string().min(1),
+}).strict();
 
 const applyInsightArgs = z.object({
   profileId: z.string().uuid(),
@@ -887,6 +893,29 @@ const toolDefs: AssistantToolDef[] = [
       if (!ctx.learning) throw new AppError(503, "LEARNING_UNAVAILABLE", "Bài học chưa sẵn sàng");
       const parsed = applyInsightArgs.parse(args);
       return ctx.learning.apply(parsed.profileId, parsed.insightId, parsed.fields);
+    },
+  }),
+  defineTool({
+    name: "get_llm_quota_status",
+    description: "Xem hạn mức model miễn phí, mức đã dùng và thời gian chờ.",
+    risk: "read",
+    argsSchema: emptyObject,
+    summarize: () => "Xem quota LLM",
+    execute: async (_args, ctx) => readQuotaStatus(ctx.sqlite),
+  }),
+  defineTool({
+    name: "clear_llm_cooldown",
+    description: "Xoá thời gian chờ của một model LLM.",
+    risk: "confirm",
+    argsSchema: quotaRefArgs,
+    summarize: (args) => {
+      const parsed = quotaRefArgs.parse(args);
+      return `Xoá chờ ${parsed.provider}/${parsed.model}`;
+    },
+    execute: async (args, ctx) => {
+      const parsed = quotaRefArgs.parse(args);
+      clearLlmCooldown(ctx.sqlite, parsed.provider, parsed.model);
+      return { ok: true, ...parsed };
     },
   }),
 ];

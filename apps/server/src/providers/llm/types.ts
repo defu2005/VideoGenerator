@@ -11,6 +11,7 @@ export type LlmErrorCode =
   | "LLM_NOT_CONFIGURED"
   | "LLM_LIMIT_TOO_SMALL"
   | "LLM_QUOTA_EXHAUSTED"
+  | "LLM_QUOTA_WAIT"
   | "VISION_PROVIDER_REQUIRED"
   | "FFMPEG_MISSING";
 
@@ -62,6 +63,9 @@ export interface LlmProvider {
 }
 
 export class LlmError extends Error {
+  readonly retryAfterMs?: number;
+  readonly retryAt?: string;
+
   constructor(
     message: string,
     public readonly code: LlmErrorCode,
@@ -74,9 +78,13 @@ export class LlmError extends Error {
       tokensUnknown?: boolean;
       calls?: LlmCallUsage[];
     },
+    retryAfterMs?: number,
+    retryAt?: string,
   ) {
     super(message);
     this.name = "LlmError";
+    if (retryAfterMs !== undefined) this.retryAfterMs = retryAfterMs;
+    if (retryAt !== undefined) this.retryAt = retryAt;
   }
 }
 

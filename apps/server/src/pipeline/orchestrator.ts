@@ -411,6 +411,28 @@ export class PipelineOrchestrator {
       if (!job || job.status !== "RUNNING") return;
       const finishedAt = this.now().toISOString();
       const durationMs = job.startedAt ? Date.parse(finishedAt) - Date.parse(job.startedAt) : 0;
+      if (error.code === "LLM_QUOTA_WAIT" && error.retryAt) {
+        this.repository.updateJob(jobId, {
+          status: "QUEUED",
+          attempt: job.attempt,
+          runAfter: error.retryAt,
+          startedAt: null,
+          finishedAt: null,
+          message: error.message,
+          error,
+        });
+        if (!isPublishStage(job.stage)) {
+          this.repository.updateStage(job.projectId, job.stage, {
+            state: "QUEUED",
+            progress: 0,
+            message: error.message,
+            jobId,
+            error,
+          });
+        }
+        this.logger.warn({ jobId, projectId: job.projectId, stage: job.stage, attempt: job.attempt, runAfter: error.retryAt }, "Pipeline job waiting for quota reset");
+        return;
+      }
       if (error.retryable && job.attempt < job.maxAttempts) {
         const delay = this.config.JOB_RETRY_BASE_MS * 2 ** (job.attempt - 1);
         const runAfter = new Date(this.now().getTime() + delay);

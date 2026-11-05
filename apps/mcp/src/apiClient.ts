@@ -113,6 +113,10 @@ export class VideoAgentApiClient {
     });
   }
 
+  getLlmQuotaStatus(): Promise<unknown> {
+    return this.request("/api/llm/quota");
+  }
+
   getLlmRoutes(projectId: string): Promise<{
     routes: Partial<Record<LlmTaskId, (LlmRoute & {
       model: string;

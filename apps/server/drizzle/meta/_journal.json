@@ -225,6 +225,13 @@
       "when": 1793845763364,
       "tag": "0031_absent_lethal_legion",
       "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "6",
+      "when": 1793850989161,
+      "tag": "0032_true_tinkerer",
+      "breakpoints": true
     }
   ]
 }

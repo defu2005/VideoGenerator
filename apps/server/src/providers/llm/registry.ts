@@ -14,6 +14,7 @@ import { fetchAnthropicModels, fetchGeminiModels, readCopilotAccountModels } fro
 import { OmniRouteCatalogService, omniRouteBaseUrl } from "./omnirouteCatalog.js";
 import { defaultLlmGatewaySettings } from "./gatewaySettings.js";
 import type { LlmGatewaySettings } from "@vg/shared";
+import type { LlmQuotaController } from "./quota.js";
 
 // Active Claude models, newest first within each family. Deprecated ones are left out.
 const CLAUDE_MODELS = [
@@ -27,6 +28,7 @@ export class LlmProviderRegistry {
   private readonly providers = new Map<string, LlmProvider & { configured?: boolean; hint?: string }>();
   private readonly modelCache = new Map<string, { expiresAt: number; models: string[] }>();
   readonly omnirouteCatalog: OmniRouteCatalogService;
+  quota: LlmQuotaController | null = null;
   private loadGatewaySettings: () => LlmGatewaySettings = defaultLlmGatewaySettings;
 
   constructor(
@@ -364,7 +366,11 @@ export class LlmProviderRegistry {
       model,
       maxOutputTokens: selection.route.maxOutputTokens,
       fallback: selection.route.fallback,
+      fallbacks: selection.route.fallbacks,
       source: selection.source,
+      budgetMode: project.settings.budget?.mode,
+      autonomy: project.mode,
+      profileId: project.profileId ?? null,
       ...(failedRoute ? { failedRoute } : {}),
     };
   }
@@ -380,6 +386,7 @@ export class LlmProviderRegistry {
         ?? "",
       ...(selection.route.maxOutputTokens === undefined ? {} : { maxOutputTokens: selection.route.maxOutputTokens }),
       ...(selection.route.fallback ? { fallback: selection.route.fallback } : {}),
+      ...(selection.route.fallbacks?.length ? { fallbacks: selection.route.fallbacks } : {}),
       source: selection.source,
     };
   }
@@ -447,14 +454,19 @@ export type ResolvedLlmRoute = {
   model: string;
   maxOutputTokens?: number;
   fallback?: { provider: string; model?: string };
+  fallbacks?: { provider: string; model?: string }[];
   source: LlmRouteSource;
   failedRoute?: { provider: string; model: string };
+  budgetMode?: string;
+  autonomy?: "AUTO" | "ASSISTED" | "MANUAL";
+  profileId?: string | null;
 };
 export type ResolvedRouteDescription = {
   provider: string;
   model: string;
   maxOutputTokens?: number;
   fallback?: { provider: string; model?: string };
+  fallbacks?: { provider: string; model?: string }[];
   source: LlmRouteSource;
 };
 

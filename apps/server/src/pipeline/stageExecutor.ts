@@ -18,7 +18,12 @@ export interface StageExecutor {
 }
 
 export class StageError extends Error {
-  constructor(message: string, public readonly code: string, public readonly retryable: boolean) {
+  constructor(
+    message: string,
+    public readonly code: string,
+    public readonly retryable: boolean,
+    public readonly retryAt?: string,
+  ) {
     super(message);
     this.name = "StageError";
   }

@@ -137,6 +137,9 @@ export function registerVideoAgentTools(
     },
   ));
 
+  server.tool("get_llm_quota_status", "Read free-model quota usage, cool-downs, and the wait-or-paid policy.", {}, () =>
+    invoke(() => api.getLlmQuotaStatus()));
+
   server.tool("get_llm_routes", "Read the resolved provider and model route for each LLM task in a project.", projectIdShape, ({ projectId }) =>
     invoke(() => api.getLlmRoutes(projectId)));
 
