@@ -405,8 +405,46 @@ export type ProfileService = ReturnType<typeof createProfileService>;
 
 /** Sync helper for stage executors that only have better-sqlite3. */
 export function getProfileDirection(sqlite: Database.Database, profileId: string | null | undefined): string | undefined {
-  if (!profileId) return undefined;
-  const row = sqlite.prepare("SELECT direction FROM profiles WHERE id = ?").get(profileId) as { direction?: string } | undefined;
-  const text = row?.direction?.trim();
-  return text || undefined;
+  return getProfilePromptContext(sqlite, profileId).direction;
+}
+
+export type ProfilePromptContext = {
+  direction?: string;
+  learnedNotes?: string;
+  topicAngles: string[];
+  avoid: string[];
+  titleAbTest: boolean;
+};
+
+/** Direction stays the user's text. Learned notes are a separate block for prompts. */
+export function getProfilePromptContext(
+  sqlite: Database.Database,
+  profileId: string | null | undefined,
+): ProfilePromptContext {
+  const empty: ProfilePromptContext = { topicAngles: [], avoid: [], titleAbTest: false };
+  if (!profileId) return empty;
+  const row = sqlite.prepare(
+    "SELECT direction, learned_notes, learned_hints, title_ab_test FROM profiles WHERE id = ?",
+  ).get(profileId) as {
+    direction?: string;
+    learned_notes?: string | null;
+    learned_hints?: string | { topicAngles?: unknown; avoid?: unknown } | null;
+    title_ab_test?: number | boolean | null;
+  } | undefined;
+  if (!row) return empty;
+  const hints = typeof row.learned_hints === "string"
+    ? JSON.parse(row.learned_hints) as { topicAngles?: unknown; avoid?: unknown }
+    : row.learned_hints ?? {};
+  const strings = (value: unknown) => Array.isArray(value)
+    ? value.filter((item): item is string => typeof item === "string")
+    : [];
+  const direction = row.direction?.trim() || undefined;
+  const learnedNotes = row.learned_notes?.trim() || undefined;
+  return {
+    ...(direction ? { direction } : {}),
+    ...(learnedNotes ? { learnedNotes } : {}),
+    topicAngles: strings(hints?.topicAngles),
+    avoid: strings(hints?.avoid),
+    titleAbTest: Boolean(row.title_ab_test),
+  };
 }

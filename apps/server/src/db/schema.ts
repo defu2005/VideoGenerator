@@ -25,6 +25,12 @@ export const profiles = sqliteTable("profiles", {
   guidelines: text("guidelines", { mode: "json" }).$type<GuidelineSettings>().notNull(),
   llm: text("llm", { mode: "json" }).$type<ProfileLlmSettings | null>(),
   automation: text("automation", { mode: "json" }).$type<ProfileAutomation>(),
+  /** off | suggest | auto. Default suggest (TASK-035). */
+  learningMode: text("learning_mode").notNull().default("suggest"),
+  learnedNotes: text("learned_notes").notNull().default(""),
+  learnedHints: text("learned_hints", { mode: "json" }).$type<{ topicAngles?: string[]; avoid?: string[] } | null>(),
+  titleAbTest: integer("title_ab_test", { mode: "boolean" }).notNull().default(false),
+  learningUndo: text("learning_undo", { mode: "json" }).$type<Record<string, unknown> | null>(),
   avatarPath: text("avatar_path"),
   color: text("color").notNull().default("#3B82F6"),
   archivedAt: text("archived_at"),
@@ -755,3 +761,39 @@ export const monthlyReports = sqliteTable("monthly_reports", {
 });
 
 export type MonthlyReportRow = typeof monthlyReports.$inferSelect;
+
+/** Stored performance insights per profile (TASK-035). */
+export const profileInsights = sqliteTable("profile_insights", {
+  id: text("id").primaryKey(),
+  profileId: text("profile_id").notNull().references(() => profiles.id, { onDelete: "cascade" }),
+  createdAt: text("created_at").notNull(),
+  period: text("period").notNull(),
+  json: text("json", { mode: "json" }).$type<Record<string, unknown>>().notNull(),
+  status: text("status").notNull(),
+}, (table) => [
+  index("profile_insights_profile_created_idx").on(table.profileId, table.createdAt),
+]);
+
+export type ProfileInsightRow = typeof profileInsights.$inferSelect;
+
+/** YouTube A/B title test, one row per publication (TASK-035). */
+export const titleExperiments = sqliteTable("title_experiments", {
+  id: text("id").primaryKey(),
+  publicationId: text("publication_id").notNull().references(() => publications.id, { onDelete: "cascade" }),
+  profileId: text("profile_id").notNull().references(() => profiles.id, { onDelete: "cascade" }),
+  accountId: text("account_id").notNull(),
+  externalId: text("external_id").notNull(),
+  titleA: text("title_a").notNull(),
+  titleB: text("title_b").notNull(),
+  status: text("status").notNull(),
+  winner: text("winner"),
+  viewsPerHour: real("views_per_hour"),
+  medianViewsPerHour: real("median_views_per_hour"),
+  checkedAt: text("checked_at"),
+  createdAt: text("created_at").notNull(),
+}, (table) => [
+  uniqueIndex("title_experiments_publication_uq").on(table.publicationId),
+  index("title_experiments_profile_idx").on(table.profileId),
+]);
+
+export type TitleExperimentRow = typeof titleExperiments.$inferSelect;

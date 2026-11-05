@@ -91,6 +91,8 @@ import { registerAnalyticsRoutes } from "./api/analytics.js";
 import { FinanceService } from "./finance/financeService.js";
 import { registerFinanceRoutes } from "./api/finance.js";
 import { ensureDefaultRates } from "./finance/currencySettings.js";
+import { LearningService } from "./learning/learningService.js";
+import { registerLearningRoutes } from "./api/learning.js";
 
 export function buildApp({ config }: { config: AppConfig }) {
   const server = Fastify({
@@ -328,6 +330,22 @@ export function buildApp({ config }: { config: AppConfig }) {
   });
   publishTicker.setFinance(financeService);
   assistantService.setFinance(financeService);
+  const learningService = new LearningService({
+    sqlite: database.sqlite,
+    llm: llmProviders,
+    notifications: notificationService,
+    logger: server.log,
+    updateYoutubeTitle: async (input) => {
+      await youtubePublisher.updateTitle(
+        input.accountId,
+        input.videoId,
+        input.title,
+        input.signal ?? AbortSignal.timeout(30_000),
+      );
+    },
+  });
+  publishTicker.setLearning(learningService);
+  assistantService.setLearning(learningService);
   setAutomationNotify((event) => {
     void notificationService.notify(event);
   });
@@ -393,6 +411,7 @@ export function buildApp({ config }: { config: AppConfig }) {
   registerPublicationRoutes(server, { publish: publishService, vault: tokenVault });
   registerAnalyticsRoutes(server, { analytics: analyticsSyncService });
   registerFinanceRoutes(server, { finance: financeService });
+  registerLearningRoutes(server, learningService);
   registerRecommendationRoutes(server);
   registerBudgetRoutes(server, projectService, jobRepository, config, llmProviders);
   registerDashboardRoutes(server, projectService, automationService);

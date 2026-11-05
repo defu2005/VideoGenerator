@@ -45,7 +45,7 @@ const RANGE_PRESETS = [
   { days: 90, label: "90 ngày" },
 ] as const;
 
-type SortKey = "title" | "platform" | "publishedAt" | "views" | "avgViewPct" | "likes" | "comments";
+type SortKey = "title" | "platform" | "publishedAt" | "views" | "avgViewPct" | "likes" | "comments" | "score";
 type SortDir = "asc" | "desc";
 
 function toDateInput(d: Date): string {
@@ -386,6 +386,7 @@ function VideosTable({
             {header("% xem TB", "avgViewPct")}
             {header("Thích", "likes")}
             {header("Bình luận", "comments")}
+            {header("Điểm", "score")}
             <th scope="col">Liên kết</th>
           </tr>
         </thead>
@@ -403,6 +404,7 @@ function VideosTable({
               <td>{formatPct(video.avgViewPct)}</td>
               <td>{formatNumber(video.likes)}</td>
               <td>{formatNumber(video.comments)}</td>
+              <td>{video.score == null ? "—" : String(Math.round(video.score))}</td>
               <td>
                 {video.externalUrl
                   ? <a href={video.externalUrl} target="_blank" rel="noreferrer">Xem</a>

@@ -412,6 +412,30 @@ describe("YouTubePublisher upload", () => {
     expect(result.warnings.some((w) => w.includes("riêng tư"))).toBe(true);
   });
 
+  it("updates a YouTube title with videos.update and keeps the snippet", async () => {
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse({
+        items: [{
+          id: "vid-1",
+          snippet: { title: "A", description: "Mô tả", categoryId: "22", tags: ["a"] },
+        }],
+      }))
+      .mockResolvedValueOnce(jsonResponse({ id: "vid-1" }));
+    await publisher.updateVideoTitle({
+      videoId: "vid-1",
+      title: "Tiêu đề B",
+      tokens,
+      signal: AbortSignal.timeout(5_000),
+    });
+    const put = fetchMock.mock.calls[1] as [string, RequestInit];
+    expect(String(put[0])).toContain("/videos?part=snippet");
+    expect(put[1]?.method).toBe("PUT");
+    const body = JSON.parse(String(put[1]?.body)) as { snippet: { title: string; categoryId: string; description: string } };
+    expect(body.snippet.title).toBe("Tiêu đề B");
+    expect(body.snippet.categoryId).toBe("22");
+    expect(body.snippet.description).toBe("Mô tả");
+  });
+
   it("throws YoutubeQuotaExceededError before upload when budget is exhausted", async () => {
     publisher.quota.setUsed(9950);
     await expect(

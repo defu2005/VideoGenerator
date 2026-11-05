@@ -259,6 +259,24 @@ export class MockLlmProvider implements LlmProvider {
       }
       return response({ reply: "Đã nhận.", done: true }, req.model);
     }
+    if (req.schemaName === "PerformanceInsight") {
+      return response({
+        summary: "- Video đăng lúc 19:00 có điểm cao hơn.\n- Nên giữ thời lượng vừa phải.\n- Hook ngắn dễ giữ người xem.",
+        patterns: [{
+          kind: "timing",
+          finding: "Khung 19:00 vượt trung vị điểm.",
+          evidence: "Nhóm giờ có ít nhất 3 video và điểm trên trung vị.",
+          confidence: "high",
+        }],
+        recommendations: {
+          directionAddendum: "Ưu tiên hook ngắn và góc kể chuyện rõ ngay câu đầu.",
+          preferredDurationSec: { min: 60, max: 180 },
+          publishTimes: ["19:00", "03:00"],
+          topicAngles: ["kể một chi tiết cụ thể"],
+          avoid: ["tiêu đề giật gân"],
+        },
+      }, req.model);
+    }
     if (req.schemaName === "FinanceInsight") {
       return response({
         bullets: [
@@ -288,9 +306,34 @@ export class MockLlmProvider implements LlmProvider {
 function parsePromptObject(prompt: string): Record<string, unknown> {
   const start = prompt.indexOf("{");
   if (start < 0) return {};
+  const slice = prompt.slice(start);
   try {
-    return JSON.parse(prompt.slice(start)) as Record<string, unknown>;
+    return JSON.parse(slice) as Record<string, unknown>;
   } catch {
+    let depth = 0;
+    let inString = false;
+    let escape = false;
+    for (let index = 0; index < slice.length; index += 1) {
+      const char = slice[index]!;
+      if (inString) {
+        if (escape) escape = false;
+        else if (char === "\\") escape = true;
+        else if (char === "\"") inString = false;
+        continue;
+      }
+      if (char === "\"") inString = true;
+      else if (char === "{") depth += 1;
+      else if (char === "}") {
+        depth -= 1;
+        if (depth === 0) {
+          try {
+            return JSON.parse(slice.slice(0, index + 1)) as Record<string, unknown>;
+          } catch {
+            return {};
+          }
+        }
+      }
+    }
     return {};
   }
 }

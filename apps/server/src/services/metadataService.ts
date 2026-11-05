@@ -28,7 +28,7 @@ import type { LlmProviderRegistry, ResolvedLlmRoute } from "../providers/llm/reg
 import { getAppLlmSettings } from "../providers/llm/settings.js";
 import { LlmError } from "../providers/llm/types.js";
 import { metadataPrompt } from "../stages/timeline/metadataPrompt.js";
-import { getProfileDirection } from "./profileService.js";
+import { getProfilePromptContext } from "./profileService.js";
 import type { RenderService } from "./renderService.js";
 import type { TimelineService } from "./timelineService.js";
 
@@ -138,7 +138,8 @@ export class MetadataService {
           script?.outro ?? "",
         ].join("\n").replace(/\s+/g, " ").trim().slice(0, 1500);
         const guidance = new GuidelineService(this.sqlite).guidanceFor(project, ["metadata"]);
-        const channelDirection = getProfileDirection(this.sqlite, project.profileId);
+        const promptContext = getProfilePromptContext(this.sqlite, project.profileId);
+        const titleCount = promptContext.titleAbTest ? 2 : 3;
         const prompt = metadataPrompt({
           project,
           scriptTitle: script?.title ?? project.title,
@@ -146,7 +147,9 @@ export class MetadataService {
           sectionHeadings: (script?.sections ?? []).map((section) => section.heading),
           narrationSummary,
           guidance,
-          channelDirection,
+          channelDirection: promptContext.direction,
+          learnedNotes: promptContext.learnedNotes,
+          titleCount,
         });
         const cacheKeyExtra = createHash("sha256")
           .update(JSON.stringify({
@@ -157,6 +160,8 @@ export class MetadataService {
             narrationSummary,
             platform: project.settings.platform,
             guidance,
+            titleCount,
+            learnedNotes: promptContext.learnedNotes ?? "",
           }))
           .digest("hex");
         const generated = await generateRoutedStructured({
@@ -228,6 +233,10 @@ export class MetadataService {
       });
       draft = this.codeDraft(project, script);
       source = "CODE";
+    }
+
+    if (getProfilePromptContext(this.sqlite, project.profileId).titleAbTest && draft.titles.length > 2) {
+      draft = { ...draft, titles: draft.titles.slice(0, 2) };
     }
 
     const now = this.now().toISOString();

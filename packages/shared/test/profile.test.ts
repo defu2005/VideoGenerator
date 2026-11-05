@@ -58,5 +58,9 @@ describe("profile schemas", () => {
     expect(channelDirectionBlock(long)!.length).toBe("Định hướng kênh:\n".length + 800);
     expect(appendChannelDirection("Topic: a", "Góc nhìn dân gian")).toContain("Định hướng kênh:\nGóc nhìn dân gian");
     expect(appendChannelDirection("Topic: a")).toBe("Topic: a");
+    const withNotes = appendChannelDirection("Topic: a", "Góc nhìn dân gian", "x".repeat(700));
+    expect(withNotes).toContain("Bài học từ số liệu:\n");
+    expect(withNotes).toContain("Định hướng kênh:\nGóc nhìn dân gian");
+    expect(withNotes.split("Bài học từ số liệu:\n")[1]).toHaveLength(600);
   });
 });

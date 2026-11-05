@@ -49,6 +49,7 @@ function overviewFixture(overrides: Partial<AnalyticsOverviewResponse> = {}): An
         externalUrl: "https://example.com/a",
         views: 10,
         avgViewPct: 40,
+        score: 12,
         likes: 1,
         comments: 0,
         shares: 0,
@@ -62,6 +63,7 @@ function overviewFixture(overrides: Partial<AnalyticsOverviewResponse> = {}): An
         externalUrl: "https://example.com/b",
         views: 999,
         avgViewPct: 55,
+        score: 80,
         likes: 20,
         comments: 3,
         shares: 1,
@@ -134,6 +136,8 @@ describe("AnalyticsPage", () => {
     }));
 
     renderWithProviders(<AnalyticsPage />);
+    expect(await screen.findByRole("button", { name: /Điểm/ })).toBeInTheDocument();
+    expect(await screen.findByText("80")).toBeInTheDocument();
     const table = await screen.findByRole("table");
     const bodyRows = () => within(table).getAllByRole("row").slice(1);
 

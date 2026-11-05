@@ -226,6 +226,7 @@ export const ProfileUpdateSchema = z.object({
 export type ProfileUpdate = z.infer<typeof ProfileUpdateSchema>;
 
 const CHANNEL_DIRECTION_MAX = 800;
+const LEARNED_NOTES_MAX = 600;
 
 /** Truncated "Định hướng kênh" block for LLM prompts. Empty when no direction. */
 export function channelDirectionBlock(direction?: string | null): string {
@@ -235,7 +236,19 @@ export function channelDirectionBlock(direction?: string | null): string {
   return `Định hướng kênh:\n${truncated}`;
 }
 
-export function appendChannelDirection(prompt: string, direction?: string | null): string {
-  const block = channelDirectionBlock(direction);
-  return block ? `${prompt}\n\n${block}` : prompt;
+/** Truncated "Bài học từ số liệu" block. Empty when there are no notes. */
+export function learnedNotesBlock(notes?: string | null): string {
+  const text = notes?.trim();
+  if (!text) return "";
+  const truncated = text.length > LEARNED_NOTES_MAX ? text.slice(0, LEARNED_NOTES_MAX) : text;
+  return `Bài học từ số liệu:\n${truncated}`;
+}
+
+export function appendChannelDirection(
+  prompt: string,
+  direction?: string | null,
+  learnedNotes?: string | null,
+): string {
+  const blocks = [channelDirectionBlock(direction), learnedNotesBlock(learnedNotes)].filter(Boolean);
+  return blocks.length > 0 ? `${prompt}\n\n${blocks.join("\n\n")}` : prompt;
 }

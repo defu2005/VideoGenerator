@@ -1,4 +1,5 @@
 import type Database from "better-sqlite3";
+import { scoreMapForProfiles } from "../learning/loadRows.js";
 import type {
   AnalyticsDayPoint,
   AnalyticsKpiTotals,
@@ -14,6 +15,7 @@ type PubJoinRow = {
   project_id: string | null;
   title: string;
   platform: PlatformId;
+  profile_id: string;
   published_at: string | null;
   external_url: string | null;
   latest_metrics: string | null;
@@ -146,7 +148,7 @@ function loadPublishedVideos(
   }
 
   const rows = sqlite.prepare(
-    `SELECT p.id, p.project_id, COALESCE(proj.title, '') AS title, a.platform,
+    `SELECT p.id, p.project_id, COALESCE(proj.title, '') AS title, a.platform, a.profile_id,
             p.published_at, p.external_url, p.latest_metrics
      FROM publications p
      JOIN platform_accounts a ON a.id = p.account_id
@@ -156,6 +158,7 @@ function loadPublishedVideos(
   ).all(...params) as PubJoinRow[];
 
   let watchHours = 0;
+  const scores = scoreMapForProfiles(sqlite, rows.map((row) => row.profile_id));
   const videos: AnalyticsVideoRankItem[] = rows.map((row) => {
     const m = parseMetrics(row.latest_metrics);
     watchHours += (m.watchTimeSec ?? 0) / 3600;
@@ -171,6 +174,7 @@ function loadPublishedVideos(
       likes: m.likes,
       comments: m.comments,
       shares: m.shares,
+      score: scores.get(row.id) ?? null,
     };
   });
 

@@ -9,6 +9,8 @@ export function metadataPrompt(input: {
   narrationSummary: string;
   guidance?: string;
   channelDirection?: string | null;
+  learnedNotes?: string | null;
+  titleCount?: number;
 }): { system: string; prompt: string } {
   const { project } = input;
   return {
@@ -28,7 +30,9 @@ export function metadataPrompt(input: {
       `Hook: ${input.hook}`,
       `Section headings: ${input.sectionHeadings.join(" | ") || "(none)"}`,
       `Narration summary: ${input.narrationSummary || "(none)"}`,
-      "Return titles (3, ≤100 chars), description (≤1500 chars, no chapters/credits), tags (≤15), hashtags (≤5, with #), thumbnailText (2 short overlay ideas).",
-    ].join("\n"), input.channelDirection), input.guidance),
+      input.titleCount === 2
+        ? "Return exactly 2 titles (option A then option B, ≤100 chars), description (≤1500 chars, no chapters/credits), tags (≤15), hashtags (≤5, with #), thumbnailText (2 short overlay ideas)."
+        : "Return titles (3, ≤100 chars), description (≤1500 chars, no chapters/credits), tags (≤15), hashtags (≤5, with #), thumbnailText (2 short overlay ideas).",
+    ].join("\n"), input.channelDirection, input.learnedNotes), input.guidance),
   };
 }

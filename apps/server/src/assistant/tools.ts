@@ -48,6 +48,7 @@ import {
 } from "../settings/notifications.js";
 import type { AnalyticsSyncService } from "../analytics/syncService.js";
 import type { FinanceService } from "../finance/financeService.js";
+import type { LearningService } from "../learning/learningService.js";
 
 const emptyObject = z.object({}).strict();
 
@@ -66,6 +67,7 @@ export type AssistantToolContext = {
   scenes: SceneService;
   analytics?: AnalyticsSyncService;
   finance?: FinanceService;
+  learning?: LearningService;
   signal?: AbortSignal;
 };
 
@@ -217,6 +219,20 @@ const deleteTopicArgs = z.object({
 }).strict();
 
 const deleteProjectArgs = projectIdArgs;
+
+const profileInsightsArgs = z.object({ profileId: z.string().uuid() }).strict();
+
+const applyInsightArgs = z.object({
+  profileId: z.string().uuid(),
+  insightId: z.string().uuid(),
+  fields: z.array(z.enum([
+    "directionAddendum",
+    "preferredDuration",
+    "publishTimes",
+    "topicAngles",
+    "avoid",
+  ])).min(1),
+}).strict();
 
 function defineTool(def: AssistantToolDef): AssistantToolDef {
   return def;
@@ -835,6 +851,42 @@ const toolDefs: AssistantToolDef[] = [
       if (result === "not_found") throw new AppError(404, "PROJECT_NOT_FOUND", "Không tìm thấy dự án");
       if (result === "busy") throw new AppError(409, "PROJECT_BUSY", "Dự án đang chạy, không thể xóa.");
       return { ok: true, projectId };
+    },
+  }),
+  defineTool({
+    name: "profile_insights",
+    description: "Đọc bài học hiệu suất mới nhất của một hồ sơ.",
+    risk: "read",
+    argsSchema: profileInsightsArgs,
+    summarize: () => "Xem bài học hồ sơ",
+    execute: async (args, ctx) => {
+      if (!ctx.learning) throw new AppError(503, "LEARNING_UNAVAILABLE", "Bài học chưa sẵn sàng");
+      const { profileId } = profileInsightsArgs.parse(args);
+      return ctx.learning.getView(profileId);
+    },
+  }),
+  defineTool({
+    name: "run_insight",
+    description: "Phân tích hiệu suất hồ sơ ngay (tối đa một lần mỗi giờ).",
+    risk: "safe",
+    argsSchema: profileInsightsArgs,
+    summarize: () => "Phân tích bài học ngay",
+    execute: async (args, ctx) => {
+      if (!ctx.learning) throw new AppError(503, "LEARNING_UNAVAILABLE", "Bài học chưa sẵn sàng");
+      const { profileId } = profileInsightsArgs.parse(args);
+      return ctx.learning.run(profileId, "manual", ctx.signal);
+    },
+  }),
+  defineTool({
+    name: "apply_insight",
+    description: "Áp dụng một hoặc vài đề xuất trong bài học vào hồ sơ.",
+    risk: "confirm",
+    argsSchema: applyInsightArgs,
+    summarize: () => "Áp dụng bài học",
+    execute: async (args, ctx) => {
+      if (!ctx.learning) throw new AppError(503, "LEARNING_UNAVAILABLE", "Bài học chưa sẵn sàng");
+      const parsed = applyInsightArgs.parse(args);
+      return ctx.learning.apply(parsed.profileId, parsed.insightId, parsed.fields);
     },
   }),
 ];

@@ -17,7 +17,7 @@ import { FactCheckResponseSchema, factCheckPrompt } from "./factCheckPrompt.js";
 import { getAppLlmSettings } from "../../providers/llm/settings.js";
 import { GuidelineService } from "../../guidelines/service.js";
 import { runGuidelineLlmCheck } from "../../guidelines/llmCheck.js";
-import { getProfileDirection } from "../../services/profileService.js";
+import { getProfilePromptContext } from "../../services/profileService.js";
 
 type ResearchRow = { input_hash: string; data: string; provider: string; model: string };
 type ExistingScript = {
@@ -130,7 +130,7 @@ export class ScriptExecutor implements StageExecutor {
       let provider: string;
       let model: string;
       const scriptGuidance = new GuidelineService(this.sqlite).guidanceFor(project, ["script", "subtitles"]);
-      const channelDirection = getProfileDirection(this.sqlite, project.profileId);
+      const promptContext = getProfilePromptContext(this.sqlite, project.profileId);
       if (mergedSource) {
         script = ScriptSchema.parse(JSON.parse(existing!.data) as unknown);
         const durationCheck = checkScriptDuration(script, project.settings.targetDurationSec, this.config.SPEECH_WORDS_PER_MINUTE);
@@ -143,7 +143,7 @@ export class ScriptExecutor implements StageExecutor {
       } else {
         selected = this.registry.resolveTask("script", project, appRouting);
         const inputHash = scriptInputHash(project, applicableResearch?.input_hash);
-        const initialPrompt = scriptPrompt(project, research, this.config.SPEECH_WORDS_PER_MINUTE, scriptGuidance, channelDirection);
+        const initialPrompt = scriptPrompt(project, research, this.config.SPEECH_WORDS_PER_MINUTE, scriptGuidance, promptContext.direction, promptContext.learnedNotes);
         const check = preflight({
           provider: selected.provider,
           mode: "off",
@@ -156,7 +156,7 @@ export class ScriptExecutor implements StageExecutor {
           input: initialPrompt,
           ...(research ? {
             research,
-            rebuildInput: (trimmedResearch) => scriptPrompt(project, trimmedResearch, this.config.SPEECH_WORDS_PER_MINUTE, scriptGuidance, channelDirection),
+            rebuildInput: (trimmedResearch) => scriptPrompt(project, trimmedResearch, this.config.SPEECH_WORDS_PER_MINUTE, scriptGuidance, promptContext.direction, promptContext.learnedNotes),
           } : {}),
         });
         if (check.decision === "reject") throw check.error;

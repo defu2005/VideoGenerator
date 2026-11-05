@@ -86,6 +86,8 @@ export const AnalyticsVideoRankItemSchema = z.object({
   likes: z.number().nullable(),
   comments: z.number().nullable(),
   shares: z.number().nullable(),
+  /** Per-profile, per-platform learning score 0–100. Null when the profile has too few scored videos. */
+  score: z.number().min(0).max(100).nullable().optional(),
 }).strict();
 export type AnalyticsVideoRankItem = z.infer<typeof AnalyticsVideoRankItemSchema>;
 

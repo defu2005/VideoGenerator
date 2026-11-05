@@ -7,6 +7,7 @@ export function mergedStoryPrompt(
   depth: BudgetFeatures["researchDepth"] = "standard",
   guidance?: string,
   channelDirection?: string | null,
+  learnedNotes?: string | null,
 ): { system: string; prompt: string } {
   const pace = project.settings.wordsPerMinute ?? wordsPerMinute;
   const factTargets = { light: "6-8", standard: "10-12", deep: "14-16" } as const;
@@ -29,6 +30,6 @@ export function mergedStoryPrompt(
       `Research: ${factTargets[depth]} keyFacts[{fact,confidence,sourceHint|null}], at most 10 timeline[{date,event}] and 6 cautions[string]; outline 3-8 items [{section,purpose,points[string]}].`,
       "Script: narration within 20% of target; sections[{id,heading,narration,visualQueries:{primary,alternatives[]},visualNotes,musicMood,energy}]. Provide 0-3 visual-query alternatives per section; the server calculates duration. music:{mood,energy,keywords[]}.",
       "Enum values must be these English words exactly: confidence = high|medium|low; energy = low|medium|high. JSON keys stay in English.",
-    ].join("\n"), channelDirection), guidance),
+    ].join("\n"), channelDirection, learnedNotes), guidance),
   };
 }

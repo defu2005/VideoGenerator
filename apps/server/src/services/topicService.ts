@@ -5,6 +5,7 @@ import {
   SuggestTopicsResponseSchema,
   TopicListResponseSchema,
   TopicSuggestOutputSchema,
+  appendChannelDirection,
   dedupeTopicSuggestions,
   type ApproveTopicsBody,
   type ProfileTopic,
@@ -24,6 +25,7 @@ import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
 import type { ProfileService } from "./profileService.js";
 import type { LlmProviderRegistry } from "../providers/llm/registry.js";
 import { getAppLlmSettings } from "../providers/llm/settings.js";
+import { getProfilePromptContext } from "./profileService.js";
 import { generateRoutedStructured } from "../providers/llm/structured.js";
 import { LlmCache } from "../providers/llm/cache.js";
 
@@ -42,6 +44,37 @@ function toTopic(row: ProfileTopicRow): ProfileTopic {
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
   });
+}
+
+export function buildTopicSuggestPrompt(input: {
+  direction: string;
+  learnedNotes?: string | null;
+  language: string;
+  hint: string;
+  count: number;
+  pastTopics: string[];
+  topicAngles: string[];
+  avoid: string[];
+}): { system: string; prompt: string } {
+  return {
+    system: [
+      "You suggest short video topics for a channel.",
+      "Respect the channel direction, the learned-notes block, and the language.",
+      "Favour topicAngles and avoid the avoid list when they are present.",
+      "Do not repeat or closely paraphrase pastTopics.",
+      "Each topic needs a one-line angle.",
+      "Reply with JSON only.",
+    ].join(" "),
+    prompt: appendChannelDirection(JSON.stringify({
+      direction: input.direction,
+      language: input.language,
+      hint: input.hint,
+      count: input.count,
+      pastTopics: input.pastTopics,
+      topicAngles: input.topicAngles,
+      avoid: input.avoid,
+    }), input.direction, input.learnedNotes),
+  };
 }
 
 export function createTopicService(
@@ -181,6 +214,7 @@ export function createTopicService(
     const profile = await requireProfile(profileId);
     const past = await pastTopicTexts(profileId, 50);
     const count = body.count ?? 5;
+    const promptContext = getProfilePromptContext(sqlite, profileId);
     const routeProject = {
       id: profileId,
       mode: "AUTO" as const,
@@ -199,20 +233,20 @@ export function createTopicService(
       hint: body.hint ?? "",
       count,
       pastTopics: past,
+      topicAngles: promptContext.topicAngles,
+      avoid: promptContext.avoid,
     };
-    const hash = createHash("sha256").update(JSON.stringify(payload)).digest("hex");
+    const built = buildTopicSuggestPrompt({
+      ...payload,
+      learnedNotes: promptContext.learnedNotes,
+    });
+    const hash = createHash("sha256").update(built.prompt).digest("hex");
     const generated = await generateRoutedStructured({
       registry: llm,
       route,
       task: "topicSuggest",
-      system: [
-        "You suggest short video topics for a channel.",
-        "Respect the channel direction and language.",
-        "Do not repeat or closely paraphrase pastTopics.",
-        "Each topic needs a one-line angle.",
-        "Reply with JSON only.",
-      ].join(" "),
-      prompt: JSON.stringify(payload),
+      system: built.system,
+      prompt: built.prompt,
       schema: TopicSuggestOutputSchema,
       schemaName: "TopicSuggest",
       schemaVersion: "1",

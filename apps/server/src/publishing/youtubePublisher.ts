@@ -264,6 +264,67 @@ export class YouTubePublisher implements Publisher {
     },
   };
 
+  /** videos.update — needs the full youtube scope, not upload-only. */
+  async updateVideoTitle(input: {
+    videoId: string;
+    title: string;
+    tokens: TokenSet;
+    signal: AbortSignal;
+  }): Promise<void> {
+    const updateCost = 50;
+    if (this.quota.wouldExceed(updateCost)) {
+      throw new YoutubeQuotaExceededError(
+        "Hết hạn mức YouTube trong ngày, chưa đổi được tiêu đề.",
+        nextPacificMidnightIso(this.now()),
+      );
+    }
+    const current = await this.fetchImpl(
+      `${API_BASE}/videos?part=snippet&id=${encodeURIComponent(input.videoId)}`,
+      { headers: { Authorization: `Bearer ${input.tokens.accessToken}` }, signal: input.signal },
+    );
+    if (!current.ok) throw mapYoutubeApiError(await safeJson(current), current.status);
+    const data = await current.json() as {
+      items?: Array<{ snippet?: { title?: string; description?: string; categoryId?: string; tags?: string[]; defaultLanguage?: string } }>;
+    };
+    const snippet = data.items?.[0]?.snippet;
+    if (!snippet) {
+      throw Object.assign(new Error("Không tìm thấy video YouTube để đổi tiêu đề"), { status: 404, retryable: false });
+    }
+    const updated = await this.fetchImpl(`${API_BASE}/videos?part=snippet`, {
+      method: "PUT",
+      headers: {
+        Authorization: `Bearer ${input.tokens.accessToken}`,
+        "Content-Type": "application/json; charset=UTF-8",
+      },
+      body: JSON.stringify({
+        id: input.videoId,
+        snippet: {
+          title: input.title.slice(0, TITLE_MAX),
+          description: snippet.description ?? "",
+          categoryId: snippet.categoryId ?? YOUTUBE_DEFAULT_CATEGORY_ID,
+          ...(snippet.tags ? { tags: snippet.tags } : {}),
+          ...(snippet.defaultLanguage ? { defaultLanguage: snippet.defaultLanguage } : {}),
+        },
+      }),
+      signal: input.signal,
+    });
+    if (!updated.ok) throw mapYoutubeApiError(await safeJson(updated), updated.status);
+    this.quota.record(updateCost);
+  }
+
+  async updateTitle(accountId: string, videoId: string, title: string, signal: AbortSignal): Promise<void> {
+    let tokens = this.options.vault.loadTokens(accountId);
+    if (!tokens) {
+      throw Object.assign(new Error("Chưa có token YouTube để đổi tiêu đề"), { status: 401, retryable: false });
+    }
+    const expires = tokens.expiresAt ? Date.parse(tokens.expiresAt) : Number.POSITIVE_INFINITY;
+    if (expires < this.now().getTime() + 60_000) {
+      tokens = await this.oauth.refresh(tokens, signal, accountId);
+      this.options.vault.storeTokens(accountId, tokens);
+    }
+    await this.updateVideoTitle({ videoId, title, tokens, signal });
+  }
+
   async upload(
     input: PublishInput,
     tokens: TokenSet,

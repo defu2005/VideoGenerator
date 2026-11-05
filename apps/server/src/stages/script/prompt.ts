@@ -7,6 +7,7 @@ export function scriptPrompt(
   wordsPerMinute = 150,
   guidance?: string,
   channelDirection?: string | null,
+  learnedNotes?: string | null,
 ): { system: string; prompt: string } {
   const pace = project.settings.wordsPerMinute ?? wordsPerMinute;
   const pacing = project.settings.aspectRatio === "9:16" ? " (vertical, fast pacing)" : "";
@@ -27,6 +28,6 @@ export function scriptPrompt(
       research ? `Research notes (unverified; preserve uncertainty):\n${JSON.stringify(research)}` : "No research notes are available; use the topic only.",
       "Script fields: title, hook, sections[{id,heading,narration,visualQueries:{primary,alternatives},visualNotes,musicMood,energy}], outro, music:{mood,energy,keywords}.",
       "Use English visual search terms, retain proper nouns, provide 0-3 alternatives; the server calculates section durations.",
-    ].join("\n"), channelDirection), guidance),
+    ].join("\n"), channelDirection, learnedNotes), guidance),
   };
 }

@@ -12,7 +12,8 @@ Lưu ý:
 • Video tải lên từ project API chưa được Google xác minh có thể bị YouTube khóa ở chế độ riêng tư; ứng dụng ghi nhận đó là cảnh báo, không phải lỗi đăng.
 • Nếu bạn đặt Playlist ID, lần Kết nối sẽ xin thêm quyền youtube (không chỉ youtube.readonly) để thêm video vào playlist.
 • Tài khoản đã kết nối trước khi bật thống kê cần "Kết nối lại để bật thống kê" để cấp quyền yt-analytics.readonly.
-• Doanh thu YouTube cần bật riêng ("Bật thống kê doanh thu YouTube") vì xin quyền xem số tiền; kênh chưa tham gia Partner Program sẽ hiện "Kênh chưa bật kiếm tiền".`;
+• Doanh thu YouTube cần bật riêng ("Bật thống kê doanh thu YouTube") vì xin quyền xem số tiền; kênh chưa tham gia Partner Program sẽ hiện "Kênh chưa bật kiếm tiền".
+• Thử 2 tiêu đề cần quyền youtube đầy đủ (cùng quyền dùng khi có Playlist ID). Nếu chưa cấp, hồ sơ sẽ ẩn công tắc và giải thích.`;
 
 export const YOUTUBE_PLAYLIST_SCOPE_NOTE_VI =
   "Có Playlist ID: lần Kết nối sẽ xin quyền đầy đủ youtube (thêm video vào playlist), không chỉ youtube.readonly.";

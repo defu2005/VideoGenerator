@@ -16,7 +16,7 @@ import { mergedStoryPrompt } from "../script/mergedStoryPrompt.js";
 import { z } from "zod";
 import { getAppLlmSettings } from "../../providers/llm/settings.js";
 import { GuidelineService } from "../../guidelines/service.js";
-import { getProfileDirection } from "../../services/profileService.js";
+import { getProfilePromptContext } from "../../services/profileService.js";
 
 type ExistingScript = { data: string; version: number; input_hash: string; review_notes: string | null };
 
@@ -51,9 +51,10 @@ export class ResearchExecutor implements StageExecutor {
       let effectiveMode = mode;
       usageFeature = mode === "merged" ? "story" : "research";
       const guidelines = new GuidelineService(this.sqlite);
-      const channelDirection = getProfileDirection(this.sqlite, project.profileId);
+      const promptContext = getProfilePromptContext(this.sqlite, project.profileId);
+      const channelDirection = promptContext.direction;
       let promptInput = mode === "merged"
-        ? mergedStoryPrompt(project, this.config.SPEECH_WORDS_PER_MINUTE, budget.researchDepth, guidelines.guidanceFor(project, ["script", "subtitles"]), channelDirection)
+        ? mergedStoryPrompt(project, this.config.SPEECH_WORDS_PER_MINUTE, budget.researchDepth, guidelines.guidanceFor(project, ["script", "subtitles"]), channelDirection, promptContext.learnedNotes)
         : researchPrompt(project, budget.researchDepth, guidelines.guidanceFor(project, ["script"]), channelDirection);
       const desiredOutputTokens = Math.ceil(
         maxOutputTokensForDuration(project.settings.targetDurationSec, this.config.SPEECH_WORDS_PER_MINUTE)

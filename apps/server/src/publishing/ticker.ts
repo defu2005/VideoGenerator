@@ -4,6 +4,7 @@ import type { AutomationService } from "../services/automationService.js";
 import type { NotificationService } from "../notifications/notificationService.js";
 import type { AnalyticsSyncService } from "../analytics/syncService.js";
 import type { FinanceService } from "../finance/financeService.js";
+import type { LearningService } from "../learning/learningService.js";
 
 const INTERVAL_MS = 60_000;
 
@@ -24,6 +25,8 @@ export class PublishTicker {
   private analyticsRunning = false;
   private finance: FinanceService | undefined;
   private financeRunning = false;
+  private learning: LearningService | undefined;
+  private learningRunning = false;
 
   constructor(
     private readonly publish: PublishService,
@@ -47,6 +50,10 @@ export class PublishTicker {
 
   setFinance(service: FinanceService): void {
     this.finance = service;
+  }
+
+  setLearning(service: LearningService): void {
+    this.learning = service;
   }
 
   start(): void {
@@ -97,6 +104,12 @@ export class PublishTicker {
         void this.finance.tick(this.controller.signal)
           .catch((error) => this.logger.warn({ err: error }, "Finance tick failed"))
           .finally(() => { this.financeRunning = false; });
+      }
+      if (this.learning && !this.learningRunning) {
+        this.learningRunning = true;
+        void this.learning.tick(this.controller.signal)
+          .catch((error) => this.logger.warn({ err: error }, "Learning tick failed"))
+          .finally(() => { this.learningRunning = false; });
       }
     } catch (error) {
       this.logger.warn({ err: error }, "Publish ticker tick failed");
