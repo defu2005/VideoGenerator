@@ -44,6 +44,7 @@
 | 28 | [TASK-041](TASK-041.md) | Editing skills: real transitions (xfade), emphasis (punch-in, keyword callouts, SFX), animated styled subtitles (word highlight), LLM edit plan, per-profile edit presets, subtitle gap fix | (guide only) |
 | 29 | [TASK-042](TASK-042.md) | Motion graphics layer: HyperFrames HTML/GSAP templates (titles, kinetic words, counters, lower thirds, lists, charts, end card) rendered to alpha clips and overlaid; LLM picks templates + fills text | (guide only) |
 | 30 | [TASK-043](TASK-043.md) | Format recipes (explainer, listicle, story, news…), treatment card with cost estimate, chat editing with revision token + undo across web/Telegram/MCP | (guide only) |
+| 31 | [TASK-044](TASK-044.md) | Free/quota-limited model manager: quota profiles, usage counters, cool-down on 429/quota, ordered free-first fallback chain, wait-or-paid policy with daily cap, Quota UI, Telegram alert, advisor awareness | (guide only) |
 
 The spec in `docs/tasks/` is the requirement. The guide in `docs/cursor/` gives the current code state, the file map and the steps. When they disagree, the guide wins (it is newer). Each task depends on the ones above it; don't skip ahead.
 
