@@ -8,6 +8,7 @@ import {
   LlmQuotaPolicyBodySchema,
   LlmQuotaRuleSchema,
   LlmQuotaStatusSchema,
+  OmniRouteTokenBodySchema,
   LlmSettingsSchema,
   ModelAdvisorApplyBodySchema,
   ModelAdvisorApplyResultSchema,
@@ -31,6 +32,7 @@ import {
   saveUserQuotaRule,
   setQuotaRuleEnabled,
 } from "../providers/llm/quota.js";
+import type { OmniRouteQuotaSync } from "../services/omnirouteQuotaSync.js";
 import { getLlmGatewaySettings, saveLlmGatewaySettings } from "../providers/llm/gatewaySettings.js";
 import { applyModelRoutes, proposeModelRoutes } from "../services/modelAdvisor.js";
 import { JobUsageSchema } from "@vg/shared";
@@ -64,6 +66,20 @@ const ProjectRoutesSchema = z.object({
 }).strict();
 const ProjectParamsSchema = z.object({ id: z.string().uuid() }).strict();
 
+function presentQuota(sqlite: Database.Database, quotaSync?: OmniRouteQuotaSync) {
+  const status = readQuotaStatus(sqlite);
+  if (!quotaSync) return status;
+  const token = quotaSync.tokenMeta();
+  return {
+    ...status,
+    omniroute: {
+      ...status.omniroute,
+      tokenSaved: token.saved,
+      tokenLast4: token.last4,
+    },
+  };
+}
+
 export function registerLlmRoutes(
   app: FastifyInstance,
   registry: LlmProviderRegistry,
@@ -71,6 +87,7 @@ export function registerLlmRoutes(
   projects?: ProjectService,
   profiles?: ProfileService,
   fetchImpl: typeof fetch = fetch,
+  quotaSync?: OmniRouteQuotaSync,
 ): void {
   app.get("/api/llm/providers", {
     schema: {
@@ -109,7 +126,38 @@ export function registerLlmRoutes(
 
   app.get("/api/llm/quota", {
     schema: { response: { 200: LlmQuotaStatusSchema } },
-  }, async () => readQuotaStatus(sqlite));
+  }, async () => {
+    if (quotaSync && !process.env.VITEST) await quotaSync.refreshIfDue();
+    return presentQuota(sqlite, quotaSync);
+  });
+
+  app.post("/api/llm/quota/omniroute/refresh", {
+    schema: { response: { 200: LlmQuotaStatusSchema, 503: ApiErrorSchema } },
+  }, async () => {
+    if (!quotaSync) throw new AppError(503, "OMNIROUTE_QUOTA_UNAVAILABLE", "Đồng bộ quota OmniRoute chưa sẵn sàng.");
+    await quotaSync.refresh(true);
+    return presentQuota(sqlite, quotaSync);
+  });
+
+  app.put("/api/llm/quota/omniroute/token", {
+    schema: {
+      body: OmniRouteTokenBodySchema,
+      response: { 200: LlmQuotaStatusSchema, 400: ApiErrorSchema, 503: ApiErrorSchema },
+    },
+  }, async (request) => {
+    if (!quotaSync) throw new AppError(503, "OMNIROUTE_QUOTA_UNAVAILABLE", "Đồng bộ quota OmniRoute chưa sẵn sàng.");
+    const body = OmniRouteTokenBodySchema.parse(request.body);
+    quotaSync.saveToken(body.token);
+    return presentQuota(sqlite, quotaSync);
+  });
+
+  app.delete("/api/llm/quota/omniroute/token", {
+    schema: { response: { 200: LlmQuotaStatusSchema, 503: ApiErrorSchema } },
+  }, async () => {
+    if (!quotaSync) throw new AppError(503, "OMNIROUTE_QUOTA_UNAVAILABLE", "Đồng bộ quota OmniRoute chưa sẵn sàng.");
+    quotaSync.removeToken();
+    return presentQuota(sqlite, quotaSync);
+  });
 
   app.put("/api/llm/quota/policy", {
     schema: {
@@ -119,7 +167,7 @@ export function registerLlmRoutes(
   }, async (request) => {
     const body = LlmQuotaPolicyBodySchema.parse(request.body);
     saveQuotaPolicy(sqlite, body);
-    return readQuotaStatus(sqlite);
+    return presentQuota(sqlite, quotaSync);
   });
 
   app.put("/api/llm/quota/rules", {
@@ -133,7 +181,7 @@ export function registerLlmRoutes(
       throw new AppError(400, "INVALID_LLM_PROVIDER", "A quota rule references an unsupported provider.");
     }
     saveUserQuotaRule(sqlite, rule);
-    return readQuotaStatus(sqlite);
+    return presentQuota(sqlite, quotaSync);
   });
 
   app.post("/api/llm/quota/rules/enabled", {
@@ -144,7 +192,7 @@ export function registerLlmRoutes(
   }, async (request) => {
     const body = LlmQuotaModelRefSchema.extend({ enabled: z.boolean() }).parse(request.body);
     setQuotaRuleEnabled(sqlite, body.provider, body.model, body.enabled);
-    return readQuotaStatus(sqlite);
+    return presentQuota(sqlite, quotaSync);
   });
 
   app.post("/api/llm/quota/cooldowns/clear", {
@@ -155,7 +203,7 @@ export function registerLlmRoutes(
   }, async (request) => {
     const body = LlmQuotaModelRefSchema.parse(request.body);
     clearLlmCooldown(sqlite, body.provider, body.model);
-    return readQuotaStatus(sqlite);
+    return presentQuota(sqlite, quotaSync);
   });
 
   app.get("/api/settings/llm-gateway", {

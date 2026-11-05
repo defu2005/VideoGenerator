@@ -295,11 +295,15 @@ export async function generateRoutedStructured<T>(input: {
   gatewaySettings?: LlmGatewaySettings;
 } & Omit<Parameters<typeof generateStructured<T>>[0], "provider" | "model" | "task">): Promise<RoutedResult<T>> {
   const { registry, route: originalRoute, task, gatewaySettings, ...request } = input;
+  await registry.quota?.refreshIfStale(originalRoute.provider.id, originalRoute.model);
   const settings = gatewaySettings ?? registry.getGatewaySettings();
   const applied = await applyOmnirouteGateway(registry, originalRoute, settings, task);
   const route = applied.route;
   const gatewayDirect = applied.directFallback;
   const quota = registry.quota;
+  if (route.provider.id !== originalRoute.provider.id || route.model !== originalRoute.model) {
+    await quota?.refreshIfStale(route.provider.id, route.model);
+  }
   const gatewayOnly = settings.mode === "only" && route.provider.id === "omniroute";
   const onRealCall = quota
     ? (call: { provider: string; model: string; inputTokens: number; outputTokens: number }) => quota.recordCall(call)
@@ -431,8 +435,18 @@ export async function generateRoutedStructured<T>(input: {
   let lastError: LlmError | undefined;
 
   const quotaWait = () => {
-    const retryAt = quota?.earliestRetryAt(ordered.map((step) => ({ provider: step.provider.id, model: step.model })))
-      ?? new Date(Date.now() + 60_000).toISOString();
+    const retryAt = quota?.earliestRetryAt(ordered.map((step) => ({ provider: step.provider.id, model: step.model }))) ?? null;
+    if (!retryAt) {
+      return mergedError(
+        "Hết credit, cần nạp hoặc tạo quy tắc mới",
+        "LLM_QUOTA_EXHAUSTED",
+        false,
+        undefined,
+        priorCalls,
+        priorUsage,
+        [],
+      );
+    }
     const when = formatHourMinute(new Date(retryAt), policy.timeZone);
     const message = route.autonomy === "AUTO"
       ? `Chờ quota reset lúc ${when}`

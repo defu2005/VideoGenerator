@@ -719,6 +719,12 @@ button:disabled { cursor: not-allowed; opacity: .58; }
 .quota-chip-near { background: #fff4d6; color: #8a5b00; }
 .quota-chip-out { background: #fde8e8; color: #b42318; }
 .quota-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+.quota-live-grid { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); }
+.quota-live-card { border: 1px solid #d8deea; border-radius: 12px; padding: 12px; display: grid; gap: 8px; background: #fff; }
+.quota-live-head { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.quota-row-covered { opacity: 0.55; }
+.quota-steps { margin: 0; padding-left: 1.2rem; }
+.quota-token-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: end; }
 .ai-task-fields .form-field { min-width: 0; margin-bottom: 10px; }
 .model-field { display: grid; gap: 5px; min-width: 0; }
 .ai-task-fields .form-field .model-field select + input { margin-top: 0; }

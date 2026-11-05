@@ -240,7 +240,145 @@ describe("AiSettingsPage", () => {
     fireEvent.click(screen.getByRole("button", { name: "Lưu cài đặt" }));
     await waitFor(() => expect(saved?.tasks?.research?.fallbacks?.map((item) => item.model)).toEqual(["two", "one"]));
   });
+
+  it("renders live OmniRoute quota cards", async () => {
+    const overrides: Record<string, unknown> = {
+      quota: quotaBody({
+        status: "connected",
+        fetchedAt: "2026-06-15T18:05:00.000Z",
+        tokenSaved: true,
+        tokenLast4: "1234",
+        connections: [liveCard()],
+      }),
+    };
+    vi.stubGlobal("fetch", stubGatewayApis(settingsFetch, overrides));
+    renderWithProviders(<AiSettingsPage />);
+    fireEvent.click(await screen.findByRole("button", { name: "Quota" }));
+    expect(await screen.findByText("Từ OmniRoute (số thật)")).toBeInTheDocument();
+    const card = screen.getByTestId("omni-card-gh-1");
+    expect(document.body.textContent).toMatch(/Đã kết nối OmniRoute/);
+    expect(card.textContent).toMatch(/10 \/ 300 lượt/);
+    expect(card.textContent).toMatch(/a\*\*\*@gmail\.com/);
+    expect(document.body.textContent).toMatch(/đã lưu\s*1234/);
+    expect(card.textContent).toMatch(/đang dùng cho:\s*Viết kịch bản/);
+  });
+
+  it("saves a management token and only shows the last four characters", async () => {
+    const secret = "oma_live_secret1234";
+    let posted = "";
+    const quota = quotaBody({ status: "needs_token", tokenSaved: false, tokenLast4: null, message: "Cần token" });
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url === "/api/llm/quota/omniroute/token" && init?.method === "PUT") {
+        posted = JSON.parse(String(init.body)).token as string;
+        return jsonResponse(quotaBody({ status: "connected", tokenSaved: true, tokenLast4: posted.slice(-4) }));
+      }
+      if (url.startsWith("/api/llm/quota")) return jsonResponse(quota);
+      if (url === "/api/llm/tasks") return jsonResponse(LLM_TASKS);
+      if (url === "/api/llm/providers") return jsonResponse([{ id: "mock", label: "Mock", configured: true, defaultModel: "mock-v1" }]);
+      if (url === "/api/settings/llm-routing") return jsonResponse({});
+      if (url === "/api/settings/llm-gateway") return jsonResponse({ mode: "off", mappings: [] });
+      if (url === "/api/llm/providers/omniroute/health") return jsonResponse({ reachable: false, latencyMs: null, modelCount: 0, lastError: null, baseUrl: "http://127.0.0.1:20128/v1", configured: false, setupHint: "" });
+      if (url === "/api/llm/providers/omniroute/catalog") return jsonResponse({ models: [], cachedAt: null, baseUrl: "http://127.0.0.1:20128/v1" });
+      if (url.includes("/models")) return jsonResponse({ provider: "mock", models: [] });
+      throw new Error(`Unexpected offline test request: ${url}`);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    renderWithProviders(<AiSettingsPage />);
+    fireEvent.click(await screen.findByRole("button", { name: "Quota" }));
+    expect(await screen.findByText(/Access Tokens/)).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText("Token quản trị OmniRoute"), { target: { value: secret } });
+    fireEvent.click(screen.getByRole("button", { name: "Lưu token" }));
+    await waitFor(() => expect(posted).toBe(secret));
+    await screen.findByText(/đã lưu/);
+    expect(document.body.textContent).toMatch(/đã lưu\s*1234/);
+    expect(screen.queryByLabelText("Token quản trị OmniRoute")).not.toBeInTheDocument();
+    expect(document.body.textContent).not.toContain(secret);
+  });
+
+  it("lists routed models that have neither live quota nor a rule", async () => {
+    const overrides: Record<string, unknown> = {
+      quota: quotaBody({
+        status: "connected",
+        tokenSaved: false,
+        missingModels: [{ provider: "omniroute", model: "cc/claude-sonnet", tasks: ["Viết kịch bản"] }],
+      }),
+    };
+    vi.stubGlobal("fetch", stubGatewayApis(settingsFetch, overrides));
+    renderWithProviders(<AiSettingsPage />);
+    fireEvent.click(await screen.findByRole("button", { name: "Quota" }));
+    expect(await screen.findByText(/omniroute\/cc\/claude-sonnet/)).toBeInTheDocument();
+    const row = screen.getByText(/omniroute\/cc\/claude-sonnet/).closest("li");
+    fireEvent.click(row!.querySelector("button")!);
+    expect(screen.getByLabelText("Model của quy tắc mới")).toHaveValue("cc/claude-sonnet");
+    expect(screen.getByLabelText("Nhà cung cấp của quy tắc mới")).toHaveValue("omniroute");
+  });
 });
+
+async function settingsFetch(input: RequestInfo | URL) {
+  const url = String(input);
+  if (url === "/api/llm/tasks") return jsonResponse(LLM_TASKS);
+  if (url === "/api/llm/providers") return jsonResponse([{ id: "mock", label: "Mock", configured: true, defaultModel: "mock-v1" }]);
+  if (url === "/api/settings/llm-routing") return jsonResponse({});
+  if (url.includes("/models")) return jsonResponse({ provider: "mock", models: ["mock-v1"] });
+  throw new Error(`Unexpected offline test request: ${url}`);
+}
+
+function quotaBody(omniroute: Record<string, unknown>) {
+  return {
+    quotaPolicy: "wait",
+    paidFallbackDailyUsd: 1,
+    nearLimitRatio: 0.9,
+    todaySpendUsd: 0,
+    paidFallbackSpendToday: 0,
+    freeCreditSpendUsd: 0,
+    rows: [],
+    cooldowns: [],
+    omniroute: {
+      status: "idle",
+      fetchedAt: null,
+      tokenSaved: false,
+      tokenLast4: null,
+      dashboardUrl: "http://127.0.0.1:20128",
+      message: null,
+      connections: [],
+      missingModels: [],
+      ...omniroute,
+    },
+  };
+}
+
+function liveCard() {
+  return {
+    connectionId: "gh-1",
+    provider: "github",
+    appProvider: "copilot-cli",
+    label: "Copilot",
+    maskedAccount: "a***@gmail.com",
+    active: true,
+    fetchedAt: "2026-06-15T18:05:00.000Z",
+    error: null,
+    noQuotaData: false,
+    tasks: ["Viết kịch bản"],
+    rateLimitNote: null,
+    manualRule: { provider: "copilot-cli", model: "*" },
+    quotas: [{
+      key: "premium_interactions",
+      unit: "requests",
+      used: 10,
+      total: 300,
+      remaining: 290,
+      remainingPct: 96,
+      resetAt: "2026-07-01T00:00:00.000Z",
+      expiresAt: null,
+      unlimited: false,
+      fractionReported: true,
+      status: "ok",
+      display: "10 / 300 lượt",
+      expiryLabel: null,
+    }],
+  };
+}
 
 function row(provider: string, model: string, status: "ok" | "near" | "exhausted", used: number, limit: number, until: string | null) {
   return {

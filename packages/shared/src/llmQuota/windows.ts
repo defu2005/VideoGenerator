@@ -54,8 +54,11 @@ function nextMonthStart(year: number, month: number): { year: number; month: num
   return month === 12 ? { year: year + 1, month: 1 } : { year, month: month + 1 };
 }
 
-/** Start of the quota window that contains `now`. For `rolling_5h` this is `now` minus 5 hours. */
+const LIFETIME_START = new Date(0);
+
+/** Start of the quota window that contains `now`. For `rolling_5h` this is `now` minus 5 hours. Lifetime never resets. */
 export function currentWindowStart(window: LlmQuotaWindow, now: Date, timeZone: string): Date {
+  if (window === "lifetime") return LIFETIME_START;
   if (window === "rolling_5h") return new Date(now.getTime() - ROLLING_5H_MS);
   const parts = zonedParts(now, timeZone);
   if (window === "minute") return zonedToUtc(parts.year, parts.month, parts.day, parts.hour, parts.minute, 0, timeZone);
@@ -63,8 +66,9 @@ export function currentWindowStart(window: LlmQuotaWindow, now: Date, timeZone: 
   return zonedToUtc(parts.year, parts.month, 1, 0, 0, 0, timeZone);
 }
 
-/** Instant the current window ends. For `rolling_5h` this is `now` plus 5 hours. */
+/** Instant the current window ends. Lifetime has no reset; callers use `expiresAt` when a trial ends. */
 export function nextReset(window: LlmQuotaWindow, now: Date, timeZone: string): Date {
+  if (window === "lifetime") return new Date(now.getTime());
   if (window === "rolling_5h") return new Date(now.getTime() + ROLLING_5H_MS);
   const parts = zonedParts(now, timeZone);
   if (window === "minute") return new Date(currentWindowStart(window, now, timeZone).getTime() + 60_000);

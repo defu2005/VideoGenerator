@@ -98,6 +98,26 @@ const RAW_PRESETS: LlmQuotaRule[] = [
     source: "preset",
     enabled: true,
   },
+  {
+    provider: "openrouter",
+    model: "*",
+    kind: "free_tier",
+    limits: [{ window: "lifetime", creditsUsd: 0, unit: "credits_usd" }],
+    resetTz: "UTC",
+    note: NOTE,
+    source: "preset",
+    enabled: false,
+  },
+  {
+    provider: "deepseek",
+    model: "*",
+    kind: "free_tier",
+    limits: [{ window: "lifetime", creditsUsd: 0, unit: "credits_usd" }],
+    resetTz: "UTC",
+    note: NOTE,
+    source: "preset",
+    enabled: false,
+  },
 ];
 
 export const LLM_QUOTA_PRESETS: LlmQuotaRule[] = RAW_PRESETS.map((rule) => LlmQuotaRuleSchema.parse(rule));

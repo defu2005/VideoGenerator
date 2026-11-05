@@ -23,6 +23,8 @@ import { PipelineOrchestrator } from "./pipeline/orchestrator.js";
 import { LlmProviderRegistry } from "./providers/llm/registry.js";
 import { getLlmGatewaySettings } from "./providers/llm/gatewaySettings.js";
 import { attachLlmQuota } from "./providers/llm/quota.js";
+import { omniRouteBaseUrl } from "./providers/llm/omnirouteCatalog.js";
+import { OmniRouteQuotaSync } from "./services/omnirouteQuotaSync.js";
 import { estimateLlmCost } from "./providers/llm/pricing.js";
 import { ResearchExecutor } from "./stages/research/researchExecutor.js";
 import { ScriptExecutor } from "./stages/script/scriptExecutor.js";
@@ -312,8 +314,17 @@ export function buildApp({ config }: { config: AppConfig }) {
   });
   publishService.setNotificationService(notificationService);
   orchestrator.setNotificationService(notificationService);
+  const quotaSync = new OmniRouteQuotaSync({
+    sqlite: database.sqlite,
+    vault: tokenVault,
+    baseUrl: omniRouteBaseUrl(config),
+    apiKey: config.OMNIROUTE_API_KEY,
+    logger: server.log,
+  });
+  let stopQuotaSync = () => {};
   attachLlmQuota(llmProviders, {
     sqlite: database.sqlite,
+    refreshLive: () => quotaSync.refresh(false),
     spendToday: (dateKey) => {
       try {
         return usageService.getAppUsage({ from: dateKey, to: dateKey, groupBy: "day" }).totals.costUsd;
@@ -453,7 +464,7 @@ export function buildApp({ config }: { config: AppConfig }) {
   registerDashboardRoutes(server, projectService, automationService);
   registerUsageRoutes(server, usageService, projectService);
   registerPipelineRoutes(server, projectService, jobRepository, orchestrator, events, sceneService);
-  registerLlmRoutes(server, llmProviders, database.sqlite, projectService, profileService);
+  registerLlmRoutes(server, llmProviders, database.sqlite, projectService, profileService, fetch, quotaSync);
   registerScriptRoutes(server, scriptService, projectService, config, guidelineService, database.sqlite);
   registerGuidelineRoutes(server, database.sqlite, projectService, guidelineService, llmProviders, config);
   registerSceneRoutes(server, sceneService);
@@ -480,6 +491,7 @@ export function buildApp({ config }: { config: AppConfig }) {
   registerReviewRoutes(server, reviewService, projectService);
 
   server.addHook("onReady", async () => {
+    stopQuotaSync = quotaSync.start();
     await worker.start();
     if (config.WORKER_ENABLED) {
       publishTicker.start();
@@ -487,6 +499,7 @@ export function buildApp({ config }: { config: AppConfig }) {
     }
   });
   server.addHook("onClose", async () => {
+    stopQuotaSync();
     await telegramPoller.stop();
     await publishTicker.stop();
     await worker.stop();

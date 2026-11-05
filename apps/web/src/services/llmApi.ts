@@ -131,6 +131,27 @@ export function clearLlmCooldown(provider: string, model: string): Promise<LlmQu
   });
 }
 
+function parseQuota(response: unknown): LlmQuotaStatus {
+  const parsed = LlmQuotaStatusSchema.safeParse(response);
+  if (!parsed.success) throw new Error("Máy chủ trả về quota LLM không hợp lệ");
+  return parsed.data;
+}
+
+export function refreshOmnirouteQuota(): Promise<LlmQuotaStatus> {
+  return apiRequest<unknown>("/llm/quota/omniroute/refresh", { method: "POST" }).then(parseQuota);
+}
+
+export function saveOmnirouteToken(token: string): Promise<LlmQuotaStatus> {
+  return apiRequest<unknown>("/llm/quota/omniroute/token", {
+    method: "PUT",
+    body: JSON.stringify({ token }),
+  }).then(parseQuota);
+}
+
+export function removeOmnirouteToken(): Promise<LlmQuotaStatus> {
+  return apiRequest<unknown>("/llm/quota/omniroute/token", { method: "DELETE" }).then(parseQuota);
+}
+
 export function getLlmGatewaySettings(): Promise<LlmGatewaySettings> {
   return apiRequest<unknown>("/settings/llm-gateway").then((response) => {
     const parsed = LlmGatewaySettingsSchema.safeParse(response);

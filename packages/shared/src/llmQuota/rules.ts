@@ -1,4 +1,4 @@
-import type { LlmQuotaKind, LlmQuotaLimit, LlmQuotaRule, LlmQuotaWindow } from "../schemas/llmQuota.js";
+import type { LlmQuotaKind, LlmQuotaLimit, LlmQuotaRule, LlmQuotaUnit, LlmQuotaWindow } from "../schemas/llmQuota.js";
 
 const PAID_WITHOUT_RULE = new Set(["anthropic", "openai", "deepseek", "opencode"]);
 
@@ -79,15 +79,47 @@ export function kindForModel(rules: readonly LlmQuotaRule[], provider: string, m
   return null;
 }
 
+export function limitUnit(limit: LlmQuotaLimit): LlmQuotaUnit {
+  if (limit.unit) return limit.unit;
+  if (limit.creditsUsd !== undefined) return "credits_usd";
+  if ((limit.inputTokens || limit.outputTokens) && !limit.requests) return "tokens";
+  return "requests";
+}
+
 export function limitRatio(
   limit: LlmQuotaLimit,
-  used: { requests: number; inputTokens: number; outputTokens: number },
+  used: { requests: number; inputTokens: number; outputTokens: number; creditsUsd?: number },
 ): number {
   const ratios: number[] = [];
   if (limit.requests) ratios.push(used.requests / limit.requests);
   if (limit.inputTokens) ratios.push(used.inputTokens / limit.inputTokens);
   if (limit.outputTokens) ratios.push(used.outputTokens / limit.outputTokens);
+  if (limit.creditsUsd && limit.creditsUsd > 0) ratios.push((used.creditsUsd ?? 0) / limit.creditsUsd);
   return ratios.length === 0 ? 0 : Math.max(...ratios);
+}
+
+const NEAR_CREDIT_USD = 0.5;
+const NEAR_EXPIRY_MS = 3 * 24 * 60 * 60 * 1000;
+
+/** Credit and trial status. A passed expiry or a non-positive balance is exhausted and has no reset. */
+export function creditAllowanceStatus(input: {
+  grantedUsd: number;
+  spentUsd: number;
+  expiresAt?: string | null;
+  now: Date;
+}): "ok" | "near" | "exhausted" {
+  if (input.expiresAt) {
+    const expiresMs = Date.parse(input.expiresAt);
+    if (Number.isFinite(expiresMs) && expiresMs <= input.now.getTime()) return "exhausted";
+  }
+  const remaining = input.grantedUsd - input.spentUsd;
+  if (input.grantedUsd > 0 && remaining <= 0) return "exhausted";
+  if (input.expiresAt) {
+    const expiresMs = Date.parse(input.expiresAt);
+    if (Number.isFinite(expiresMs) && expiresMs - input.now.getTime() <= NEAR_EXPIRY_MS) return "near";
+  }
+  if (input.grantedUsd > 0 && (remaining <= input.grantedUsd * 0.1 || remaining < NEAR_CREDIT_USD)) return "near";
+  return "ok";
 }
 
 export function orderChainForBudget<T extends { kind: LlmQuotaKind | null }>(entries: readonly T[], budgetMode: string | undefined): T[] {

@@ -239,6 +239,13 @@
       "when": 1793853637611,
       "tag": "0033_melted_ultimates",
       "breakpoints": true
+    },
+    {
+      "idx": 34,
+      "version": "6",
+      "when": 1793856139380,
+      "tag": "0034_nice_jackpot",
+      "breakpoints": true
     }
   ]
 }

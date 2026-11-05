@@ -843,6 +843,8 @@ export const llmQuotaUsage = sqliteTable("llm_quota_usage", {
   requests: integer("requests").notNull().default(0),
   inputTokens: integer("input_tokens").notNull().default(0),
   outputTokens: integer("output_tokens").notNull().default(0),
+  /** Estimated USD spent against a credits_usd rule. Lifetime rows keep the running total. */
+  creditsUsd: real("credits_usd").notNull().default(0),
 }, (table) => [
   uniqueIndex("llm_quota_usage_bucket_uq").on(table.provider, table.model, table.window, table.windowStart),
   index("llm_quota_usage_window_start_idx").on(table.windowStart),
@@ -862,3 +864,31 @@ export const llmCooldowns = sqliteTable("llm_cooldowns", {
 ]);
 
 export type LlmCooldownRow = typeof llmCooldowns.$inferSelect;
+
+/** Latest OmniRoute provider-quota snapshot (TASK-045). Emails are stored masked. */
+export const llmProviderQuotaSnapshots = sqliteTable("llm_provider_quota_snapshots", {
+  id: text("id").primaryKey(),
+  connectionId: text("connection_id").notNull(),
+  omnirouteProvider: text("omniroute_provider").notNull(),
+  label: text("label").notNull(),
+  maskedAccount: text("masked_account"),
+  quotaKey: text("quota_key").notNull(),
+  used: real("used"),
+  total: real("total"),
+  remaining: real("remaining"),
+  remainingPct: real("remaining_pct"),
+  resetAt: text("reset_at"),
+  unlimited: integer("unlimited", { mode: "boolean" }).notNull().default(false),
+  fractionReported: integer("fraction_reported", { mode: "boolean" }),
+  unit: text("unit").notNull().default("requests"),
+  expiresAt: text("expires_at"),
+  fetchedAt: text("fetched_at").notNull(),
+  error: text("error"),
+  active: integer("active", { mode: "boolean" }).notNull().default(true),
+  rateLimitNote: text("rate_limit_note"),
+}, (table) => [
+  uniqueIndex("llm_provider_quota_snapshots_uq").on(table.connectionId, table.quotaKey),
+  index("llm_provider_quota_snapshots_provider_idx").on(table.omnirouteProvider),
+]);
+
+export type LlmProviderQuotaSnapshotRow = typeof llmProviderQuotaSnapshots.$inferSelect;
