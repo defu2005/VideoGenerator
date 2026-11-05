@@ -96,17 +96,29 @@ function usageForJob(job: UsageJobRow): ProjectUsageRun | undefined {
     0,
   ) ?? 0;
   const hasCallDetails = (usage.calls?.length ?? 0) > 0;
+  const ownCosts = hasCallDetails && usage.calls!.every((call) => typeof call.costUsd === "number");
   const calls: UsageCallSummary[] = hasCallDetails
     ? usage.calls!.map((call) => ({
-      ...call,
+      task: call.task,
+      provider: call.provider,
+      model: call.model,
+      inputTokens: call.inputTokens,
+      outputTokens: call.outputTokens,
       premiumRequests: call.premiumRequests ?? 0,
       callCount: 1,
+      cached: call.cached,
+      fallback: call.fallback,
+      ...(call.fallbackReason ? { fallbackReason: call.fallbackReason } : {}),
+      ok: call.ok,
       // The job-level flag only says some call lacked counts: blame calls that reported none.
       tokensUnknown: (usage.tokensUnknown ?? false) && !call.cached
         && call.inputTokens === 0 && call.outputTokens === 0,
-      costUsd: call.cached || SUBSCRIPTION_PROVIDERS.has(call.provider) || billableCallCount === 0
-        ? 0
-        : usage.costUsd / billableCallCount,
+      costUsd: ownCosts
+        ? (call.costUsd ?? 0)
+        : call.cached || SUBSCRIPTION_PROVIDERS.has(call.provider) || billableCallCount === 0
+          ? 0
+          : usage.costUsd / billableCallCount,
+      ...(typeof call.characters === "number" ? { characters: call.characters } : {}),
     }))
     : usage.llmCalls > 0 || usage.inputTokens > 0 || usage.outputTokens > 0 || usage.costUsd > 0 || usage.tokensUnknown
       ? [{

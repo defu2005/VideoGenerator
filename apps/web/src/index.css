@@ -1023,3 +1023,6 @@ button:disabled { cursor: not-allowed; opacity: .58; }
 .import-layer { position: fixed; inset: 0; z-index: 30; display: grid; place-items: center; background: #18243a70; padding: 16px; }
 .import-layer .dialog { width: min(560px, 100%); max-height: 90vh; overflow: auto; }
 .finance-page th { color: #59667d; font-size: 12px; font-weight: 600; }
+.tts-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; width: 100%; }
+.tts-page .card { padding: 12px; border: 1px solid #e6e9f0; border-radius: 10px; }
+.tts-page audio { margin-top: 12px; width: min(420px, 100%); }

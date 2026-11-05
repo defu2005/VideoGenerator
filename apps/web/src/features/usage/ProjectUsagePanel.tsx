@@ -81,7 +81,7 @@ export function ProjectUsagePanel({ projectId }: { projectId: string }) {
                   <tbody>{stageRuns.map((run) => <tr key={run.jobId}>
                     <td>{run.status}</td><td>{run.attempt}</td><td>{run.scope ?? "—"}</td>
                     <td>{formatTime(run.startedAt)}{run.durationMs === null ? "" : ` · ${(run.durationMs / 1000).toFixed(1)} giây`}</td>
-                    <td>{run.calls.map((call, index) => <div key={`${call.task}-${index}`}>{call.task} · {call.provider}/{call.model}{call.cached ? " · cache" : ""}{call.fallback && call.fallbackReason === "quota" ? <span className="ai-chip quota-chip-out">dự phòng (hết quota)</span> : call.fallback ? " · dự phòng" : ""}{!call.ok ? " · lỗi" : ""}</div>)}</td>
+                    <td>{run.calls.map((call, index) => <div key={`${call.task}-${index}`}>{call.task} · {call.provider}/{call.model}{typeof call.characters === "number" ? ` · ${call.characters} ký tự` : ""}{call.task === "tts" ? ` · ${formatUsd(call.costUsd)}` : ""}{call.cached ? " · cache" : ""}{call.fallback && call.fallbackReason === "quota" ? <span className="ai-chip quota-chip-out">dự phòng (hết quota)</span> : call.fallback ? " · dự phòng" : ""}{!call.ok ? " · lỗi" : ""}</div>)}</td>
                     <td>{formatTokens(run.totals.inputTokens + run.totals.outputTokens, run.totals.tokensUnknown)}</td>
                   </tr>)}</tbody>
                 </table></div>

@@ -4,6 +4,7 @@ import { basename, dirname, join } from "node:path";
 import { randomUUID } from "node:crypto";
 import { StageError } from "../../pipeline/stageExecutor.js";
 import { probeDurationSec } from "../../media/ffmpeg.js";
+import { cuesFromWords, parseEdgeWordBoundaries, ttsCatalogEntry } from "@vg/shared";
 import type { TtsCue, TtsProvider, TtsVoice } from "./types.js";
 
 type EdgeTtsDependencies = {
@@ -64,6 +65,12 @@ function parseSrtTimestamp(value: string): number {
 
 export class EdgeTtsProvider implements TtsProvider {
   private listCache: { expiresAt: number; voices: TtsVoice[] } | null = null;
+  readonly capabilities = {
+    wordTimings: ttsCatalogEntry("edge-tts")!.wordTimings,
+    ssml: false,
+    maxCharsPerRequest: ttsCatalogEntry("edge-tts")!.maxCharsPerRequest,
+    languages: ttsCatalogEntry("edge-tts")!.languages,
+  };
 
   constructor(
     private readonly binaryPath: string | null,
@@ -103,7 +110,7 @@ export class EdgeTtsProvider implements TtsProvider {
     return this.listCache.voices;
   }
 
-  async synthesize({ text, voice, rate, outPath, signal }: { text: string; voice: string; rate: string; outPath: string; signal?: AbortSignal }): Promise<{ durationSec: number; cues: TtsCue[] }> {
+  async synthesize({ text, voice, rate, outPath, signal }: { text: string; voice: string; rate: string; outPath: string; signal?: AbortSignal }): Promise<{ durationSec: number; cues: TtsCue[]; words?: TtsCue[]; timingSource: "provider" | "estimated"; characters: number }> {
     if (!this.binaryPath) {
       throw new StageError("Chưa cài edge-tts — chạy: pip install edge-tts", "TTS_BINARY_MISSING", false);
     }
@@ -141,8 +148,16 @@ export class EdgeTtsProvider implements TtsProvider {
           const isEmpty = !existsSync(outPath) || statSync(outPath).size === 0;
           const noAudio = status.toLowerCase().includes("noaudioreceived") || status.toLowerCase().includes("no audio received");
           if (!isEmpty && !noAudio) {
-            const cues = existsSync(srtPath) ? parseSrt(readFileSync(srtPath, "utf8")) : [];
-            return { durationSec: await this.dependencies.probeDuration(outPath, signal), cues };
+            const boundaryWords = parseEdgeWordBoundaries(status);
+            const cues = boundaryWords.length > 0
+              ? cuesFromWords(boundaryWords)
+              : (existsSync(srtPath) ? parseSrt(readFileSync(srtPath, "utf8")) : []);
+            return {
+              durationSec: await this.dependencies.probeDuration(outPath, signal),
+              cues,
+              ...(boundaryWords.length > 0 ? { words: boundaryWords, timingSource: "provider" as const } : { timingSource: "estimated" as const }),
+              characters: text.length,
+            };
           }
           if (!noAudio && !isEmpty) throw new Error("edge-tts produced invalid audio.");
         } catch (error) {

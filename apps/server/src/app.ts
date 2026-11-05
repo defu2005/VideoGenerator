@@ -41,6 +41,7 @@ import { MAX_IMAGE_BYTES } from "./services/imageStore.js";
 import { UsageService } from "./services/usageService.js";
 import { registerUsageRoutes } from "./api/usage.js";
 import { registerVoiceRoutes } from "./api/voice.js";
+import { registerTtsSettingsRoutes } from "./api/ttsSettings.js";
 import { registerSubtitleRoutes } from "./api/subtitles.js";
 import { TtsProviderRegistry } from "./providers/tts/registry.js";
 import { VoiceExecutor } from "./stages/voice/voiceExecutor.js";
@@ -204,6 +205,7 @@ export function buildApp({ config }: { config: AppConfig }) {
     metadataService,
   );
   const tokenVault = new TokenVault(database.sqlite, config.DATA_DIR, config.TOKEN_ENCRYPTION_KEY);
+  ttsProviders.bind(tokenVault, database.sqlite);
   const youtubePublisher = new YouTubePublisher({
     config,
     vault: tokenVault,
@@ -516,6 +518,7 @@ export function buildApp({ config }: { config: AppConfig }) {
   });
   registerAssistantRoutes(server, assistantService);
   registerVoiceRoutes(server, ttsProviders, database.sqlite, projectService, jobRepository, config);
+  registerTtsSettingsRoutes(server, database.sqlite, config, tokenVault, ttsProviders);
   registerSubtitleRoutes(server, database.sqlite, jobRepository, config);
   registerMusicRoutes(server, musicService, projectService, jobRepository);
   registerTimelineRoutes(server, timelineService, projectService);

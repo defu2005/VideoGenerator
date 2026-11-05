@@ -97,7 +97,7 @@ export function VoicePanel({ project }: { project: Project }) {
                       {formatDuration(track.durationSec)} · ước tính cảnh {formatDuration(estimate)}
                       {durationMismatch && <span role="alert"> · Chênh lệch lớn hơn 30%</span>}
                     </p>
-                    <small>{track.voice} · {track.rate}</small>
+                    <small>{track.provider} · {track.voice} · {track.rate}{(track.timingSource === "provider" || track.timingSource === "aligned") ? " · Có mốc thời gian từng từ" : ""}</small>
                   </>
                 ) : <p className="voice-missing">Chưa có giọng đọc</p>}
                 <div className="voice-actions">

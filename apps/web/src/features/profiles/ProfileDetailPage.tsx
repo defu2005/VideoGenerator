@@ -8,6 +8,7 @@ import {
   YOUTUBE_PLAYLIST_SCOPE_NOTE_VI,
   YOUTUBE_SETUP_HELP_VI,
   recommendBrief,
+  TTS_CATALOG,
   type AccountConnectionDetail,
   type BriefSettings,
   type PlatformAccount,
@@ -203,6 +204,9 @@ function BriefTab({ profile }: { profile: ProfileDetail }) {
   const [paidCap, setPaidCap] = useState(profile.llm?.paidFallbackDailyUsd === undefined ? "" : String(profile.llm.paidFallbackDailyUsd));
   const [voice, setVoice] = useState(profile.voice?.voice ?? "");
   const [rate, setRate] = useState(profile.voice?.rate ?? "+0%");
+  const [ttsProvider, setTtsProvider] = useState(profile.voice?.provider ?? "");
+  const [ttsModel, setTtsModel] = useState(profile.voice?.model ?? "");
+  const [ttsStyle, setTtsStyle] = useState(profile.voice?.style ?? "");
   const [guidelineDraft, setGuidelineDraft] = useState<GuidelineDraft>(() =>
     guidelineDraftFromSettings({ guidelines: profile.guidelines }));
   const [message, setMessage] = useState("");
@@ -217,6 +221,9 @@ function BriefTab({ profile }: { profile: ProfileDetail }) {
     setPaidCap(profile.llm?.paidFallbackDailyUsd === undefined ? "" : String(profile.llm.paidFallbackDailyUsd));
     setVoice(profile.voice?.voice ?? "");
     setRate(profile.voice?.rate ?? "+0%");
+    setTtsProvider(profile.voice?.provider ?? "");
+    setTtsModel(profile.voice?.model ?? "");
+    setTtsStyle(profile.voice?.style ?? "");
     setGuidelineDraft(guidelineDraftFromSettings({ guidelines: profile.guidelines }));
   }, [profile]);
 
@@ -253,7 +260,15 @@ function BriefTab({ profile }: { profile: ProfileDetail }) {
         id: profile.id,
         input: {
           defaultBrief,
-          voice: voice.trim() ? { voice: voice.trim(), ...(rate ? { rate } : {}) } : null,
+          voice: voice.trim() || ttsProvider || ttsModel.trim() || ttsStyle.trim()
+            ? {
+              ...(voice.trim() ? { voice: voice.trim() } : {}),
+              ...(rate ? { rate } : {}),
+              ...(ttsProvider ? { provider: ttsProvider } : {}),
+              ...(ttsModel.trim() ? { model: ttsModel.trim() } : {}),
+              ...(ttsStyle.trim() ? { style: ttsStyle.trim() } : {}),
+            }
+            : null,
           ...(guidelines ? { guidelines } : {}),
           llm: (() => {
             const { quotaPolicy: _policy, paidFallbackDailyUsd: _cap, ...rest } = profile.llm ?? {};
@@ -315,12 +330,30 @@ function BriefTab({ profile }: { profile: ProfileDetail }) {
       <ModelAdvisorPanel scope="profile" id={profile.id} budgetMode={brief.budget.mode} />
       <div className="form-row">
         <label className="form-field">
+          <span>Nhà cung cấp TTS</span>
+          <select aria-label="Nhà cung cấp TTS" value={ttsProvider} onChange={(event) => setTtsProvider(event.target.value)}>
+            <option value="">Mặc định app</option>
+            {TTS_CATALOG.filter((entry) => entry.id !== "mock").map((entry) => (
+              <option key={entry.id} value={entry.id}>{entry.label}</option>
+            ))}
+          </select>
+          {TTS_CATALOG.find((entry) => entry.id === ttsProvider)?.wordTimings && <small>Có mốc thời gian từng từ</small>}
+        </label>
+        <label className="form-field">
           <span>Giọng đọc</span>
           <input value={voice} onChange={(event) => setVoice(event.target.value)} placeholder="vi-VN-HoaiMyNeural" />
         </label>
         <label className="form-field">
           <span>Tốc độ</span>
           <input value={rate} onChange={(event) => setRate(event.target.value)} placeholder="+0%" />
+        </label>
+        <label className="form-field">
+          <span>Phong cách</span>
+          <input aria-label="Phong cách giọng" value={ttsStyle} onChange={(event) => setTtsStyle(event.target.value)} />
+        </label>
+        <label className="form-field">
+          <span>Model</span>
+          <input aria-label="Model giọng" value={ttsModel} onChange={(event) => setTtsModel(event.target.value)} />
         </label>
       </div>
       <GuidelineFieldset draft={guidelineDraft} brief={brief} onChange={setGuidelineDraft} />

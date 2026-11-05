@@ -34,6 +34,7 @@ export const UsageCallSummarySchema = z.object({
   ok: z.boolean(),
   tokensUnknown: z.boolean(),
   costUsd: z.number().nonnegative(),
+  characters: z.number().int().nonnegative().optional(),
 }).strict();
 export type UsageCallSummary = z.infer<typeof UsageCallSummarySchema>;
 

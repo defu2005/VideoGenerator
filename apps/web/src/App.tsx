@@ -7,6 +7,7 @@ import { ProjectListPage } from "./features/projects/ProjectListPage";
 import { AiSettingsPage } from "./features/settings/AiSettingsPage";
 import { RenderSettingsPage } from "./features/settings/RenderSettingsPage";
 import { WebImageSettingsPage } from "./features/settings/WebImageSettingsPage";
+import { TtsSettingsPage } from "./features/settings/TtsSettingsPage";
 import { ImageSourcesSettingsPage } from "./features/settings/ImageSourcesSettingsPage";
 import { NotificationsPage } from "./features/settings/NotificationsPage";
 import { GuidelineSettingsPage } from "./features/guidelines/GuidelineSettingsPage";
@@ -50,6 +51,7 @@ export function App() {
             <Route path="settings/render" element={<RenderSettingsPage />} />
             <Route path="settings/image-sources" element={<ImageSourcesSettingsPage />} />
             <Route path="settings/web-image" element={<WebImageSettingsPage />} />
+            <Route path="settings/tts" element={<TtsSettingsPage />} />
             <Route path="settings/notifications" element={<NotificationsPage />} />
             <Route path="settings/guidelines" element={<GuidelineSettingsPage />} />
             <Route path="usage" element={<UsagePage />} />

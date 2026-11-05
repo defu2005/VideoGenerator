@@ -1,9 +1,10 @@
 import { AUTONOMY_MODES, LLM_TASKS, type AutonomyMode, type LlmRoute, type ProjectSettings, type ProjectSettingsInput } from "@vg/shared";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { ModelField } from "../llm/ModelField";
 import { getLlmProviders, getProjectLlmRoutes, getProviderModels } from "../../services/llmApi";
 import { getTtsVoices } from "../../services/voiceApi";
+import { TTS_CATALOG } from "@vg/shared";
 import { GuidelineFieldset, type GuidelineDraft } from "./GuidelineFieldset";
 
 export type ProjectDraft = {
@@ -23,6 +24,9 @@ export type ProjectDraft = {
   llmModel: string;
   voice: string;
   rate: string;
+  ttsProvider: string;
+  ttsModel: string;
+  ttsStyle: string;
   autoRender: boolean;
 };
 
@@ -43,6 +47,9 @@ export const DEFAULT_PROJECT_DRAFT: ProjectDraft = {
   llmModel: "",
   voice: "",
   rate: "+0%",
+  ttsProvider: "",
+  ttsModel: "",
+  ttsStyle: "",
   autoRender: false,
 };
 
@@ -66,10 +73,13 @@ export function settingsFromDraft(draft: ProjectDraft): ProjectSettingsInput {
         },
       },
     } : {}),
-    ...(draft.voice || draft.rate !== "+0%" ? {
+    ...(draft.voice || draft.rate !== "+0%" || draft.ttsProvider || draft.ttsModel || draft.ttsStyle ? {
       voice: {
         ...(draft.voice ? { voice: draft.voice } : {}),
         ...(draft.rate !== "+0%" ? { rate: draft.rate } : {}),
+        ...(draft.ttsProvider ? { provider: draft.ttsProvider } : {}),
+        ...(draft.ttsModel.trim() ? { model: draft.ttsModel.trim() } : {}),
+        ...(draft.ttsStyle.trim() ? { style: draft.ttsStyle.trim() } : {}),
       },
     } : {}),
     autoRender: draft.autoRender,
@@ -114,7 +124,11 @@ export function ProjectFormFields({
     queryFn: () => getProjectLlmRoutes(projectId!),
     enabled: Boolean(projectId),
   });
-  const voices = useQuery({ queryKey: ["tts-voices"], queryFn: getTtsVoices });
+  const [gender, setGender] = useState("");
+  const voices = useQuery({
+    queryKey: ["tts-voices", draft.ttsProvider],
+    queryFn: () => getTtsVoices(draft.ttsProvider ? { provider: draft.ttsProvider } : undefined),
+  });
   // Set when the user picks another provider; the model is checked once that provider's list loads.
   // A custom model name typed for the current provider is never cleared.
   const providerSwitchedTo = useRef<string | null>(null);
@@ -129,9 +143,11 @@ export function ProjectFormFields({
   const matchingVoices = availableVoices.filter((voice) => {
     const language = normalizeLanguage(voice.language);
     const target = normalizeLanguage(draft.language);
-    return language === target || language.startsWith(`${target}-`) || target.startsWith(`${language}-`);
+    const languageMatch = language === target || language.startsWith(`${target}-`) || target.startsWith(`${language}-`);
+    const genderMatch = !gender || (voice.gender ?? "unknown") === gender;
+    return languageMatch && genderMatch;
   }).filter((voice) => !voice.multilingual);
-  const multilingualVoices = availableVoices.filter((voice) => voice.multilingual);
+  const multilingualVoices = availableVoices.filter((voice) => voice.multilingual && (!gender || (voice.gender ?? "unknown") === gender));
   const selectedProvider = availableProviders.find((provider) => provider.id === draft.llmProvider);
   return (
     <>
@@ -215,6 +231,25 @@ export function ProjectFormFields({
               <option value="">Mode default</option>
               <option value="AGENT">Agent</option>
               <option value="USER">User</option>
+            </select>
+          </label>
+          <label className="form-field">
+            <span>Nhà cung cấp TTS</span>
+            <select aria-label="Nhà cung cấp TTS" value={draft.ttsProvider} onChange={(event) => onChange("ttsProvider", event.target.value)}>
+              <option value="">Mặc định app</option>
+              {TTS_CATALOG.filter((entry) => entry.id !== "mock").map((entry) => (
+                <option key={entry.id} value={entry.id}>{entry.label}</option>
+              ))}
+            </select>
+            {TTS_CATALOG.find((entry) => entry.id === draft.ttsProvider)?.wordTimings && <small>Có mốc thời gian từng từ</small>}
+          </label>
+          <label className="form-field">
+            <span>Lọc giới tính</span>
+            <select aria-label="Lọc giới tính" value={gender} onChange={(event) => setGender(event.target.value)}>
+              <option value="">Tất cả</option>
+              <option value="female">Nữ</option>
+              <option value="male">Nam</option>
+              <option value="neutral">Trung tính</option>
             </select>
           </label>
           <label className="form-field">

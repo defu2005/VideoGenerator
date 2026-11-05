@@ -124,7 +124,7 @@ const ConfigSchema = z.object({
   JOB_MAX_ATTEMPTS: z.coerce.number().int().positive().max(20).default(3),
   JOB_RETRY_BASE_MS: z.coerce.number().int().nonnegative().default(2_000),
   FAKE_STAGE_DELAY_MS: z.coerce.number().int().nonnegative().default(300),
-  TTS_PROVIDER: z.enum(["edge-tts", "mock"]).default("edge-tts"),
+  TTS_PROVIDER: z.enum(["edge-tts", "mock", "google_cloud", "gemini", "elevenlabs", "openai", "fpt_ai", "viettel_ai", "piper", "vieneu"]).default("edge-tts"),
   EDGE_TTS_PATH: z.string().min(1).default(resolveEdgeTtsPath()),
   TTS_VOICE_VI: z.string().min(1).default("vi-VN-HoaiMyNeural"),
   TTS_VOICE_EN: z.string().min(1).default("en-US-AriaNeural"),
@@ -250,7 +250,7 @@ export type AppConfig = {
   JOB_MAX_ATTEMPTS: number;
   JOB_RETRY_BASE_MS: number;
   FAKE_STAGE_DELAY_MS: number;
-  TTS_PROVIDER: "edge-tts" | "mock";
+  TTS_PROVIDER: "edge-tts" | "mock" | "google_cloud" | "gemini" | "elevenlabs" | "openai" | "fpt_ai" | "viettel_ai" | "piper" | "vieneu";
   EDGE_TTS_PATH: string;
   TTS_VOICE_VI: string;
   TTS_VOICE_EN: string;

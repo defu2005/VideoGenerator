@@ -24,6 +24,10 @@ export const LlmCallUsageSchema = z.object({
   /** Set when this call ran because an earlier model was out of quota. */
   fallbackReason: z.literal("quota").optional(),
   ok: z.boolean(),
+  /** Character count for a TTS call. */
+  characters: z.number().int().nonnegative().optional(),
+  /** This call's own cost. When every call sets it, usage keeps these amounts. */
+  costUsd: z.number().nonnegative().optional(),
 }).strict();
 export type LlmCallUsage = z.infer<typeof LlmCallUsageSchema>;
 

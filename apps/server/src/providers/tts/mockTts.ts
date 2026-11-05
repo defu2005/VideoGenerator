@@ -1,6 +1,7 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
-import type { TtsProvider, TtsCue, TtsVoice } from "./types.js";
+import type { TtsProvider, TtsCue, TtsVoice, TtsWord } from "./types.js";
+import { spreadSentence, ttsCatalogEntry } from "@vg/shared";
 
 function splitSentences(value: string): string[] {
   return value
@@ -35,6 +36,12 @@ function wavHeader(samples: number): Buffer {
 export class MockTtsProvider implements TtsProvider {
   id = "mock";
   label = "Mock TTS";
+  readonly capabilities = {
+    wordTimings: false,
+    ssml: false,
+    maxCharsPerRequest: ttsCatalogEntry("mock")!.maxCharsPerRequest,
+    languages: ["*"],
+  };
 
   isAvailable(): boolean {
     return true;
@@ -52,7 +59,7 @@ export class MockTtsProvider implements TtsProvider {
     ];
   }
 
-  async synthesize({ text, outPath }: { text: string; voice: string; rate: string; outPath: string; signal?: AbortSignal }): Promise<{ durationSec: number; cues: TtsCue[] }> {
+  async synthesize({ text, outPath }: { text: string; voice: string; rate: string; outPath: string; signal?: AbortSignal }): Promise<{ durationSec: number; cues: TtsCue[]; words: TtsWord[]; timingSource: "estimated"; characters: number }> {
     const trimmed = text.trim();
     const sentences = splitSentences(trimmed) || [trimmed || " "];
     const secondsPerChar = 1 / 14;
@@ -74,6 +81,7 @@ export class MockTtsProvider implements TtsProvider {
         text: sentence,
       };
     });
-    return { durationSec, cues };
+    const words: TtsWord[] = cues.flatMap((cue) => spreadSentence(cue.text, cue.startSec, cue.endSec, "vi"));
+    return { durationSec, cues, words, timingSource: "estimated", characters: trimmed.length };
   }
 }

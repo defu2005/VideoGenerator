@@ -75,6 +75,9 @@ export function mainAspectFromFormats(formats: AccountFormat[]): "16:9" | "9:16"
 const VoiceSettingsSchema = z.object({
   voice: z.string().trim().max(200).optional(),
   rate: z.string().regex(/^[+-]\d{1,3}%$/).optional(),
+  provider: z.string().trim().max(40).optional(),
+  model: z.string().trim().max(120).optional(),
+  style: z.string().trim().max(500).optional(),
 }).strict();
 
 export const ProfileDefaultBriefSchema = VideoBriefSettingsSchema.extend({

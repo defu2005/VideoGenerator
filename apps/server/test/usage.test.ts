@@ -217,4 +217,42 @@ describe("usage aggregation API", () => {
     const invalidDate = await app.inject({ method: "GET", url: "/api/usage?from=2026-11-31" });
     expect(invalidDate.statusCode).toBe(400);
   });
+
+  it("keeps TTS character counts and the recorded cost on the provider line", async () => {
+    const { app, config } = createApp();
+    const created = await app.inject({ method: "POST", url: "/api/projects", payload: { topic: "TTS usage" } });
+    const project = created.json<Project>();
+    insertJob(config.DATABASE_PATH, project.id, {
+      stage: "VOICE",
+      status: "SUCCEEDED",
+      attempt: 1,
+      date: "2026-11-04",
+      usage: {
+        llmCalls: 0,
+        inputTokens: 0,
+        outputTokens: 0,
+        costUsd: 0.016,
+        calls: [{
+          task: "tts",
+          provider: "google_cloud",
+          model: "vi-VN-Neural2-A",
+          inputTokens: 0,
+          outputTokens: 0,
+          cached: false,
+          fallback: false,
+          ok: true,
+          characters: 1000,
+          costUsd: 0.016,
+        }],
+      },
+    });
+    const response = await app.inject({ method: "GET", url: `/api/projects/${project.id}/usage` });
+    expect(response.statusCode).toBe(200);
+    expect(response.json().runs[0].calls[0]).toMatchObject({
+      task: "tts",
+      provider: "google_cloud",
+      characters: 1000,
+      costUsd: 0.016,
+    });
+  });
 });

@@ -37,6 +37,8 @@ type VoiceTrackRow = {
   audio_path: string;
   duration_sec: number;
   cues: string | TtsCue[];
+  words?: string | TtsCue[];
+  timing_source?: string;
   input_hash: string;
   created_at: string;
   updated_at: string;
@@ -53,6 +55,8 @@ function toVoiceTrack(track: VoiceTrackRow) {
     origin: track.origin,
     audioPath: track.audio_path,
     cues: typeof track.cues === "string" ? JSON.parse(track.cues) as TtsCue[] : track.cues,
+    words: !track.words ? [] : typeof track.words === "string" ? JSON.parse(track.words) as TtsCue[] : track.words,
+    timingSource: track.timing_source ?? "estimated",
     durationSec: Number(track.duration_sec),
     inputHash: track.input_hash,
     createdAt: track.created_at,
@@ -83,12 +87,27 @@ export function registerVoiceRoutes(
   repository: JobRepository,
   config: AppConfig,
 ): void {
-  app.get("/api/tts/voices", async () => {
-    const voices = (await registry.listVoices()).map((voice) => ({
-      ...voice,
-      multilingual: Boolean(voice.multilingual ?? /Multilingual/i.test(voice.name)),
-    }));
-    return { voices };
+  app.get("/api/tts/voices", async (request) => {
+    const query = z.object({
+      provider: z.string().optional(),
+      language: z.string().optional(),
+      gender: z.enum(["female", "male", "neutral", "unknown"]).optional(),
+    }).strict().parse(request.query ?? {});
+    let voices = await registry.listVoices(query.provider);
+    if (query.language) {
+      const language = query.language.toLowerCase();
+      voices = voices.filter((voice) => {
+        const code = voice.language.toLowerCase();
+        return code === "multi" || code === "*" || code.startsWith(language) || voice.multilingual;
+      });
+    }
+    if (query.gender) voices = voices.filter((voice) => (voice.gender ?? "unknown") === query.gender);
+    return {
+      voices: voices.map((voice) => ({
+        ...voice,
+        multilingual: Boolean(voice.multilingual ?? /Multilingual/i.test(voice.name)),
+      })),
+    };
   });
 
   app.get("/api/projects/:id/voice", async (request) => {
@@ -101,10 +120,12 @@ export function registerVoiceRoutes(
       .filter((scene) => scene.narration.trim().length > 0)
       .filter((scene) => !tracks.some((track) => track.scene_id === scene.id && existsSync(track.audio_path)))
       .map((scene) => scene.id);
+    const plan = typeof registry.planVoice === "function" ? registry.planVoice(project) : null;
     return {
-      voice: project.settings.voice?.voice ?? null,
-      rate: project.settings.voice?.rate ?? null,
-      provider: config.TTS_PROVIDER,
+      voice: plan?.voice || project.settings.voice?.voice || null,
+      rate: plan?.rate || project.settings.voice?.rate || null,
+      provider: plan?.provider || config.TTS_PROVIDER,
+      wordTimings: plan?.wordTimings ?? false,
       tracks: tracks.map(toVoiceTrack),
       totalDurationSec: tracks.reduce((sum, track) => sum + Number(track.duration_sec ?? 0), 0),
       missingSceneIds,
@@ -148,28 +169,34 @@ export function registerVoiceRoutes(
     const provider = registry.resolve();
     const hash = createHash("sha256").update(`${scene.narration}\u0000${voice}\u0000${rate}\u0000${provider.id}`).digest("hex");
     const filePath = projectVoiceTrackPath(config, id, sceneId, hash, provider.id === "mock" ? "wav" : "mp3");
-    const result = await provider.synthesize({ text: scene.narration, voice, rate, outPath: filePath, signal: new AbortController().signal });
+    const tracked = typeof registry.synthesizeTracked === "function"
+      ? await registry.synthesizeTracked({ project, text: scene.narration, outPath: filePath, voice, rate, signal: new AbortController().signal })
+      : null;
+    const result = tracked ?? await provider.synthesize({ text: scene.narration, voice, rate, outPath: filePath, signal: new AbortController().signal });
     const now = new Date().toISOString();
     const narrationHash = createHash("sha256").update(scene.narration.trim()).digest("hex");
     const previous = db.prepare("SELECT audio_path FROM voice_tracks WHERE scene_id = ? AND project_id = ?").get(sceneId, id) as { audio_path: string } | undefined;
-    db.prepare(`INSERT INTO voice_tracks (id, project_id, scene_id, provider, voice, rate, origin, audio_path, duration_sec, cues, input_hash, narration_hash, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, 'AGENT', ?, ?, ?, ?, ?, ?, ?)
-      ON CONFLICT(scene_id) DO UPDATE SET provider=excluded.provider, voice=excluded.voice, rate=excluded.rate, origin='AGENT', audio_path=excluded.audio_path, duration_sec=excluded.duration_sec, cues=excluded.cues, input_hash=excluded.input_hash, narration_hash=excluded.narration_hash, updated_at=excluded.updated_at`).run(
+    const audioPath = tracked?.audioPath ?? filePath;
+    db.prepare(`INSERT INTO voice_tracks (id, project_id, scene_id, provider, voice, rate, origin, audio_path, duration_sec, cues, words, timing_source, input_hash, narration_hash, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, 'AGENT', ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(scene_id) DO UPDATE SET provider=excluded.provider, voice=excluded.voice, rate=excluded.rate, origin='AGENT', audio_path=excluded.audio_path, duration_sec=excluded.duration_sec, cues=excluded.cues, words=excluded.words, timing_source=excluded.timing_source, input_hash=excluded.input_hash, narration_hash=excluded.narration_hash, updated_at=excluded.updated_at`).run(
       randomUUID(),
       id,
       sceneId,
-      provider.id,
-      voice,
-      rate,
-      filePath,
+      tracked?.providerId ?? provider.id,
+      tracked?.voice ?? voice,
+      tracked?.rate ?? rate,
+      audioPath,
       result.durationSec,
       JSON.stringify(result.cues),
+      JSON.stringify(result.words ?? []),
+      result.timingSource ?? "estimated",
       hash,
       narrationHash,
       now,
       now,
     );
-    if (previous && previous.audio_path !== filePath) rmSync(previous.audio_path, { force: true });
+    if (previous && previous.audio_path !== audioPath) rmSync(previous.audio_path, { force: true });
     markStaleFrom(repository, id, "VOICE");
     const track = db.prepare("SELECT * FROM voice_tracks WHERE scene_id = ? AND project_id = ?").get(sceneId, id) as VoiceTrackRow;
     return toVoiceTrack(track);

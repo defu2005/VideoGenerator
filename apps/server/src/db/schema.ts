@@ -26,7 +26,7 @@ export const profiles = sqliteTable("profiles", {
   direction: text("direction").notNull().default(""),
   language: text("language").notNull().default("vi"),
   defaultBrief: text("default_brief", { mode: "json" }).$type<ProfileDefaultBrief>().notNull(),
-  voice: text("voice", { mode: "json" }).$type<{ voice?: string; rate?: string } | null>(),
+  voice: text("voice", { mode: "json" }).$type<{ voice?: string; rate?: string; provider?: string; model?: string; style?: string } | null>(),
   guidelines: text("guidelines", { mode: "json" }).$type<GuidelineSettings>().notNull(),
   llm: text("llm", { mode: "json" }).$type<ProfileLlmSettings | null>(),
   automation: text("automation", { mode: "json" }).$type<ProfileAutomation>(),
@@ -418,6 +418,8 @@ export const jobs = sqliteTable("jobs", {
       fallback: boolean;
       fallbackReason?: "quota";
       ok: boolean;
+      characters?: number;
+      costUsd?: number;
     }[];
   } | null>(),
   createdAt: text("created_at").notNull(),
@@ -507,6 +509,8 @@ export const voiceTracks = sqliteTable("voice_tracks", {
   audioPath: text("audio_path").notNull(),
   durationSec: real("duration_sec").notNull(),
   cues: text("cues", { mode: "json" }).$type<Array<{ startSec: number; endSec: number; text: string }>>().notNull().default([]),
+  words: text("words", { mode: "json" }).$type<Array<{ startSec: number; endSec: number; text: string }>>().notNull().default([]),
+  timingSource: text("timing_source").notNull().default("estimated"),
   inputHash: text("input_hash").notNull(),
   narrationHash: text("narration_hash").notNull().default(""),
   createdAt: text("created_at").notNull(),

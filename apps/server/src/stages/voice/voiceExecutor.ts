@@ -15,8 +15,8 @@ function formatDuration(totalSeconds: number): string {
   return `${minutes}:${seconds.toString().padStart(2, "0")}`;
 }
 
-function inputHash(text: string, voice: string, rate: string, provider: string): string {
-  return createHash("sha256").update(`${text}\u0000${voice}\u0000${rate}\u0000${provider}`).digest("hex");
+function inputHash(text: string, voice: string, rate: string, provider: string, model = "", style = ""): string {
+  return createHash("sha256").update(`${text}\u0000${voice}\u0000${rate}\u0000${provider}\u0000${model}\u0000${style}`).digest("hex");
 }
 
 function narrationHash(text: string): string {
@@ -34,12 +34,17 @@ export class VoiceExecutor implements StageExecutor {
 
   async run(context: StageContext) {
     const project = context.project;
-    const provider = this.providers.resolve();
+    const planner = this.providers as TtsProviderRegistry;
+    const plan = typeof planner.planVoice === "function" ? planner.planVoice(project) : null;
+    const provider = plan ? (this.providers.get(plan.provider) ?? this.providers.resolve()) : this.providers.resolve();
     const voices = typeof provider.listVoices === "function"
       ? await provider.listVoices()
       : (typeof this.providers.listVoices === "function" ? await this.providers.listVoices() : []);
-    const voice = project.settings.voice?.voice || defaultVoiceFor(project.settings.language, voices, this.config, (message) => context.logger.warn(message));
-    const rate = project.settings.voice?.rate || this.config.TTS_RATE;
+    const voice = plan
+      ? (plan.voice || defaultVoiceFor(project.settings.language, voices, this.config, (message) => context.logger.warn(message)))
+      : (project.settings.voice?.voice || defaultVoiceFor(project.settings.language, voices, this.config, (message) => context.logger.warn(message)));
+    const rate = plan?.rate || project.settings.voice?.rate || this.config.TTS_RATE;
+    const plannedProvider = plan?.provider || provider.id;
     const scenes = this.sqlite.prepare("SELECT * FROM scenes WHERE project_id = ? ORDER BY \"order\" ASC").all(project.id) as Array<{ id: string; narration: string; order: number; label: string }>;
     const projectRoot = projectDir(this.config.DATA_DIR, project.id);
     const voiceDir = join(projectRoot, "voice");
@@ -48,6 +53,7 @@ export class VoiceExecutor implements StageExecutor {
     const allExisting = this.sqlite.prepare("SELECT * FROM voice_tracks WHERE project_id = ?").all(project.id) as Array<{
       id: string;
       scene_id: string;
+      provider: string;
       audio_path: string;
       duration_sec: number;
       input_hash: string;
@@ -70,10 +76,14 @@ export class VoiceExecutor implements StageExecutor {
         continue;
       }
       narratedSceneIds.add(scene.id);
-      const hash = inputHash(narrative, voice, rate, provider.id);
+      const hash = inputHash(narrative, voice, rate, plannedProvider, plan?.model ?? "", plan?.style ?? "");
       const currentNarrationHash = narrationHash(narrative);
       const existing = existingByScene.get(scene.id);
-      const canReuse = existing && existing.input_hash === hash && existing.audio_path && existsSync(existing.audio_path);
+      const canReuse = existing
+        && existing.input_hash === hash
+        && existing.provider === plannedProvider
+        && existing.audio_path
+        && existsSync(existing.audio_path);
       if (canReuse) {
         reused += 1;
         totalDurationSec += Number(existing.duration_sec ?? 0);
@@ -90,16 +100,31 @@ export class VoiceExecutor implements StageExecutor {
         continue;
       }
       if (existing?.origin === "USER" && existing.narration_hash !== currentNarrationHash) userNarrationChanged += 1;
-      const fileName = `${scene.id}-${hash.slice(0, 8)}.${provider.id === "mock" ? "wav" : "mp3"}`;
+      const fileName = `${scene.id}-${hash.slice(0, 8)}.${plannedProvider === "mock" ? "wav" : "mp3"}`;
       const outPath = join(voiceDir, fileName);
-      const synthesized = await provider.synthesize({ text: narrative, voice, rate, outPath, signal: context.signal });
+      const tracked = typeof planner.synthesizeTracked === "function"
+        ? await planner.synthesizeTracked({
+          project,
+          text: narrative,
+          outPath,
+          signal: context.signal,
+          voice,
+          rate,
+          onUsage: (usage) => context.recordUsage(usage),
+        })
+        : null;
+      const synthesized = tracked ?? await provider.synthesize({ text: narrative, voice, rate, outPath, signal: context.signal });
+      const usedProvider = tracked?.providerId ?? provider.id;
+      const usedVoice = tracked?.voice ?? voice;
+      const usedRate = tracked?.rate ?? rate;
+      const audioPath = tracked?.audioPath ?? outPath;
       const now = new Date().toISOString();
-      if (existing && existing.audio_path && existsSync(existing.audio_path) && existing.audio_path !== outPath) {
+      if (existing && existing.audio_path && existsSync(existing.audio_path) && existing.audio_path !== audioPath) {
         rmSync(existing.audio_path, { force: true });
       }
       this.sqlite.prepare(
-        `INSERT INTO voice_tracks (id, project_id, scene_id, provider, voice, rate, origin, audio_path, duration_sec, cues, input_hash, narration_hash, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `INSERT INTO voice_tracks (id, project_id, scene_id, provider, voice, rate, origin, audio_path, duration_sec, cues, words, timing_source, input_hash, narration_hash, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(scene_id) DO UPDATE SET
           provider = excluded.provider,
           voice = excluded.voice,
@@ -108,6 +133,8 @@ export class VoiceExecutor implements StageExecutor {
           audio_path = excluded.audio_path,
           duration_sec = excluded.duration_sec,
           cues = excluded.cues,
+          words = excluded.words,
+          timing_source = excluded.timing_source,
           input_hash = excluded.input_hash,
           narration_hash = excluded.narration_hash,
           updated_at = excluded.updated_at`,
@@ -115,13 +142,15 @@ export class VoiceExecutor implements StageExecutor {
         randomUUID(),
         project.id,
         scene.id,
-        provider.id,
-        voice,
-        rate,
+        usedProvider,
+        usedVoice,
+        usedRate,
         "AGENT",
-        outPath,
+        audioPath,
         synthesized.durationSec,
         JSON.stringify(synthesized.cues),
+        JSON.stringify(synthesized.words ?? []),
+        synthesized.timingSource ?? "estimated",
         hash,
         currentNarrationHash,
         now,

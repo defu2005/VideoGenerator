@@ -15,6 +15,13 @@ export const VoiceCueSchema = z.object({
 }).strict();
 export type VoiceCue = z.infer<typeof VoiceCueSchema>;
 
+export const VoiceWordSchema = z.object({
+  startSec: z.number().nonnegative(),
+  endSec: z.number().nonnegative(),
+  text: z.string().min(1),
+}).strict();
+export type VoiceWord = z.infer<typeof VoiceWordSchema>;
+
 export const VoiceTrackSchema = z.object({
   id: z.string().uuid(),
   projectId: z.string().uuid(),
@@ -26,6 +33,8 @@ export const VoiceTrackSchema = z.object({
   audioPath: z.string().min(1),
   durationSec: z.number().nonnegative(),
   cues: z.array(VoiceCueSchema).default([]),
+  words: z.array(VoiceWordSchema).optional(),
+  timingSource: z.enum(["provider", "aligned", "estimated"]).optional(),
   inputHash: z.string().min(1),
   createdAt: z.string().datetime({ offset: true }),
   updatedAt: z.string().datetime({ offset: true }),
@@ -40,6 +49,7 @@ export const ProjectVoiceSummarySchema = z.object({
   voice: z.string().nullable(),
   rate: z.string().nullable(),
   provider: z.string().nullable(),
+  wordTimings: z.boolean().optional(),
   tracks: z.array(VoiceTrackSchema),
   totalDurationSec: z.number().nonnegative(),
   missingSceneIds: z.array(z.string().uuid()),

@@ -81,7 +81,12 @@ describe("EdgeTtsProvider", () => {
     expect(pitchOf(fake.calls[0]!.args)).toBeUndefined();
     expect(pitchOf(fake.calls[1]!.args)).toBe("+1Hz");
     expect(pitchOf(fake.calls[2]!.args)).toBe("-1Hz");
-    expect(result).toEqual({ durationSec: 1.25, cues: [{ startSec: 0, endSec: 1.25, text: "Xin chào bạn." }] });
+    expect(result).toEqual({
+      durationSec: 1.25,
+      cues: [{ startSec: 0, endSec: 1.25, text: "Xin chào bạn." }],
+      timingSource: "estimated",
+      characters: text.length,
+    });
     expect(probeDuration).toHaveBeenCalledWith(output, undefined);
     expect(existsSync(output)).toBe(true);
     const { args, options } = fake.calls[2]!;

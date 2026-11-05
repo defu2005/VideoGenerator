@@ -78,6 +78,9 @@ export const ProjectSettingsSchema = z.object({
   voice: z.object({
     voice: z.string().trim().max(200).optional(),
     rate: z.string().regex(/^[+-]\d{1,3}%$/).optional(),
+    provider: z.string().trim().max(40).optional(),
+    model: z.string().trim().max(120).optional(),
+    style: z.string().trim().max(500).optional(),
   }).strict().optional(),
   llm: LlmSettingsSchema.optional(),
   autoRender: z.boolean().default(false),
@@ -117,6 +120,9 @@ export const ProjectSettingsInputSchema = z.object({
   voice: z.object({
     voice: z.string().trim().max(200).optional(),
     rate: z.string().regex(/^[+-]\d{1,3}%$/).optional(),
+    provider: z.string().trim().max(40).optional(),
+    model: z.string().trim().max(120).optional(),
+    style: z.string().trim().max(500).optional(),
   }).strict().optional(),
   llm: LlmSettingsInputSchema.optional(),
   autoRender: z.boolean().optional(),

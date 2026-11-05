@@ -41,11 +41,16 @@
 | 25 | [TASK-038](TASK-038.md) | Comment inbox across platforms, LLM reply suggestions, spam filter | (guide only) |
 | 26 | [TASK-039](TASK-039.md) | Trending topics via official APIs + multi-language dubbing/subtitles | (guide only) |
 | 27 | [TASK-040](TASK-040.md) | More TTS sources: Google Gemini/Cloud, ElevenLabs, OpenAI, FPT.AI/Viettel AI, local Piper/VieNeu; word timings | (guide only) |
+| ∥ | [TASK-049](TASK-049.md) | Frontend polish (runs in parallel in worktree `../videoGenerator-fe`, branch `frontend-polish`; web only): design system, grouped sidebar + mobile drawer, Ctrl+K, states/toasts, dashboard "Cần bạn xử lý", lazy routes, a11y | (guide only) |
+| 27b | [TASK-048](TASK-048.md) | User guide (Vietnamese, `docs/user-guide/`) + one feature map in code + in-app Hướng dẫn page with "?" links + coverage test; every later task must update it | (guide only) |
 | 28 | [TASK-041](TASK-041.md) | Editing skills: real transitions (xfade), emphasis (punch-in, keyword callouts, SFX), animated styled subtitles (word highlight), LLM edit plan, per-profile edit presets, subtitle gap fix | (guide only) |
 | 29 | [TASK-042](TASK-042.md) | Motion graphics layer: HyperFrames HTML/GSAP templates (titles, kinetic words, counters, lower thirds, lists, charts, end card) rendered to alpha clips and overlaid; LLM picks templates + fills text | (guide only) |
 | 30 | [TASK-043](TASK-043.md) | Format recipes (explainer, listicle, story, news…), treatment card with cost estimate, chat editing with revision token + undo across web/Telegram/MCP | (guide only) |
 | 31 | [TASK-044](TASK-044.md) | Free/quota-limited model manager: quota profiles, usage counters, cool-down on 429/quota, ordered free-first fallback chain, wait-or-paid policy with daily cap, Quota UI, Telegram alert, advisor awareness | (guide only) |
 | 32 | [TASK-045](TASK-045.md) | Live provider quota from OmniRoute (connections + real used/total/reset), management token in vault, live data overrides estimates, backfill local counters, Quota tab live cards + routed models without quota | (guide only) |
+| 33 | [TASK-047](TASK-047.md) | Cursor operator: one tool registry for assistant/MCP/operator with server-enforced confirm + hard blocks, long-lived Cursor CLI session (resume, MCP-only, no shell) driven from web/Telegram chat or the Cursor IDE, generated handbook, notes memory, standing orders, optional ticks | (guide only) |
+| 34 | [TASK-046](TASK-046.md) | Provider intelligence: evidence-backed provider/offer/ToS/privacy/billing-risk database with history, Vietnam eligibility, OmniRoute connection audit, account benefits, page-change monitoring, routing profiles + backed-up OmniRoute combo updates on click; model abilities + public benchmarks + real-run stats + app eval suites into a per-task model scorecard; research done by the TASK-047 operator via quote-verified tools | (guide only) |
+| 35 | [TASK-050](TASK-050.md) | Per-project stage timeouts: one fast LLM call sizes each stage's ceiling from duration and complexity; a code baseline is the fallback; the worker uses that plan instead of one global 10-minute limit | (guide only) |
 
 The spec in `docs/tasks/` is the requirement. The guide in `docs/cursor/` gives the current code state, the file map and the steps. When they disagree, the guide wins (it is newer). Each task depends on the ones above it; don't skip ahead.
 
@@ -78,6 +83,7 @@ The spec in `docs/tasks/` is the requirement. The guide in `docs/cursor/` gives 
 7. Don't put the user's email or other personal data into user agents, URLs or any external service.
 8. **Live checks:** never approve gates or press Render on project `56374fb2-54cf-48ff-9441-2e6c653295d4` (the user's real project). Create a throwaway project for live tests.
 9. Windows + PowerShell 5.1: `&&` does not work in PowerShell. Use `;` or Git Bash.
+10. **User guide.** Every task that changes what the user sees or does must update `docs/user-guide/` (Vietnamese), the `featureMap` in `packages/shared/src/features/featureMap.ts`, and `docs/user-guide/nhat-ky-thay-doi.md`. This applies from TASK-048 on.
 
 ## Commands
 
@@ -105,4 +111,5 @@ Test counts after TASK-017: shared 156, mcp 11, server 295, web 70. The counts m
   - test counts per workspace;
   - deviations from the spec;
   - what is not done.
+- [ ] The user guide is updated for every user-visible change: the `featureMap` entry, the guide section in `docs/user-guide/`, and a `nhat-ky-thay-doi.md` entry for this task. The guide coverage test passes. This applies from TASK-048 on.
 - [ ] An empty file `docs/tasks/TASK-XXX.done`.

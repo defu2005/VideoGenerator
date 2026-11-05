@@ -24,6 +24,9 @@ function draftFromProject(project: Project): ProjectDraft {
     llmModel: project.settings.llm?.default?.model ?? "",
     voice: project.settings.voice?.voice ?? "",
     rate: project.settings.voice?.rate ?? "+0%",
+    ttsProvider: project.settings.voice?.provider ?? "",
+    ttsModel: project.settings.voice?.model ?? "",
+    ttsStyle: project.settings.voice?.style ?? "",
     autoRender: project.settings.autoRender,
   };
 }
@@ -167,8 +170,20 @@ export function EditProjectDialog({
     if (draft.researchMode !== (project.settings.researchMode ?? "")) {
       settings.researchMode = draft.researchMode || undefined;
     }
-    if (draft.voice !== (project.settings.voice?.voice ?? "") || draft.rate !== (project.settings.voice?.rate ?? "+0%")) {
-      settings.voice = { voice: draft.voice, rate: draft.rate };
+    if (
+      draft.voice !== (project.settings.voice?.voice ?? "")
+      || draft.rate !== (project.settings.voice?.rate ?? "+0%")
+      || draft.ttsProvider !== (project.settings.voice?.provider ?? "")
+      || draft.ttsModel !== (project.settings.voice?.model ?? "")
+      || draft.ttsStyle !== (project.settings.voice?.style ?? "")
+    ) {
+      settings.voice = {
+        ...(draft.voice ? { voice: draft.voice } : {}),
+        ...(draft.rate ? { rate: draft.rate } : {}),
+        ...(draft.ttsProvider ? { provider: draft.ttsProvider } : {}),
+        ...(draft.ttsModel.trim() ? { model: draft.ttsModel.trim() } : {}),
+        ...(draft.ttsStyle.trim() ? { style: draft.ttsStyle.trim() } : {}),
+      };
     }
     const stageExecutors: Record<string, string> = {};
     const clearErrors: Record<string, string> = {};
