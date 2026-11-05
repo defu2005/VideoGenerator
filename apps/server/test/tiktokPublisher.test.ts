@@ -315,6 +315,24 @@ describe("TikTokPublisher upload", () => {
       chunk_size: 1024,
       total_chunk_count: 1,
     });
+    expect(initBody.post_info).not.toHaveProperty("video_cover_timestamp_ms");
+    expect(fetchMock.mock.calls[2]![1]?.headers).toMatchObject({
+      "Content-Range": "bytes 0-1023/1024",
+    });
+  });
+
+  it("sets video_cover_timestamp_ms on a direct post", async () => {
+    mockHappyDirectPost();
+    await publisher.upload(
+      baseInput({ coverTimestampMs: 1500 }),
+      tokens,
+      AbortSignal.timeout(10_000),
+      () => {},
+    );
+    const initBody = JSON.parse(String(fetchMock.mock.calls[1]![1]?.body)) as {
+      post_info: { video_cover_timestamp_ms?: number };
+    };
+    expect(initBody.post_info.video_cover_timestamp_ms).toBe(1500);
     expect(fetchMock.mock.calls[2]![1]?.headers).toMatchObject({
       "Content-Range": "bytes 0-1023/1024",
     });

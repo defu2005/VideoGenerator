@@ -335,6 +335,49 @@ describe("Telegram pairing + poller", () => {
     rmSync(h.dataDir, { recursive: true, force: true });
   });
 
+  it("pairs while Telegram is still disabled, and skips polling with no active code", async () => {
+    const now = Date.parse("2026-11-05T10:00:00.000Z");
+    const h = makeHarness(now);
+    saveNotificationSettings(h.database.sqlite, {
+      ...getNotificationSettings(h.database.sqlite),
+      telegram: { enabled: false, chatId: null, botUsername: "bot" },
+    });
+
+    // Disabled and no pairing code: no getUpdates call.
+    await h.poller.pollOnce();
+    expect(h.localFetch.mock.calls.some(([u]) => String(u).includes("/getUpdates"))).toBe(false);
+
+    savePairingCode(h.database.sqlite, {
+      code: "654321",
+      expiresAt: new Date(now + 10 * 60 * 1000).toISOString(),
+    });
+    h.localFetch.mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.includes("/getUpdates")) {
+        return jsonResponse({
+          ok: true,
+          result: [{
+            update_id: 7,
+            message: { message_id: 7, text: "/start 654321", chat: { id: 77, type: "private" } },
+          }],
+        });
+      }
+      if (url.includes("/sendMessage")) {
+        const body = JSON.parse(String(init?.body)) as { chat_id: string; text: string };
+        h.sent.push({ chatId: String(body.chat_id), text: body.text });
+        return jsonResponse({ ok: true, result: { message_id: 1 } });
+      }
+      return jsonResponse({ ok: true, result: {} });
+    });
+    await h.poller.pollOnce();
+    const settings = getNotificationSettings(h.database.sqlite);
+    expect(settings.telegram.chatId).toBe("77");
+    expect(settings.telegram.enabled).toBe(true);
+
+    h.database.sqlite.close();
+    rmSync(h.dataDir, { recursive: true, force: true });
+  });
+
   it("invalidates the pairing code after too many wrong attempts", async () => {
     const now = Date.parse("2026-11-05T10:00:00.000Z");
     const h = makeHarness(now);

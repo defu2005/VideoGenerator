@@ -90,6 +90,9 @@ describe("PublishPanel", () => {
   it("renders accounts and posts publications", async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
+      if (url.includes(`/projects/${projectId}/thumbnail`)) {
+        return jsonResponse({ hasLandscape: false, hasCover: false, meta: null, candidates: [] });
+      }
       if (url.includes(`/profiles/${profileId}`) && !url.includes("publications")) {
         return jsonResponse(profile);
       }
@@ -144,6 +147,9 @@ describe("PublishPanel", () => {
   it("shows publication warnings", async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
       const url = String(input);
+      if (url.includes(`/projects/${projectId}/thumbnail`)) {
+        return jsonResponse({ hasLandscape: false, hasCover: false, meta: null, candidates: [] });
+      }
       if (url.includes(`/profiles/${profileId}`) && !url.includes("publications")) {
         return jsonResponse(profile);
       }

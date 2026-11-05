@@ -429,7 +429,8 @@ export class YouTubePublisher implements Publisher {
       visibilityUsed = returnedPrivacy;
     }
 
-    if (input.format === "landscape" && input.thumbnailPath) {
+    // Shorts (vertical) cannot take a custom thumbnail through the API. Skip with no warning.
+    if (input.format === "landscape" && !isShort && input.thumbnailPath) {
       const thumbWarning = await this.setThumbnail(videoId, input.thumbnailPath, tokens.accessToken, signal);
       if (thumbWarning) warnings.push(thumbWarning);
       else this.quota.record(YOUTUBE_THUMBNAIL_QUOTA_COST);

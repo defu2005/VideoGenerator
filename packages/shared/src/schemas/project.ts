@@ -12,6 +12,7 @@ import {
   BudgetSettingsSchema,
 } from "../budget/modes.js";
 import { GuidelineSettingsInputSchema, GuidelineSettingsSchema } from "../guidelines/schema.js";
+import { ThumbnailMetaSchema } from "../thumbnails/index.js";
 
 export const VideoBriefSettingsSchema = z.object({
   budget: BudgetSettingsSchema.default({ mode: "BALANCED" }),
@@ -129,6 +130,8 @@ export const ProjectSchema = z.object({
   status: ProjectStatusSchema,
   stage: PipelineStageSchema,
   thumbnailPath: z.string().nullable(),
+  coverPath: z.string().nullable().optional(),
+  thumbnailMeta: ThumbnailMetaSchema.nullable().optional(),
   durationSec: z.number().nullable(),
   version: z.number().int().positive(),
   profileId: z.string().uuid().nullable().optional(),

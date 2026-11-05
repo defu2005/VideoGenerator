@@ -65,6 +65,15 @@ export class MockLlmProvider implements LlmProvider {
     if (req.schemaName === "VisionConsistency") {
       return response({ flags: [] }, req.model);
     }
+    if (req.schemaName === "ThumbnailPick") {
+      return response({
+        frameIndex: 0,
+        text: "Bí ẩn đại dương",
+        position: "bottom",
+        subjectX: 0.5,
+        subjectY: 0.45,
+      }, req.model);
+    }
     if (req.schemaName === "RenderVision") {
       const frames = Array.isArray(payload.frames)
         ? payload.frames as Array<{ sceneId: string }>

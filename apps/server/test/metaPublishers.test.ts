@@ -287,6 +287,33 @@ describe("FacebookReelsPublisher upload", () => {
     expect(finishBody).toContain("upload_phase=finish");
     expect(finishBody).toContain("video_state=PUBLISHED");
     expect(finishBody).toContain("is_ai_generated=true");
+    expect(result.warnings).toEqual([]);
+
+    const uploadCall = fetchMock.mock.calls[1]!;
+    expect(String(uploadCall[0])).toContain(`rupload.facebook.com/video-upload/${META_GRAPH_VERSION}/vid-1`);
+    expect((uploadCall[1]?.headers as Record<string, string>).offset).toBe("0");
+  });
+
+  it("skips a Reels thumbnail upload and records one warning", async () => {
+    fb.bindExternalId("page-1");
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse({ video_id: "vid-1" }))
+      .mockResolvedValueOnce(jsonResponse({ success: true }))
+      .mockResolvedValueOnce(jsonResponse({ success: true, video_id: "vid-1" }))
+      .mockResolvedValueOnce(jsonResponse({
+        status: { video_status: "ready", publishing_phase: { publish_status: "published" } },
+      }));
+    const result = await fb.upload(
+      baseInput({ thumbnailPath: join(dataDir, "cover.jpg"), coverTimestampMs: 1000 }),
+      pageTokens,
+      AbortSignal.timeout(5_000),
+      () => {},
+    );
+    expect(result.warnings).toEqual([
+      "Facebook Reels (Graph v26) không nhận ảnh thumbnail qua API; bỏ qua ảnh bìa.",
+    ]);
+    const finishBody = String(fetchMock.mock.calls[2]![1]?.body);
+    expect(finishBody).not.toContain("thumb=");
 
     const uploadCall = fetchMock.mock.calls[1]!;
     expect(String(uploadCall[0])).toContain(`rupload.facebook.com/video-upload/${META_GRAPH_VERSION}/vid-1`);
@@ -348,6 +375,30 @@ describe("InstagramReelsPublisher upload", () => {
     expect(createBody).toContain("media_type=REELS");
     expect(createBody).toContain("upload_type=resumable");
     expect(createBody).toContain("share_to_feed=true");
+    expect(createBody).not.toContain("thumb_offset");
+  });
+
+  it("sets thumb_offset from the chosen frame", async () => {
+    ig.bindExternalId("ig-1");
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse({
+        data: [{ quota_usage: 1, config: { quota_total: 50 } }],
+      }))
+      .mockResolvedValueOnce(jsonResponse({
+        id: "container-1",
+        uri: `https://rupload.facebook.com/ig-api-upload/${META_GRAPH_VERSION}/container-1`,
+      }))
+      .mockResolvedValueOnce(jsonResponse({ success: true }))
+      .mockResolvedValueOnce(jsonResponse({ status_code: "FINISHED" }))
+      .mockResolvedValueOnce(jsonResponse({ id: "media-99" }));
+    await ig.upload(
+      baseInput({ durationSec: 45, coverTimestampMs: 2500 }),
+      pageTokens,
+      AbortSignal.timeout(5_000),
+      () => {},
+    );
+    const createBody = String(fetchMock.mock.calls[1]![1]?.body);
+    expect(createBody).toContain("thumb_offset=2500");
   });
 
   it("blocks when content_publishing_limit is exhausted", async () => {

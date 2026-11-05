@@ -65,6 +65,7 @@ export function BriefFields({
       visionThreshold: "Ngưỡng điểm AI nhìn (0–10)",
       visualSearchBreadth: "Số ảnh liên quan tối thiểu mỗi scene",
       renderVerify: "Kiểm tra frame sau render bằng AI nhìn",
+      thumbnailPick: "Chọn thumbnail bằng AI nhìn (MAX)",
       factCheck: "Đối chiếu fact script với research",
       musicAssist: "Music assist (BALANCED/QUALITY/CUSTOM)",
       metadata: "Publishing metadata (BALANCED/QUALITY/CUSTOM)",
@@ -155,6 +156,7 @@ export function BriefFields({
           {customFeature("visionThreshold", budgetFeatures.visionThreshold)}
           {customFeature("visualSearchBreadth", budgetFeatures.visualSearchBreadth)}
           {customFeature("renderVerify", budgetFeatures.renderVerify)}
+          {customFeature("thumbnailPick", budgetFeatures.thumbnailPick)}
           {customFeature("factCheck", budgetFeatures.factCheck)}
           {customFeature("musicAssist", budgetFeatures.musicAssist)}
           {customFeature("metadata", budgetFeatures.metadata)}

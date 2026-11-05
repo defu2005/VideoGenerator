@@ -45,7 +45,7 @@ describe("LLM routing schemas", () => {
   });
 
   it("catalogs the task tiers and budget feature controls", () => {
-    expect(LLM_TASKS).toHaveLength(21);
+    expect(LLM_TASKS).toHaveLength(22);
     expect(LLM_TASKS.find((task) => task.id === "research")).toMatchObject({ stage: "RESEARCH", tier: "strong", qualityWeight: 3 });
     expect(LLM_TASKS.find((task) => task.id === "sceneQueries")).toMatchObject({
       stage: "SCENE_PLAN",
@@ -83,6 +83,12 @@ describe("LLM routing schemas", () => {
       stage: "SETTINGS",
       tier: "fast",
       budgetFeature: "financeInsight",
+    });
+    expect(LLM_TASKS.find((task) => task.id === "thumbnailPick")).toMatchObject({
+      stage: "RENDER",
+      tier: "fast",
+      needsVision: true,
+      budgetFeature: "thumbnailPick",
     });
     expect(LLM_TASKS.find((task) => task.id === "performanceInsight")).toMatchObject({
       stage: "SETTINGS",

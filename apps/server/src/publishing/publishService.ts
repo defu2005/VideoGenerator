@@ -4,6 +4,7 @@ import type Database from "better-sqlite3";
 import {
   AspectRatioSchema,
   PublicationSchema,
+  ThumbnailMetaSchema,
   VideoMetadataDraftSchema,
   aspectFromAccountFormat,
   type AccountConnectionDetail,
@@ -546,6 +547,8 @@ export class PublishService {
 
     const project = this.sqlite.prepare("SELECT * FROM projects WHERE id = ?").get(publication.projectId) as ProjectRow & {
       thumbnail_path?: string | null;
+      cover_path?: string | null;
+      thumbnail_meta?: unknown;
       duration_sec?: number | null;
     };
     const settings = typeof project.settings === "string"
@@ -583,6 +586,16 @@ export class PublishService {
         ? project.thumbnail_path
         : join(this.config.DATA_DIR, project.thumbnail_path))
       : undefined;
+    let thumbMetaRaw: unknown = project.thumbnail_meta;
+    if (typeof thumbMetaRaw === "string") {
+      try {
+        thumbMetaRaw = JSON.parse(thumbMetaRaw) as unknown;
+      } catch {
+        thumbMetaRaw = null;
+      }
+    }
+    const thumbMeta = ThumbnailMetaSchema.safeParse(thumbMetaRaw);
+    const coverTimestampMs = thumbMeta.success ? Math.round(thumbMeta.data.frameTimeSec * 1000) : undefined;
     const durationSec = render.duration_sec ?? project.duration_sec ?? undefined;
     const input: PublishInput = {
       videoPath,
@@ -600,6 +613,7 @@ export class PublishService {
       ...(publishSettings.tiktokUploadMode ? { tiktokUploadMode: publishSettings.tiktokUploadMode } : {}),
       ...(durationSec != null ? { durationSec: Number(durationSec) } : {}),
       ...(thumbnailPath ? { thumbnailPath } : {}),
+      ...(coverTimestampMs !== undefined ? { coverTimestampMs } : {}),
     };
 
     return { publication, input, tokens, publisher };

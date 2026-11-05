@@ -389,6 +389,27 @@ describe("YouTubePublisher upload", () => {
     );
     expect(result.externalId).toBe("vid-thumb");
     expect(result.warnings.some((w) => w.includes("thumbnail"))).toBe(true);
+    expect(String(fetchMock.mock.calls[2]?.[0])).toContain("/thumbnails/set");
+  });
+
+  it("does not set a thumbnail on a Short and adds no warning", async () => {
+    const thumbPath = join(dataDir, "short-thumb.jpg");
+    writeFileSync(thumbPath, Buffer.from("jpeg"));
+    const smallPath = join(dataDir, "short.mp4");
+    writeFileSync(smallPath, Buffer.alloc(256, 6));
+    const sessionUri = "https://www.googleapis.com/upload/youtube/v3/videos?uploadType=resumable&upload_id=short";
+    fetchMock
+      .mockResolvedValueOnce(new Response(null, { status: 200, headers: { Location: sessionUri } }))
+      .mockResolvedValueOnce(jsonResponse({ id: "vid-short", status: { privacyStatus: "public" } }, { status: 201 }));
+    const result = await publisher.upload(
+      baseInput({ videoPath: smallPath, thumbnailPath: thumbPath, format: "vertical", durationSec: 30 }),
+      tokens,
+      AbortSignal.timeout(10_000),
+      () => {},
+    );
+    expect(result.externalId).toBe("vid-short");
+    expect(fetchMock.mock.calls.some((call) => String(call[0]).includes("thumbnails/set"))).toBe(false);
+    expect(result.warnings.some((warning) => /thumbnail/i.test(warning))).toBe(false);
   });
 
   it("warns when YouTube downgrades privacy", async () => {

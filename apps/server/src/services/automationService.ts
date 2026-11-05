@@ -36,6 +36,7 @@ import { getAutomationPaused } from "./automationSettings.js";
 import type { PipelineOrchestrator } from "../pipeline/orchestrator.js";
 import type { PublishService } from "../publishing/publishService.js";
 import type { RenderService } from "./renderService.js";
+import type { ThumbnailService } from "./thumbnailService.js";
 
 const LOG_RETENTION_DAYS = 30;
 const COOLDOWN_MS = 6 * 60 * 60 * 1000;
@@ -219,6 +220,7 @@ export function createAutomationService(deps: {
   orchestrator: PipelineOrchestrator;
   publish: PublishService;
   render: RenderService;
+  thumbnails?: ThumbnailService;
   logger: FastifyBaseLogger;
   now?: () => Date;
 }) {
@@ -404,6 +406,18 @@ export function createAutomationService(deps: {
         }
 
         if (accounts.length > 0 && scheduledFor) {
+          if (deps.thumbnails) {
+            try {
+              await deps.thumbnails.ensureBeforePublish(project, new AbortController().signal);
+            } catch (thumbError) {
+              writeAutomationLog(deps.sqlite, {
+                profileId: topic.profileId,
+                level: "warn",
+                message: `Thumbnail bỏ qua: ${thumbError instanceof Error ? thumbError.message : String(thumbError)}`,
+                data: { topicId: topic.id, projectId: topic.projectId },
+              });
+            }
+          }
           await deps.publish.createForProject(topic.projectId, {
             accountIds: accounts.map((account) => account.id),
             scheduledFor,

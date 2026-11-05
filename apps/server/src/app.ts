@@ -50,6 +50,8 @@ import { registerTimelineRoutes } from "./api/timeline.js";
 import { RenderService } from "./services/renderService.js";
 import { RenderExecutor } from "./stages/render/renderExecutor.js";
 import { registerRenderRoutes } from "./api/render.js";
+import { ThumbnailService } from "./services/thumbnailService.js";
+import { registerThumbnailRoutes } from "./api/thumbnails.js";
 import { MetadataService } from "./services/metadataService.js";
 import { registerMetadataRoutes } from "./api/metadata.js";
 import { ReviewService } from "./review/service.js";
@@ -138,6 +140,7 @@ export function buildApp({ config }: { config: AppConfig }) {
   const llmProviders = new LlmProviderRegistry(config);
   llmProviders.setGatewaySettingsLoader(() => getLlmGatewaySettings(database.sqlite));
   const renderService = new RenderService(database.sqlite, config, timelineService, undefined, undefined, llmProviders, autoReportService);
+  const thumbnailService = new ThumbnailService(database.sqlite, config, timelineService, undefined, llmProviders);
   const metadataService = new MetadataService(database.sqlite, config, llmProviders, timelineService, renderService);
   const orchestrator = new PipelineOrchestrator(
     jobRepository,
@@ -234,6 +237,7 @@ export function buildApp({ config }: { config: AppConfig }) {
     orchestrator,
     publish: publishService,
     render: renderService,
+    thumbnails: thumbnailService,
     logger: server.log,
   });
   publishTicker.setAutomation(automationService);
@@ -366,7 +370,7 @@ export function buildApp({ config }: { config: AppConfig }) {
         SUBTITLE: new SubtitleExecutor(database.sqlite, config),
         MUSIC_SEARCH: new MusicSearchExecutor(musicService, database.sqlite, llmProviders, config, autoReportService),
         TIMELINE: new TimelineExecutor(timelineService, guidelineService, metadataService),
-        RENDER: new RenderExecutor(renderService),
+        RENDER: new RenderExecutor(renderService, thumbnailService),
         PUBLISH: new PublishExecutor(publishService),
       },
     ),
@@ -436,6 +440,7 @@ export function buildApp({ config }: { config: AppConfig }) {
   registerMusicRoutes(server, musicService, projectService, jobRepository);
   registerTimelineRoutes(server, timelineService, projectService);
   registerRenderRoutes(server, renderService, projectService, database.sqlite, autoReportService, orchestrator);
+  registerThumbnailRoutes(server, thumbnailService, projectService);
   registerMetadataRoutes(server, metadataService, projectService);
   registerAutoReportRoutes(server, autoReportService, projectService);
   registerReviewRoutes(server, reviewService, projectService);

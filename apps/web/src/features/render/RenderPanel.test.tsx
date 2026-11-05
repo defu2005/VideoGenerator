@@ -100,6 +100,7 @@ describe("RenderPanel", () => {
     vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
       calls.push({ url, init });
+      if (url.includes("/thumbnail")) return jsonResponse({ hasLandscape: false, hasCover: false, meta: null, candidates: [] });
       if (url.endsWith("/pipeline") || url.includes("/run")) return jsonResponse(pipelineWith("DONE"));
       if (url.endsWith("/renders")) return jsonResponse({ renders: [version()] });
       if (url.endsWith("/render") && init?.method === "POST") return jsonResponse(pipelineWith("DONE"));
@@ -157,6 +158,7 @@ describe("RenderPanel", () => {
     vi.stubGlobal("EventSource", undefined);
     vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
+      if (url.includes("/thumbnail")) return jsonResponse({ hasLandscape: false, hasCover: false, meta: null, candidates: [] });
       if (url.endsWith("/pipeline")) return jsonResponse(pipelineWith("DONE"));
       if (url.endsWith("/renders")) return jsonResponse({ renders: [verticalVersion] });
       if (url.endsWith("/render") && init?.method === "POST") return jsonResponse(pipelineWith("DONE"));
@@ -193,6 +195,7 @@ describe("RenderPanel", () => {
     vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
       calls.push({ url, init });
+      if (url.includes("/thumbnail")) return jsonResponse({ hasLandscape: false, hasCover: false, meta: null, candidates: [] });
       if (url.endsWith("/pipeline")) return jsonResponse(pipelineWith("DONE"));
       if (url.endsWith("/renders")) {
         return jsonResponse({
@@ -236,6 +239,7 @@ describe("RenderPanel", () => {
     vi.stubGlobal("EventSource", undefined);
     vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
       const url = String(input);
+      if (url.includes("/thumbnail")) return jsonResponse({ hasLandscape: false, hasCover: false, meta: null, candidates: [] });
       if (url.endsWith("/pipeline")) return jsonResponse(pipelineWith("PENDING"));
       if (url.endsWith("/renders")) return jsonResponse({ renders: [] });
       if (url.endsWith("/render")) return jsonResponse({ render: null });

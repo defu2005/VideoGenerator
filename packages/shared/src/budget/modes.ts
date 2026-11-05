@@ -22,6 +22,8 @@ export const BudgetFeaturesSchema = z.object({
   visualSearchBreadth: z.union([z.literal(8), z.literal(16)]),
   /** Post-render vision verification of mid-frame thumbnails. */
   renderVerify: z.boolean(),
+  /** Vision pick of the thumbnail frame, overlay text and position. */
+  thumbnailPick: z.boolean(),
   /** Extra script pass checking claims against research notes. */
   factCheck: z.boolean(),
   musicAssist: z.boolean(),
@@ -81,6 +83,7 @@ const PRESETS: Record<Exclude<BudgetMode, "CUSTOM">, BudgetFeatures> = {
     visionThreshold: 7,
     visualSearchBreadth: 8,
     renderVerify: false,
+    thumbnailPick: false,
     factCheck: false,
     musicAssist: false,
     metadata: false,
@@ -107,6 +110,7 @@ const PRESETS: Record<Exclude<BudgetMode, "CUSTOM">, BudgetFeatures> = {
     visionThreshold: 7,
     visualSearchBreadth: 8,
     renderVerify: false,
+    thumbnailPick: false,
     factCheck: false,
     musicAssist: true,
     metadata: true,
@@ -133,6 +137,7 @@ const PRESETS: Record<Exclude<BudgetMode, "CUSTOM">, BudgetFeatures> = {
     visionThreshold: 7,
     visualSearchBreadth: 8,
     renderVerify: false,
+    thumbnailPick: false,
     factCheck: false,
     musicAssist: true,
     metadata: true,
@@ -159,6 +164,7 @@ const PRESETS: Record<Exclude<BudgetMode, "CUSTOM">, BudgetFeatures> = {
     visionThreshold: 7,
     visualSearchBreadth: 16,
     renderVerify: true,
+    thumbnailPick: true,
     factCheck: true,
     musicAssist: true,
     metadata: true,
@@ -402,15 +408,19 @@ export function estimateBudget(
   const renderVisionCalls = !renderDone && features.renderVerify
     ? Math.max(1, Math.ceil(sceneCount / imagesPerCall))
     : 0;
-  if (features.renderVerify || renderVisionCalls > 0) {
+  const thumbnailPickCalls = !renderDone && features.thumbnailPick ? 1 : 0;
+  const renderStageCalls = renderVisionCalls + thumbnailPickCalls;
+  if (features.renderVerify || features.thumbnailPick || renderStageCalls > 0) {
     perStage.push({
       stage: "RENDER",
-      calls: { min: renderVisionCalls, max: renderVisionCalls },
+      calls: { min: renderStageCalls, max: renderStageCalls },
       reason: renderDone
         ? "Render verification is already complete."
-        : renderVisionCalls
-          ? `Vision verifies mid-frame thumbnails in batches of ${imagesPerCall}.`
-          : "Render verification is off.",
+        : [
+          renderVisionCalls ? `Vision verifies mid-frame thumbnails in batches of ${imagesPerCall}.` : "",
+          thumbnailPickCalls ? "One vision call picks the thumbnail frame and overlay text." : "",
+          !renderVisionCalls && !thumbnailPickCalls ? "Render vision features are off." : "",
+        ].filter(Boolean).join(" "),
     });
   }
 
@@ -443,6 +453,7 @@ export function estimateBudget(
     },
     webImageGrounding: { min: 0, max: webGroundingMax },
     renderVision: { min: renderVisionCalls, max: renderVisionCalls },
+    thumbnailPick: { min: thumbnailPickCalls, max: thumbnailPickCalls },
     musicAssist: { min: musicAssistCalls, max: musicAssistCalls },
     metadata: { min: metadataCalls, max: metadataCalls },
   };
@@ -452,7 +463,7 @@ export function estimateBudget(
         : stage.stage === "SCENE_PLAN" ? ["sceneQueries"]
           : stage.stage === "MUSIC_SEARCH" ? ["musicAssist"]
             : stage.stage === "TIMELINE" ? ["metadata"]
-              : stage.stage === "RENDER" ? ["renderVision"]
+              : stage.stage === "RENDER" ? ["renderVision", "thumbnailPick"]
                 : ["visualAltQueries", "visualRerank", "visionCheck", "visionResearch", "visionConsistency", "webImageGrounding"];
     stage.tasks = taskIds.map((task) => {
       const route = routes?.[task];
@@ -527,6 +538,7 @@ function estimateBudgetTokens(
   // visionCheck.max already includes consistency batches; do not also add visionConsistency.
   const visionCheckCalls = maxCalls("visionCheck");
   const renderVisionCalls = maxCalls("renderVision");
+  const thumbnailPickCalls = maxCalls("thumbnailPick");
   const musicSearchCalls = maxCalls("musicAssist");
   const visualSearchCalls = stages.find((stage) => stage.stage === "VISUAL_SEARCH")?.calls.max ?? 0;
   const timelineCalls = stages.find((stage) => stage.stage === "TIMELINE")?.calls.max ?? 0;
@@ -549,6 +561,7 @@ function estimateBudgetTokens(
   // Vision image tokens (keep VISION_IMAGE_TOKEN_ESTIMATE per attached image).
   input += (visionCheckCalls + renderVisionCalls)
     * (SYSTEM_PROMPT_OVERHEAD_TOKENS + imagesPerCall * VISION_IMAGE_TOKEN_ESTIMATE);
+  input += thumbnailPickCalls * (SYSTEM_PROMPT_OVERHEAD_TOKENS + 4 * VISION_IMAGE_TOKEN_ESTIMATE);
   input += musicSearchCalls * (SYSTEM_PROMPT_OVERHEAD_TOKENS + SMALL_CONTEXT_TOKENS);
 
   const output = researchCalls * (storyMode === "merged" ? scriptOutput + researchOutput : researchOutput)

@@ -79,6 +79,8 @@ export const PublishInputSchema = z.object({
   description: z.string(),
   tags: z.array(z.string()),
   thumbnailPath: z.string().optional(),
+  /** Cover frame time in milliseconds (TikTok video_cover_timestamp_ms, Instagram thumb_offset). */
+  coverTimestampMs: z.number().int().nonnegative().optional(),
   visibility: PublishVisibilitySchema,
   publishAt: z.string().datetime({ offset: true }).optional(),
   language: z.string(),

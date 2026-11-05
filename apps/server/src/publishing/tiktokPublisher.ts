@@ -418,6 +418,7 @@ export class TikTokPublisher implements Publisher {
         plan,
         fileSize,
         signal,
+        ...(input.coverTimestampMs !== undefined ? { coverTimestampMs: input.coverTimestampMs } : {}),
       });
     }
 
@@ -516,6 +517,7 @@ export class TikTokPublisher implements Publisher {
     plan: { chunkSize: number; totalChunkCount: number };
     fileSize: number;
     signal: AbortSignal;
+    coverTimestampMs?: number;
   }): Promise<InitUploadResult> {
     const response = await this.fetchWithRetry(DIRECT_INIT_URL, {
       method: "POST",
@@ -531,6 +533,9 @@ export class TikTokPublisher implements Publisher {
           brand_content_toggle: false,
           brand_organic_toggle: false,
           is_aigc: true,
+          ...(input.coverTimestampMs !== undefined
+            ? { video_cover_timestamp_ms: input.coverTimestampMs }
+            : {}),
         },
         source_info: {
           source: "FILE_UPLOAD",

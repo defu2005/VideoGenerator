@@ -292,8 +292,7 @@ export class TelegramPoller {
 
   /** Exposed for tests — process one getUpdates cycle. */
   async pollOnce(signal?: AbortSignal): Promise<void> {
-    const settings = getNotificationSettings(this.deps.sqlite);
-    if (!settings.telegram.enabled) return;
+    if (!this.shouldPoll()) return;
     const client = this.createClient();
     if (!client) return;
 
@@ -306,11 +305,21 @@ export class TelegramPoller {
     this.backoffMs = BACKOFF_START_MS;
   }
 
+  /**
+   * Poll when Telegram is enabled, or while a pairing code is active so that
+   * "/start <code>" can be read before the chat is paired (pairing enables it).
+   */
+  private shouldPoll(): boolean {
+    const settings = getNotificationSettings(this.deps.sqlite);
+    if (settings.telegram.enabled) return true;
+    const pairing = getPairingCode(this.deps.sqlite);
+    return pairing != null && Date.parse(pairing.expiresAt) > this.now().getTime();
+  }
+
   private async loop(signal: AbortSignal): Promise<void> {
     while (this.started && !signal.aborted) {
       try {
-        const settings = getNotificationSettings(this.deps.sqlite);
-        if (!settings.telegram.enabled || !this.deps.vault.hasSecret(TELEGRAM_BOT_TOKEN_KEY)) {
+        if (!this.shouldPoll() || !this.deps.vault.hasSecret(TELEGRAM_BOT_TOKEN_KEY)) {
           await this.sleepFn(2_000);
           continue;
         }
@@ -333,7 +342,7 @@ export class TelegramPoller {
           error instanceof Error ? error.message : String(error),
           token,
         );
-        this.deps.logger.debug({ err: message }, "Telegram poller error");
+        this.deps.logger.warn({ err: message }, "Telegram poller error");
         await this.sleepFn(this.backoffMs);
         this.backoffMs = Math.min(BACKOFF_MAX_MS, this.backoffMs * 2);
       }

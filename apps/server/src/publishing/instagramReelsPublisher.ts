@@ -202,6 +202,7 @@ export class InstagramReelsPublisher implements Publisher {
       accessToken: tokens.accessToken,
       caption,
       signal,
+      ...(input.coverTimestampMs !== undefined ? { coverTimestampMs: input.coverTimestampMs } : {}),
     });
     onProgress(8);
 
@@ -274,6 +275,7 @@ export class InstagramReelsPublisher implements Publisher {
     accessToken: string;
     caption: string;
     signal: AbortSignal;
+    coverTimestampMs?: number;
   }): Promise<{ containerId: string; uploadUri: string }> {
     const url = new URL(`${META_GRAPH_BASE}/${encodeURIComponent(input.igUserId)}/media`);
     const body = new URLSearchParams({
@@ -282,6 +284,7 @@ export class InstagramReelsPublisher implements Publisher {
       caption: input.caption,
       share_to_feed: "true",
       access_token: input.accessToken,
+      ...(input.coverTimestampMs !== undefined ? { thumb_offset: String(input.coverTimestampMs) } : {}),
     });
     const response = await metaFetchWithRetry(this.fetchImpl, this.sleep, url.toString(), {
       method: "POST",

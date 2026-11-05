@@ -223,6 +223,7 @@ describe("ProjectDetailPage", () => {
           visionThreshold: 7,
           visualSearchBreadth: 8,
           renderVerify: false,
+          thumbnailPick: false,
           factCheck: false,
           musicAssist: true,
           metadata: true,

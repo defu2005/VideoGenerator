@@ -8,6 +8,7 @@ import {
   listProjectPublications,
 } from "../../services/publishApi";
 import { Spinner } from "../../components/Spinner";
+import { ThumbnailCard } from "./ThumbnailCard";
 
 const STATUS_LABEL: Record<string, string> = {
   QUEUED: "Đang chờ",
@@ -93,6 +94,7 @@ export function PublishPanel({ project }: { project: Project }) {
     return (
       <section className="panel" aria-label="Đăng">
         <h3>Đăng</h3>
+        <ThumbnailCard project={project} />
         <p className="page-subtitle">Gán dự án vào một hồ sơ có tài khoản để đăng video.</p>
       </section>
     );
@@ -101,6 +103,7 @@ export function PublishPanel({ project }: { project: Project }) {
   return (
     <section className="panel publish-panel" aria-label="Đăng">
       <h3>Đăng</h3>
+      <ThumbnailCard project={project} />
       {profile.isLoading || publications.isLoading ? <Spinner label="Đang tải…" /> : null}
       {profile.isError && <p className="request-error" role="alert">Không tải được tài khoản hồ sơ.</p>}
       {error && <p className="request-error" role="alert">{error}</p>}

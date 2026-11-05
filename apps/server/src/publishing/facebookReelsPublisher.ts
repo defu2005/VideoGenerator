@@ -196,6 +196,12 @@ export class FacebookReelsPublisher implements Publisher {
       META_FB_MAX_DESCRIPTION_CHARS,
     );
 
+    const warnings: string[] = [];
+    if (input.thumbnailPath || input.coverTimestampMs !== undefined) {
+      // Graph v26 `video_reels` finish has no thumbnail upload. Regular /videos thumbnails do not apply.
+      warnings.push("Facebook Reels (Graph v26) không nhận ảnh thumbnail qua API; bỏ qua ảnh bìa.");
+    }
+
     onProgress(2);
     const start = await this.startUpload(pageId, tokens.accessToken, signal);
     onProgress(8);
@@ -228,7 +234,7 @@ export class FacebookReelsPublisher implements Publisher {
     return {
       externalId,
       externalUrl: `https://www.facebook.com/reel/${externalId}`,
-      warnings: [],
+      warnings,
     };
   }
 
