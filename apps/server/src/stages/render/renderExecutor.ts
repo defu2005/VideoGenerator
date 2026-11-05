@@ -2,6 +2,7 @@ import { parseRenderJobScope } from "@vg/shared";
 import type { StageContext, StageExecutor } from "../../pipeline/stageExecutor.js";
 import type { RenderService } from "../../services/renderService.js";
 import type { ThumbnailService } from "../../services/thumbnailService.js";
+import type { ClipService } from "../../services/clipService.js";
 
 /** RENDER stage. Job scope may carry an aspect-ratio variant. Thumbnails run after a successful render. */
 export class RenderExecutor implements StageExecutor {
@@ -10,6 +11,7 @@ export class RenderExecutor implements StageExecutor {
   constructor(
     private readonly renders: RenderService,
     private readonly thumbnails?: ThumbnailService,
+    private readonly clips?: ClipService,
   ) {}
 
   async run(context: StageContext) {
@@ -32,6 +34,13 @@ export class RenderExecutor implements StageExecutor {
       } catch (error) {
         if (context.signal.aborted) throw error;
         thumbNote = " · thumbnail lỗi";
+      }
+    }
+    if (this.clips && !aspectRatio) {
+      try {
+        await this.clips.maybeAutoShorts(context.project, context.signal);
+      } catch (error) {
+        if (context.signal.aborted) throw error;
       }
     }
     const minutes = Math.floor(render.durationSec / 60);

@@ -135,6 +135,9 @@ export const ProjectSchema = z.object({
   durationSec: z.number().nullable(),
   version: z.number().int().positive(),
   profileId: z.string().uuid().nullable().optional(),
+  /** long = full video; clip = a Short/Reel cut from a parent. Omitted means long. */
+  kind: z.enum(["long", "clip"]).optional(),
+  parentProjectId: z.string().uuid().nullable().optional(),
   createdAt: z.string().datetime({ offset: true }),
   updatedAt: z.string().datetime({ offset: true }),
   archivedAt: z.string().datetime({ offset: true }).nullable(),

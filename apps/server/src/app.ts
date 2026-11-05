@@ -54,6 +54,9 @@ import { RenderExecutor } from "./stages/render/renderExecutor.js";
 import { registerRenderRoutes } from "./api/render.js";
 import { ThumbnailService } from "./services/thumbnailService.js";
 import { registerThumbnailRoutes } from "./api/thumbnails.js";
+import { ClipService } from "./services/clipService.js";
+import { registerClipRoutes } from "./api/clips.js";
+import { ClipExecutor } from "./stages/clip/clipExecutor.js";
 import { MetadataService } from "./services/metadataService.js";
 import { registerMetadataRoutes } from "./api/metadata.js";
 import { ReviewService } from "./review/service.js";
@@ -143,6 +146,7 @@ export function buildApp({ config }: { config: AppConfig }) {
   llmProviders.setGatewaySettingsLoader(() => getLlmGatewaySettings(database.sqlite));
   const renderService = new RenderService(database.sqlite, config, timelineService, undefined, undefined, llmProviders, autoReportService);
   const thumbnailService = new ThumbnailService(database.sqlite, config, timelineService, undefined, llmProviders);
+  const clipService = new ClipService(database.sqlite, config, jobRepository, llmProviders, thumbnailService);
   const metadataService = new MetadataService(database.sqlite, config, llmProviders, timelineService, renderService);
   const orchestrator = new PipelineOrchestrator(
     jobRepository,
@@ -282,6 +286,7 @@ export function buildApp({ config }: { config: AppConfig }) {
     usageService,
     sceneService,
   );
+  assistantService.setClips(clipService);
   installAssistantTelegramHandlers(telegramPoller, assistantService, {
     sqlite: database.sqlite,
     getAutomationStatusText: async () => {
@@ -396,7 +401,8 @@ export function buildApp({ config }: { config: AppConfig }) {
         SUBTITLE: new SubtitleExecutor(database.sqlite, config),
         MUSIC_SEARCH: new MusicSearchExecutor(musicService, database.sqlite, llmProviders, config, autoReportService),
         TIMELINE: new TimelineExecutor(timelineService, guidelineService, metadataService),
-        RENDER: new RenderExecutor(renderService, thumbnailService),
+        RENDER: new RenderExecutor(renderService, thumbnailService, clipService),
+        CLIP: new ClipExecutor(clipService),
         PUBLISH: new PublishExecutor(publishService),
       },
     ),
@@ -467,6 +473,8 @@ export function buildApp({ config }: { config: AppConfig }) {
   registerTimelineRoutes(server, timelineService, projectService);
   registerRenderRoutes(server, renderService, projectService, database.sqlite, autoReportService, orchestrator);
   registerThumbnailRoutes(server, thumbnailService, projectService);
+  registerClipRoutes(server, clipService);
+  server.decorate("vgClips", clipService);
   registerMetadataRoutes(server, metadataService, projectService);
   registerAutoReportRoutes(server, autoReportService, projectService);
   registerReviewRoutes(server, reviewService, projectService);

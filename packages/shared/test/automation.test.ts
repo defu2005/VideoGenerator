@@ -32,6 +32,8 @@ describe("profile automation schemas", () => {
       autoSuggest: false,
       autoApproveTopics: false,
       accountIds: null,
+      autoShorts: false,
+      shortsPerVideo: 3,
     });
     expect(TopicSuggestOutputSchema.parse({
       topics: [{ topic: "Ai cập cổ đại", angle: "kim tự tháp" }],

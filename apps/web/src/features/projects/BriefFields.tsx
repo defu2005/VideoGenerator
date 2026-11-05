@@ -76,6 +76,7 @@ export function BriefFields({
       assistantChat: "Trợ lý AI điều khiển app (mọi chế độ)",
       financeInsight: "Nhận xét báo cáo doanh thu tháng (BALANCED+)",
       performanceInsight: "Bài học hiệu suất từ số liệu (ECO mỗi 2 tuần)",
+      clipPick: "Chọn đoạn Shorts bằng AI (BALANCED+)",
     };
     const label = labels[key] ?? key;
     if (typeof value === "boolean") {
@@ -167,6 +168,7 @@ export function BriefFields({
           {customFeature("assistantChat", budgetFeatures.assistantChat)}
           {customFeature("financeInsight", budgetFeatures.financeInsight)}
           {customFeature("performanceInsight", budgetFeatures.performanceInsight)}
+          {customFeature("clipPick", budgetFeatures.clipPick)}
         </fieldset>
       )}
       {select("platform", "Platform", ["youtube", "youtube_shorts", "tiktok", "facebook_reels", "custom"])}

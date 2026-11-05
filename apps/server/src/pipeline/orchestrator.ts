@@ -3,6 +3,7 @@ import {
   STAGE_ORDER,
   isGate,
   isPublishStage,
+  isSideJobStage,
   renderJobScope,
   type Job,
   type JobError,
@@ -42,7 +43,7 @@ export function deriveProjectStatus(input: {
   stages: Pick<StageRecord, "state">[];
   projectStage: PipelineStage;
 }): ProjectStatus {
-  const pipelineJob = input.activeJob && !isPublishStage(input.activeJob.stage) ? input.activeJob : null;
+  const pipelineJob = input.activeJob && !isSideJobStage(input.activeJob.stage) ? input.activeJob : null;
   if (pipelineJob?.stage === "RENDER") return "RENDERING";
   if (pipelineJob) return "GENERATING";
   if (input.stages.some((stage) => stage.state === "WAITING_USER")) return "REVIEW";
@@ -87,7 +88,8 @@ export class PipelineOrchestrator {
 
   runAll(projectId: string): PipelineState {
     this.repository.atomic(() => {
-      this.requireProject(projectId);
+      const project = this.requireProject(projectId);
+      if (project.kind === "clip") this.invalid("Dự án clip không chạy pipeline.");
       this.repository.ensureStages(projectId);
       this.assertNoActiveJob(projectId);
       this.repository.setRunMode(projectId, "ALL");
@@ -98,13 +100,13 @@ export class PipelineOrchestrator {
 
   runStage(projectId: string, stage: PipelineStage): PipelineState {
     this.repository.atomic(() => {
-      this.requireProject(projectId);
+      const project = this.requireProject(projectId);
+      if (project.kind === "clip") this.invalid("Dự án clip không chạy pipeline.");
       this.repository.ensureStages(projectId);
       this.assertNoActiveJob(projectId);
       const position = STAGE_ORDER.indexOf(stage);
       if (position < 0) this.invalid(`${stage} is not a runnable pipeline stage.`);
       if (isGate(stage)) this.invalid(`Review stage ${stage} must be approved, not run.`);
-      const project = this.requireProject(projectId);
       const researchMode = storyModeForProject(project);
       if (stage === "RESEARCH" && researchMode === "off" && project.settings.stageExecutors.script !== "USER") {
         this.skipResearch(projectId, "Skipped (research mode is off)");
@@ -312,9 +314,9 @@ export class PipelineOrchestrator {
         startedAt: this.now().toISOString(),
         finishedAt: null,
         error: null,
-        message: isPublishStage(job.stage) ? "Publish started" : "Stage started",
+        message: isPublishStage(job.stage) ? "Publish started" : job.stage === "CLIP" ? "Đang cắt Short" : "Stage started",
       });
-      if (!isPublishStage(job.stage)) {
+      if (!isSideJobStage(job.stage)) {
         this.repository.updateStage(job.projectId, job.stage, {
           state: "RUNNING",
           progress: 0,
@@ -334,7 +336,7 @@ export class PipelineOrchestrator {
       const job = this.repository.getJob(jobId);
       if (!job || job.status !== "RUNNING") return;
       const next = this.repository.updateJob(jobId, { progress, message: message ?? job.message });
-      if (!isPublishStage(job.stage)) {
+      if (!isSideJobStage(job.stage)) {
         this.repository.updateStage(job.projectId, job.stage, {
           progress,
           message: message ?? job.message,
@@ -381,9 +383,9 @@ export class PipelineOrchestrator {
         message: message ?? `${job.stage} completed`,
         finishedAt,
       });
-      if (isPublishStage(job.stage)) {
+      if (isSideJobStage(job.stage)) {
         const durationMs = job.startedAt ? Date.parse(finishedAt) - Date.parse(job.startedAt) : 0;
-        this.logger.info({ jobId, projectId: job.projectId, stage: job.stage, attempt: job.attempt, durationMs }, "Publish job finished");
+        this.logger.info({ jobId, projectId: job.projectId, stage: job.stage, attempt: job.attempt, durationMs }, isPublishStage(job.stage) ? "Publish job finished" : "Clip job finished");
         return;
       }
       this.repository.updateStage(job.projectId, job.stage, {
@@ -421,7 +423,7 @@ export class PipelineOrchestrator {
           message: error.message,
           error,
         });
-        if (!isPublishStage(job.stage)) {
+        if (!isSideJobStage(job.stage)) {
           this.repository.updateStage(job.projectId, job.stage, {
             state: "QUEUED",
             progress: 0,
@@ -445,7 +447,7 @@ export class PipelineOrchestrator {
           message: `Retry scheduled: ${error.message}`,
           error,
         });
-        if (!isPublishStage(job.stage)) {
+        if (!isSideJobStage(job.stage)) {
           this.repository.updateStage(job.projectId, job.stage, {
             state: "QUEUED",
             progress: 0,
@@ -458,8 +460,11 @@ export class PipelineOrchestrator {
         return;
       }
       this.repository.updateJob(jobId, { status: "FAILED", error, finishedAt, message: error.message });
-      if (isPublishStage(job.stage)) {
-        this.logger.error({ jobId, projectId: job.projectId, stage: job.stage, attempt: job.attempt, durationMs, error }, "Publish job failed");
+      if (isSideJobStage(job.stage)) {
+        if (job.stage === "CLIP") {
+          this.repository.updateProject(job.projectId, { status: "FAILED", stage: "RENDER" });
+        }
+        this.logger.error({ jobId, projectId: job.projectId, stage: job.stage, attempt: job.attempt, durationMs, error }, isPublishStage(job.stage) ? "Publish job failed" : "Clip job failed");
         return;
       }
       this.repository.updateStage(job.projectId, job.stage, {
@@ -505,7 +510,7 @@ export class PipelineOrchestrator {
           finishedAt: null,
           message: "Resuming after server restart",
         });
-        if (isPublishStage(job.stage)) continue;
+        if (isSideJobStage(job.stage)) continue;
         this.repository.updateStage(job.projectId, job.stage, {
           state: "QUEUED",
           progress: 0,
@@ -526,7 +531,7 @@ export class PipelineOrchestrator {
           finishedAt: null,
           message: "Queued for resume after shutdown",
         });
-        if (isPublishStage(job.stage)) continue;
+        if (isSideJobStage(job.stage)) continue;
         this.repository.updateStage(job.projectId, job.stage, {
           state: "QUEUED",
           progress: 0,
@@ -731,7 +736,7 @@ export class PipelineOrchestrator {
 
   private assertNoActiveJob(projectId: string): void {
     const active = this.repository.getActiveJob(projectId);
-    if (active && !isPublishStage(active.stage)) this.invalid("A job is already active for this project.");
+    if (active && !isSideJobStage(active.stage)) this.invalid("A job is already active for this project.");
   }
 
   private requireProject(projectId: string): Project {

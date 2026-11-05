@@ -28,12 +28,19 @@ export const PIPELINE_STAGES = [
   "DONE",
   /** Side job: not in STAGE_ORDER; publish worker only. */
   "PUBLISH",
+  /** Side job: cut a vertical short from a finished render. */
+  "CLIP",
 ] as const;
 export const PipelineStageSchema = z.enum(PIPELINE_STAGES);
 export type PipelineStage = z.infer<typeof PipelineStageSchema>;
 
 export function isPublishStage(stage: PipelineStage): boolean {
   return stage === "PUBLISH";
+}
+
+/** Jobs that must not move pipeline stages (publish and clip export). */
+export function isSideJobStage(stage: PipelineStage): boolean {
+  return stage === "PUBLISH" || stage === "CLIP";
 }
 
 export const AUTONOMY_MODES = ["AUTO", "ASSISTED", "MANUAL"] as const;

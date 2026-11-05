@@ -45,6 +45,8 @@ export const BudgetFeaturesSchema = z.object({
   financeInsight: z.boolean(),
   /** LLM performance insights from past videos (not pipeline). ECO still runs, at most every 2 weeks. */
   performanceInsight: z.boolean(),
+  /** Pick Shorts/Reels ranges from a finished long video. Off uses the code fallback. */
+  clipPick: z.boolean(),
   outputHeadroom: z.union([z.literal(1), z.literal(1.5), z.literal(2)]),
 }).strict();
 export type BudgetFeatures = z.infer<typeof BudgetFeaturesSchema>;
@@ -94,6 +96,7 @@ const PRESETS: Record<Exclude<BudgetMode, "CUSTOM">, BudgetFeatures> = {
     assistantChat: true,
     financeInsight: false,
     performanceInsight: true,
+    clipPick: false,
     outputHeadroom: 1,
   },
   BALANCED: {
@@ -121,6 +124,7 @@ const PRESETS: Record<Exclude<BudgetMode, "CUSTOM">, BudgetFeatures> = {
     assistantChat: true,
     financeInsight: true,
     performanceInsight: true,
+    clipPick: true,
     outputHeadroom: 1.5,
   },
   QUALITY: {
@@ -148,6 +152,7 @@ const PRESETS: Record<Exclude<BudgetMode, "CUSTOM">, BudgetFeatures> = {
     assistantChat: true,
     financeInsight: true,
     performanceInsight: true,
+    clipPick: true,
     outputHeadroom: 2,
   },
   MAX: {
@@ -175,6 +180,7 @@ const PRESETS: Record<Exclude<BudgetMode, "CUSTOM">, BudgetFeatures> = {
     assistantChat: true,
     financeInsight: true,
     performanceInsight: true,
+    clipPick: true,
     outputHeadroom: 2,
   },
 };

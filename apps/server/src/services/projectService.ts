@@ -447,6 +447,7 @@ export function createProjectService(
       .get();
     if (activeJob || project.status === "GENERATING" || project.status === "RENDERING") return "busy";
 
+    await db.update(projects).set({ parentProjectId: null, updatedAt: new Date().toISOString() }).where(eq(projects.parentProjectId, id)).run();
     await db.delete(projects).where(eq(projects.id, id)).run();
     try {
       removeProjectDir(config.DATA_DIR, id);

@@ -15,6 +15,7 @@ import { Spinner } from "../../components/Spinner";
 import { useDeleteProject, useDuplicateProject, useProjects, useSetProjectArchived } from "../../hooks/useProjects";
 import { useProfiles } from "../../hooks/useProfiles";
 import { CreateProjectDialog } from "./CreateProjectDialog";
+import { ImportLongVideoDialog } from "./ImportLongVideoDialog";
 import { EditProjectDialog } from "./EditProjectDialog";
 import { ProjectCard } from "./ProjectCard";
 import { ProjectFilters } from "./ProjectFilters";
@@ -55,6 +56,7 @@ export function ProjectListPage() {
   const firstSearchEffect = useRef(true);
   const [searchText, setSearchText] = useState(query.q ?? "");
   const [createOpen, setCreateOpen] = useState(false);
+  const [importOpen, setImportOpen] = useState(false);
   const [editing, setEditing] = useState<Project | null>(null);
   const [deleting, setDeleting] = useState<Project | null>(null);
   const [deleteError, setDeleteError] = useState("");
@@ -148,7 +150,10 @@ export function ProjectListPage() {
     <div className="page-stack">
       <div className="page-heading">
         <div><p className="eyebrow">WORKSPACE</p><h1>Project library</h1><p className="page-subtitle">Find and manage your video projects.</p></div>
-        <button className="button button-primary" type="button" onClick={() => setCreateOpen(true)}>＋ New project</button>
+        <div className="detail-actions">
+          <button className="button button-secondary" type="button" onClick={() => setImportOpen(true)}>Nhập video dài</button>
+          <button className="button button-primary" type="button" onClick={() => setCreateOpen(true)}>＋ New project</button>
+        </div>
       </div>
       <section className="panel list-panel">
         <div className="list-toolbar">
@@ -217,6 +222,7 @@ export function ProjectListPage() {
         )}
       </section>
       <CreateProjectDialog open={createOpen} onClose={() => setCreateOpen(false)} />
+      <ImportLongVideoDialog open={importOpen} onClose={() => setImportOpen(false)} />
       {editing && <EditProjectDialog project={editing} open onClose={() => setEditing(null)} />}
       <ConfirmDialog
         open={Boolean(deleting)}

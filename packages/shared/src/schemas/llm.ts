@@ -89,6 +89,7 @@ export const LlmTaskIdSchema = z.enum([
   "assistantChat",
   "financeInsight",
   "performanceInsight",
+  "clipPick",
 ]);
 export type LlmTaskId = z.infer<typeof LlmTaskIdSchema>;
 
@@ -126,6 +127,7 @@ export const LLM_TASKS: {
   { id: "assistantChat", label: "Trợ lý AI điều khiển app", stage: "SETTINGS", purpose: "Chat assistant that clarifies requests and runs app tools (web + Telegram).", tier: "fast", qualityWeight: 1, budgetFeature: "assistantChat" },
   { id: "financeInsight", label: "Nhận xét báo cáo doanh thu", stage: "SETTINGS", purpose: "3–5 Vietnamese bullet points on what went well or badly in a monthly finance report.", tier: "fast", qualityWeight: 1, budgetFeature: "financeInsight" },
   { id: "performanceInsight", label: "Bài học từ số liệu", stage: "SETTINGS", purpose: "Vietnamese patterns and recommendations from past video performance for one profile.", tier: "strong", qualityWeight: 2, budgetFeature: "performanceInsight" },
+  { id: "clipPick", label: "Chọn đoạn Shorts", stage: "RENDER", purpose: "Pick vertical clip ranges from a finished long video.", tier: "strong", qualityWeight: 3, budgetFeature: "clipPick" },
 ];
 
 function normalizeLlmSettings(value: unknown): unknown {

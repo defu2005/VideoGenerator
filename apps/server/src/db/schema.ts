@@ -1,4 +1,4 @@
-import { integer, index, primaryKey, real, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
+import { integer, index, primaryKey, real, sqliteTable, text, uniqueIndex, type AnySQLiteColumn } from "drizzle-orm/sqlite-core";
 import type {
   AccountConnection,
   AccountFormat,
@@ -10,6 +10,8 @@ import type {
   ProfileLlmSettings,
   ProjectSettings,
   ThumbnailMeta,
+  ClipProposal,
+  ReframeMode,
   PublishSettings,
   TopicSource,
   TopicStatus,
@@ -231,6 +233,9 @@ export const projects = sqliteTable("projects", {
   durationSec: integer("duration_sec"),
   version: integer("version").notNull().default(1),
   profileId: text("profile_id").references(() => profiles.id, { onDelete: "set null" }),
+  /** long | clip. Clips skip the draft pipeline and point at a parent when one exists. */
+  kind: text("kind").notNull().default("long"),
+  parentProjectId: text("parent_project_id").references((): AnySQLiteColumn => projects.id, { onDelete: "set null" }),
   createdAt: text("created_at").notNull(),
   updatedAt: text("updated_at").notNull(),
   archivedAt: text("archived_at"),
@@ -239,9 +244,35 @@ export const projects = sqliteTable("projects", {
   index("projects_updated_at_idx").on(table.updatedAt),
   index("projects_archived_at_idx").on(table.archivedAt),
   index("projects_profile_id_idx").on(table.profileId),
+  index("projects_parent_project_id_idx").on(table.parentProjectId),
 ]);
 
 export type ProjectRow = typeof projects.$inferSelect;
+
+/** One proposal batch for Shorts/Reels cut from a long render or an external file. */
+export const clipSets = sqliteTable("clip_sets", {
+  id: text("id").primaryKey(),
+  projectId: text("project_id").references(() => projects.id, { onDelete: "cascade" }),
+  source: text("source", { enum: ["project", "external"] }).notNull(),
+  externalPath: text("external_path"),
+  title: text("title").notNull().default(""),
+  ownershipConfirmed: integer("ownership_confirmed", { mode: "boolean" }).notNull().default(false),
+  options: text("options", { mode: "json" }).$type<{
+    count: number;
+    minSec: number;
+    maxSec: number;
+    reframe: ReframeMode;
+    platform?: string;
+  }>().notNull(),
+  proposals: text("proposals", { mode: "json" }).$type<ClipProposal[]>().notNull(),
+  status: text("status", { enum: ["proposed", "exporting", "done"] }).notNull(),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+}, (table) => [
+  index("clip_sets_project_idx").on(table.projectId),
+]);
+
+export type ClipSetRow = typeof clipSets.$inferSelect;
 
 export const appSettings = sqliteTable("app_settings", {
   key: text("key").primaryKey(),

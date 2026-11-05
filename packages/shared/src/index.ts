@@ -52,6 +52,7 @@ export * from "./render/variants.js";
 export * from "./schemas/notifications.js";
 export * from "./schemas/metadata.js";
 export * from "./thumbnails/index.js";
+export * from "./clips/index.js";
 export * from "./metadata/chapters.js";
 export * from "./metadata/tags.js";
 export * from "./metadata/draft.js";

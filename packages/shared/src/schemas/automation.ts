@@ -14,6 +14,10 @@ export const ProfileAutomationSchema = z.object({
   autoApproveTopics: z.boolean().default(false),
   /** null / omitted = all enabled accounts of the profile. */
   accountIds: z.array(z.string().uuid()).nullable().default(null),
+  /** After a long render, propose and export vertical clips with no user gate. */
+  autoShorts: z.boolean().default(false),
+  /** How many clips to cut from each long video when autoShorts is on. */
+  shortsPerVideo: z.number().int().min(1).max(8).default(3),
 }).strict();
 export type ProfileAutomation = z.infer<typeof ProfileAutomationSchema>;
 
@@ -26,6 +30,8 @@ export const ProfileAutomationInputSchema = z.object({
   autoSuggest: z.boolean().optional(),
   autoApproveTopics: z.boolean().optional(),
   accountIds: z.array(z.string().uuid()).nullable().optional(),
+  autoShorts: z.boolean().optional(),
+  shortsPerVideo: z.number().int().min(1).max(8).optional(),
 }).strict();
 export type ProfileAutomationInput = z.infer<typeof ProfileAutomationInputSchema>;
 

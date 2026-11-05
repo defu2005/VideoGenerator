@@ -72,7 +72,16 @@ function ProjectOverview({ project }: { project: Project }) {
           <div><dt>Updated</dt><dd>{formatUpdated(project.updatedAt)}</dd></div>
         </dl>
       </section>
-      <PipelinePanel projectId={project.id} project={project} />
+      {project.kind === "clip" ? (
+        <section className="panel overview-card">
+          <p className="eyebrow">SHORT</p>
+          <h2>Đoạn đã cắt</h2>
+          <p>Đây là Short đã cắt từ video dài, không cần duyệt kịch bản.</p>
+          {project.parentProjectId && <Link to={`/projects/${project.parentProjectId}/render`}>Mở video gốc</Link>}
+        </section>
+      ) : (
+        <PipelinePanel projectId={project.id} project={project} />
+      )}
     </div>
   );
 }
@@ -103,6 +112,8 @@ export function ProjectDetailPage() {
   }
 
   const project = projectQuery.data;
+  const isClip = project.kind === "clip";
+  const tabs = isClip ? (["overview", "render"] as const) : TABS;
   const autoWarnCount = autoReport.data?.warnCount ?? 0;
   async function duplicateCurrent() {
     setActionError("");
@@ -132,6 +143,10 @@ export function ProjectDetailPage() {
     }
   }
 
+  if (isClip && tab !== "overview" && tab !== "render") {
+    return <Navigate replace to={`/projects/${project.id}/overview`} />;
+  }
+
   return (
     <div className="page-stack">
       <div className="detail-back"><Link to="/projects">← Project library</Link></div>
@@ -159,7 +174,7 @@ export function ProjectDetailPage() {
       </section>
       {actionError && <p className="request-error" role="alert">{actionError}</p>}
       <nav className="tab-bar" aria-label="Project sections">
-        {TABS.map((value) => (
+        {tabs.map((value) => (
           <NavLink key={value} to={`/projects/${project.id}/${value}`} className={({ isActive }) => isActive ? "active" : ""}>
         {value === "usage" ? "Token" : `${value[0].toUpperCase()}${value.slice(1)}`}
           </NavLink>

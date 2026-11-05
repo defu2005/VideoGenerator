@@ -232,6 +232,13 @@
       "when": 1793850989161,
       "tag": "0032_true_tinkerer",
       "breakpoints": true
+    },
+    {
+      "idx": 33,
+      "version": "6",
+      "when": 1793853637611,
+      "tag": "0033_melted_ultimates",
+      "breakpoints": true
     }
   ]
 }

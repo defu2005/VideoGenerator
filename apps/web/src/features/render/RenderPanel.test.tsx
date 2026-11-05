@@ -100,6 +100,7 @@ describe("RenderPanel", () => {
     vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
       calls.push({ url, init });
+      if (url.includes("/clips")) return jsonResponse({ eligible: true, reason: null, renderId: "r1", options: { count: 3, minSec: 20, maxSec: 45, reframe: "center" }, proposals: [], children: [], jobs: [] });
       if (url.includes("/thumbnail")) return jsonResponse({ hasLandscape: false, hasCover: false, meta: null, candidates: [] });
       if (url.endsWith("/pipeline") || url.includes("/run")) return jsonResponse(pipelineWith("DONE"));
       if (url.endsWith("/renders")) return jsonResponse({ renders: [version()] });
@@ -158,6 +159,7 @@ describe("RenderPanel", () => {
     vi.stubGlobal("EventSource", undefined);
     vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
+      if (url.includes("/clips")) return jsonResponse({ eligible: true, reason: null, renderId: "r1", options: { count: 3, minSec: 20, maxSec: 45, reframe: "center" }, proposals: [], children: [], jobs: [] });
       if (url.includes("/thumbnail")) return jsonResponse({ hasLandscape: false, hasCover: false, meta: null, candidates: [] });
       if (url.endsWith("/pipeline")) return jsonResponse(pipelineWith("DONE"));
       if (url.endsWith("/renders")) return jsonResponse({ renders: [verticalVersion] });
@@ -195,6 +197,7 @@ describe("RenderPanel", () => {
     vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
       calls.push({ url, init });
+      if (url.includes("/clips")) return jsonResponse({ eligible: true, reason: null, renderId: "r1", options: { count: 3, minSec: 20, maxSec: 45, reframe: "center" }, proposals: [], children: [], jobs: [] });
       if (url.includes("/thumbnail")) return jsonResponse({ hasLandscape: false, hasCover: false, meta: null, candidates: [] });
       if (url.endsWith("/pipeline")) return jsonResponse(pipelineWith("DONE"));
       if (url.endsWith("/renders")) {
@@ -239,6 +242,7 @@ describe("RenderPanel", () => {
     vi.stubGlobal("EventSource", undefined);
     vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
       const url = String(input);
+      if (url.includes("/clips")) return jsonResponse({ eligible: true, reason: null, renderId: "r1", options: { count: 3, minSec: 20, maxSec: 45, reframe: "center" }, proposals: [], children: [], jobs: [] });
       if (url.includes("/thumbnail")) return jsonResponse({ hasLandscape: false, hasCover: false, meta: null, candidates: [] });
       if (url.endsWith("/pipeline")) return jsonResponse(pipelineWith("PENDING"));
       if (url.endsWith("/renders")) return jsonResponse({ renders: [] });

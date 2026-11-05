@@ -65,6 +65,35 @@ export class MockLlmProvider implements LlmProvider {
     if (req.schemaName === "VisionConsistency") {
       return response({ flags: [] }, req.model);
     }
+    if (req.schemaName === "ClipPick") {
+      const sentences = Array.isArray(payload.sentences)
+        ? payload.sentences as Array<{ start: number; end: number; text?: string }>
+        : [];
+      const count = Math.min(8, Math.max(1, Number(payload.count) || 3));
+      const minSec = Number(payload.minSec) || 20;
+      const maxSec = Number(payload.maxSec) || 45;
+      const clips: Array<{ start: number; end: number; hook: string; title: string; reason: string; score: number }> = [];
+      for (let index = 0; index < sentences.length && clips.length < count; index += 1) {
+        let endIndex = index;
+        while (endIndex < sentences.length - 1 && sentences[endIndex]!.end - sentences[index]!.start < minSec) endIndex += 1;
+        const start = sentences[index]!.start;
+        const end = sentences[endIndex]!.end;
+        const duration = end - start;
+        const text = (sentences[index]!.text ?? "Đoạn ngắn").trim();
+        if (duration < minSec || duration > maxSec) continue;
+        if (/^(và|nhưng|thì|còn)\b/i.test(text)) continue;
+        clips.push({
+          start,
+          end,
+          hook: text.slice(0, 40),
+          title: text.slice(0, 80) || `Short ${clips.length + 1}`,
+          reason: "Đoạn mở ý rõ.",
+          score: Math.max(1, 90 - clips.length * 5),
+        });
+        index = endIndex;
+      }
+      return response({ clips }, req.model);
+    }
     if (req.schemaName === "ThumbnailPick") {
       return response({
         frameIndex: 0,

@@ -49,6 +49,7 @@ import {
 import type { AnalyticsSyncService } from "../analytics/syncService.js";
 import type { FinanceService } from "../finance/financeService.js";
 import type { LearningService } from "../learning/learningService.js";
+import type { ClipService } from "../services/clipService.js";
 import { clearLlmCooldown, readQuotaStatus } from "../providers/llm/quota.js";
 
 const emptyObject = z.object({}).strict();
@@ -69,6 +70,7 @@ export type AssistantToolContext = {
   analytics?: AnalyticsSyncService;
   finance?: FinanceService;
   learning?: LearningService;
+  clips?: ClipService;
   signal?: AbortSignal;
 };
 
@@ -916,6 +918,43 @@ const toolDefs: AssistantToolDef[] = [
       const parsed = quotaRefArgs.parse(args);
       clearLlmCooldown(ctx.sqlite, parsed.provider, parsed.model);
       return { ok: true, ...parsed };
+    },
+  }),
+  defineTool({
+    name: "list_clips",
+    description: "Xem các đoạn Shorts đã đề xuất và dự án clip con của một video dài.",
+    risk: "read",
+    argsSchema: z.object({ projectId: z.string().uuid() }).strict(),
+    summarize: () => "Xem danh sách Shorts",
+    execute: async (args, ctx) => {
+      if (!ctx.clips) throw new AppError(503, "CLIPS_UNAVAILABLE", "Cắt Shorts chưa sẵn sàng");
+      const { projectId } = z.object({ projectId: z.string().uuid() }).parse(args);
+      return ctx.clips.view(projectId);
+    },
+  }),
+  defineTool({
+    name: "make_shorts",
+    description: "Đề xuất và xuất Shorts từ một video dài đã render (cần xác nhận).",
+    risk: "confirm",
+    argsSchema: z.object({
+      projectId: z.string().uuid(),
+      count: z.number().int().min(1).max(8).optional(),
+    }).strict(),
+    summarize: (args) => {
+      const parsed = z.object({ projectId: z.string().uuid(), count: z.number().int().optional() }).parse(args);
+      return parsed.count ? `Cắt ${parsed.count} Shorts` : "Cắt Shorts từ video dài";
+    },
+    execute: async (args, ctx) => {
+      if (!ctx.clips) throw new AppError(503, "CLIPS_UNAVAILABLE", "Cắt Shorts chưa sẵn sàng");
+      const parsed = z.object({
+        projectId: z.string().uuid(),
+        count: z.number().int().min(1).max(8).optional(),
+      }).strict().parse(args);
+      await ctx.clips.propose(parsed.projectId, { count: parsed.count }, ctx.signal);
+      const view = ctx.clips.view(parsed.projectId);
+      const ids = view.proposals.filter((item) => item.selected && item.status === "proposed").map((item) => item.id);
+      if (!ids.length) return view;
+      return ctx.clips.exportClips(parsed.projectId, ids);
     },
   }),
 ];

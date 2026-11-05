@@ -15,6 +15,7 @@ import {
 } from "../../services/renderApi";
 import { getProjectTimeline } from "../../services/timelineApi";
 import { AutoReportPanel } from "./AutoReportPanel";
+import { ShortsPanel } from "./ShortsPanel";
 import { MetadataPanel } from "./MetadataPanel";
 import { PublishPanel } from "./PublishPanel";
 import { RenderHistory, renderHistoryKeys } from "./RenderHistory";
@@ -219,6 +220,9 @@ export function RenderPanel({ project }: { project: Project }) {
             selectedId={data.id}
             onSelect={setSelectedId}
           />
+          {project.kind !== "clip" && data.width >= data.height && (
+            <ShortsPanel projectId={project.id} renderId={data.id} />
+          )}
           <MetadataPanel project={project} />
           <PublishPanel project={project} />
           <AutoReportPanel project={project} />

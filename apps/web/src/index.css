@@ -994,4 +994,11 @@ button:disabled { cursor: not-allowed; opacity: .58; }
 .finance-page ul { margin: 0 0 10px; padding-left: 18px; font-size: 13px; }
 .finance-page table { width: 100%; border-collapse: collapse; font-size: 13px; }
 .finance-page th, .finance-page td { padding: 7px 8px; border-bottom: 1px solid #eef0f5; text-align: left; }
+.shorts-options, .shorts-item { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 10px; align-items: end; }
+.shorts-list { list-style: none; margin: 12px 0 0; padding: 0; display: grid; gap: 16px; }
+.shorts-item { padding: 12px; border: 1px solid #e6e9f0; border-radius: 10px; }
+.shorts-item video { width: min(240px, 100%); max-height: 420px; background: #111; grid-column: 1 / -1; }
+.shorts-item p { grid-column: 1 / -1; margin: 0; }
+.import-layer { position: fixed; inset: 0; z-index: 30; display: grid; place-items: center; background: #18243a70; padding: 16px; }
+.import-layer .dialog { width: min(560px, 100%); max-height: 90vh; overflow: auto; }
 .finance-page th { color: #59667d; font-size: 12px; font-weight: 600; }

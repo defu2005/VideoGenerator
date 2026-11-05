@@ -44,6 +44,8 @@ const profile: ProfileDetail = {
     leadTimeHours: 6,
     autoSuggest: false,
     autoApproveTopics: false,
+    autoShorts: false,
+    shortsPerVideo: 3,
     accountIds: null,
   },
   avatarPath: null,

@@ -34,6 +34,7 @@ export function ProjectCard({
         <div className="project-card-title">
           <Link to={`/projects/${project.id}/overview`}><h2>{project.title}</h2></Link>
           <StatusBadge status={project.status} />
+          {project.kind === "clip" && <span className="profile-chip">Short</span>}
           {profileName && (
             <span className="profile-chip" title={profileName}>
               <i style={{ background: profileColor ?? "#3B82F6" }} aria-hidden="true" />

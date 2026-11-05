@@ -30,6 +30,7 @@ import type { SceneService } from "../services/sceneService.js";
 import type { AnalyticsSyncService } from "../analytics/syncService.js";
 import type { FinanceService } from "../finance/financeService.js";
 import type { LearningService } from "../learning/learningService.js";
+import type { ClipService } from "../services/clipService.js";
 import { getAssistantSettings, saveAssistantSettings } from "../settings/assistant.js";
 import { runAssistantLoop } from "./loop.js";
 import { getToolRisk, runTool, summarizeTool, type AssistantToolContext } from "./tools.js";
@@ -87,6 +88,7 @@ export class AssistantService {
   private analytics: AnalyticsSyncService | undefined;
   private finance: FinanceService | undefined;
   private learning: LearningService | undefined;
+  private clips: ClipService | undefined;
 
   setAnalytics(service: AnalyticsSyncService): void {
     this.analytics = service;
@@ -98,6 +100,10 @@ export class AssistantService {
 
   setLearning(service: LearningService): void {
     this.learning = service;
+  }
+
+  setClips(service: ClipService): void {
+    this.clips = service;
   }
 
   getSettings(): AssistantSettings {
@@ -459,6 +465,7 @@ export class AssistantService {
       analytics: this.analytics,
       finance: this.finance,
       learning: this.learning,
+      clips: this.clips,
       signal,
     };
   }

@@ -120,6 +120,26 @@ export function AutomationTab({ profile }: { profile: ProfileDetail }) {
           />
           Tự duyệt chủ đề do AI gợi ý
         </label>
+        <label className="field-checkbox">
+          <input
+            type="checkbox"
+            checked={draft.autoShorts}
+            onChange={(event) => setDraft({ ...draft, autoShorts: event.target.checked })}
+          />
+          Tự cắt Shorts từ video dài
+        </label>
+        <label>
+          Số Shorts mỗi video dài (1–8)
+          <input
+            aria-label="Số Shorts mỗi video dài"
+            type="number"
+            min={1}
+            max={8}
+            value={draft.shortsPerVideo}
+            disabled={!draft.autoShorts}
+            onChange={(event) => setDraft({ ...draft, shortsPerVideo: Math.min(8, Math.max(1, Number(event.target.value) || 1)) })}
+          />
+        </label>
         <div className="form-actions">
           <button className="button button-primary" type="submit" disabled={save.isPending}>
             {save.isPending ? "Đang lưu…" : "Lưu lịch"}
