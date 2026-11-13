@@ -1,0 +1,3295 @@
+[
+  {
+    "id": "api.youtube.retention",
+    "kind": "api_contract",
+    "scope": {
+      "platforms": [
+        "youtube"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "platform": "youtube",
+      "name": "Đường giữ chân",
+      "capability": "retention",
+      "availability": "API",
+      "api": true,
+      "summary": "100 đoạn theo tỷ lệ thời lượng. Không có mẫu gốc mỗi giây.",
+      "endpoint": "GET https://youtubeanalytics.googleapis.com/v2/reports",
+      "scopes": [
+        "https://www.googleapis.com/auth/yt-analytics.readonly",
+        "https://www.googleapis.com/auth/youtube.readonly"
+      ],
+      "quotaCost": null,
+      "rateLimit": null,
+      "limits": {
+        "points": 100,
+        "dimension": "elapsedVideoTimeRatio",
+        "requiredFilter": "video==VIDEO_ID",
+        "oneVideoPerQuery": true,
+        "metrics": [
+          "audienceWatchRatio",
+          "relativeRetentionPerformance",
+          "startedWatching",
+          "stoppedWatching",
+          "totalSegmentImpressions"
+        ],
+        "nativePerSecond": false,
+        "secondsConversion": "elapsedVideoTimeRatio * durationSeconds",
+        "extraMetricsSince": "2024-05-06"
+      },
+      "apiSince": "2014-07-16",
+      "uiSince": null,
+      "verification": "documentation"
+    },
+    "evidence": [
+      {
+        "url": "https://developers.google.com/youtube/analytics/dimensions",
+        "checkedAt": "2026-11-12",
+        "type": "official"
+      },
+      {
+        "url": "https://developers.google.com/youtube/analytics/metrics",
+        "checkedAt": "2026-11-12",
+        "type": "official"
+      },
+      {
+        "url": "https://developers.google.com/youtube/analytics/reference/reports/query",
+        "checkedAt": "2026-11-12",
+        "type": "official"
+      },
+      {
+        "url": "https://developers.google.com/youtube/analytics/channel_reports?authuser=2",
+        "checkedAt": "2026-11-12",
+        "type": "official"
+      },
+      {
+        "url": "https://developers.google.com/youtube/analytics/revision_history",
+        "checkedAt": "2026-11-12",
+        "type": "official"
+      }
+    ],
+    "confidence": "high",
+    "volatility": "monthly",
+    "watch": [
+      {
+        "url": "https://developers.google.com/youtube/analytics/revision_history",
+        "kind": "changelog"
+      },
+      {
+        "url": "https://developers.google.com/youtube/analytics/dimensions",
+        "kind": "api_revision"
+      }
+    ],
+    "status": "active",
+    "notes": "Chỉ kiểm tài liệu công khai. Chưa gọi API tài khoản. Ngày ra mắt không rõ giữ null."
+  },
+  {
+    "id": "api.youtube.retention_native_per_second",
+    "kind": "api_contract",
+    "scope": {
+      "platforms": [
+        "youtube"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "platform": "youtube",
+      "name": "Retention gốc mỗi giây",
+      "capability": "retention_native_per_second",
+      "availability": "not_possible",
+      "api": false,
+      "summary": "Không thể yêu cầu API trả một mẫu gốc cho mỗi giây. Endpoint chỉ trả 100 khoảng theo tỷ lệ thời lượng.",
+      "endpoint": null,
+      "scopes": null,
+      "quotaCost": null,
+      "rateLimit": null,
+      "limits": {
+        "nativePerSecond": false,
+        "points": 100
+      },
+      "apiSince": null,
+      "uiSince": null,
+      "verification": "inference"
+    },
+    "evidence": [
+      {
+        "url": "https://developers.google.com/youtube/analytics/dimensions",
+        "checkedAt": "2026-11-12",
+        "type": "official"
+      },
+      {
+        "url": "https://developers.google.com/youtube/analytics/dimensions",
+        "checkedAt": "2026-11-12",
+        "type": "inference"
+      }
+    ],
+    "confidence": "high",
+    "volatility": "monthly",
+    "watch": [
+      {
+        "url": "https://developers.google.com/youtube/analytics/revision_history",
+        "kind": "changelog"
+      },
+      {
+        "url": "https://developers.google.com/youtube/analytics/dimensions",
+        "kind": "api_revision"
+      }
+    ],
+    "status": "active",
+    "notes": "Chỉ kiểm tài liệu công khai. Chưa gọi API tài khoản. Ngày ra mắt không rõ giữ null."
+  },
+  {
+    "id": "api.youtube.reach",
+    "kind": "api_contract",
+    "scope": {
+      "platforms": [
+        "youtube"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "platform": "youtube",
+      "name": "Impressions và CTR thumbnail",
+      "capability": "reach",
+      "availability": "API",
+      "api": true,
+      "summary": "Bulk reach reports có impressions và CTR thumbnail.",
+      "endpoint": [
+        "GET https://youtubereporting.googleapis.com/v1/reportTypes",
+        "POST https://youtubereporting.googleapis.com/v1/jobs",
+        "GET https://youtubereporting.googleapis.com/v1/jobs/{jobId}/reports",
+        "GET {downloadUrl}"
+      ],
+      "scopes": [
+        "https://www.googleapis.com/auth/yt-analytics.readonly"
+      ],
+      "quotaCost": null,
+      "rateLimit": null,
+      "limits": {
+        "reports": [
+          "channel_reach_basic_a1",
+          "channel_reach_combined_a1"
+        ],
+        "metrics": [
+          "video_thumbnail_impressions",
+          "video_thumbnail_impressions_ctr"
+        ],
+        "granularity": "daily",
+        "retentionDays": 60,
+        "historicalReportRetentionDays": 30,
+        "firstReportWithinHours": 24
+      },
+      "apiSince": "2026-01-15",
+      "uiSince": null,
+      "verification": "documentation"
+    },
+    "evidence": [
+      {
+        "url": "https://developers.google.com/youtube/reporting/v1/reports/channel_reports",
+        "checkedAt": "2026-11-12",
+        "type": "official"
+      },
+      {
+        "url": "https://developers.google.com/youtube/reporting/v1/reports/metrics",
+        "checkedAt": "2026-11-12",
+        "type": "official"
+      },
+      {
+        "url": "https://developers.google.com/youtube/analytics/revision_history",
+        "checkedAt": "2026-11-12",
+        "type": "official"
+      },
+      {
+        "url": "https://developers.google.com/youtube/reporting/v1/reference/rest/v1/jobs/create",
+        "checkedAt": "2026-11-12",
+        "type": "official"
+      },
+      {
+        "url": "https://developers.google.com/youtube/reporting/v1/reports/",
+        "checkedAt": "2026-11-12",
+        "type": "official"
+      },
+      {
+        "url": "https://developers.google.com/youtube/reporting/",
+        "checkedAt": "2026-11-12",
+        "type": "official"
+      }
+    ],
+    "confidence": "high",
+    "volatility": "monthly",
+    "watch": [
+      {
+        "url": "https://developers.google.com/youtube/analytics/revision_history",
+        "kind": "changelog"
+      },
+      {
+        "url": "https://developers.google.com/youtube/reporting/v1/reports/channel_reports",
+        "kind": "api_revision"
+      }
+    ],
+    "status": "active",
+    "notes": "Chỉ kiểm tài liệu công khai. Chưa gọi API tài khoản. Ngày ra mắt không rõ giữ null."
+  },
+  {
+    "id": "api.youtube.end_screen_write",
+    "kind": "api_contract",
+    "scope": {
+      "platforms": [
+        "youtube"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "platform": "youtube",
+      "name": "Tạo/sửa end screen",
+      "capability": "end_screen_write",
+      "availability": "manual_only",
+      "api": false,
+      "summary": "Chỉnh trong Studio. Data API công khai không có resource/method tương ứng.",
+      "endpoint": null,
+      "scopes": null,
+      "quotaCost": null,
+      "rateLimit": null,
+      "limits": {
+        "videoMinSeconds": 25,
+        "lastSeconds": [
+          5,
+          20
+        ],
+        "elementsAt16x9": 4,
+        "madeForKids": false
+      },
+      "apiSince": null,
+      "uiSince": null,
+      "verification": "documentation"
+    },
+    "evidence": [
+      {
+        "url": "https://developers.google.com/youtube/data/reference/rest",
+        "checkedAt": "2026-11-12",
+        "type": "official"
+      },
+      {
+        "url": "https://support.google.com/youtube/answer/6388789",
+        "checkedAt": "2026-11-12",
+        "type": "official"
+      },
+      {
+        "url": "https://developers.google.com/youtube/data/reference/rest",
+        "checkedAt": "2026-11-12",
+        "type": "inference"
+      }
+    ],
+    "confidence": "medium",
+    "volatility": "monthly",
+    "watch": [
+      {
+        "url": "https://developers.google.com/youtube/data/revision_history",
+        "kind": "changelog"
+      },
+      {
+        "url": "https://developers.google.com/youtube/data/reference/rest",
+        "kind": "api_revision"
+      }
+    ],
+    "status": "active",
+    "notes": "Chỉ kiểm tài liệu công khai. Chưa gọi API tài khoản. Ngày ra mắt không rõ giữ null."
+  },
+  {
+    "id": "api.youtube.cards_write",
+    "kind": "api_contract",
+    "scope": {
+      "platforms": [
+        "youtube"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "platform": "youtube",
+      "name": "Tạo/sửa cards",
+      "capability": "cards_write",
+      "availability": "manual_only",
+      "api": false,
+      "summary": "Chỉnh trong Studio. Không có endpoint tạo/sửa cards trong Data API công khai.",
+      "endpoint": null,
+      "scopes": null,
+      "quotaCost": null,
+      "rateLimit": null,
+      "limits": {
+        "maxCards": 5,
+        "madeForKids": false
+      },
+      "apiSince": null,
+      "uiSince": null,
+      "verification": "documentation"
+    },
+    "evidence": [
+      {
+        "url": "https://developers.google.com/youtube/data/reference/rest",
+        "checkedAt": "2026-11-12",
+        "type": "official"
+      },
+      {
+        "url": "https://support.google.com/youtube/answer/6140493",
+        "checkedAt": "2026-11-12",
+        "type": "official"
+      },
+      {
+        "url": "https://developers.google.com/youtube/data/reference/rest",
+        "checkedAt": "2026-11-12",
+        "type": "inference"
+      }
+    ],
+    "confidence": "medium",
+    "volatility": "monthly",
+    "watch": [
+      {
+        "url": "https://developers.google.com/youtube/data/revision_history",
+        "kind": "changelog"
+      },
+      {
+        "url": "https://developers.google.com/youtube/data/reference/rest",
+        "kind": "api_revision"
+      }
+    ],
+    "status": "active",
+    "notes": "Chỉ kiểm tài liệu công khai. Chưa gọi API tài khoản. Ngày ra mắt không rõ giữ null."
+  },
+  {
+    "id": "api.youtube.pin_comment",
+    "kind": "api_contract",
+    "scope": {
+      "platforms": [
+        "youtube"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "platform": "youtube",
+      "name": "Ghim bình luận",
+      "capability": "pin_comment",
+      "availability": "manual_only",
+      "api": false,
+      "summary": "Ghim trong giao diện. comments.update và setModerationStatus không phải lệnh ghim.",
+      "endpoint": null,
+      "scopes": null,
+      "quotaCost": null,
+      "rateLimit": null,
+      "limits": "Cần Advanced features. Không áp dụng cho liveChatMessages.",
+      "apiSince": null,
+      "uiSince": null,
+      "verification": "documentation"
+    },
+    "evidence": [
+      {
+        "url": "https://developers.google.com/youtube/data/reference/rest/v3/comments",
+        "checkedAt": "2026-11-12",
+        "type": "official"
+      },
+      {
+        "url": "https://support.google.com/youtube/answer/6000964",
+        "checkedAt": "2026-11-12",
+        "type": "official"
+      },
+      {
+        "url": "https://developers.google.com/youtube/data/reference/rest/v3/comments",
+        "checkedAt": "2026-11-12",
+        "type": "inference"
+      }
+    ],
+    "confidence": "medium",
+    "volatility": "monthly",
+    "watch": [
+      {
+        "url": "https://developers.google.com/youtube/data/revision_history",
+        "kind": "changelog"
+      },
+      {
+        "url": "https://developers.google.com/youtube/data/reference/rest/v3/comments",
+        "kind": "api_revision"
+      }
+    ],
+    "status": "active",
+    "notes": "Chỉ kiểm tài liệu công khai. Chưa gọi API tài khoản. Ngày ra mắt không rõ giữ null."
+  },
+  {
+    "id": "api.youtube.midroll_positions",
+    "kind": "api_contract",
+    "scope": {
+      "platforms": [
+        "youtube"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "platform": "youtube",
+      "name": "Đọc/đặt vị trí mid-roll",
+      "capability": "midroll_positions",
+      "availability": "manual_only",
+      "api": false,
+      "summary": "Đặt/kiểm vị trí trong Studio. Data API công khai không có trường vị trí mid-roll VOD.",
+      "endpoint": null,
+      "scopes": null,
+      "quotaCost": null,
+      "rateLimit": null,
+      "limits": "Video bật kiếm tiền, dài từ 8 phút. Slot không bảo đảm được phân phối quảng cáo. Không suy từ cuepoint của livestream.",
+      "apiSince": null,
+      "uiSince": null,
+      "verification": "documentation"
+    },
+    "evidence": [
+      {
+        "url": "https://developers.google.com/youtube/data/reference/rest/v3/videos/update",
+        "checkedAt": "2026-11-12",
+        "type": "official",
+        "sourceUpdatedAt": "2026-11-10"
+      },
+      {
+        "url": "https://support.google.com/youtube/answer/6175006",
+        "checkedAt": "2026-11-12",
+        "type": "official"
+      },
+      {
+        "url": "https://developers.google.com/youtube/data/reference/rest",
+        "checkedAt": "2026-11-12",
+        "type": "official"
+      },
+      {
+        "url": "https://developers.google.com/youtube/data/reference/rest/v3/videos/update",
+        "checkedAt": "2026-11-12",
+        "type": "inference",
+        "sourceUpdatedAt": "2026-11-10"
+      }
+    ],
+    "confidence": "medium",
+    "volatility": "monthly",
+    "watch": [
+      {
+        "url": "https://developers.google.com/youtube/data/revision_history",
+        "kind": "changelog"
+      },
+      {
+        "url": "https://developers.google.com/youtube/data/reference/rest/v3/videos/update",
+        "kind": "api_revision"
+      }
+    ],
+    "status": "active",
+    "notes": "Chỉ kiểm tài liệu công khai. Chưa gọi API tài khoản. Ngày ra mắt không rõ giữ null."
+  },
+  {
+    "id": "api.youtube.ab_create",
+    "kind": "api_contract",
+    "scope": {
+      "platforms": [
+        "youtube"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "platform": "youtube",
+      "name": "Tạo Test & Compare tiêu đề/thumbnail",
+      "capability": "ab_create",
+      "availability": "manual_only",
+      "api": false,
+      "summary": "Thử nghiệm gốc trong Studio. Không có endpoint công khai để tạo/gán biến thể.",
+      "endpoint": null,
+      "scopes": null,
+      "quotaCost": null,
+      "rateLimit": null,
+      "limits": "Tối đa 3 phương án. Desktop, Advanced features. Không hỗ trợ Shorts, video riêng tư, Made for Kids, giới hạn tuổi. Đổi title/thumbnail đang thử sẽ dừng thử nghiệm.",
+      "apiSince": null,
+      "uiSince": "2025-09-16",
+      "verification": "documentation",
+      "uiSinceMeaning": "Ngày công bố mở rộng sang title; không phải ngày mọi tài khoản được cấp."
+    },
+    "evidence": [
+      {
+        "url": "https://support.google.com/youtube/answer/16391400?hl=en",
+        "checkedAt": "2026-11-12",
+        "type": "official"
+      },
+      {
+        "url": "https://developers.google.com/youtube/data/reference/rest",
+        "checkedAt": "2026-11-12",
+        "type": "official"
+      },
+      {
+        "url": "https://blog.youtube/news-and-events/youtube-studio-made-on-youtube-2025/",
+        "checkedAt": "2026-11-12",
+        "type": "official",
+        "sourceUpdatedAt": "2025-09-16"
+      },
+      {
+        "url": "https://support.google.com/youtube/answer/16391400?hl=en",
+        "checkedAt": "2026-11-12",
+        "type": "inference"
+      }
+    ],
+    "confidence": "medium",
+    "volatility": "monthly",
+    "watch": [
+      {
+        "url": "https://developers.google.com/youtube/data/revision_history",
+        "kind": "changelog"
+      },
+      {
+        "url": "https://support.google.com/youtube/answer/16391400?hl=en",
+        "kind": "api_revision"
+      }
+    ],
+    "status": "active",
+    "notes": "Chỉ kiểm tài liệu công khai. Chưa gọi API tài khoản. Ngày ra mắt không rõ giữ null."
+  },
+  {
+    "id": "api.youtube.ab_results",
+    "kind": "api_contract",
+    "scope": {
+      "platforms": [
+        "youtube"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "platform": "youtube",
+      "name": "Đọc kết quả Test & Compare",
+      "capability": "ab_results",
+      "availability": "manual_only",
+      "api": false,
+      "summary": "Xem kết quả trong Studio. Không có experiment ID/variant ID/result endpoint trong API công khai đã đối chiếu.",
+      "endpoint": null,
+      "scopes": null,
+      "quotaCost": null,
+      "rateLimit": null,
+      "limits": "Không thể suy watch-time share từng biến thể từ CTR tổng của video. Kết quả thử nghiệm có thể không có phương án thắng.",
+      "apiSince": null,
+      "uiSince": null,
+      "verification": "documentation"
+    },
+    "evidence": [
+      {
+        "url": "https://support.google.com/youtube/answer/16391400?hl=en",
+        "checkedAt": "2026-11-12",
+        "type": "official"
+      },
+      {
+        "url": "https://developers.google.com/youtube/data/reference/rest",
+        "checkedAt": "2026-11-12",
+        "type": "official"
+      },
+      {
+        "url": "https://developers.google.com/youtube/reporting/v1/reports/channel_reports",
+        "checkedAt": "2026-11-12",
+        "type": "official"
+      },
+      {
+        "url": "https://support.google.com/youtube/answer/16391400?hl=en",
+        "checkedAt": "2026-11-12",
+        "type": "inference"
+      }
+    ],
+    "confidence": "medium",
+    "volatility": "monthly",
+    "watch": [
+      {
+        "url": "https://developers.google.com/youtube/data/revision_history",
+        "kind": "changelog"
+      },
+      {
+        "url": "https://support.google.com/youtube/answer/16391400?hl=en",
+        "kind": "api_revision"
+      }
+    ],
+    "status": "active",
+    "notes": "Chỉ kiểm tài liệu công khai. Chưa gọi API tài khoản. Ngày ra mắt không rõ giữ null."
+  },
+  {
+    "id": "api.youtube.community_posts",
+    "kind": "api_contract",
+    "scope": {
+      "platforms": [
+        "youtube"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "platform": "youtube",
+      "name": "Bài cộng đồng / tính năng tương đương",
+      "capability": "community_posts",
+      "availability": "manual_only",
+      "api": false,
+      "summary": "Tạo Posts trong giao diện. Data API không có resource Community post.",
+      "endpoint": null,
+      "scopes": null,
+      "quotaCost": null,
+      "rateLimit": null,
+      "limits": "Có trần đăng trong 24 giờ; số cụ thể chưa xác minh. activities.list không phải API quản lý Community Posts.",
+      "apiSince": null,
+      "uiSince": null,
+      "verification": "documentation"
+    },
+    "evidence": [
+      {
+        "url": "https://developers.google.com/youtube/data/reference/rest",
+        "checkedAt": "2026-11-12",
+        "type": "official"
+      },
+      {
+        "url": "https://support.google.com/youtube/answer/7124474",
+        "checkedAt": "2026-11-12",
+        "type": "official"
+      },
+      {
+        "url": "https://developers.google.com/youtube/data/reference/rest",
+        "checkedAt": "2026-11-12",
+        "type": "inference"
+      }
+    ],
+    "confidence": "medium",
+    "volatility": "monthly",
+    "watch": [
+      {
+        "url": "https://developers.google.com/youtube/data/revision_history",
+        "kind": "changelog"
+      },
+      {
+        "url": "https://developers.google.com/youtube/data/reference/rest",
+        "kind": "api_revision"
+      }
+    ],
+    "status": "active",
+    "notes": "Chỉ kiểm tài liệu công khai. Chưa gọi API tài khoản. Ngày ra mắt không rõ giữ null."
+  },
+  {
+    "id": "api.youtube.playlist_create",
+    "kind": "api_contract",
+    "scope": {
+      "platforms": [
+        "youtube"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "platform": "youtube",
+      "name": "Tạo playlist",
+      "capability": "playlist_create",
+      "availability": "API",
+      "api": true,
+      "summary": "Tạo playlist thuộc kênh được ủy quyền.",
+      "endpoint": "POST https://www.googleapis.com/youtube/v3/playlists",
+      "scopes": [
+        "https://www.googleapis.com/auth/youtube.force-ssl"
+      ],
+      "quotaCost": {
+        "value": 50,
+        "unit": "Data API units/call",
+        "bucket": "all_other_endpoints"
+      },
+      "rateLimit": null,
+      "limits": "Bắt buộc snippet.title. Có lỗi maxPlaylistExceeded; trần số playlist chưa xác minh.",
+      "apiSince": null,
+      "uiSince": null,
+      "verification": "documentation"
+    },
+    "evidence": [
+      {
+        "url": "https://developers.google.com/youtube/data/reference/rest/v3/playlists/insert",
+        "checkedAt": "2026-11-12",
+        "type": "official",
+        "sourceUpdatedAt": "2026-11-10"
+      },
+      {
+        "url": "https://developers.google.com/youtube/data/determine_quota_cost",
+        "checkedAt": "2026-11-12",
+        "type": "official"
+      }
+    ],
+    "confidence": "high",
+    "volatility": "monthly",
+    "watch": [
+      {
+        "url": "https://developers.google.com/youtube/data/revision_history",
+        "kind": "changelog"
+      },
+      {
+        "url": "https://developers.google.com/youtube/data/reference/rest/v3/playlists/insert",
+        "kind": "api_revision"
+      }
+    ],
+    "status": "active",
+    "notes": "Chỉ kiểm tài liệu công khai. Chưa gọi API tài khoản. Ngày ra mắt không rõ giữ null."
+  },
+  {
+    "id": "api.youtube.playlist_add",
+    "kind": "api_contract",
+    "scope": {
+      "platforms": [
+        "youtube"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "platform": "youtube",
+      "name": "Thêm video vào playlist",
+      "capability": "playlist_add",
+      "availability": "API",
+      "api": true,
+      "summary": "Thêm một video mỗi playlistItem.",
+      "endpoint": "POST https://www.googleapis.com/youtube/v3/playlistItems",
+      "scopes": [
+        "https://www.googleapis.com/auth/youtube.force-ssl"
+      ],
+      "quotaCost": {
+        "value": 50,
+        "unit": "Data API units/call",
+        "bucket": "all_other_endpoints"
+      },
+      "rateLimit": null,
+      "limits": "Bắt buộc playlistId và resourceId. Playlist phải cho phép sửa. Uploads playlist không cho chèn. Trần item cụ thể chưa xác minh.",
+      "apiSince": null,
+      "uiSince": null,
+      "verification": "documentation"
+    },
+    "evidence": [
+      {
+        "url": "https://developers.google.com/youtube/data/reference/rest/v3/playlistItems/insert",
+        "checkedAt": "2026-11-12",
+        "type": "official",
+        "sourceUpdatedAt": "2026-11-10"
+      },
+      {
+        "url": "https://developers.google.com/youtube/data/determine_quota_cost",
+        "checkedAt": "2026-11-12",
+        "type": "official"
+      }
+    ],
+    "confidence": "high",
+    "volatility": "monthly",
+    "watch": [
+      {
+        "url": "https://developers.google.com/youtube/data/revision_history",
+        "kind": "changelog"
+      },
+      {
+        "url": "https://developers.google.com/youtube/data/reference/rest/v3/playlistItems/insert",
+        "kind": "api_revision"
+      }
+    ],
+    "status": "active",
+    "notes": "Chỉ kiểm tài liệu công khai. Chưa gọi API tài khoản. Ngày ra mắt không rõ giữ null."
+  },
+  {
+    "id": "api.youtube.playlist_order",
+    "kind": "api_contract",
+    "scope": {
+      "platforms": [
+        "youtube"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "platform": "youtube",
+      "name": "Đổi thứ tự playlist",
+      "capability": "playlist_order",
+      "availability": "API",
+      "api": true,
+      "summary": "Đổi snippet.position của playlistItem. Điều kiện playlist dùng Manual ordering.",
+      "endpoint": "PUT https://www.googleapis.com/youtube/v3/playlistItems",
+      "scopes": [
+        "https://www.googleapis.com/auth/youtube.force-ssl"
+      ],
+      "quotaCost": {
+        "value": 50,
+        "unit": "Data API units/call",
+        "bucket": "all_other_endpoints"
+      },
+      "rateLimit": null,
+      "limits": "Cần playlistItem id, snippet.playlistId/resourceId và position. Nếu manualSortRequired: người dùng chuyển Ordering sang Manual trong giao diện. Không có hợp đồng đổi sorting mode được xác minh.",
+      "apiSince": null,
+      "uiSince": null,
+      "verification": "documentation"
+    },
+    "evidence": [
+      {
+        "url": "https://developers.google.com/youtube/data/reference/rest/v3/playlistItems/update",
+        "checkedAt": "2026-11-12",
+        "type": "official"
+      },
+      {
+        "url": "https://developers.google.com/youtube/data/reference/rest/v3/playlistItems/insert",
+        "checkedAt": "2026-11-12",
+        "type": "official",
+        "sourceUpdatedAt": "2026-11-10"
+      },
+      {
+        "url": "https://developers.google.com/youtube/data/determine_quota_cost",
+        "checkedAt": "2026-11-12",
+        "type": "official"
+      }
+    ],
+    "confidence": "high",
+    "volatility": "monthly",
+    "watch": [
+      {
+        "url": "https://developers.google.com/youtube/data/revision_history",
+        "kind": "changelog"
+      },
+      {
+        "url": "https://developers.google.com/youtube/data/reference/rest/v3/playlistItems/update",
+        "kind": "api_revision"
+      }
+    ],
+    "status": "active",
+    "notes": "Chỉ kiểm tài liệu công khai. Chưa gọi API tài khoản. Ngày ra mắt không rõ giữ null."
+  },
+  {
+    "id": "api.youtube.multi_audio",
+    "kind": "api_contract",
+    "scope": {
+      "platforms": [
+        "youtube"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "platform": "youtube",
+      "name": "Thêm track audio đa ngôn ngữ",
+      "capability": "multi_audio",
+      "availability": "manual_only",
+      "api": false,
+      "summary": "Tải track audio qua Languages trong Studio. Không có endpoint Data API công khai cho track bổ sung.",
+      "endpoint": null,
+      "scopes": null,
+      "quotaCost": null,
+      "rateLimit": null,
+      "limits": "Advanced features. File audio có thời lượng gần video. Xóa auto dub cùng ngôn ngữ trước khi thêm. Captions không phải audio.",
+      "apiSince": null,
+      "uiSince": "2023-02-23",
+      "verification": "documentation",
+      "uiSinceMeaning": "Ngày mở rộng tới hàng nghìn creator; không phải ngày API ra mắt."
+    },
+    "evidence": [
+      {
+        "url": "https://support.google.com/youtube/answer/13338784?hl=en",
+        "checkedAt": "2026-11-12",
+        "type": "official"
+      },
+      {
+        "url": "https://developers.google.com/youtube/data/reference/rest",
+        "checkedAt": "2026-11-12",
+        "type": "official"
+      },
+      {
+        "url": "https://blog.youtube/news-and-events/multi-language-audio-mrbeast-interview/",
+        "checkedAt": "2026-11-12",
+        "type": "official",
+        "sourceUpdatedAt": "2023-02-23"
+      },
+      {
+        "url": "https://support.google.com/youtube/answer/13338784?hl=en",
+        "checkedAt": "2026-11-12",
+        "type": "inference"
+      }
+    ],
+    "confidence": "medium",
+    "volatility": "monthly",
+    "watch": [
+      {
+        "url": "https://developers.google.com/youtube/data/revision_history",
+        "kind": "changelog"
+      },
+      {
+        "url": "https://support.google.com/youtube/answer/13338784?hl=en",
+        "kind": "api_revision"
+      }
+    ],
+    "status": "active",
+    "notes": "Chỉ kiểm tài liệu công khai. Chưa gọi API tài khoản. Ngày ra mắt không rõ giữ null."
+  },
+  {
+    "id": "api.youtube.localized_metadata",
+    "kind": "api_contract",
+    "scope": {
+      "platforms": [
+        "youtube"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "platform": "youtube",
+      "name": "Tiêu đề/mô tả theo locale",
+      "capability": "localized_metadata",
+      "availability": "API",
+      "api": true,
+      "summary": "Ghi localizations theo mã ngôn ngữ; đọc lại localizations hoặc hl.",
+      "endpoint": [
+        "PUT https://www.googleapis.com/youtube/v3/videos?part=snippet,localizations",
+        "GET https://www.googleapis.com/youtube/v3/videos?part=localizations&id=VIDEO_ID"
+      ],
+      "scopes": [
+        "https://www.googleapis.com/auth/youtube.force-ssl"
+      ],
+      "quotaCost": {
+        "write": 50,
+        "read": 1,
+        "unit": "Data API units/call",
+        "bucket": "all_other_endpoints"
+      },
+      "rateLimit": null,
+      "limits": "Phải có snippet.defaultLanguage. Khi ghi snippet cần title/categoryId. Giữ đủ bản dịch cũ để tránh xóa. defaultAudioLanguage không tải audio.",
+      "apiSince": "2015-11-19",
+      "uiSince": null,
+      "verification": "documentation"
+    },
+    "evidence": [
+      {
+        "url": "https://developers.google.com/youtube/data/reference/rest/v3/videos/update",
+        "checkedAt": "2026-11-12",
+        "type": "official",
+        "sourceUpdatedAt": "2026-11-10"
+      },
+      {
+        "url": "https://developers.google.com/youtube/data/revision_history",
+        "checkedAt": "2026-11-12",
+        "type": "official"
+      },
+      {
+        "url": "https://developers.google.com/youtube/data/determine_quota_cost",
+        "checkedAt": "2026-11-12",
+        "type": "official"
+      }
+    ],
+    "confidence": "high",
+    "volatility": "monthly",
+    "watch": [
+      {
+        "url": "https://developers.google.com/youtube/data/revision_history",
+        "kind": "changelog"
+      },
+      {
+        "url": "https://developers.google.com/youtube/data/reference/rest/v3/videos/update",
+        "kind": "api_revision"
+      }
+    ],
+    "status": "active",
+    "notes": "Chỉ kiểm tài liệu công khai. Chưa gọi API tài khoản. Ngày ra mắt không rõ giữ null."
+  },
+  {
+    "id": "api.youtube.end_screen_metrics",
+    "kind": "api_contract",
+    "scope": {
+      "platforms": [
+        "youtube"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "platform": "youtube",
+      "name": "Đọc hiệu quả end screen",
+      "capability": "end_screen_metrics",
+      "availability": "API",
+      "api": true,
+      "summary": "Bulk channel_end_screens_a2 trả số hiển thị, click và click rate.",
+      "endpoint": "POST /v1/jobs → GET /v1/jobs/{jobId}/reports → GET downloadUrl (youtubereporting.googleapis.com)",
+      "scopes": [
+        "https://www.googleapis.com/auth/yt-analytics.readonly"
+      ],
+      "quotaCost": null,
+      "rateLimit": null,
+      "limits": {
+        "report": "channel_end_screens_a2",
+        "metrics": [
+          "end_screen_element_impressions",
+          "end_screen_element_clicks",
+          "end_screen_element_click_rate"
+        ]
+      },
+      "apiSince": null,
+      "uiSince": null,
+      "verification": "documentation"
+    },
+    "evidence": [
+      {
+        "url": "https://developers.google.com/youtube/reporting/v1/reports/channel_reports",
+        "checkedAt": "2026-11-12",
+        "type": "official"
+      },
+      {
+        "url": "https://developers.google.com/youtube/reporting/v1/reference/rest/v1/jobs/create",
+        "checkedAt": "2026-11-12",
+        "type": "official"
+      },
+      {
+        "url": "https://developers.google.com/youtube/reporting/v1/reports/",
+        "checkedAt": "2026-11-12",
+        "type": "official"
+      }
+    ],
+    "confidence": "high",
+    "volatility": "monthly",
+    "watch": [
+      {
+        "url": "https://developers.google.com/youtube/analytics/revision_history",
+        "kind": "changelog"
+      },
+      {
+        "url": "https://developers.google.com/youtube/reporting/v1/reports/channel_reports",
+        "kind": "api_revision"
+      }
+    ],
+    "status": "active",
+    "notes": "Chỉ kiểm tài liệu công khai. Chưa gọi API tài khoản. Ngày ra mắt không rõ giữ null."
+  },
+  {
+    "id": "api.youtube.cards_metrics",
+    "kind": "api_contract",
+    "scope": {
+      "platforms": [
+        "youtube"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "platform": "youtube",
+      "name": "Đọc hiệu quả cards",
+      "capability": "cards_metrics",
+      "availability": "API",
+      "api": true,
+      "summary": "Đọc card metrics qua Analytics hoặc bulk channel_cards_a1.",
+      "endpoint": [
+        "GET https://youtubeanalytics.googleapis.com/v2/reports",
+        "Reporting jobs: channel_cards_a1"
+      ],
+      "scopes": [
+        "https://www.googleapis.com/auth/yt-analytics.readonly",
+        "https://www.googleapis.com/auth/youtube.readonly"
+      ],
+      "quotaCost": null,
+      "rateLimit": null,
+      "limits": "cardImpressions, cardClicks, cardClickRate; bulk có card_id. Không trả quyền chỉnh nội dung card.",
+      "apiSince": null,
+      "uiSince": null,
+      "verification": "documentation"
+    },
+    "evidence": [
+      {
+        "url": "https://developers.google.com/youtube/analytics/channel_reports?authuser=2",
+        "checkedAt": "2026-11-12",
+        "type": "official"
+      },
+      {
+        "url": "https://developers.google.com/youtube/reporting/v1/reports/channel_reports",
+        "checkedAt": "2026-11-12",
+        "type": "official"
+      },
+      {
+        "url": "https://developers.google.com/youtube/analytics/reference/reports/query",
+        "checkedAt": "2026-11-12",
+        "type": "official"
+      }
+    ],
+    "confidence": "high",
+    "volatility": "monthly",
+    "watch": [
+      {
+        "url": "https://developers.google.com/youtube/analytics/revision_history",
+        "kind": "changelog"
+      },
+      {
+        "url": "https://developers.google.com/youtube/analytics/channel_reports?authuser=2",
+        "kind": "api_revision"
+      }
+    ],
+    "status": "active",
+    "notes": "Chỉ kiểm tài liệu công khai. Chưa gọi API tài khoản. Ngày ra mắt không rõ giữ null."
+  },
+  {
+    "id": "api.tiktok.retention",
+    "kind": "api_contract",
+    "scope": {
+      "platforms": [
+        "tiktok"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "platform": "tiktok",
+      "name": "Đường giữ chân",
+      "capability": "retention",
+      "availability": null,
+      "api": null,
+      "summary": "Display video.query không trả đường retention hoặc CTR thumbnail. Accounts API có insights riêng; hợp đồng chi tiết chưa xác minh.",
+      "endpoint": null,
+      "scopes": null,
+      "quotaCost": null,
+      "rateLimit": null,
+      "limits": "Display/Content Posting không đủ bằng chứng cho API Accounts/đối tác.",
+      "apiSince": null,
+      "uiSince": null,
+      "verification": "unverified",
+      "publicDeveloperApiFinding": "Không tìm thấy thao tác được yêu cầu trong các schema Display/Content Posting đã đối chiếu. Chưa kết luận cho Accounts API."
+    },
+    "evidence": [
+      {
+        "url": "https://developers.tiktok.com/docs/en/tiktok-api-v2-video-query",
+        "checkedAt": "2026-11-12",
+        "type": "inference",
+        "sourceUpdatedAt": "2026-08-24"
+      },
+      {
+        "url": "https://business-api.tiktok.com/portal/docs/accounts-api-overview/v1.3",
+        "checkedAt": "2026-11-12",
+        "type": "inference"
+      }
+    ],
+    "confidence": "low",
+    "volatility": "weekly",
+    "watch": [
+      {
+        "url": "https://developers.tiktok.com/docs/en/tiktok-api-v2-video-query",
+        "kind": "policy_page"
+      }
+    ],
+    "status": "active",
+    "notes": "URL là nơi cần kiểm. Không có bằng chứng xác nhận hợp đồng API. Không nhập null thành false."
+  },
+  {
+    "id": "api.tiktok.reach",
+    "kind": "api_contract",
+    "scope": {
+      "platforms": [
+        "tiktok"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "platform": "tiktok",
+      "name": "Impressions và CTR thumbnail",
+      "capability": "reach",
+      "availability": null,
+      "api": null,
+      "summary": "Display video.query không trả đường retention hoặc CTR thumbnail. Accounts API có insights riêng; hợp đồng chi tiết chưa xác minh.",
+      "endpoint": null,
+      "scopes": null,
+      "quotaCost": null,
+      "rateLimit": null,
+      "limits": "Display/Content Posting không đủ bằng chứng cho API Accounts/đối tác.",
+      "apiSince": null,
+      "uiSince": null,
+      "verification": "unverified",
+      "publicDeveloperApiFinding": "Không tìm thấy thao tác được yêu cầu trong các schema Display/Content Posting đã đối chiếu. Chưa kết luận cho Accounts API."
+    },
+    "evidence": [
+      {
+        "url": "https://developers.tiktok.com/docs/en/tiktok-api-v2-video-query",
+        "checkedAt": "2026-11-12",
+        "type": "inference",
+        "sourceUpdatedAt": "2026-08-24"
+      },
+      {
+        "url": "https://business-api.tiktok.com/portal/docs/accounts-api-overview/v1.3",
+        "checkedAt": "2026-11-12",
+        "type": "inference"
+      }
+    ],
+    "confidence": "low",
+    "volatility": "weekly",
+    "watch": [
+      {
+        "url": "https://developers.tiktok.com/docs/en/tiktok-api-v2-video-query",
+        "kind": "policy_page"
+      }
+    ],
+    "status": "active",
+    "notes": "URL là nơi cần kiểm. Không có bằng chứng xác nhận hợp đồng API. Không nhập null thành false."
+  },
+  {
+    "id": "api.tiktok.end_screen_write",
+    "kind": "api_contract",
+    "scope": {
+      "platforms": [
+        "tiktok"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "platform": "tiktok",
+      "name": "Tạo/sửa end screen",
+      "capability": "end_screen_write",
+      "availability": null,
+      "api": null,
+      "summary": "Chưa xác minh tính năng tương đương và API ngoài Display/Content Posting. Không suy ra nền tảng không có tính năng.",
+      "endpoint": null,
+      "scopes": null,
+      "quotaCost": null,
+      "rateLimit": null,
+      "limits": "Display/Content Posting không đủ bằng chứng cho API Accounts/đối tác.",
+      "apiSince": null,
+      "uiSince": null,
+      "verification": "unverified",
+      "publicDeveloperApiFinding": "Không tìm thấy thao tác được yêu cầu trong các schema Display/Content Posting đã đối chiếu. Chưa kết luận cho Accounts API."
+    },
+    "evidence": [
+      {
+        "url": "https://developers.tiktok.com/docs/en/tiktok-api-scopes?enter_method=left_navigation",
+        "checkedAt": "2026-11-12",
+        "type": "inference"
+      },
+      {
+        "url": "https://developers.tiktok.com/docs/en/content-posting-api-reference-direct-post?enter_method=left_navigation",
+        "checkedAt": "2026-11-12",
+        "type": "inference"
+      }
+    ],
+    "confidence": "low",
+    "volatility": "weekly",
+    "watch": [
+      {
+        "url": "https://developers.tiktok.com/docs/en/tiktok-api-scopes?enter_method=left_navigation",
+        "kind": "policy_page"
+      }
+    ],
+    "status": "active",
+    "notes": "URL là nơi cần kiểm. Không có bằng chứng xác nhận hợp đồng API. Không nhập null thành false."
+  },
+  {
+    "id": "api.tiktok.cards_write",
+    "kind": "api_contract",
+    "scope": {
+      "platforms": [
+        "tiktok"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "platform": "tiktok",
+      "name": "Tạo/sửa cards",
+      "capability": "cards_write",
+      "availability": null,
+      "api": null,
+      "summary": "Chưa xác minh tính năng tương đương và API ngoài Display/Content Posting. Không suy ra nền tảng không có tính năng.",
+      "endpoint": null,
+      "scopes": null,
+      "quotaCost": null,
+      "rateLimit": null,
+      "limits": "Display/Content Posting không đủ bằng chứng cho API Accounts/đối tác.",
+      "apiSince": null,
+      "uiSince": null,
+      "verification": "unverified",
+      "publicDeveloperApiFinding": "Không tìm thấy thao tác được yêu cầu trong các schema Display/Content Posting đã đối chiếu. Chưa kết luận cho Accounts API."
+    },
+    "evidence": [
+      {
+        "url": "https://developers.tiktok.com/docs/en/tiktok-api-scopes?enter_method=left_navigation",
+        "checkedAt": "2026-11-12",
+        "type": "inference"
+      },
+      {
+        "url": "https://developers.tiktok.com/docs/en/content-posting-api-reference-direct-post?enter_method=left_navigation",
+        "checkedAt": "2026-11-12",
+        "type": "inference"
+      }
+    ],
+    "confidence": "low",
+    "volatility": "weekly",
+    "watch": [
+      {
+        "url": "https://developers.tiktok.com/docs/en/tiktok-api-scopes?enter_method=left_navigation",
+        "kind": "policy_page"
+      }
+    ],
+    "status": "active",
+    "notes": "URL là nơi cần kiểm. Không có bằng chứng xác nhận hợp đồng API. Không nhập null thành false."
+  },
+  {
+    "id": "api.tiktok.pin_comment",
+    "kind": "api_contract",
+    "scope": {
+      "platforms": [
+        "tiktok"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "platform": "tiktok",
+      "name": "Ghim bình luận",
+      "capability": "pin_comment",
+      "availability": null,
+      "api": null,
+      "summary": "Accounts API đọc được pinned. Chưa xác minh được endpoint/scope để ghim; không kết luận manual only.",
+      "endpoint": null,
+      "scopes": null,
+      "quotaCost": null,
+      "rateLimit": null,
+      "limits": "Display/Content Posting không đủ bằng chứng cho API Accounts/đối tác.",
+      "apiSince": null,
+      "uiSince": null,
+      "verification": "unverified",
+      "publicDeveloperApiFinding": "Không tìm thấy thao tác được yêu cầu trong các schema Display/Content Posting đã đối chiếu. Chưa kết luận cho Accounts API."
+    },
+    "evidence": [
+      {
+        "url": "https://business-api.tiktok.com/portal/docs/get-comments-on-an-owned-video/v1.3",
+        "checkedAt": "2026-11-12",
+        "type": "inference"
+      },
+      {
+        "url": "https://business-api.tiktok.com/portal/docs/accounts-api-overview/v1.3",
+        "checkedAt": "2026-11-12",
+        "type": "inference"
+      }
+    ],
+    "confidence": "low",
+    "volatility": "weekly",
+    "watch": [
+      {
+        "url": "https://business-api.tiktok.com/portal/docs/get-comments-on-an-owned-video/v1.3",
+        "kind": "policy_page"
+      }
+    ],
+    "status": "active",
+    "notes": "URL là nơi cần kiểm. Không có bằng chứng xác nhận hợp đồng API. Không nhập null thành false."
+  },
+  {
+    "id": "api.tiktok.midroll_positions",
+    "kind": "api_contract",
+    "scope": {
+      "platforms": [
+        "tiktok"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "platform": "tiktok",
+      "name": "Đọc/đặt vị trí mid-roll",
+      "capability": "midroll_positions",
+      "availability": null,
+      "api": null,
+      "summary": "Chưa xác minh tính năng tương đương và API ngoài Display/Content Posting. Không suy ra nền tảng không có tính năng.",
+      "endpoint": null,
+      "scopes": null,
+      "quotaCost": null,
+      "rateLimit": null,
+      "limits": "Display/Content Posting không đủ bằng chứng cho API Accounts/đối tác.",
+      "apiSince": null,
+      "uiSince": null,
+      "verification": "unverified",
+      "publicDeveloperApiFinding": "Không tìm thấy thao tác được yêu cầu trong các schema Display/Content Posting đã đối chiếu. Chưa kết luận cho Accounts API."
+    },
+    "evidence": [
+      {
+        "url": "https://developers.tiktok.com/docs/en/tiktok-api-scopes?enter_method=left_navigation",
+        "checkedAt": "2026-11-12",
+        "type": "inference"
+      },
+      {
+        "url": "https://developers.tiktok.com/docs/en/content-posting-api-reference-direct-post?enter_method=left_navigation",
+        "checkedAt": "2026-11-12",
+        "type": "inference"
+      }
+    ],
+    "confidence": "low",
+    "volatility": "weekly",
+    "watch": [
+      {
+        "url": "https://developers.tiktok.com/docs/en/tiktok-api-scopes?enter_method=left_navigation",
+        "kind": "policy_page"
+      }
+    ],
+    "status": "active",
+    "notes": "URL là nơi cần kiểm. Không có bằng chứng xác nhận hợp đồng API. Không nhập null thành false."
+  },
+  {
+    "id": "api.tiktok.ab_create",
+    "kind": "api_contract",
+    "scope": {
+      "platforms": [
+        "tiktok"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "platform": "tiktok",
+      "name": "Tạo Test & Compare tiêu đề/thumbnail",
+      "capability": "ab_create",
+      "availability": null,
+      "api": null,
+      "summary": "Chưa xác minh tính năng tương đương và API ngoài Display/Content Posting. Không suy ra nền tảng không có tính năng.",
+      "endpoint": null,
+      "scopes": null,
+      "quotaCost": null,
+      "rateLimit": null,
+      "limits": "Display/Content Posting không đủ bằng chứng cho API Accounts/đối tác.",
+      "apiSince": null,
+      "uiSince": null,
+      "verification": "unverified",
+      "publicDeveloperApiFinding": "Không tìm thấy thao tác được yêu cầu trong các schema Display/Content Posting đã đối chiếu. Chưa kết luận cho Accounts API."
+    },
+    "evidence": [
+      {
+        "url": "https://developers.tiktok.com/docs/en/tiktok-api-scopes?enter_method=left_navigation",
+        "checkedAt": "2026-11-12",
+        "type": "inference"
+      },
+      {
+        "url": "https://developers.tiktok.com/docs/en/content-posting-api-reference-direct-post?enter_method=left_navigation",
+        "checkedAt": "2026-11-12",
+        "type": "inference"
+      }
+    ],
+    "confidence": "low",
+    "volatility": "weekly",
+    "watch": [
+      {
+        "url": "https://developers.tiktok.com/docs/en/tiktok-api-scopes?enter_method=left_navigation",
+        "kind": "policy_page"
+      }
+    ],
+    "status": "active",
+    "notes": "URL là nơi cần kiểm. Không có bằng chứng xác nhận hợp đồng API. Không nhập null thành false."
+  },
+  {
+    "id": "api.tiktok.ab_results",
+    "kind": "api_contract",
+    "scope": {
+      "platforms": [
+        "tiktok"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "platform": "tiktok",
+      "name": "Đọc kết quả Test & Compare",
+      "capability": "ab_results",
+      "availability": null,
+      "api": null,
+      "summary": "Chưa xác minh tính năng tương đương và API ngoài Display/Content Posting. Không suy ra nền tảng không có tính năng.",
+      "endpoint": null,
+      "scopes": null,
+      "quotaCost": null,
+      "rateLimit": null,
+      "limits": "Display/Content Posting không đủ bằng chứng cho API Accounts/đối tác.",
+      "apiSince": null,
+      "uiSince": null,
+      "verification": "unverified",
+      "publicDeveloperApiFinding": "Không tìm thấy thao tác được yêu cầu trong các schema Display/Content Posting đã đối chiếu. Chưa kết luận cho Accounts API."
+    },
+    "evidence": [
+      {
+        "url": "https://developers.tiktok.com/docs/en/tiktok-api-scopes?enter_method=left_navigation",
+        "checkedAt": "2026-11-12",
+        "type": "inference"
+      },
+      {
+        "url": "https://developers.tiktok.com/docs/en/content-posting-api-reference-direct-post?enter_method=left_navigation",
+        "checkedAt": "2026-11-12",
+        "type": "inference"
+      }
+    ],
+    "confidence": "low",
+    "volatility": "weekly",
+    "watch": [
+      {
+        "url": "https://developers.tiktok.com/docs/en/tiktok-api-scopes?enter_method=left_navigation",
+        "kind": "policy_page"
+      }
+    ],
+    "status": "active",
+    "notes": "URL là nơi cần kiểm. Không có bằng chứng xác nhận hợp đồng API. Không nhập null thành false."
+  },
+  {
+    "id": "api.tiktok.community_posts",
+    "kind": "api_contract",
+    "scope": {
+      "platforms": [
+        "tiktok"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "platform": "tiktok",
+      "name": "Bài cộng đồng / tính năng tương đương",
+      "capability": "community_posts",
+      "availability": null,
+      "api": null,
+      "summary": "Chưa xác minh tính năng tương đương và API ngoài Display/Content Posting. Không suy ra nền tảng không có tính năng.",
+      "endpoint": null,
+      "scopes": null,
+      "quotaCost": null,
+      "rateLimit": null,
+      "limits": "Display/Content Posting không đủ bằng chứng cho API Accounts/đối tác.",
+      "apiSince": null,
+      "uiSince": null,
+      "verification": "unverified",
+      "publicDeveloperApiFinding": "Không tìm thấy thao tác được yêu cầu trong các schema Display/Content Posting đã đối chiếu. Chưa kết luận cho Accounts API."
+    },
+    "evidence": [
+      {
+        "url": "https://developers.tiktok.com/docs/en/tiktok-api-scopes?enter_method=left_navigation",
+        "checkedAt": "2026-11-12",
+        "type": "inference"
+      },
+      {
+        "url": "https://developers.tiktok.com/docs/en/content-posting-api-reference-direct-post?enter_method=left_navigation",
+        "checkedAt": "2026-11-12",
+        "type": "inference"
+      }
+    ],
+    "confidence": "low",
+    "volatility": "weekly",
+    "watch": [
+      {
+        "url": "https://developers.tiktok.com/docs/en/tiktok-api-scopes?enter_method=left_navigation",
+        "kind": "policy_page"
+      }
+    ],
+    "status": "active",
+    "notes": "URL là nơi cần kiểm. Không có bằng chứng xác nhận hợp đồng API. Không nhập null thành false."
+  },
+  {
+    "id": "api.tiktok.playlist_create",
+    "kind": "api_contract",
+    "scope": {
+      "platforms": [
+        "tiktok"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "platform": "tiktok",
+      "name": "Tạo playlist",
+      "capability": "playlist_create",
+      "availability": null,
+      "api": null,
+      "summary": "Help liệt kê Creator Playlists. Thân trang hướng dẫn trả 503. Chưa xác minh đủ create/add/order và API Accounts.",
+      "endpoint": null,
+      "scopes": null,
+      "quotaCost": null,
+      "rateLimit": null,
+      "limits": "Display/Content Posting không đủ bằng chứng cho API Accounts/đối tác.",
+      "apiSince": null,
+      "uiSince": null,
+      "verification": "unverified",
+      "publicDeveloperApiFinding": "Không tìm thấy thao tác được yêu cầu trong các schema Display/Content Posting đã đối chiếu. Chưa kết luận cho Accounts API."
+    },
+    "evidence": [
+      {
+        "url": "https://developers.tiktok.com/docs/en/tiktok-api-scopes?enter_method=left_navigation",
+        "checkedAt": "2026-11-12",
+        "type": "inference"
+      },
+      {
+        "url": "https://support.tiktok.com/en/using-tiktok/creating-videos/creator-playlist",
+        "checkedAt": "2026-11-12",
+        "type": "inference"
+      }
+    ],
+    "confidence": "low",
+    "volatility": "weekly",
+    "watch": [
+      {
+        "url": "https://developers.tiktok.com/docs/en/tiktok-api-scopes?enter_method=left_navigation",
+        "kind": "policy_page"
+      }
+    ],
+    "status": "active",
+    "notes": "URL là nơi cần kiểm. Không có bằng chứng xác nhận hợp đồng API. Không nhập null thành false."
+  },
+  {
+    "id": "api.tiktok.playlist_add",
+    "kind": "api_contract",
+    "scope": {
+      "platforms": [
+        "tiktok"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "platform": "tiktok",
+      "name": "Thêm video vào playlist",
+      "capability": "playlist_add",
+      "availability": null,
+      "api": null,
+      "summary": "Help liệt kê Creator Playlists. Thân trang hướng dẫn trả 503. Chưa xác minh đủ create/add/order và API Accounts.",
+      "endpoint": null,
+      "scopes": null,
+      "quotaCost": null,
+      "rateLimit": null,
+      "limits": "Display/Content Posting không đủ bằng chứng cho API Accounts/đối tác.",
+      "apiSince": null,
+      "uiSince": null,
+      "verification": "unverified",
+      "publicDeveloperApiFinding": "Không tìm thấy thao tác được yêu cầu trong các schema Display/Content Posting đã đối chiếu. Chưa kết luận cho Accounts API."
+    },
+    "evidence": [
+      {
+        "url": "https://developers.tiktok.com/docs/en/tiktok-api-scopes?enter_method=left_navigation",
+        "checkedAt": "2026-11-12",
+        "type": "inference"
+      },
+      {
+        "url": "https://support.tiktok.com/en/using-tiktok/creating-videos/creator-playlist",
+        "checkedAt": "2026-11-12",
+        "type": "inference"
+      }
+    ],
+    "confidence": "low",
+    "volatility": "weekly",
+    "watch": [
+      {
+        "url": "https://developers.tiktok.com/docs/en/tiktok-api-scopes?enter_method=left_navigation",
+        "kind": "policy_page"
+      }
+    ],
+    "status": "active",
+    "notes": "URL là nơi cần kiểm. Không có bằng chứng xác nhận hợp đồng API. Không nhập null thành false."
+  },
+  {
+    "id": "api.tiktok.playlist_order",
+    "kind": "api_contract",
+    "scope": {
+      "platforms": [
+        "tiktok"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "platform": "tiktok",
+      "name": "Đổi thứ tự playlist",
+      "capability": "playlist_order",
+      "availability": null,
+      "api": null,
+      "summary": "Help liệt kê Creator Playlists. Thân trang hướng dẫn trả 503. Chưa xác minh đủ create/add/order và API Accounts.",
+      "endpoint": null,
+      "scopes": null,
+      "quotaCost": null,
+      "rateLimit": null,
+      "limits": "Display/Content Posting không đủ bằng chứng cho API Accounts/đối tác.",
+      "apiSince": null,
+      "uiSince": null,
+      "verification": "unverified",
+      "publicDeveloperApiFinding": "Không tìm thấy thao tác được yêu cầu trong các schema Display/Content Posting đã đối chiếu. Chưa kết luận cho Accounts API."
+    },
+    "evidence": [
+      {
+        "url": "https://developers.tiktok.com/docs/en/tiktok-api-scopes?enter_method=left_navigation",
+        "checkedAt": "2026-11-12",
+        "type": "inference"
+      },
+      {
+        "url": "https://support.tiktok.com/en/using-tiktok/creating-videos/creator-playlist",
+        "checkedAt": "2026-11-12",
+        "type": "inference"
+      }
+    ],
+    "confidence": "low",
+    "volatility": "weekly",
+    "watch": [
+      {
+        "url": "https://developers.tiktok.com/docs/en/tiktok-api-scopes?enter_method=left_navigation",
+        "kind": "policy_page"
+      }
+    ],
+    "status": "active",
+    "notes": "URL là nơi cần kiểm. Không có bằng chứng xác nhận hợp đồng API. Không nhập null thành false."
+  },
+  {
+    "id": "api.tiktok.multi_audio",
+    "kind": "api_contract",
+    "scope": {
+      "platforms": [
+        "tiktok"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "platform": "tiktok",
+      "name": "Thêm track audio đa ngôn ngữ",
+      "capability": "multi_audio",
+      "availability": null,
+      "api": null,
+      "summary": "Chưa xác minh tính năng tương đương và API ngoài Display/Content Posting. Không suy ra nền tảng không có tính năng.",
+      "endpoint": null,
+      "scopes": null,
+      "quotaCost": null,
+      "rateLimit": null,
+      "limits": "Display/Content Posting không đủ bằng chứng cho API Accounts/đối tác.",
+      "apiSince": null,
+      "uiSince": null,
+      "verification": "unverified",
+      "publicDeveloperApiFinding": "Không tìm thấy thao tác được yêu cầu trong các schema Display/Content Posting đã đối chiếu. Chưa kết luận cho Accounts API."
+    },
+    "evidence": [
+      {
+        "url": "https://developers.tiktok.com/docs/en/tiktok-api-scopes?enter_method=left_navigation",
+        "checkedAt": "2026-11-12",
+        "type": "inference"
+      },
+      {
+        "url": "https://developers.tiktok.com/docs/en/content-posting-api-reference-direct-post?enter_method=left_navigation",
+        "checkedAt": "2026-11-12",
+        "type": "inference"
+      }
+    ],
+    "confidence": "low",
+    "volatility": "weekly",
+    "watch": [
+      {
+        "url": "https://developers.tiktok.com/docs/en/tiktok-api-scopes?enter_method=left_navigation",
+        "kind": "policy_page"
+      }
+    ],
+    "status": "active",
+    "notes": "URL là nơi cần kiểm. Không có bằng chứng xác nhận hợp đồng API. Không nhập null thành false."
+  },
+  {
+    "id": "api.tiktok.localized_metadata",
+    "kind": "api_contract",
+    "scope": {
+      "platforms": [
+        "tiktok"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "platform": "tiktok",
+      "name": "Tiêu đề/mô tả theo locale",
+      "capability": "localized_metadata",
+      "availability": null,
+      "api": null,
+      "summary": "Chưa xác minh tính năng tương đương và API ngoài Display/Content Posting. Không suy ra nền tảng không có tính năng.",
+      "endpoint": null,
+      "scopes": null,
+      "quotaCost": null,
+      "rateLimit": null,
+      "limits": "Display/Content Posting không đủ bằng chứng cho API Accounts/đối tác.",
+      "apiSince": null,
+      "uiSince": null,
+      "verification": "unverified",
+      "publicDeveloperApiFinding": "Không tìm thấy thao tác được yêu cầu trong các schema Display/Content Posting đã đối chiếu. Chưa kết luận cho Accounts API."
+    },
+    "evidence": [
+      {
+        "url": "https://developers.tiktok.com/docs/en/tiktok-api-scopes?enter_method=left_navigation",
+        "checkedAt": "2026-11-12",
+        "type": "inference"
+      },
+      {
+        "url": "https://developers.tiktok.com/docs/en/content-posting-api-reference-direct-post?enter_method=left_navigation",
+        "checkedAt": "2026-11-12",
+        "type": "inference"
+      }
+    ],
+    "confidence": "low",
+    "volatility": "weekly",
+    "watch": [
+      {
+        "url": "https://developers.tiktok.com/docs/en/tiktok-api-scopes?enter_method=left_navigation",
+        "kind": "policy_page"
+      }
+    ],
+    "status": "active",
+    "notes": "URL là nơi cần kiểm. Không có bằng chứng xác nhận hợp đồng API. Không nhập null thành false."
+  },
+  {
+    "id": "api.tiktok.pin_comment_read",
+    "kind": "api_contract",
+    "scope": {
+      "platforms": [
+        "tiktok"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "platform": "tiktok",
+      "name": "Đọc trạng thái ghim bình luận",
+      "capability": "pin_comment_read",
+      "availability": "API",
+      "api": true,
+      "summary": "Accounts API trả trạng thái pinned của bình luận thuộc video sở hữu.",
+      "endpoint": "GET https://business-api.tiktok.com/open_api/v1.3/business/comment/list/",
+      "scopes": null,
+      "quotaCost": null,
+      "rateLimit": null,
+      "limits": "Access-Token qua /tt_user/oauth2/token/; business_id, video_id; tối đa 30 comment mỗi trang. Tên scope chính xác chưa xác minh. Quyền Accounts cần xét duyệt riêng.",
+      "apiSince": null,
+      "uiSince": null,
+      "verification": "documentation"
+    },
+    "evidence": [
+      {
+        "url": "https://business-api.tiktok.com/portal/docs/get-comments-on-an-owned-video/v1.3",
+        "checkedAt": "2026-11-12",
+        "type": "official"
+      },
+      {
+        "url": "https://business-api.tiktok.com/portal/docs/accounts-api-overview/v1.3",
+        "checkedAt": "2026-11-12",
+        "type": "official"
+      }
+    ],
+    "confidence": "high",
+    "volatility": "monthly",
+    "watch": [
+      {
+        "url": "https://business-api.tiktok.com/portal/docs/get-comments-on-an-owned-video/v1.3",
+        "kind": "policy_page"
+      }
+    ],
+    "status": "active",
+    "notes": "Chỉ kiểm tài liệu công khai. Chưa gọi API tài khoản. Ngày ra mắt không rõ giữ null."
+  },
+  {
+    "id": "api.facebook.retention",
+    "kind": "api_contract",
+    "scope": {
+      "platforms": [
+        "facebook"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "platform": "facebook",
+      "name": "Đường giữ chân",
+      "capability": "retention",
+      "availability": null,
+      "api": null,
+      "summary": "Chưa xác minh hợp đồng hiện hành. Tài liệu developer trả 429; không kết luận API/manual/not possible.",
+      "endpoint": null,
+      "scopes": null,
+      "quotaCost": null,
+      "rateLimit": null,
+      "limits": null,
+      "apiSince": null,
+      "uiSince": "2023-11-02",
+      "verification": "unverified",
+      "uiAvailable": true
+    },
+    "evidence": [
+      {
+        "url": "https://developers.facebook.com/docs/graph-api/reference/video/video_insights/",
+        "checkedAt": "2026-11-12",
+        "type": "inference"
+      },
+      {
+        "url": "https://about.fb.com/news/2023/11/helping-creators-test-content-and-earn-rewards/",
+        "checkedAt": "2026-11-12",
+        "type": "inference",
+        "sourceUpdatedAt": "2023-11-02"
+      }
+    ],
+    "confidence": "low",
+    "volatility": "weekly",
+    "watch": [
+      {
+        "url": "https://developers.facebook.com/docs/graph-api/reference/video/video_insights/",
+        "kind": "policy_page"
+      }
+    ],
+    "status": "active",
+    "notes": "URL là nơi cần kiểm. Không có bằng chứng xác nhận hợp đồng API. Không nhập null thành false."
+  },
+  {
+    "id": "api.facebook.reach",
+    "kind": "api_contract",
+    "scope": {
+      "platforms": [
+        "facebook"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "platform": "facebook",
+      "name": "Impressions và CTR thumbnail",
+      "capability": "reach",
+      "availability": null,
+      "api": null,
+      "summary": "Chưa xác minh hợp đồng hiện hành. Tài liệu developer trả 429; không kết luận API/manual/not possible.",
+      "endpoint": null,
+      "scopes": null,
+      "quotaCost": null,
+      "rateLimit": null,
+      "limits": null,
+      "apiSince": null,
+      "uiSince": null,
+      "verification": "unverified",
+      "uiAvailable": null
+    },
+    "evidence": [
+      {
+        "url": "https://developers.facebook.com/docs/graph-api/reference/video/video_insights/",
+        "checkedAt": "2026-11-12",
+        "type": "inference"
+      },
+      {
+        "url": "https://about.fb.com/news/2023/11/helping-creators-test-content-and-earn-rewards/",
+        "checkedAt": "2026-11-12",
+        "type": "inference",
+        "sourceUpdatedAt": "2023-11-02"
+      }
+    ],
+    "confidence": "low",
+    "volatility": "weekly",
+    "watch": [
+      {
+        "url": "https://developers.facebook.com/docs/graph-api/reference/video/video_insights/",
+        "kind": "policy_page"
+      }
+    ],
+    "status": "active",
+    "notes": "URL là nơi cần kiểm. Không có bằng chứng xác nhận hợp đồng API. Không nhập null thành false."
+  },
+  {
+    "id": "api.facebook.end_screen_write",
+    "kind": "api_contract",
+    "scope": {
+      "platforms": [
+        "facebook"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "platform": "facebook",
+      "name": "Tạo/sửa end screen",
+      "capability": "end_screen_write",
+      "availability": null,
+      "api": null,
+      "summary": "Chưa xác minh hợp đồng hiện hành. Tài liệu developer trả 429; không kết luận API/manual/not possible.",
+      "endpoint": null,
+      "scopes": null,
+      "quotaCost": null,
+      "rateLimit": null,
+      "limits": null,
+      "apiSince": null,
+      "uiSince": null,
+      "verification": "unverified",
+      "uiAvailable": null
+    },
+    "evidence": [
+      {
+        "url": "https://developers.facebook.com/docs/graph-api/reference/video/",
+        "checkedAt": "2026-11-12",
+        "type": "inference"
+      }
+    ],
+    "confidence": "low",
+    "volatility": "weekly",
+    "watch": [
+      {
+        "url": "https://developers.facebook.com/docs/graph-api/reference/video/",
+        "kind": "policy_page"
+      }
+    ],
+    "status": "active",
+    "notes": "URL là nơi cần kiểm. Không có bằng chứng xác nhận hợp đồng API. Không nhập null thành false."
+  },
+  {
+    "id": "api.facebook.cards_write",
+    "kind": "api_contract",
+    "scope": {
+      "platforms": [
+        "facebook"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "platform": "facebook",
+      "name": "Tạo/sửa cards",
+      "capability": "cards_write",
+      "availability": null,
+      "api": null,
+      "summary": "Chưa xác minh hợp đồng hiện hành. Tài liệu developer trả 429; không kết luận API/manual/not possible.",
+      "endpoint": null,
+      "scopes": null,
+      "quotaCost": null,
+      "rateLimit": null,
+      "limits": null,
+      "apiSince": null,
+      "uiSince": null,
+      "verification": "unverified",
+      "uiAvailable": null
+    },
+    "evidence": [
+      {
+        "url": "https://developers.facebook.com/docs/graph-api/reference/video/",
+        "checkedAt": "2026-11-12",
+        "type": "inference"
+      }
+    ],
+    "confidence": "low",
+    "volatility": "weekly",
+    "watch": [
+      {
+        "url": "https://developers.facebook.com/docs/graph-api/reference/video/",
+        "kind": "policy_page"
+      }
+    ],
+    "status": "active",
+    "notes": "URL là nơi cần kiểm. Không có bằng chứng xác nhận hợp đồng API. Không nhập null thành false."
+  },
+  {
+    "id": "api.facebook.pin_comment",
+    "kind": "api_contract",
+    "scope": {
+      "platforms": [
+        "facebook"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "platform": "facebook",
+      "name": "Ghim bình luận",
+      "capability": "pin_comment",
+      "availability": null,
+      "api": null,
+      "summary": "Chưa xác minh hợp đồng hiện hành. Tài liệu developer trả 429; không kết luận API/manual/not possible.",
+      "endpoint": null,
+      "scopes": null,
+      "quotaCost": null,
+      "rateLimit": null,
+      "limits": null,
+      "apiSince": null,
+      "uiSince": null,
+      "verification": "unverified",
+      "uiAvailable": null
+    },
+    "evidence": [
+      {
+        "url": "https://developers.facebook.com/docs/graph-api/reference/comment/",
+        "checkedAt": "2026-11-12",
+        "type": "inference"
+      }
+    ],
+    "confidence": "low",
+    "volatility": "weekly",
+    "watch": [
+      {
+        "url": "https://developers.facebook.com/docs/graph-api/reference/comment/",
+        "kind": "policy_page"
+      }
+    ],
+    "status": "active",
+    "notes": "URL là nơi cần kiểm. Không có bằng chứng xác nhận hợp đồng API. Không nhập null thành false."
+  },
+  {
+    "id": "api.facebook.midroll_positions",
+    "kind": "api_contract",
+    "scope": {
+      "platforms": [
+        "facebook"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "platform": "facebook",
+      "name": "Đọc/đặt vị trí mid-roll",
+      "capability": "midroll_positions",
+      "availability": null,
+      "api": null,
+      "summary": "Chưa xác minh hợp đồng hiện hành. Tài liệu developer trả 429; không kết luận API/manual/not possible.",
+      "endpoint": null,
+      "scopes": null,
+      "quotaCost": null,
+      "rateLimit": null,
+      "limits": null,
+      "apiSince": null,
+      "uiSince": null,
+      "verification": "unverified",
+      "uiAvailable": null
+    },
+    "evidence": [
+      {
+        "url": "https://developers.facebook.com/docs/graph-api/reference/video/",
+        "checkedAt": "2026-11-12",
+        "type": "inference"
+      }
+    ],
+    "confidence": "low",
+    "volatility": "weekly",
+    "watch": [
+      {
+        "url": "https://developers.facebook.com/docs/graph-api/reference/video/",
+        "kind": "policy_page"
+      }
+    ],
+    "status": "active",
+    "notes": "URL là nơi cần kiểm. Không có bằng chứng xác nhận hợp đồng API. Không nhập null thành false."
+  },
+  {
+    "id": "api.facebook.ab_create",
+    "kind": "api_contract",
+    "scope": {
+      "platforms": [
+        "facebook"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "platform": "facebook",
+      "name": "Tạo Test & Compare tiêu đề/thumbnail",
+      "capability": "ab_create",
+      "availability": null,
+      "api": null,
+      "summary": "Meta công bố A/B caption/thumbnail trên mobile và kết quả trong professional dashboard. API điều khiển/đọc kết quả chưa xác minh.",
+      "endpoint": null,
+      "scopes": null,
+      "quotaCost": null,
+      "rateLimit": null,
+      "limits": null,
+      "apiSince": null,
+      "uiSince": "2023-11-02",
+      "verification": "unverified",
+      "uiAvailable": true
+    },
+    "evidence": [
+      {
+        "url": "https://about.fb.com/news/2023/11/helping-creators-test-content-and-earn-rewards/",
+        "checkedAt": "2026-11-12",
+        "type": "inference",
+        "sourceUpdatedAt": "2023-11-02"
+      },
+      {
+        "url": "https://developers.facebook.com/docs/graph-api/reference/video/",
+        "checkedAt": "2026-11-12",
+        "type": "inference"
+      }
+    ],
+    "confidence": "low",
+    "volatility": "weekly",
+    "watch": [
+      {
+        "url": "https://about.fb.com/news/2023/11/helping-creators-test-content-and-earn-rewards/",
+        "kind": "policy_page"
+      }
+    ],
+    "status": "active",
+    "notes": "URL là nơi cần kiểm. Không có bằng chứng xác nhận hợp đồng API. Không nhập null thành false."
+  },
+  {
+    "id": "api.facebook.ab_results",
+    "kind": "api_contract",
+    "scope": {
+      "platforms": [
+        "facebook"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "platform": "facebook",
+      "name": "Đọc kết quả Test & Compare",
+      "capability": "ab_results",
+      "availability": null,
+      "api": null,
+      "summary": "Meta công bố A/B caption/thumbnail trên mobile và kết quả trong professional dashboard. API điều khiển/đọc kết quả chưa xác minh.",
+      "endpoint": null,
+      "scopes": null,
+      "quotaCost": null,
+      "rateLimit": null,
+      "limits": null,
+      "apiSince": null,
+      "uiSince": "2023-11-02",
+      "verification": "unverified",
+      "uiAvailable": true
+    },
+    "evidence": [
+      {
+        "url": "https://about.fb.com/news/2023/11/helping-creators-test-content-and-earn-rewards/",
+        "checkedAt": "2026-11-12",
+        "type": "inference",
+        "sourceUpdatedAt": "2023-11-02"
+      },
+      {
+        "url": "https://developers.facebook.com/docs/graph-api/reference/video/",
+        "checkedAt": "2026-11-12",
+        "type": "inference"
+      }
+    ],
+    "confidence": "low",
+    "volatility": "weekly",
+    "watch": [
+      {
+        "url": "https://about.fb.com/news/2023/11/helping-creators-test-content-and-earn-rewards/",
+        "kind": "policy_page"
+      }
+    ],
+    "status": "active",
+    "notes": "URL là nơi cần kiểm. Không có bằng chứng xác nhận hợp đồng API. Không nhập null thành false."
+  },
+  {
+    "id": "api.facebook.community_posts",
+    "kind": "api_contract",
+    "scope": {
+      "platforms": [
+        "facebook"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "platform": "facebook",
+      "name": "Bài cộng đồng / tính năng tương đương",
+      "capability": "community_posts",
+      "availability": null,
+      "api": null,
+      "summary": "Chưa xác minh hợp đồng hiện hành. Tài liệu developer trả 429; không kết luận API/manual/not possible.",
+      "endpoint": null,
+      "scopes": null,
+      "quotaCost": null,
+      "rateLimit": null,
+      "limits": null,
+      "apiSince": null,
+      "uiSince": null,
+      "verification": "unverified",
+      "uiAvailable": null
+    },
+    "evidence": [
+      {
+        "url": "https://developers.facebook.com/docs/pages-api/posts/",
+        "checkedAt": "2026-11-12",
+        "type": "inference"
+      }
+    ],
+    "confidence": "low",
+    "volatility": "weekly",
+    "watch": [
+      {
+        "url": "https://developers.facebook.com/docs/pages-api/posts/",
+        "kind": "policy_page"
+      }
+    ],
+    "status": "active",
+    "notes": "URL là nơi cần kiểm. Không có bằng chứng xác nhận hợp đồng API. Không nhập null thành false."
+  },
+  {
+    "id": "api.facebook.playlist_create",
+    "kind": "api_contract",
+    "scope": {
+      "platforms": [
+        "facebook"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "platform": "facebook",
+      "name": "Tạo playlist",
+      "capability": "playlist_create",
+      "availability": null,
+      "api": null,
+      "summary": "Chưa xác minh hợp đồng hiện hành. Tài liệu developer trả 429; không kết luận API/manual/not possible.",
+      "endpoint": null,
+      "scopes": null,
+      "quotaCost": null,
+      "rateLimit": null,
+      "limits": null,
+      "apiSince": null,
+      "uiSince": null,
+      "verification": "unverified",
+      "uiAvailable": null
+    },
+    "evidence": [
+      {
+        "url": "https://developers.facebook.com/docs/graph-api/reference/page/video_playlists/",
+        "checkedAt": "2026-11-12",
+        "type": "inference"
+      }
+    ],
+    "confidence": "low",
+    "volatility": "weekly",
+    "watch": [
+      {
+        "url": "https://developers.facebook.com/docs/graph-api/reference/page/video_playlists/",
+        "kind": "policy_page"
+      }
+    ],
+    "status": "active",
+    "notes": "URL là nơi cần kiểm. Không có bằng chứng xác nhận hợp đồng API. Không nhập null thành false."
+  },
+  {
+    "id": "api.facebook.playlist_add",
+    "kind": "api_contract",
+    "scope": {
+      "platforms": [
+        "facebook"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "platform": "facebook",
+      "name": "Thêm video vào playlist",
+      "capability": "playlist_add",
+      "availability": null,
+      "api": null,
+      "summary": "Chưa xác minh hợp đồng hiện hành. Tài liệu developer trả 429; không kết luận API/manual/not possible.",
+      "endpoint": null,
+      "scopes": null,
+      "quotaCost": null,
+      "rateLimit": null,
+      "limits": null,
+      "apiSince": null,
+      "uiSince": null,
+      "verification": "unverified",
+      "uiAvailable": null
+    },
+    "evidence": [
+      {
+        "url": "https://developers.facebook.com/docs/graph-api/reference/page/video_playlists/",
+        "checkedAt": "2026-11-12",
+        "type": "inference"
+      }
+    ],
+    "confidence": "low",
+    "volatility": "weekly",
+    "watch": [
+      {
+        "url": "https://developers.facebook.com/docs/graph-api/reference/page/video_playlists/",
+        "kind": "policy_page"
+      }
+    ],
+    "status": "active",
+    "notes": "URL là nơi cần kiểm. Không có bằng chứng xác nhận hợp đồng API. Không nhập null thành false."
+  },
+  {
+    "id": "api.facebook.playlist_order",
+    "kind": "api_contract",
+    "scope": {
+      "platforms": [
+        "facebook"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "platform": "facebook",
+      "name": "Đổi thứ tự playlist",
+      "capability": "playlist_order",
+      "availability": null,
+      "api": null,
+      "summary": "Chưa xác minh hợp đồng hiện hành. Tài liệu developer trả 429; không kết luận API/manual/not possible.",
+      "endpoint": null,
+      "scopes": null,
+      "quotaCost": null,
+      "rateLimit": null,
+      "limits": null,
+      "apiSince": null,
+      "uiSince": null,
+      "verification": "unverified",
+      "uiAvailable": null
+    },
+    "evidence": [
+      {
+        "url": "https://developers.facebook.com/docs/graph-api/reference/page/video_playlists/",
+        "checkedAt": "2026-11-12",
+        "type": "inference"
+      }
+    ],
+    "confidence": "low",
+    "volatility": "weekly",
+    "watch": [
+      {
+        "url": "https://developers.facebook.com/docs/graph-api/reference/page/video_playlists/",
+        "kind": "policy_page"
+      }
+    ],
+    "status": "active",
+    "notes": "URL là nơi cần kiểm. Không có bằng chứng xác nhận hợp đồng API. Không nhập null thành false."
+  },
+  {
+    "id": "api.facebook.multi_audio",
+    "kind": "api_contract",
+    "scope": {
+      "platforms": [
+        "facebook"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "platform": "facebook",
+      "name": "Thêm track audio đa ngôn ngữ",
+      "capability": "multi_audio",
+      "availability": null,
+      "api": null,
+      "summary": "Meta AI dubbing là tính năng giao diện. Không chứng minh app OAuth tải track audio riêng hoặc điều khiển dubbing được.",
+      "endpoint": null,
+      "scopes": null,
+      "quotaCost": null,
+      "rateLimit": null,
+      "limits": null,
+      "apiSince": null,
+      "uiSince": null,
+      "verification": "unverified",
+      "uiAvailable": true
+    },
+    "evidence": [
+      {
+        "url": "https://about.fb.com/news/2025/10/discover-reels-around-world-meta-ai-translation/",
+        "checkedAt": "2026-11-12",
+        "type": "inference",
+        "sourceUpdatedAt": "2026-07-14"
+      },
+      {
+        "url": "https://developers.facebook.com/docs/graph-api/reference/video/",
+        "checkedAt": "2026-11-12",
+        "type": "inference"
+      }
+    ],
+    "confidence": "low",
+    "volatility": "weekly",
+    "watch": [
+      {
+        "url": "https://about.fb.com/news/2025/10/discover-reels-around-world-meta-ai-translation/",
+        "kind": "policy_page"
+      }
+    ],
+    "status": "active",
+    "notes": "URL là nơi cần kiểm. Không có bằng chứng xác nhận hợp đồng API. Không nhập null thành false."
+  },
+  {
+    "id": "api.facebook.localized_metadata",
+    "kind": "api_contract",
+    "scope": {
+      "platforms": [
+        "facebook"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "platform": "facebook",
+      "name": "Tiêu đề/mô tả theo locale",
+      "capability": "localized_metadata",
+      "availability": null,
+      "api": null,
+      "summary": "Chưa xác minh hợp đồng hiện hành. Tài liệu developer trả 429; không kết luận API/manual/not possible.",
+      "endpoint": null,
+      "scopes": null,
+      "quotaCost": null,
+      "rateLimit": null,
+      "limits": null,
+      "apiSince": null,
+      "uiSince": null,
+      "verification": "unverified",
+      "uiAvailable": null
+    },
+    "evidence": [
+      {
+        "url": "https://developers.facebook.com/docs/graph-api/reference/video/",
+        "checkedAt": "2026-11-12",
+        "type": "inference"
+      }
+    ],
+    "confidence": "low",
+    "volatility": "weekly",
+    "watch": [
+      {
+        "url": "https://developers.facebook.com/docs/graph-api/reference/video/",
+        "kind": "policy_page"
+      }
+    ],
+    "status": "active",
+    "notes": "URL là nơi cần kiểm. Không có bằng chứng xác nhận hợp đồng API. Không nhập null thành false."
+  },
+  {
+    "id": "api.instagram.retention",
+    "kind": "api_contract",
+    "scope": {
+      "platforms": [
+        "instagram"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "platform": "instagram",
+      "name": "Đường giữ chân",
+      "capability": "retention",
+      "availability": null,
+      "api": null,
+      "summary": "Chưa xác minh hợp đồng hiện hành. Tài liệu developer trả 429; không kết luận API/manual/not possible.",
+      "endpoint": null,
+      "scopes": null,
+      "quotaCost": null,
+      "rateLimit": null,
+      "limits": null,
+      "apiSince": null,
+      "uiSince": null,
+      "verification": "unverified",
+      "uiAvailable": null
+    },
+    "evidence": [
+      {
+        "url": "https://developers.facebook.com/docs/instagram-platform/insights/",
+        "checkedAt": "2026-11-12",
+        "type": "inference"
+      },
+      {
+        "url": "https://www.postman.com/meta/instagram/collection/6yqw8pt/instagram-api",
+        "checkedAt": "2026-11-12",
+        "type": "inference"
+      }
+    ],
+    "confidence": "low",
+    "volatility": "weekly",
+    "watch": [
+      {
+        "url": "https://developers.facebook.com/docs/instagram-platform/insights/",
+        "kind": "policy_page"
+      }
+    ],
+    "status": "active",
+    "notes": "URL là nơi cần kiểm. Không có bằng chứng xác nhận hợp đồng API. Không nhập null thành false."
+  },
+  {
+    "id": "api.instagram.reach",
+    "kind": "api_contract",
+    "scope": {
+      "platforms": [
+        "instagram"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "platform": "instagram",
+      "name": "Impressions và CTR thumbnail",
+      "capability": "reach",
+      "availability": null,
+      "api": null,
+      "summary": "Chưa xác minh hợp đồng hiện hành. Tài liệu developer trả 429; không kết luận API/manual/not possible.",
+      "endpoint": null,
+      "scopes": null,
+      "quotaCost": null,
+      "rateLimit": null,
+      "limits": null,
+      "apiSince": null,
+      "uiSince": null,
+      "verification": "unverified",
+      "uiAvailable": null
+    },
+    "evidence": [
+      {
+        "url": "https://developers.facebook.com/docs/instagram-platform/insights/",
+        "checkedAt": "2026-11-12",
+        "type": "inference"
+      },
+      {
+        "url": "https://www.postman.com/meta/instagram/collection/6yqw8pt/instagram-api",
+        "checkedAt": "2026-11-12",
+        "type": "inference"
+      }
+    ],
+    "confidence": "low",
+    "volatility": "weekly",
+    "watch": [
+      {
+        "url": "https://developers.facebook.com/docs/instagram-platform/insights/",
+        "kind": "policy_page"
+      }
+    ],
+    "status": "active",
+    "notes": "URL là nơi cần kiểm. Không có bằng chứng xác nhận hợp đồng API. Không nhập null thành false."
+  },
+  {
+    "id": "api.instagram.end_screen_write",
+    "kind": "api_contract",
+    "scope": {
+      "platforms": [
+        "instagram"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "platform": "instagram",
+      "name": "Tạo/sửa end screen",
+      "capability": "end_screen_write",
+      "availability": null,
+      "api": null,
+      "summary": "Chưa xác minh hợp đồng hiện hành. Tài liệu developer trả 429; không kết luận API/manual/not possible.",
+      "endpoint": null,
+      "scopes": null,
+      "quotaCost": null,
+      "rateLimit": null,
+      "limits": null,
+      "apiSince": null,
+      "uiSince": null,
+      "verification": "unverified",
+      "uiAvailable": null
+    },
+    "evidence": [
+      {
+        "url": "https://www.postman.com/meta/instagram/collection/6yqw8pt/instagram-api",
+        "checkedAt": "2026-11-12",
+        "type": "inference"
+      },
+      {
+        "url": "https://developers.facebook.com/docs/instagram-platform/content-publishing/",
+        "checkedAt": "2026-11-12",
+        "type": "inference"
+      }
+    ],
+    "confidence": "low",
+    "volatility": "weekly",
+    "watch": [
+      {
+        "url": "https://www.postman.com/meta/instagram/collection/6yqw8pt/instagram-api",
+        "kind": "policy_page"
+      }
+    ],
+    "status": "active",
+    "notes": "URL là nơi cần kiểm. Không có bằng chứng xác nhận hợp đồng API. Không nhập null thành false."
+  },
+  {
+    "id": "api.instagram.cards_write",
+    "kind": "api_contract",
+    "scope": {
+      "platforms": [
+        "instagram"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "platform": "instagram",
+      "name": "Tạo/sửa cards",
+      "capability": "cards_write",
+      "availability": null,
+      "api": null,
+      "summary": "Chưa xác minh hợp đồng hiện hành. Tài liệu developer trả 429; không kết luận API/manual/not possible.",
+      "endpoint": null,
+      "scopes": null,
+      "quotaCost": null,
+      "rateLimit": null,
+      "limits": null,
+      "apiSince": null,
+      "uiSince": null,
+      "verification": "unverified",
+      "uiAvailable": null
+    },
+    "evidence": [
+      {
+        "url": "https://www.postman.com/meta/instagram/collection/6yqw8pt/instagram-api",
+        "checkedAt": "2026-11-12",
+        "type": "inference"
+      },
+      {
+        "url": "https://developers.facebook.com/docs/instagram-platform/content-publishing/",
+        "checkedAt": "2026-11-12",
+        "type": "inference"
+      }
+    ],
+    "confidence": "low",
+    "volatility": "weekly",
+    "watch": [
+      {
+        "url": "https://www.postman.com/meta/instagram/collection/6yqw8pt/instagram-api",
+        "kind": "policy_page"
+      }
+    ],
+    "status": "active",
+    "notes": "URL là nơi cần kiểm. Không có bằng chứng xác nhận hợp đồng API. Không nhập null thành false."
+  },
+  {
+    "id": "api.instagram.pin_comment",
+    "kind": "api_contract",
+    "scope": {
+      "platforms": [
+        "instagram"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "platform": "instagram",
+      "name": "Ghim bình luận",
+      "capability": "pin_comment",
+      "availability": null,
+      "api": null,
+      "summary": "Chưa xác minh hợp đồng hiện hành. Tài liệu developer trả 429; không kết luận API/manual/not possible.",
+      "endpoint": null,
+      "scopes": null,
+      "quotaCost": null,
+      "rateLimit": null,
+      "limits": null,
+      "apiSince": null,
+      "uiSince": null,
+      "verification": "unverified",
+      "uiAvailable": null
+    },
+    "evidence": [
+      {
+        "url": "https://developers.facebook.com/docs/instagram-platform/content-publishing/",
+        "checkedAt": "2026-11-12",
+        "type": "inference"
+      },
+      {
+        "url": "https://www.postman.com/meta/instagram/collection/6yqw8pt/instagram-api",
+        "checkedAt": "2026-11-12",
+        "type": "inference"
+      }
+    ],
+    "confidence": "low",
+    "volatility": "weekly",
+    "watch": [
+      {
+        "url": "https://developers.facebook.com/docs/instagram-platform/content-publishing/",
+        "kind": "policy_page"
+      }
+    ],
+    "status": "active",
+    "notes": "URL là nơi cần kiểm. Không có bằng chứng xác nhận hợp đồng API. Không nhập null thành false."
+  },
+  {
+    "id": "api.instagram.midroll_positions",
+    "kind": "api_contract",
+    "scope": {
+      "platforms": [
+        "instagram"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "platform": "instagram",
+      "name": "Đọc/đặt vị trí mid-roll",
+      "capability": "midroll_positions",
+      "availability": null,
+      "api": null,
+      "summary": "Chưa xác minh hợp đồng hiện hành. Tài liệu developer trả 429; không kết luận API/manual/not possible.",
+      "endpoint": null,
+      "scopes": null,
+      "quotaCost": null,
+      "rateLimit": null,
+      "limits": null,
+      "apiSince": null,
+      "uiSince": null,
+      "verification": "unverified",
+      "uiAvailable": null
+    },
+    "evidence": [
+      {
+        "url": "https://www.postman.com/meta/instagram/collection/6yqw8pt/instagram-api",
+        "checkedAt": "2026-11-12",
+        "type": "inference"
+      },
+      {
+        "url": "https://developers.facebook.com/docs/instagram-platform/content-publishing/",
+        "checkedAt": "2026-11-12",
+        "type": "inference"
+      }
+    ],
+    "confidence": "low",
+    "volatility": "weekly",
+    "watch": [
+      {
+        "url": "https://www.postman.com/meta/instagram/collection/6yqw8pt/instagram-api",
+        "kind": "policy_page"
+      }
+    ],
+    "status": "active",
+    "notes": "URL là nơi cần kiểm. Không có bằng chứng xác nhận hợp đồng API. Không nhập null thành false."
+  },
+  {
+    "id": "api.instagram.ab_create",
+    "kind": "api_contract",
+    "scope": {
+      "platforms": [
+        "instagram"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "platform": "instagram",
+      "name": "Tạo Test & Compare tiêu đề/thumbnail",
+      "capability": "ab_create",
+      "availability": null,
+      "api": null,
+      "summary": "Chưa xác minh hợp đồng hiện hành. Tài liệu developer trả 429; không kết luận API/manual/not possible.",
+      "endpoint": null,
+      "scopes": null,
+      "quotaCost": null,
+      "rateLimit": null,
+      "limits": null,
+      "apiSince": null,
+      "uiSince": null,
+      "verification": "unverified",
+      "uiAvailable": null
+    },
+    "evidence": [
+      {
+        "url": "https://developers.facebook.com/docs/instagram-platform/content-publishing/",
+        "checkedAt": "2026-11-12",
+        "type": "inference"
+      },
+      {
+        "url": "https://www.postman.com/meta/instagram/collection/6yqw8pt/instagram-api",
+        "checkedAt": "2026-11-12",
+        "type": "inference"
+      }
+    ],
+    "confidence": "low",
+    "volatility": "weekly",
+    "watch": [
+      {
+        "url": "https://developers.facebook.com/docs/instagram-platform/content-publishing/",
+        "kind": "policy_page"
+      }
+    ],
+    "status": "active",
+    "notes": "URL là nơi cần kiểm. Không có bằng chứng xác nhận hợp đồng API. Không nhập null thành false."
+  },
+  {
+    "id": "api.instagram.ab_results",
+    "kind": "api_contract",
+    "scope": {
+      "platforms": [
+        "instagram"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "platform": "instagram",
+      "name": "Đọc kết quả Test & Compare",
+      "capability": "ab_results",
+      "availability": null,
+      "api": null,
+      "summary": "Chưa xác minh hợp đồng hiện hành. Tài liệu developer trả 429; không kết luận API/manual/not possible.",
+      "endpoint": null,
+      "scopes": null,
+      "quotaCost": null,
+      "rateLimit": null,
+      "limits": null,
+      "apiSince": null,
+      "uiSince": null,
+      "verification": "unverified",
+      "uiAvailable": null
+    },
+    "evidence": [
+      {
+        "url": "https://developers.facebook.com/docs/instagram-platform/content-publishing/",
+        "checkedAt": "2026-11-12",
+        "type": "inference"
+      },
+      {
+        "url": "https://www.postman.com/meta/instagram/collection/6yqw8pt/instagram-api",
+        "checkedAt": "2026-11-12",
+        "type": "inference"
+      }
+    ],
+    "confidence": "low",
+    "volatility": "weekly",
+    "watch": [
+      {
+        "url": "https://developers.facebook.com/docs/instagram-platform/content-publishing/",
+        "kind": "policy_page"
+      }
+    ],
+    "status": "active",
+    "notes": "URL là nơi cần kiểm. Không có bằng chứng xác nhận hợp đồng API. Không nhập null thành false."
+  },
+  {
+    "id": "api.instagram.community_posts",
+    "kind": "api_contract",
+    "scope": {
+      "platforms": [
+        "instagram"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "platform": "instagram",
+      "name": "Bài cộng đồng / tính năng tương đương",
+      "capability": "community_posts",
+      "availability": null,
+      "api": null,
+      "summary": "Chưa xác minh hợp đồng hiện hành. Tài liệu developer trả 429; không kết luận API/manual/not possible.",
+      "endpoint": null,
+      "scopes": null,
+      "quotaCost": null,
+      "rateLimit": null,
+      "limits": null,
+      "apiSince": null,
+      "uiSince": null,
+      "verification": "unverified",
+      "uiAvailable": null
+    },
+    "evidence": [
+      {
+        "url": "https://developers.facebook.com/docs/instagram-platform/content-publishing/",
+        "checkedAt": "2026-11-12",
+        "type": "inference"
+      },
+      {
+        "url": "https://www.postman.com/meta/instagram/collection/6yqw8pt/instagram-api",
+        "checkedAt": "2026-11-12",
+        "type": "inference"
+      }
+    ],
+    "confidence": "low",
+    "volatility": "weekly",
+    "watch": [
+      {
+        "url": "https://developers.facebook.com/docs/instagram-platform/content-publishing/",
+        "kind": "policy_page"
+      }
+    ],
+    "status": "active",
+    "notes": "URL là nơi cần kiểm. Không có bằng chứng xác nhận hợp đồng API. Không nhập null thành false."
+  },
+  {
+    "id": "api.instagram.playlist_create",
+    "kind": "api_contract",
+    "scope": {
+      "platforms": [
+        "instagram"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "platform": "instagram",
+      "name": "Tạo playlist",
+      "capability": "playlist_create",
+      "availability": null,
+      "api": null,
+      "summary": "Chưa xác minh hợp đồng hiện hành. Tài liệu developer trả 429; không kết luận API/manual/not possible.",
+      "endpoint": null,
+      "scopes": null,
+      "quotaCost": null,
+      "rateLimit": null,
+      "limits": null,
+      "apiSince": null,
+      "uiSince": null,
+      "verification": "unverified",
+      "uiAvailable": null
+    },
+    "evidence": [
+      {
+        "url": "https://developers.facebook.com/docs/instagram-platform/content-publishing/",
+        "checkedAt": "2026-11-12",
+        "type": "inference"
+      },
+      {
+        "url": "https://www.postman.com/meta/instagram/collection/6yqw8pt/instagram-api",
+        "checkedAt": "2026-11-12",
+        "type": "inference"
+      }
+    ],
+    "confidence": "low",
+    "volatility": "weekly",
+    "watch": [
+      {
+        "url": "https://developers.facebook.com/docs/instagram-platform/content-publishing/",
+        "kind": "policy_page"
+      }
+    ],
+    "status": "active",
+    "notes": "URL là nơi cần kiểm. Không có bằng chứng xác nhận hợp đồng API. Không nhập null thành false."
+  },
+  {
+    "id": "api.instagram.playlist_add",
+    "kind": "api_contract",
+    "scope": {
+      "platforms": [
+        "instagram"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "platform": "instagram",
+      "name": "Thêm video vào playlist",
+      "capability": "playlist_add",
+      "availability": null,
+      "api": null,
+      "summary": "Chưa xác minh hợp đồng hiện hành. Tài liệu developer trả 429; không kết luận API/manual/not possible.",
+      "endpoint": null,
+      "scopes": null,
+      "quotaCost": null,
+      "rateLimit": null,
+      "limits": null,
+      "apiSince": null,
+      "uiSince": null,
+      "verification": "unverified",
+      "uiAvailable": null
+    },
+    "evidence": [
+      {
+        "url": "https://developers.facebook.com/docs/instagram-platform/content-publishing/",
+        "checkedAt": "2026-11-12",
+        "type": "inference"
+      },
+      {
+        "url": "https://www.postman.com/meta/instagram/collection/6yqw8pt/instagram-api",
+        "checkedAt": "2026-11-12",
+        "type": "inference"
+      }
+    ],
+    "confidence": "low",
+    "volatility": "weekly",
+    "watch": [
+      {
+        "url": "https://developers.facebook.com/docs/instagram-platform/content-publishing/",
+        "kind": "policy_page"
+      }
+    ],
+    "status": "active",
+    "notes": "URL là nơi cần kiểm. Không có bằng chứng xác nhận hợp đồng API. Không nhập null thành false."
+  },
+  {
+    "id": "api.instagram.playlist_order",
+    "kind": "api_contract",
+    "scope": {
+      "platforms": [
+        "instagram"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "platform": "instagram",
+      "name": "Đổi thứ tự playlist",
+      "capability": "playlist_order",
+      "availability": null,
+      "api": null,
+      "summary": "Chưa xác minh hợp đồng hiện hành. Tài liệu developer trả 429; không kết luận API/manual/not possible.",
+      "endpoint": null,
+      "scopes": null,
+      "quotaCost": null,
+      "rateLimit": null,
+      "limits": null,
+      "apiSince": null,
+      "uiSince": null,
+      "verification": "unverified",
+      "uiAvailable": null
+    },
+    "evidence": [
+      {
+        "url": "https://developers.facebook.com/docs/instagram-platform/content-publishing/",
+        "checkedAt": "2026-11-12",
+        "type": "inference"
+      },
+      {
+        "url": "https://www.postman.com/meta/instagram/collection/6yqw8pt/instagram-api",
+        "checkedAt": "2026-11-12",
+        "type": "inference"
+      }
+    ],
+    "confidence": "low",
+    "volatility": "weekly",
+    "watch": [
+      {
+        "url": "https://developers.facebook.com/docs/instagram-platform/content-publishing/",
+        "kind": "policy_page"
+      }
+    ],
+    "status": "active",
+    "notes": "URL là nơi cần kiểm. Không có bằng chứng xác nhận hợp đồng API. Không nhập null thành false."
+  },
+  {
+    "id": "api.instagram.multi_audio",
+    "kind": "api_contract",
+    "scope": {
+      "platforms": [
+        "instagram"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "platform": "instagram",
+      "name": "Thêm track audio đa ngôn ngữ",
+      "capability": "multi_audio",
+      "availability": null,
+      "api": null,
+      "summary": "Meta AI dubbing là tính năng giao diện. Không chứng minh app OAuth tải track audio riêng hoặc điều khiển dubbing được.",
+      "endpoint": null,
+      "scopes": null,
+      "quotaCost": null,
+      "rateLimit": null,
+      "limits": null,
+      "apiSince": null,
+      "uiSince": null,
+      "verification": "unverified",
+      "uiAvailable": true
+    },
+    "evidence": [
+      {
+        "url": "https://about.fb.com/news/2025/10/discover-reels-around-world-meta-ai-translation/",
+        "checkedAt": "2026-11-12",
+        "type": "inference",
+        "sourceUpdatedAt": "2026-07-14"
+      },
+      {
+        "url": "https://developers.facebook.com/docs/instagram-platform/content-publishing/",
+        "checkedAt": "2026-11-12",
+        "type": "inference"
+      }
+    ],
+    "confidence": "low",
+    "volatility": "weekly",
+    "watch": [
+      {
+        "url": "https://about.fb.com/news/2025/10/discover-reels-around-world-meta-ai-translation/",
+        "kind": "policy_page"
+      }
+    ],
+    "status": "active",
+    "notes": "URL là nơi cần kiểm. Không có bằng chứng xác nhận hợp đồng API. Không nhập null thành false."
+  },
+  {
+    "id": "api.instagram.localized_metadata",
+    "kind": "api_contract",
+    "scope": {
+      "platforms": [
+        "instagram"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "platform": "instagram",
+      "name": "Tiêu đề/mô tả theo locale",
+      "capability": "localized_metadata",
+      "availability": null,
+      "api": null,
+      "summary": "Chưa xác minh hợp đồng hiện hành. Tài liệu developer trả 429; không kết luận API/manual/not possible.",
+      "endpoint": null,
+      "scopes": null,
+      "quotaCost": null,
+      "rateLimit": null,
+      "limits": null,
+      "apiSince": null,
+      "uiSince": null,
+      "verification": "unverified",
+      "uiAvailable": null
+    },
+    "evidence": [
+      {
+        "url": "https://www.postman.com/meta/instagram/collection/6yqw8pt/instagram-api",
+        "checkedAt": "2026-11-12",
+        "type": "inference"
+      },
+      {
+        "url": "https://developers.facebook.com/docs/instagram-platform/content-publishing/",
+        "checkedAt": "2026-11-12",
+        "type": "inference"
+      }
+    ],
+    "confidence": "low",
+    "volatility": "weekly",
+    "watch": [
+      {
+        "url": "https://www.postman.com/meta/instagram/collection/6yqw8pt/instagram-api",
+        "kind": "policy_page"
+      }
+    ],
+    "status": "active",
+    "notes": "URL là nơi cần kiểm. Không có bằng chứng xác nhận hợp đồng API. Không nhập null thành false."
+  }
+]

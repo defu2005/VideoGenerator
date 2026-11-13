@@ -11,6 +11,7 @@ import type {
   Publication,
 } from "@vg/shared";
 import { buildApp } from "../src/app.js";
+import { testActor } from "./testActor.js";
 import { parseConfig, type AppConfig } from "../src/lib/config.js";
 import { listAutomationLogSync } from "../src/services/automationService.js";
 import { updateTopicProductionSync } from "../src/services/topicService.js";
@@ -44,7 +45,7 @@ beforeEach(() => {
     DATA_DIR: dataDir,
     DATABASE_PATH: join(dataDir, "app.db"),
   };
-  app = buildApp({ config });
+  app = buildApp({ testActor,  config });
 });
 
 afterEach(async () => {
@@ -186,7 +187,7 @@ describe("topic queue + suggest", () => {
     expect(response.json<{ items: ProfileTopic[] }>().items.every((item) => item.status === "APPROVED")).toBe(true);
   });
 
-  it("dedupes against past topics", async () => {
+  it("keeps a past topic visible with an already-queued flag", async () => {
     const profile = await createProfile();
     await addTopic(profile.id, "Ai Cập — góc 1 (Kênh lịch sử ngắn 5 phút)");
     const response = await app.inject({
@@ -196,8 +197,8 @@ describe("topic queue + suggest", () => {
     });
     expect(response.statusCode).toBe(200);
     const body = response.json<{ items: ProfileTopic[]; rejectedDuplicates: number }>();
-    expect(body.rejectedDuplicates).toBeGreaterThan(0);
-    expect(body.items.some((item) => item.topic.includes("góc 1"))).toBe(false);
+    expect(body.rejectedDuplicates).toBe(0);
+    expect(body.items.find((item) => item.topic.includes("góc 1"))?.notes).toContain("đã xếp hàng");
   });
 
   it("approves topics in bulk", async () => {

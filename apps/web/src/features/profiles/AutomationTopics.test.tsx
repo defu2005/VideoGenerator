@@ -13,6 +13,7 @@ const profile: ProfileDetail = {
   description: "",
   direction: "Lịch sử",
   language: "vi",
+  market: null,
   defaultBrief: {
     budget: { mode: "ECO" },
     platform: "youtube",

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { MarketCodeSchema } from "../markets/schema.js";
 import { AutonomyModeSchema } from "../enums.js";
 import { GuidelineSettingsInputSchema, GuidelineSettingsSchema } from "../guidelines/schema.js";
 import {
@@ -108,6 +109,7 @@ export const PlatformAccountSchema = z.object({
   enabled: z.boolean(),
   connection: AccountConnectionSchema,
   connectionError: z.string().nullable(),
+  marketWarning: z.string().nullable().optional(),
   lastCheckedAt: z.string().datetime({ offset: true }).nullable().optional(),
   publishSettings: PublishSettingsSchema,
   createdAt: z.string().datetime({ offset: true }),
@@ -142,6 +144,7 @@ export const ProfileSchema = z.object({
   description: z.string().max(2000),
   direction: z.string().max(8000),
   language: z.string(),
+  market: MarketCodeSchema.nullable().default(null),
   defaultBrief: ProfileDefaultBriefSchema,
   voice: VoiceSettingsSchema.nullable(),
   guidelines: GuidelineSettingsSchema,
@@ -208,6 +211,7 @@ export const ProfileInputSchema = z.object({
   description: z.string().max(2000).optional(),
   direction: z.string().max(8000).optional(),
   language: z.string().optional(),
+  market: MarketCodeSchema.nullable().optional(),
   defaultBrief: ProfileDefaultBriefInputSchema.optional(),
   voice: VoiceSettingsSchema.nullable().optional(),
   guidelines: GuidelineSettingsInputSchema.optional(),
@@ -225,6 +229,7 @@ export const ProfileUpdateSchema = z.object({
   description: z.string().max(2000).optional(),
   direction: z.string().max(8000).optional(),
   language: z.string().optional(),
+  market: MarketCodeSchema.nullable().optional(),
   defaultBrief: ProfileDefaultBriefInputSchema.optional(),
   voice: VoiceSettingsSchema.nullable().optional(),
   guidelines: GuidelineSettingsInputSchema.optional(),

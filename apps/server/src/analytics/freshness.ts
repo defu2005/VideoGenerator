@@ -22,6 +22,9 @@ export function isDue(
   now: Date,
 ): boolean {
   if (!lastSyncedAt) return true;
+  // D4 needs one real observation at 48 h before the normal cadence slows to 12 h.
+  const at48h = publishedAt.getTime() + 48 * HOUR;
+  if (now.getTime() >= at48h && now.getTime() <= at48h + 2 * HOUR && lastSyncedAt.getTime() < at48h) return true;
   const elapsed = now.getTime() - lastSyncedAt.getTime();
   return elapsed >= syncIntervalMs(publishedAt, now);
 }

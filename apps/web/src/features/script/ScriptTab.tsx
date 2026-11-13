@@ -1,9 +1,11 @@
+import { KnowledgeUsesPanel } from "../profiles/KnowledgeUsesPanel";
 import { useEffect, useRef, useState } from "react";
 import { resolveBudget, STAGE_ORDER, type Job, type Project, type Script } from "@vg/shared";
 import { usePipeline } from "../../hooks/usePipeline";
 import { useScript } from "../../hooks/useScript";
 import { getProjectJobs } from "../../services/pipelineApi";
 import { useQuery } from "@tanstack/react-query";
+import { guardDirtyNavigation, useConfirm } from "../../components/useConfirm";
 import { Spinner } from "../../components/Spinner";
 import { ErrorState } from "../../components/ErrorState";
 import { ApiRequestError } from "../../services/apiClient";
@@ -45,6 +47,7 @@ export function ScriptTab({ project }: { project: Project }) {
   const [copyStatus, setCopyStatus] = useState("");
   const dirtyRef = useRef(dirty);
   dirtyRef.current = dirty;
+  const { ask, dialog: leaveDialog } = useConfirm();
 
   useEffect(() => {
     const beforeUnload = (event: BeforeUnloadEvent) => {
@@ -53,13 +56,12 @@ export function ScriptTab({ project }: { project: Project }) {
       event.returnValue = "";
     };
     const confirmNavigation = (event: MouseEvent) => {
-      if (!dirtyRef.current || !(event.target instanceof Element)) return;
-      const link = event.target.closest("a[href]") as HTMLAnchorElement | null;
-      if (!link || link.origin !== window.location.origin || link.pathname === window.location.pathname) return;
-      if (!window.confirm("You have unsaved script changes. Leave without saving?")) {
-        event.preventDefault();
-        event.stopPropagation();
-      }
+      guardDirtyNavigation(event, dirtyRef.current, ask, {
+        title: "Bỏ thay đổi chưa lưu?",
+        message: "Kịch bản đang sửa sẽ mất nếu bạn rời trang.",
+        confirmLabel: "Rời trang",
+        cancelLabel: "Ở lại",
+      });
     };
     window.addEventListener("beforeunload", beforeUnload);
     document.addEventListener("click", confirmNavigation, true);
@@ -67,9 +69,9 @@ export function ScriptTab({ project }: { project: Project }) {
       window.removeEventListener("beforeunload", beforeUnload);
       document.removeEventListener("click", confirmNavigation, true);
     };
-  }, []);
+  }, [ask]);
 
-  if (scriptQuery.isPending || pipeline.isPending) return <Spinner label="Loading script workspace" />;
+  if (scriptQuery.isPending || pipeline.isPending) return <Spinner label="Đang tải kịch bản" />;
   if (scriptQuery.isError) return <ErrorState message={scriptQuery.error instanceof Error ? scriptQuery.error.message : "Unable to load script"} onRetry={() => void scriptQuery.refetch()} />;
   if (pipeline.isError) return <ErrorState message={pipeline.error instanceof Error ? pipeline.error.message : "Unable to load pipeline"} onRetry={() => void pipeline.refetch()} />;
 
@@ -120,6 +122,22 @@ export function ScriptTab({ project }: { project: Project }) {
   return (
     <div className="script-workspace">
       <ResearchPanel research={data.research} />
+      <KnowledgeUsesPanel projectId={project.id} tasks={["research"]} />
+      <KnowledgeUsesPanel projectId={project.id} tasks={["script","scriptReview","factCheck","guidelineCheck"]} />
+      {project.settings.treatment && (
+        <section className="panel" aria-label="Bản đề xuất">
+          <p className="eyebrow">BẢN ĐỀ XUẤT</p>
+          <h2>{project.settings.treatment.title}</h2>
+          <p>{project.settings.treatment.formatNameVi} · {project.settings.treatment.angle}</p>
+          <ol>
+            {project.settings.treatment.sections.map((section) => (
+              <li key={section.key}>{section.nameVi} · {section.estSec} giây</li>
+            ))}
+          </ol>
+          <p>{project.settings.treatment.estimatedSceneCount} cảnh · {project.settings.treatment.estimatedDurationSec} giây · {project.settings.treatment.renderNoteVi}</p>
+          <p>Ước tính phần còn lại: {project.settings.treatment.cost.inputTokens} token vào, {project.settings.treatment.cost.outputTokens} token ra, {project.settings.treatment.cost.ttsCharacters} ký tự đọc{project.settings.treatment.cost.usd === null ? "" : `, khoảng $${project.settings.treatment.cost.usd.toFixed(2)}`}. Chi phí thật nằm ở tab Token.</p>
+        </section>
+      )}
       {showClaudeHint && (
         <section className="panel claude-desktop-hint">
           <div>
@@ -202,6 +220,7 @@ export function ScriptTab({ project }: { project: Project }) {
       </section>
       {researchRecord?.state === "FAILED" && <p className="request-error">Research failed: {researchRecord.error?.message}</p>}
       {scriptRecord?.state === "FAILED" && <p className="request-error">Script failed: {scriptRecord.error?.message}</p>}
+      {leaveDialog}
     </div>
   );
 }

@@ -1,4 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { ToastProvider } from "../components/ui/Toast";
 import { render } from "@testing-library/react";
 import { MemoryRouter, useLocation } from "react-router-dom";
 import type { ReactNode } from "react";
@@ -17,10 +18,12 @@ export function renderWithProviders(
   });
   return render(
     <QueryClientProvider client={queryClient}>
-      <MemoryRouter initialEntries={initialEntries}>
-        {element}
-        <LocationOutput />
-      </MemoryRouter>
+      <ToastProvider>
+        <MemoryRouter initialEntries={initialEntries}>
+          {element}
+          <LocationOutput />
+        </MemoryRouter>
+      </ToastProvider>
     </QueryClientProvider>,
   );
 }

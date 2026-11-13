@@ -15,6 +15,7 @@ import {
 } from "vitest";
 import type { Project } from "@vg/shared";
 import { buildApp } from "../src/app.js";
+import { testActor } from "./testActor.js";
 import {
   ALWAYS_CONFIRM_TOOLS,
   ASSISTANT_TOOLS,
@@ -101,7 +102,7 @@ beforeEach(() => {
     DATA_DIR: dataDir,
     DATABASE_PATH: join(dataDir, "app.db"),
   };
-  app = buildApp({ config });
+  app = buildApp({ testActor,  config });
 });
 
 afterEach(async () => {
@@ -165,6 +166,31 @@ async function configureTelegram(chatId: string) {
 }
 
 describe("assistant API — mock LLM loop", () => {
+  it("writes assistant usage into jobs and the app usage page", async () => {
+    setAssistantChatScript([{ reply: "Xin chào", done: true }]);
+    const conversationId = await createConversation();
+    const sent = await sendAssistantMessage(conversationId, "Chào");
+    expect(sent.statusCode).toBe(200);
+    const row = sqlite().prepare(
+      "SELECT project_id, stage, status, usage FROM jobs WHERE stage = 'ASSISTANT'",
+    ).get() as { project_id: string | null; stage: string; status: string; usage: string } | undefined;
+    expect(row?.project_id).toBeNull();
+    expect(row?.status).toBe("SUCCEEDED");
+    const usage = JSON.parse(row!.usage) as { inputTokens: number; calls?: Array<{ task: string }> };
+    expect(usage.inputTokens).toBeGreaterThan(0);
+    expect(usage.calls?.[0]?.task).toBe("assistantChat");
+    const page = await app.inject({ method: "GET", url: "/api/usage?groupBy=project" });
+    expect(page.statusCode).toBe(200);
+    const body = page.json<{
+      totals: { inputTokens: number };
+      byGroup: Array<{ key: string; label: string }>;
+      topProjects: Array<{ projectId: string }>;
+    }>();
+    expect(body.totals.inputTokens).toBeGreaterThan(0);
+    expect(body.byGroup.some((group) => group.key === "assistant" && group.label === "Trợ lý")).toBe(true);
+    expect(body.topProjects).toHaveLength(0);
+  });
+
   it("read tool result feeds the next step and final reply arrives", async () => {
     setAssistantChatScript([
       {
@@ -448,7 +474,9 @@ describe("assistant API — mock LLM loop", () => {
     }
     for (const name of Object.keys(ASSISTANT_TOOLS)) {
       expect(name).not.toMatch(secretPattern);
-      expect(ALWAYS_CONFIRM_TOOLS.has(name)).toBe(name === "delete_project" || name === "delete_topic");
+      expect(ALWAYS_CONFIRM_TOOLS.has(name)).toBe(
+        ["delete_project", "delete_topic", "propose_knowledge_change", "import_knowledge", "resolve_change_event", "report_change"].includes(name),
+      );
     }
     expect(catalog.length).toBeGreaterThan(10);
   });
@@ -457,7 +485,8 @@ describe("assistant API — mock LLM loop", () => {
     const catalog = getToolCatalogForPrompt();
     const text = JSON.stringify(catalog);
     expect(text).not.toContain("$schema");
-    expect(text.length).toBeLessThan(12_000);
+    // Grows with each new tool; the guard is mainly against $schema bloat.
+    expect(text.length).toBeLessThan(30_000);
     const deleteProject = catalog.find((entry) => entry.name === "delete_project");
     expect(deleteProject?.args).toHaveProperty("projectId", "string");
   });

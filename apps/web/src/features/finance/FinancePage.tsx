@@ -298,7 +298,7 @@ export function FinancePage() {
             Từ ngày
             <input
               type="date"
-              aria-label="Period start"
+              aria-label="Ngày bắt đầu"
               value={revForm.periodStart}
               onChange={(e) => setRevForm({ ...revForm, periodStart: e.target.value })}
             />
@@ -307,7 +307,7 @@ export function FinancePage() {
             Đến ngày
             <input
               type="date"
-              aria-label="Period end"
+              aria-label="Ngày kết thúc"
               value={revForm.periodEnd}
               onChange={(e) => setRevForm({ ...revForm, periodEnd: e.target.value })}
             />
@@ -454,42 +454,64 @@ export function FinancePage() {
 
       <section className="card" style={{ marginTop: 24 }}>
         <h2>YouTube doanh thu (API)</h2>
-        {(youtubeQuery.data?.items ?? []).length === 0 && <p>Chưa có tài khoản YouTube.</p>}
-        <ul>
-          {(youtubeQuery.data?.items ?? []).map((a) => (
-            <li key={a.accountId}>
-              {a.displayName}
-              {" — "}
-              {a.revenueSyncEnabled ? (a.revenueStatus ?? "ok") : "tắt"}
-              {a.revenueStatus === "not_monetized" && " · Kênh chưa bật kiếm tiền"}
-              {a.revenueStatus === "needs_reconnect" && (
-                <>
-                  {" · "}
-                  <a href={oauthStartUrl(a.platform, a.accountId)}>Kết nối lại để bật thống kê doanh thu</a>
-                </>
-              )}
-              <button
-                type="button"
-                style={{ marginLeft: 8 }}
-                onClick={() => ytEnableMut.mutate({ id: a.accountId, enabled: !a.revenueSyncEnabled })}
-              >
-                {a.revenueSyncEnabled ? "Tắt" : "Bật thống kê doanh thu YouTube"}
-              </button>
-            </li>
-          ))}
-        </ul>
+        {(youtubeQuery.data?.items ?? []).length === 0 ? (
+          <p className="ui-field-hint">Chưa có tài khoản YouTube.</p>
+        ) : (
+          <ul className="finance-sync-list">
+            {(youtubeQuery.data?.items ?? []).map((a) => (
+              <li key={a.accountId} className="finance-sync-row">
+                <div className="finance-sync-info">
+                  <div className="finance-sync-title">
+                    <strong>{a.displayName}</strong>
+                    <span className={`status-badge ${a.revenueSyncEnabled ? "status-published" : ""}`}>
+                      {a.revenueSyncEnabled ? (a.revenueStatus ?? "Đang bật") : "Đã tắt"}
+                    </span>
+                  </div>
+                  {a.revenueStatus === "not_monetized" && (
+                    <span className="finance-sync-subnote">Kênh chưa bật kiếm tiền</span>
+                  )}
+                  {a.revenueStatus === "needs_reconnect" && (
+                    <a className="finance-sync-link" href={oauthStartUrl(a.platform, a.accountId)}>
+                      Kết nối lại để bật thống kê doanh thu
+                    </a>
+                  )}
+                </div>
+                <div className="finance-sync-actions">
+                  <button
+                    type="button"
+                    className={`button ${a.revenueSyncEnabled ? "button-secondary" : "button-primary"} button-sm`}
+                    onClick={() => ytEnableMut.mutate({ id: a.accountId, enabled: !a.revenueSyncEnabled })}
+                  >
+                    {a.revenueSyncEnabled ? "Tắt" : "Bật thống kê doanh thu YouTube"}
+                  </button>
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
       </section>
 
       <section className="card" style={{ marginTop: 24 }}>
         <h2>Ngưỡng rút tiền</h2>
-        <ul>
-          {(payoutQuery.data?.items ?? []).map((t) => (
-            <li key={t.accountId}>
-              {t.displayName}: ngưỡng {formatMoney(t.thresholdAmount, t.currency)}
-              {t.currentBalance != null ? ` · số dư ${formatMoney(t.currentBalance, t.currency)}` : ""}
-            </li>
-          ))}
-        </ul>
+        {(payoutQuery.data?.items ?? []).length === 0 ? (
+          <p className="ui-field-hint">Chưa có ngưỡng rút tiền nào.</p>
+        ) : (
+          <ul className="finance-sync-list" style={{ marginBottom: 16 }}>
+            {(payoutQuery.data?.items ?? []).map((t) => (
+              <li key={t.accountId} className="finance-sync-row">
+                <div className="finance-sync-info">
+                  <strong>{t.displayName}</strong>
+                  {t.currentBalance != null && (
+                    <span className="finance-sync-subnote">Số dư: {formatMoney(t.currentBalance, t.currency)}</span>
+                  )}
+                </div>
+                <div className="finance-sync-actions">
+                  <span className="status-badge">Ngưỡng: {formatMoney(t.thresholdAmount, t.currency)}</span>
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
         <form
           onSubmit={(e) => {
             e.preventDefault();
@@ -528,15 +550,27 @@ export function FinancePage() {
 
       <section className="card" style={{ marginTop: 24 }}>
         <h2>Báo cáo tháng</h2>
-        <ul>
-          {(reportsQuery.data?.items ?? []).map((r) => (
-            <li key={r.month}>
-              <button type="button" onClick={() => setReportMonth(r.month)}>{r.month}</button>
-              {" · "}
-              <button type="button" onClick={() => regenMut.mutate(r.month)}>Tạo lại</button>
-            </li>
-          ))}
-        </ul>
+        {(reportsQuery.data?.items ?? []).length === 0 ? (
+          <p className="ui-field-hint">Chưa có báo cáo tháng nào.</p>
+        ) : (
+          <ul className="finance-sync-list" style={{ marginBottom: 16 }}>
+            {(reportsQuery.data?.items ?? []).map((r) => (
+              <li key={r.month} className="finance-sync-row">
+                <div className="finance-sync-info">
+                  <strong>Tháng {r.month}</strong>
+                </div>
+                <div className="finance-sync-actions">
+                  <button type="button" className="button button-secondary button-sm" onClick={() => setReportMonth(r.month)}>
+                    {r.month}
+                  </button>
+                  <button type="button" className="button button-secondary button-sm" onClick={() => regenMut.mutate(r.month)}>
+                    Tạo lại
+                  </button>
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
         <label>
           Tháng (YYYY-MM)
           <input

@@ -11,6 +11,17 @@ export function redactOperatorText(text: string): string {
   out = out.replace(/\boma_[A-Za-z0-9]+\b/g, "[redacted]");
   out = out.replace(/Bearer\s+[A-Za-z0-9._~+/-]+=*/gi, "Bearer [redacted]");
   out = out.replace(/bot\d+:[A-Za-z0-9_-]+/g, "[redacted]");
-  out = out.replace(/\b(api[_-]?key|token|secret|password)\b\s*[:=]\s*\S+/gi, "$1=[redacted]");
+  out = out.replace(/\b(api[_-]?key|token|secret|password|cookie|set-cookie|session[_-]?id)\b\s*[:=]\s*\S+/gi, "$1=[redacted]");
+  return out;
+}
+
+/** Export redaction. Emails are removed entirely so a later secret scan does not see a raw address. */
+export function redactExportText(text: string): string {
+  let out = redactOperatorText(text.replace(
+    /("(?:api[_-]?key|token|secret|password|cookie|authorization)"\s*:\s*)"(?:[^"\\]|\\.)*"/gi,
+    '$1"[redacted]"',
+  ));
+  out = out.replace(/[A-Za-z0-9*][A-Za-z0-9.*_%+-]*@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g, "[email]");
+  out = out.replace(/Bearer\s+\[redacted\]/gi, "[redacted]");
   return out;
 }

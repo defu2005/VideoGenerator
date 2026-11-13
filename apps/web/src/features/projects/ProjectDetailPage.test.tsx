@@ -136,7 +136,8 @@ describe("ProjectDetailPage", () => {
     expect(await screen.findByText("WAITING USER")).toBeInTheDocument();
     expect(screen.getAllByText("VISUAL REVIEW")).toHaveLength(2);
     expect(screen.getByRole("heading", { name: "Production stages" })).toBeInTheDocument();
-    expect(await screen.findByText("Ước tính: ~8–14 lượt gọi AI (BALANCED)")).toBeInTheDocument();
+    expect(await screen.findByText("Ước tính: ~11–17 lượt gọi AI (BALANCED)")).toBeInTheDocument();
+    expect(screen.getByText("Giải thích. Mặc định là mẫu giải thích.")).toBeInTheDocument();
   });
 
   it("renders token totals, stage-specific tasks, runs, and the budget comparison", async () => {
@@ -182,6 +183,7 @@ describe("ProjectDetailPage", () => {
           ok: false,
           tokensUnknown: false,
           costUsd: 0.01,
+          characters: 80,
         }],
       }],
     };
@@ -210,6 +212,7 @@ describe("ProjectDetailPage", () => {
       if (url.endsWith("/budget-estimate")) return jsonResponse({
         mode: "BALANCED",
         features: {
+          knowledgeContext: 1500, knowledgeEmbeddings: true,
           storyMode: "separate",
           repairAttempts: 1,
           scriptReview: true,
@@ -238,17 +241,45 @@ describe("ProjectDetailPage", () => {
           commentAssist: true,
           trendMatch: true,
           translateScript: true,
+          providerIntelExtract: true,
+          editPlan: true,
+          formatPick: true,
+          stageTimeouts: true,
+          operatorPlan: true,
+          operatorClassify: true,
           outputHeadroom: 1.5,
+          composeGraphics: "static",
+          graphicGrain: false,
         },
         perStage: [],
         total: { min: 2, max: 5 },
       });
-      return jsonResponse(project);
+      return jsonResponse({
+        ...project,
+        settings: {
+          ...project.settings,
+          treatment: {
+            title: "Ocean",
+            formatId: "explainer",
+            formatNameVi: "Giải thích",
+            angle: "Hook",
+            sections: [],
+            estimatedSceneCount: 4,
+            estimatedDurationSec: 60,
+            cost: { inputTokens: 1000, outputTokens: 200, ttsCharacters: 400, usd: null },
+            estimatedRenderSec: null,
+            renderNoteVi: "chưa có dữ liệu",
+          },
+        },
+      });
     }));
     renderDetail(`/projects/${project.id}/usage`);
     expect(await screen.findByRole("link", { name: "Token" })).toHaveAttribute("href", `/projects/${project.id}/usage`);
     expect((await screen.findAllByText("12.3K")).length).toBeGreaterThan(0);
     expect(await screen.findByText("Đã dùng 1 lượt; các bước chưa chạy ước tính thêm ~2–5 lượt.")).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "Ước tính vs thực tế" })).toBeInTheDocument();
+    expect(screen.getByText(/1\.000 token vào, 200 token ra, 400 ký tự đọc/)).toBeInTheDocument();
+    expect(screen.getByText(/80 ký tự đọc/)).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: /VISUAL SEARCH/ }));
     expect(await screen.findByText(/visualRerank: 1 lượt/)).toBeInTheDocument();
     expect(screen.getByText(/claude-cli\/sonnet/)).toBeInTheDocument();

@@ -1,10 +1,13 @@
 import { createHash } from "node:crypto";
+import { recheckOriginalitySafely } from "../originality/recheckSafely.js";
 import { existsSync } from "node:fs";
 import { isAbsolute, join } from "node:path";
 import type Database from "better-sqlite3";
 import {
   buildTimeline,
   defaultMaxCharsPerLine,
+  fallbackGraphics,
+  resolveFormat,
   TimelineSchema,
   TIMELINE_FORMAT_VERSION,
   VOICE_TAIL_SEC,
@@ -20,6 +23,7 @@ import type { AppConfig } from "../lib/config.js";
 import { StageError } from "../pipeline/stageExecutor.js";
 import { writeSubtitleFiles } from "../stages/subtitle/subtitleExecutor.js";
 import { projectDir } from "../storage/paths.js";
+import { rememberTimelineSnapshot, undoTimelineSnapshot, type SnapshotSource } from "../timeline/snapshots.js";
 
 const READY_STATUSES = new Set(["APPROVED", "CUSTOM", "AI_GENERATED"]);
 
@@ -31,6 +35,7 @@ type SceneRow = {
   no_visual: number;
   est_duration_sec: number;
   duration_override_sec: number | null;
+  section_id: string | null;
 };
 type VoiceRow = { id: string; scene_id: string; audio_path: string; duration_sec: number; input_hash: string };
 type VisualRow = {
@@ -44,6 +49,7 @@ type VisualRow = {
   actual_width: number | null;
   actual_height: number | null;
   license: string;
+  score_breakdown: string | null;
 };
 type MusicRow = {
   status: string;
@@ -59,6 +65,16 @@ type MusicRow = {
   license: string | null;
 };
 type TimelineRow = { project_id: string; data: string; input_hash: string; total_duration_sec: number; updated_at: string };
+
+function commentaryStill(raw: string | null): boolean {
+  if (!raw) return false;
+  try {
+    const parsed = typeof raw === "string" ? JSON.parse(raw) as { usage?: string } : raw;
+    return parsed?.usage === "commentary";
+  } catch {
+    return false;
+  }
+}
 
 function licenseKindOf(raw: string | null): LicenseKind | null {
   if (!raw) return null;
@@ -99,7 +115,7 @@ export class TimelineService {
   /** Reads scenes, voice, visuals and music from the DB into the pure builder input. */
   collectInput(project: Project): { input: TimelineBuildInput; cues: SubtitleCue[] | null } {
     const scenes = this.sqlite.prepare(
-      "SELECT id, \"order\", label, narration, no_visual, est_duration_sec, duration_override_sec FROM scenes WHERE project_id = ? ORDER BY \"order\" ASC",
+      "SELECT id, \"order\", label, narration, no_visual, est_duration_sec, duration_override_sec, section_id FROM scenes WHERE project_id = ? ORDER BY \"order\" ASC",
     ).all(project.id) as SceneRow[];
     if (!scenes.length) throw new StageError("Chưa có cảnh nào — chạy bước Chia cảnh trước.", "TIMELINE_NO_SCENES", false);
 
@@ -108,7 +124,7 @@ export class TimelineService {
     ).all(project.id) as VoiceRow[]).map((row) => [row.scene_id, row]));
     const visuals = this.sqlite.prepare(`
       SELECT s.scene_id, s.slot, s.status, s.motion, s.candidate_id,
-        c.local_path, c.sha256, c.actual_width, c.actual_height, c.license
+        c.local_path, c.sha256, c.actual_width, c.actual_height, c.license, c.score_breakdown
       FROM visual_selections s JOIN visual_candidates c ON c.id = s.candidate_id
       WHERE s.project_id = ? ORDER BY s.scene_id, s.slot ASC
     `).all(project.id) as VisualRow[];
@@ -142,6 +158,7 @@ export class TimelineService {
             && this.fileExists(project.id, row.local_path),
           licenseKind: licenseKindOf(row.license),
           motion: parseMotion(row.motion),
+          commentary: commentaryStill(row.score_breakdown),
         })),
       };
     });
@@ -196,9 +213,21 @@ export class TimelineService {
     const maxCharsPerLine = Number(project.settings.subtitles?.maxCharsPerLine) > 0
       ? Number(project.settings.subtitles?.maxCharsPerLine)
       : defaultMaxCharsPerLine(aspectRatio);
+    const editPreset = project.settings.format
+      ? resolveFormat({
+        topic: project.topic,
+        aspectRatio,
+        targetDurationSec: project.settings.targetDurationSec,
+        format: project.settings.format,
+      }).recipe.edit.preset
+      : undefined;
     const inputHash = createHash("sha256").update(JSON.stringify({
       formatVersion: TIMELINE_FORMAT_VERSION,
       input,
+      editPreset: editPreset ?? null,
+      motionGraphics: project.settings.motionGraphics?.enabled === true,
+      subtitleFont: project.settings.edit?.fontSize ?? null,
+      subtitleHighlight: project.settings.edit?.highlightColor ?? null,
       cues: cues?.map((cue) => [cue.sceneId, cue.startSec, cue.endSec, cue.text]) ?? null,
       maxCharsPerLine,
     })).digest("hex");
@@ -208,20 +237,53 @@ export class TimelineService {
       const parsed = TimelineSchema.safeParse(JSON.parse(existing.data));
       const filesOk = parsed.success
         && (!parsed.data.subtitles || (existsSync(parsed.data.subtitles.srtPath) && existsSync(parsed.data.subtitles.assPath)));
-      if (parsed.success && filesOk) return { timeline: parsed.data, inputHash, reused: true };
+      if (parsed.success && filesOk) {
+        recheckOriginalitySafely(this.sqlite, project.id);
+        return { timeline: parsed.data, inputHash, reused: true };
+      }
     }
 
-    const { voiceOffsets, ...built } = buildTimeline(input);
+    const { voiceOffsets, ...built } = buildTimeline({ ...input, ...(editPreset ? { editPreset } : {}) });
     let subtitles: Timeline["subtitles"] = null;
     if (cues) {
       // Voice-relative cues → video clock, using real scene offsets (silent scenes included).
       const durations = new Map(built.scenes.filter((scene) => scene.voice)
         .map((scene) => [scene.sceneId, scene.voice!.durationSec + VOICE_TAIL_SEC]));
       const placed = cues.filter((cue) => cue.sceneId && voiceOffsets[cue.sceneId] !== undefined);
-      const paths = writeSubtitleFiles(join(this.dir(project.id), "timeline"), placed, voiceOffsets, aspectRatio, maxCharsPerLine, durations);
+      const paths = writeSubtitleFiles(join(this.dir(project.id), "timeline"), placed, voiceOffsets, aspectRatio, maxCharsPerLine, durations, {
+        ...(project.settings.edit?.fontSize ? { fontSize: project.settings.edit.fontSize } : {}),
+        ...(project.settings.edit?.highlightColor ? { highlightColor: project.settings.edit.highlightColor } : {}),
+      });
       subtitles = { ...paths, cueCount: placed.length };
     }
-    const timeline = TimelineSchema.parse({ ...built, subtitles });
+    const motionOn = project.settings.motionGraphics?.enabled === true;
+    const recipe = resolveFormat({
+      topic: project.topic,
+      aspectRatio,
+      targetDurationSec: project.settings.targetDurationSec,
+      format: project.settings.format,
+    }).recipe;
+    const keys = this.sceneSectionKeys(project.id);
+    const graphics = motionOn
+      ? fallbackGraphics({
+        title: project.title,
+        aspect: aspectRatio,
+        totalDurationSec: built.totalDurationSec,
+        preset: editPreset ?? recipe.edit.preset,
+        settings: project.settings.motionGraphics,
+        recipe,
+        scenes: built.scenes.map((scene, index) => ({
+          sceneId: scene.sceneId,
+          startSec: scene.startSec,
+          durationSec: scene.durationSec,
+          label: scene.label,
+          narration: keys.narration.get(scene.sceneId),
+          hook: index === 0,
+          sectionKey: keys.sectionKey.get(scene.sceneId),
+        })),
+      })
+      : undefined;
+    const timeline = TimelineSchema.parse({ ...built, subtitles, ...(graphics ? { graphics } : {}) });
 
     const now = this.now().toISOString();
     this.sqlite.prepare(`
@@ -231,7 +293,28 @@ export class TimelineService {
         total_duration_sec = excluded.total_duration_sec, updated_at = excluded.updated_at
     `).run(project.id, JSON.stringify(timeline), inputHash, timeline.totalDurationSec, now, now);
     this.sqlite.prepare("UPDATE projects SET duration_sec = ? WHERE id = ?").run(Math.round(timeline.totalDurationSec), project.id);
+    recheckOriginalitySafely(this.sqlite, project.id);
     return { timeline, inputHash, reused: false };
+  }
+
+  private sceneSectionKeys(projectId: string): { sectionKey: Map<string, string>; narration: Map<string, string> } {
+    const script = this.sqlite.prepare("SELECT data FROM scripts WHERE project_id = ?").get(projectId) as { data: string } | undefined;
+    const bySection = new Map<string, string>();
+    if (script) {
+      const parsed = JSON.parse(script.data) as { sections?: Array<{ id?: string; sectionKey?: string }> };
+      for (const section of parsed.sections ?? []) {
+        if (section.id && section.sectionKey) bySection.set(section.id, section.sectionKey);
+      }
+    }
+    const rows = this.sqlite.prepare("SELECT id, section_id, narration FROM scenes WHERE project_id = ?").all(projectId) as Array<{ id: string; section_id: string | null; narration: string }>;
+    const sectionKey = new Map<string, string>();
+    const narration = new Map<string, string>();
+    for (const row of rows) {
+      narration.set(row.id, row.narration);
+      const key = row.section_id ? bySection.get(row.section_id) : undefined;
+      if (key) sectionKey.set(row.id, key);
+    }
+    return { sectionKey, narration };
   }
 
   private row(projectId: string): TimelineRow | undefined {
@@ -245,6 +328,72 @@ export class TimelineService {
     return parsed.success
       ? { timeline: parsed.data, inputHash: row.input_hash, updatedAt: row.updated_at }
       : { timeline: null, inputHash: null, updatedAt: null };
+  }
+
+  saveEditPlan(projectId: string, plan: import("@vg/shared").EditPlan): Timeline {
+    const current = this.get(projectId).timeline;
+    if (!current) throw new StageError("Chưa có timeline.", "TIMELINE_MISSING", false);
+    const transitions = new Map(plan.transitions.map((item) => [item.afterSceneId, item]));
+    const motions = new Map(plan.motions.map((item) => [item.sceneId, item.preset]));
+    rememberTimelineSnapshot(this.sqlite, projectId, current, "manual", "Lưu kế hoạch dựng");
+    const timeline = TimelineSchema.parse({
+      ...current,
+      revision: (current.revision ?? 0) + 1,
+      editPlan: plan,
+      scenes: current.scenes.map((scene) => {
+        const transition = transitions.get(scene.sceneId);
+        const preset = motions.get(scene.sceneId);
+        return {
+          ...scene,
+          ...(transition ? { transitionOut: { type: transition.type, durationSec: transition.durationSec } } : {}),
+          visuals: scene.visuals.map((visual, index) => (index === 0 && preset ? { ...visual, motionPreset: preset } : visual)),
+        };
+      }),
+    });
+    const now = this.now().toISOString();
+    this.sqlite.prepare("UPDATE timelines SET data = ?, updated_at = ? WHERE project_id = ?")
+      .run(JSON.stringify(timeline), now, projectId);
+    recheckOriginalitySafely(this.sqlite, projectId);
+    return timeline;
+  }
+
+  writeEdited(projectId: string, timeline: Timeline, source: SnapshotSource, summary: string): Timeline {
+    const current = this.get(projectId).timeline;
+    if (current) rememberTimelineSnapshot(this.sqlite, projectId, current, source, summary);
+    const next = TimelineSchema.parse(timeline);
+    const now = this.now().toISOString();
+    const existing = this.row(projectId);
+    if (!existing) {
+      this.sqlite.prepare(
+        `INSERT INTO timelines (project_id, data, input_hash, total_duration_sec, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?)`,
+      ).run(projectId, JSON.stringify(next), "edit", next.totalDurationSec, now, now);
+    } else {
+      this.sqlite.prepare("UPDATE timelines SET data = ?, updated_at = ? WHERE project_id = ?")
+        .run(JSON.stringify(next), now, projectId);
+    }
+    recheckOriginalitySafely(this.sqlite, projectId);
+    return next;
+  }
+
+  undo(projectId: string): Timeline | null {
+    const restored = undoTimelineSnapshot(
+      this.sqlite,
+      projectId,
+      (path) => this.fileExists(projectId, path),
+    );
+    if (!restored) return null;
+    const current = this.get(projectId).timeline;
+    const next = TimelineSchema.parse({
+      ...restored.timeline,
+      revision: (current?.revision ?? restored.timeline.revision ?? 0) + 1,
+    });
+    if (current) rememberTimelineSnapshot(this.sqlite, projectId, current, "manual", `Hoàn tác: ${restored.summary}`);
+    const now = this.now().toISOString();
+    this.sqlite.prepare("UPDATE timelines SET data = ?, updated_at = ? WHERE project_id = ?")
+      .run(JSON.stringify(next), now, projectId);
+    recheckOriginalitySafely(this.sqlite, projectId);
+    return next;
   }
 
   canApproveFinal(projectId: string): { allowed: true } | { allowed: false; message: string } {

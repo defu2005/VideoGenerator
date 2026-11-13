@@ -4,8 +4,11 @@ import type { ProfileListItem } from "@vg/shared";
 import { ApiRequestError } from "../../services/apiClient";
 import { EmptyState } from "../../components/EmptyState";
 import { ErrorState } from "../../components/ErrorState";
-import { Spinner } from "../../components/Spinner";
+import { Button } from "../../components/ui/Button";
+import { Icon } from "../../components/ui/Icon";
+import { ProjectListSkeleton } from "../../components/ui/Skeleton";
 import { useCreateProfile, useProfiles } from "../../hooks/useProfiles";
+import { MarketInfoCard, MarketLanguageFields, MarketPicker, useMarketInfo } from "./MarketSettings";
 
 const PLATFORM_LABELS: Record<string, string> = {
   youtube: "YouTube",
@@ -45,15 +48,26 @@ export function ProfileListPage() {
   const create = useCreateProfile();
   const [createOpen, setCreateOpen] = useState(false);
   const [name, setName] = useState("");
+  const [market, setMarket] = useState("");
+  const [language, setLanguage] = useState("");
+  const marketInfo = useMarketInfo(market);
   const [error, setError] = useState("");
 
   async function submit(event: FormEvent) {
     event.preventDefault();
     setError("");
     try {
-      const profile = await create.mutateAsync({ name: name.trim() });
+      const selectedLanguage = language && marketInfo.data?.pack.languages.some(({ code }) => code === language)
+        ? new Intl.Locale(language).language : language.trim();
+      const profile = await create.mutateAsync({
+        name: name.trim(),
+        ...(market ? { market } : {}),
+        ...(selectedLanguage ? { language: selectedLanguage } : {}),
+      });
       setCreateOpen(false);
       setName("");
+      setMarket("");
+      setLanguage("");
       window.location.assign(`/profiles/${profile.id}/direction`);
     } catch (err) {
       setError(err instanceof ApiRequestError || err instanceof Error ? err.message : "Không tạo được hồ sơ");
@@ -64,16 +78,19 @@ export function ProfileListPage() {
     <div className="page-stack">
       <div className="page-heading">
         <div>
-          <p className="eyebrow">WORKSPACE</p>
+          <p className="eyebrow">Không gian làm việc</p>
           <h1>Hồ sơ</h1>
           <p className="page-subtitle">Mỗi hồ sơ mang định hướng kênh, brief mặc định và tài khoản nền tảng riêng.</p>
         </div>
-        <button className="button button-primary" type="button" onClick={() => setCreateOpen(true)}>＋ Hồ sơ mới</button>
+        <Button variant="primary" onClick={() => setCreateOpen(true)}>
+          <Icon name="plus" size={16} />
+          <span>Hồ sơ mới</span>
+        </Button>
       </div>
 
       <section className="panel list-panel">
         {profiles.isPending ? (
-          <Spinner label="Đang tải hồ sơ" />
+          <ProjectListSkeleton count={4} label="Đang tải hồ sơ" />
         ) : profiles.isError ? (
           <ErrorState
             message={profiles.error instanceof Error ? profiles.error.message : "Lỗi tải hồ sơ"}
@@ -109,14 +126,20 @@ export function ProfileListPage() {
             </div>
             <div className="dialog-form-body">
               {error && <p className="request-error" role="alert">{error}</p>}
+              <MarketPicker value={market} onChange={(code) => { setMarket(code); setLanguage(""); }} />
+              {marketInfo.data && <>
+                <MarketLanguageFields key={market} pack={marketInfo.data.pack} value={language} onChange={setLanguage} />
+                <MarketInfoCard info={marketInfo.data} />
+              </>}
+              {marketInfo.isError && <p role="alert">{marketInfo.error.message}</p>}
               <label className="form-field">
                 <span>Tên hồ sơ</span>
-                <input autoFocus value={name} maxLength={120} onChange={(event) => setName(event.target.value)} required />
+                <input value={name} maxLength={120} onChange={(event) => setName(event.target.value)} required />
               </label>
             </div>
             <div className="dialog-actions">
               <button className="button button-secondary" type="button" onClick={() => setCreateOpen(false)}>Hủy</button>
-              <button className="button button-primary" type="submit" disabled={create.isPending || !name.trim()}>
+              <button className="button button-primary" type="submit" disabled={create.isPending || !name.trim() || Boolean(market && !marketInfo.data)}>
                 {create.isPending ? "Đang tạo…" : "Tạo"}
               </button>
             </div>

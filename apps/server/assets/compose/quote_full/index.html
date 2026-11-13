@@ -1,0 +1,110 @@
+<!DOCTYPE html><html><head><meta charset="utf-8"><style>
+#stage{flex-direction:column;justify-content:center}
+.marks{flex:none;display:flex}
+.q{font-weight:var(--vg-w-display);letter-spacing:var(--vg-track-display);text-transform:var(--vg-case-display);text-wrap:balance}
+.w{display:inline-block;white-space:nowrap}
+.who{flex:none;display:flex;align-items:center}
+.who .name{font-weight:var(--vg-w-display);letter-spacing:var(--vg-track-display);text-transform:var(--vg-case-display);white-space:nowrap}
+.who .role{white-space:nowrap}
+</style><script src="gsap.min.js"></script><script src="common.js"></script></head><body>
+<div id="root" data-composition-id="main" data-start="0" data-duration="3" data-width="1920" data-height="1080" data-fps="30">
+<script>
+// tokens-v1 (TASK-110). Colours, type, motion, spacing and shape come from VG.S.
+// Axes: layout (center | mark), entrance, background. The quote, speaker and reveal stay on the shot.
+const VG = window.VGInit();
+const { v, W, H, portrait, box, stage, tl, at, el, fitText, M, axis, enter, fallbackStyle } = VG;
+const S = fallbackStyle();
+const K = S.color, T = S.type, L = S.layout, SP = S.space;
+const m = Math.min(W, H);
+const reveal = ["ghost", "appear", "block"].includes(v.reveal) ? v.reveal : "ghost";
+const words = String(v.quote || "").replace(/^[\s"“”«»„']+|[\s"“”«»']+$/g, "").split(/\s+/).filter(Boolean);
+const emphasis = new Set(Array.isArray(v.emphasis) ? v.emphasis : []);
+const speaker = String(v.speaker || "").trim();
+const role = String(v.role || "").trim();
+// Without a picked axis, variant 1 keeps the old left-aligned quote.
+const layoutId = axis("layout", ["center", "mark"], v.style && v.style.axes ? undefined : (VG.variant === 1 ? "mark" : "center"));
+const left = layoutId === "mark";
+const strokePx = (share, min) => Math.max(min, Math.round(m * share * L.stroke));
+stage.style.alignItems = left ? "flex-start" : "center";
+const gap = Math.round(SP * 0.75);
+stage.style.gap = gap + "px";
+
+// Opening marks, drawn (no font needed). center: a pair. mark: one larger glyph at the start.
+const markH = Math.round(m * (left ? 0.18 : (portrait ? 0.1 : 0.105)));
+const marks = el("div", "marks", stage);
+marks.style.cssText = `height:${markH}px;gap:${Math.round(markH * 0.14)}px`;
+const NS = "http://www.w3.org/2000/svg";
+const markCount = left ? 1 : 2;
+const markEls = Array.from({ length: markCount }, () => {
+  const svg = document.createElementNS(NS, "svg");
+  svg.setAttribute("viewBox", "0 0 72 100");
+  svg.setAttribute("width", Math.round(markH * 0.72));
+  svg.setAttribute("height", markH);
+  const path = document.createElementNS(NS, "path");
+  path.setAttribute("d", "M60 6C28 12 6 36 6 64c0 18 12 30 28 30 15 0 26-11 26-25S49 45 36 45c-3 0-5 .4-7 1 3-12 13-21 31-26z");
+  path.setAttribute("fill", K.accent);
+  svg.appendChild(path);
+  marks.appendChild(svg);
+  return svg;
+});
+
+const text = el("div", "q", stage);
+text.style.textAlign = left ? "left" : "center";
+text.style.lineHeight = String(T.lineHeight);
+text.style.color = K.text;
+const wordEls = words.map((word, i) => {
+  if (i) text.appendChild(document.createTextNode(" "));
+  const node = el("span", "w", text, word);
+  if (emphasis.has(i)) node.style.color = K.accent;
+  return node;
+});
+
+let who = null;
+if (speaker) {
+  who = el("div", "who", stage);
+  who.style.gap = Math.round(SP * 0.5) + "px";
+  who.style.lineHeight = String(T.lineHeight);
+  const bar = el("div", "", who);
+  const barH = strokePx(0.006, 4);
+  bar.style.cssText = `flex:none;width:${Math.round(SP * 1.3)}px;height:${barH}px;border-radius:${Math.round(barH * 0.5 * L.radius)}px;background:${K.accent}`;
+  const col = el("div", "", who);
+  // A tall frame stacks the role under the name; a wide frame keeps them on one line.
+  col.style.cssText = `display:flex;flex-direction:${portrait ? "column" : "row"};align-items:${portrait ? "flex-start" : "baseline"};gap:${portrait ? 0 : Math.round(SP * 0.5)}px`;
+  el("div", "name", col, speaker);
+  if (role) {
+    const roleEl = el("div", "role", col, role);
+    roleEl.style.color = K.textMuted;
+    roleEl.style.fontSize = "0.78em";
+  }
+}
+
+VG.layout(() => {
+  const whoFs = portrait ? T.md : T.sm;
+  let whoH = 0;
+  if (who) {
+    fitText(who, { maxW: box.w, maxH: whoFs * T.lineHeight * 3, maxFs: whoFs, minFs: Math.round(T.xs * 0.5), lh: T.lineHeight });
+    whoH = who.offsetHeight + gap;
+  }
+  // Inner margin so the quote is not flush with the safe box.
+  const maxW = Math.floor(box.w * 0.96);
+  text.style.width = maxW + "px";
+  fitText(text, { maxW, maxH: Math.max(T.md, box.h - markH - gap - whoH), maxLines: portrait ? 7 : 4, maxFs: T.xxl, minFs: Math.round(T.xs * 0.5), lh: T.lineHeight });
+  if (left) {
+    const rights = wordEls.map((node) => node.offsetLeft + node.offsetWidth);
+    if (rights.length) text.style.width = Math.min(maxW, Math.ceil(Math.max(...rights)) + 2) + "px";
+  }
+});
+
+// Motion: marks first, words on their times, the speaker after the last word.
+markEls.forEach((node, i) => enter(node, i * M.fast * 0.25));
+const times = VG.times(words.length, v.words || v.wordTimes, { from: M.fast, spread: 0.62, enter: M.slow * 1.5 });
+if (reveal === "block") enter(text, M.fast * 0.5);
+else if (reveal === "appear") wordEls.forEach((node, i) => enter(node, times[i]));
+else wordEls.forEach((node, i) => tl.fromTo(node, { opacity: 0.24 }, { opacity: 1, duration: M.fast, ease: M.move }, at(times[i], M.fast)));
+if (who) {
+  const last = reveal === "block" ? M.slow : (times[times.length - 1] || 0) + M.base;
+  const t = v.speakerAt != null && Number.isFinite(Number(v.speakerAt)) ? Number(v.speakerAt) : last;
+  enter(who, t);
+}
+VG.finish();
+</script></div></body></html>

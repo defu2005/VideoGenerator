@@ -105,14 +105,28 @@ export function registerReviewRoutes(
   app.post("/api/projects/:id/review/apply", {
     schema: {
       params: ProjectParams,
-      body: z.object({ proposal: ReviewProposalSchema }).strict(),
+      body: z.object({
+        proposal: ReviewProposalSchema,
+        source: z.enum(["mcp", "assistant"]).optional(),
+      }).strict(),
       response: { 200: ReviewApplyResultSchema, ...Errors },
     },
   }, async (request) => {
     const { id } = ProjectParams.parse(request.params);
-    const { proposal } = z.object({ proposal: ReviewProposalSchema }).strict().parse(request.body);
+    const { proposal, source } = z.object({
+      proposal: ReviewProposalSchema,
+      source: z.enum(["mcp", "assistant"]).optional(),
+    }).strict().parse(request.body);
     const project = await requireProject(id);
-    return review.applyRawProposal(project, proposal);
+    return review.applyRawProposal(project, proposal, source ?? "mcp");
+  });
+
+  app.post("/api/projects/:id/review/undo", {
+    schema: { params: ProjectParams, response: { 404: ApiErrorSchema, 409: ApiErrorSchema } },
+  }, async (request) => {
+    const { id } = ProjectParams.parse(request.params);
+    await requireProject(id);
+    return review.undoTimeline(id);
   });
 
   app.delete("/api/projects/:id/review", {

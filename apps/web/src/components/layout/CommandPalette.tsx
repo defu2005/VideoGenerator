@@ -6,6 +6,8 @@ import { getProjects } from "../../services/projectsApi";
 import { Modal } from "../ui/Modal";
 import { NAV_ITEMS } from "./nav";
 
+const EXTRA_PAGES = [{ to: "/nodes", label: "Máy worker" }];
+
 export function CommandPalette({ open, onClose }: { open: boolean; onClose: () => void }) {
   const [query, setQuery] = useState("");
   useEffect(() => {
@@ -32,11 +34,11 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
 
   const needle = query.trim().toLowerCase();
   const pages = useMemo(
-    () => NAV_ITEMS.filter((item) => !needle || item.label.toLowerCase().includes(needle)),
+    () => [...NAV_ITEMS, ...EXTRA_PAGES].filter((item) => !needle || item.label.toLowerCase().includes(needle)),
     [needle],
   );
   const profileHits = (profiles.data?.items ?? [])
-    .filter((profile) => !needle || profile.name.toLowerCase().includes(needle))
+    .filter((profile) => !needle || "tri thức".includes(needle) || profile.name.toLowerCase().includes(needle))
     .slice(0, 8);
   const projectHits = (projects.data?.items ?? [])
     .filter((project) => !needle || project.title.toLowerCase().includes(needle) || project.topic.toLowerCase().includes(needle))
@@ -71,7 +73,7 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
           <ul className="command-list">
             {profileHits.map((profile) => (
               <li key={profile.id}>
-                <Link to={`/profiles/${profile.id}/direction`} onClick={onClose}>{profile.name}</Link>
+                <Link to={`/profiles/${profile.id}/direction`} onClick={onClose}>{profile.name}</Link> <Link to={`/profiles/${profile.id}/knowledge`} onClick={onClose}>Tri thức</Link>
               </li>
             ))}
           </ul>

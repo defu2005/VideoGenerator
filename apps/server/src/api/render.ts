@@ -6,6 +6,8 @@ import { z } from "zod";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import type Database from "better-sqlite3";
 import {
+  estimateRenderSeconds,
+  resolveBudget,
   PipelineStateSchema,
   RenderRequestSchema,
   RenderSettingsSchema,
@@ -13,10 +15,13 @@ import {
   RenderVersionListSchema,
   RenderVersionPatchSchema,
   RenderVersionSchema,
+  ShotKindSchema,
   type Project,
 } from "@vg/shared";
 import { AppError } from "../lib/errors.js";
 import { createZipStream } from "../lib/zip.js";
+import { markUserTouch } from "../operator/autopilot.js";
+import { editSavedComposeShot } from "../services/composeBridge.js";
 import { getRenderSettings, saveRenderSettings } from "../settings/render.js";
 import type { RenderService } from "../services/renderService.js";
 import type { AutoReportService } from "../services/autoReportService.js";
@@ -24,6 +29,12 @@ import type { PipelineOrchestrator } from "../pipeline/orchestrator.js";
 import { parseRangeHeader } from "./music.js";
 
 const ProjectParams = z.object({ id: z.string().uuid() }).strict();
+const ShotParams = z.object({ id: z.string().uuid(), shotId: z.string().min(1) }).strict();
+const ShotPatch = z.object({
+  kind: ShotKindSchema.optional(),
+  reroll: z.literal(true).optional(),
+  locked: z.boolean().optional(),
+}).strict();
 const ThumbParams = z.object({ id: z.string().uuid(), sceneId: z.string().uuid() }).strict();
 const RenderParams = z.object({ id: z.string().uuid(), renderId: z.string().uuid() }).strict();
 const VersionThumbParams = z.object({ id: z.string().uuid(), renderId: z.string().uuid(), sceneId: z.string().uuid() }).strict();
@@ -69,6 +80,55 @@ export function registerRenderRoutes(
   const baseName = (title: string) => (title.replace(/[\/:*?"<>|\r\n]+/g, " ").trim().slice(0, 80) || "video");
 
   app.get("/api/projects/:id/render", async (request) => renders.get((await project(request)).id));
+
+  app.get("/api/projects/:id/render-estimate", async (request) => {
+    const found = await project(request);
+    const estimate = await renders.estimate(found);
+    if (!estimate) throw new AppError(404, "RENDER_ESTIMATE_UNAVAILABLE", "Chưa có timeline để ước tính thời gian dựng.");
+    return estimate;
+  });
+
+  app.get("/api/projects/:id/compose-plan", async (request) => {
+    const found = await project(request);
+    const plan = renders.composePlan(found.id);
+    if (!plan) throw new AppError(404, "COMPOSE_PLAN_MISSING", "Chưa có kế hoạch cảnh quay.");
+    const features = resolveBudget(found.settings.budget ?? { mode: "BALANCED" });
+    return {
+      stats: plan.stats,
+      renderEstimate: estimateRenderSeconds(plan, {
+        composeGraphics: features.composeGraphics,
+        graphicGrain: features.graphicGrain,
+      }),
+      scenes: plan.scenes.slice(0, 12).map((scene) => ({
+        sceneId: scene.sceneId,
+        shots: scene.shots.map((shot) => ({
+          id: shot.id,
+          kind: shot.kind,
+          startSec: shot.startSec,
+          endSec: shot.endSec,
+          reason: shot.reason,
+          ...(shot.locked ? { locked: true } : {}),
+        })),
+      })),
+    };
+  });
+
+  app.patch("/api/projects/:id/compose-plan/shots/:shotId", async (request) => {
+    const { id, shotId } = ShotParams.parse(request.params);
+    const found = await projectService.getProject(id);
+    if (!found) throw new AppError(404, "PROJECT_NOT_FOUND", "Project not found");
+    const patch = ShotPatch.parse(request.body ?? {});
+    if (patch.kind === undefined && patch.reroll === undefined && patch.locked === undefined) {
+      throw new AppError(400, "COMPOSE_SHOT_INVALID", "Chưa chọn việc cần sửa.");
+    }
+    const edited = editSavedComposeShot(renders.renderDir(found.id), shotId, patch);
+    if ("error" in edited) {
+      const missing = edited.error === "Không có cảnh quay này." || edited.error === "Chưa có kế hoạch cảnh quay.";
+      throw new AppError(missing ? 404 : 400, missing ? "COMPOSE_SHOT_MISSING" : "COMPOSE_SHOT_INVALID", edited.error);
+    }
+    if (sqlite) markUserTouch(sqlite, `project:${found.id}`);
+    return { ok: true, shotId };
+  });
 
   app.post("/api/projects/:id/render", async (request, reply) => {
     const found = await project(request);

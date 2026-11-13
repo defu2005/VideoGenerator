@@ -40,17 +40,27 @@ export function defaultVoiceFor(
   voices: TtsVoice[] | null | undefined,
   config: Pick<AppConfig, "TTS_VOICE_VI" | "TTS_VOICE_EN">,
   warn?: (message: string) => void,
+  preferLocale = false,
 ): string {
   const normalized = (language ?? "").trim();
   if (!normalized) return config.TTS_VOICE_EN;
   const lower = normalized.toLowerCase();
-  if (lower.startsWith("vi")) return config.TTS_VOICE_VI;
-  if (lower.startsWith("en")) return config.TTS_VOICE_EN;
+  if (!preferLocale && lower.startsWith("vi")) return config.TTS_VOICE_VI;
+  if (!preferLocale && lower.startsWith("en")) return config.TTS_VOICE_EN;
+  const vietnamese = lower.startsWith("vi");
+  const fallback = vietnamese ? config.TTS_VOICE_VI : config.TTS_VOICE_EN;
+  const fallbackLanguage = vietnamese ? "tiếng Việt" : "tiếng Anh";
   if (!voices || voices.length === 0) {
-    warn?.("Không tải được danh sách giọng đọc — dùng tiếng Anh mặc định.");
-    return config.TTS_VOICE_EN;
+    warn?.(`Không tải được danh sách giọng đọc — dùng ${fallbackLanguage} mặc định.`);
+    return fallback;
   }
 
+  if (preferLocale) {
+    const exact = voices.filter((voice) => localePriority(voice.language, normalized) === 0)
+      .sort((left, right) => Number(isMultilingualVoice(left)) - Number(isMultilingualVoice(right))
+        || voiceRank(left) - voiceRank(right) || left.name.localeCompare(right.name));
+    if (exact[0]) return exact[0].name;
+  }
   const byLocale = [...voices]
     .filter((voice) => !isMultilingualVoice(voice) && localeMatches(voice.language, normalized))
     .sort((left, right) => {
@@ -71,6 +81,6 @@ export function defaultVoiceFor(
     });
   if (multilingual.length > 0) return multilingual[0].name;
 
-  warn?.("Không tìm thấy giọng đọc phù hợp với ngôn ngữ này — dùng tiếng Anh mặc định.");
-  return config.TTS_VOICE_EN;
+  warn?.(`Không tìm thấy giọng đọc phù hợp với ngôn ngữ này — dùng ${fallbackLanguage} mặc định.`);
+  return fallback;
 }

@@ -1,10 +1,12 @@
 import { randomUUID } from "node:crypto";
+import { currentWorkspaceId } from "../auth/requestContext.js";
 import type Database from "better-sqlite3";
 import {
   YOUTUBE_ANALYTICS_MONETARY_READONLY_SCOPE,
   type TokenSet,
 } from "@vg/shared";
 import { missingScopes } from "../analytics/scopes.js";
+import { recordChannelRevenue } from "../knowledge/metricInputs.js";
 
 const ANALYTICS_API = "https://youtubeanalytics.googleapis.com/v2";
 
@@ -62,6 +64,7 @@ export async function fetchChannelRevenueByDay(opts: {
   url.searchParams.set("startDate", opts.from);
   url.searchParams.set("endDate", opts.to);
   url.searchParams.set("metrics", "estimatedRevenue,estimatedAdRevenue,estimatedRedPartnerRevenue");
+  url.searchParams.set("currency", "USD");
   url.searchParams.set("dimensions", "day");
 
   const response = await fetchImpl(url.toString(), {
@@ -85,13 +88,16 @@ export async function fetchChannelRevenueByDay(opts: {
   const redIdx = headers.indexOf("estimatedRedPartnerRevenue");
   const rows: YoutubeRevenueDayRow[] = [];
   for (const row of json.rows ?? []) {
+    const revenue = row[revIdx];
+    // An absent/invalid monetary column is missing data, not an explicit zero observation.
+    if ((typeof revenue !== "number" && typeof revenue !== "string") || String(revenue).trim() === "" || !Number.isFinite(Number(revenue))) continue;
     const dateRaw = String(row[dayIdx] ?? "");
     const date = dateRaw.length === 8
       ? `${dateRaw.slice(0, 4)}-${dateRaw.slice(4, 6)}-${dateRaw.slice(6, 8)}`
       : dateRaw;
     rows.push({
       date,
-      estimatedRevenue: Number(row[revIdx] ?? 0) || 0,
+      estimatedRevenue: Number(revenue),
       estimatedAdRevenue: Number(row[adIdx] ?? 0) || 0,
       estimatedRedPartnerRevenue: Number(row[redIdx] ?? 0) || 0,
     });
@@ -166,6 +172,7 @@ export function upsertYoutubeRevenueEntries(
     nowIso: string;
   },
 ): UpsertRevenueResult {
+  recordChannelRevenue(sqlite, opts.accountId, opts.dayRows, opts.nowIso);
   let inserted = 0;
   let updated = 0;
 
@@ -180,8 +187,9 @@ export function upsertYoutubeRevenueEntries(
   const insert = sqlite.prepare(
     `INSERT INTO revenue_entries (
       id, account_id, publication_id, profile_id, source, kind,
-      period_start, period_end, amount, currency, note, external_key, created_at
-    ) VALUES (?, ?, ?, ?, 'youtube_api', ?, ?, ?, ?, 'USD', ?, ?, ?)`,
+      period_start, period_end, amount, currency, note, external_key, created_at, workspace_id
+    ) VALUES (?, ?, ?, ?, 'youtube_api', ?, ?, ?, ?, 'USD', ?, ?, ?,
+      COALESCE((SELECT workspace_id FROM profiles WHERE id = ?), ?))`,
   );
 
   const upsert = (
@@ -221,6 +229,8 @@ export function upsertYoutubeRevenueEntries(
         note,
         externalKey,
         opts.nowIso,
+        opts.profileId,
+        currentWorkspaceId(sqlite),
       );
       inserted += 1;
     }

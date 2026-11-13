@@ -6,6 +6,7 @@ import { join } from "node:path";
 import { afterAll, afterEach, describe, expect, it, vi } from "vitest";
 import { activeGuidelines, guidelinePromptBlock, type Project } from "@vg/shared";
 import { buildApp } from "../src/app.js";
+import { testActor } from "./testActor.js";
 import { parseConfig, type AppConfig } from "../src/lib/config.js";
 import { GuidelineService } from "../src/guidelines/service.js";
 import { LlmProviderRegistry } from "../src/providers/llm/registry.js";
@@ -50,7 +51,7 @@ async function createProject(app: ReturnType<typeof buildApp>, settings: Record<
 
 describe("guideline routes", () => {
   it("saves packs and profiles, lists findings, dismisses one, and rechecks", async () => {
-    const app = buildApp({ config: testConfig() });
+    const app = buildApp({ testActor,  config: testConfig() });
     apps.push(app);
     const packs = await app.inject({ method: "GET", url: "/api/guidelines/packs" });
     expect(packs.statusCode).toBe(200);
@@ -183,7 +184,7 @@ describe("guideline prompts and script checks", () => {
         const sourceScript = prompt.match(/^Script:\s*(\{.*\})\s*$/m)?.[1];
         const revisedScript = JSON.parse(sourceScript!) as { sections: Array<{ narration: string }> };
         revisedScript.sections[0].narration = `${revisedScript.sections[0].narration} Updated.`;
-        return { text: JSON.stringify({ revisedScript, notes: ["Softened the unsourced claim."] }), usage: { inputTokens: 10, outputTokens: 20 }, model: request.model, provider: "mock", finishReason: "stop" as const };
+        return { text: JSON.stringify({ revisedScript, notes: ["Softened the unsourced claim."], score: 8 }), usage: { inputTokens: 10, outputTokens: 20 }, model: request.model, provider: "mock", finishReason: "stop" as const };
       }
       return original(request, signal);
     });

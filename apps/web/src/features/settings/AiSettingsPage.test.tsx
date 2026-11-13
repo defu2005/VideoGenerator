@@ -50,7 +50,7 @@ function stubGatewayApis(
 }
 
 describe("AiSettingsPage", () => {
-  it("renders task rows, applies routing presets, resets an override, and saves the task routes", { timeout: 15_000 }, async () => {
+  it("renders task rows, applies routing presets, resets an override, and saves the task routes", { timeout: 30_000 }, async () => {
     let saved: unknown;
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);

@@ -20,7 +20,7 @@ export const pipelineKeys = {
 type PipelineAction =
   | { type: "run"; stage?: PipelineStage; confirmOverwrite?: boolean }
   | { type: "approve"; stage: PipelineStage }
-  | { type: "cancel" }
+  | { type: "cancel"; stage?: PipelineStage }
   | { type: "retry"; stage: PipelineStage };
 
 function isPipelineState(value: unknown): value is PipelineState {
@@ -98,13 +98,12 @@ export function usePipeline(projectId: string) {
       } else if (event.type === "job.updated") {
         queryClient.setQueryData<PipelineState>(pipelineKeys.detail(projectId), (current) => {
           if (!current) return current;
-          if (event.data.status === "QUEUED" || event.data.status === "RUNNING") {
-            return { ...current, activeJob: event.data };
-          }
-          if (current.activeJob?.id === event.data.id) {
-            return { ...current, activeJob: null };
-          }
-          return current;
+          const jobs = current.activeJobs ?? (current.activeJob ? [current.activeJob] : []);
+          const live = event.data.status === "QUEUED" || event.data.status === "RUNNING";
+          const activeJobs = live
+            ? [...jobs.filter((job) => job.id !== event.data.id), event.data]
+            : jobs.filter((job) => job.id !== event.data.id);
+          return { ...current, activeJobs, activeJob: activeJobs[0] ?? null };
         });
       } else if (event.type === "project.updated") {
         queryClient.setQueryData<PipelineState>(pipelineKeys.detail(projectId), (current) => {
@@ -147,7 +146,7 @@ export function usePipeline(projectId: string) {
       switch (action.type) {
         case "run": return runPipeline(projectId, action.stage, action.confirmOverwrite);
         case "approve": return approvePipelineGate(projectId, action.stage);
-        case "cancel": return cancelPipeline(projectId);
+        case "cancel": return cancelPipeline(projectId, action.stage);
         case "retry": return retryPipelineStage(projectId, action.stage);
       }
     },

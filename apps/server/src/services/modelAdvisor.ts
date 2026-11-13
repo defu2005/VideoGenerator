@@ -16,6 +16,7 @@ import {
   type Project,
 } from "@vg/shared";
 import type Database from "better-sqlite3";
+import { z } from "zod";
 import type { LlmProviderRegistry } from "../providers/llm/registry.js";
 import { generateRoutedStructured } from "../providers/llm/structured.js";
 import { getAppLlmSettings, saveAppLlmSettings } from "../providers/llm/settings.js";
@@ -30,6 +31,46 @@ const PROPOSAL_TTL_MS = 24 * 60 * 60 * 1000;
 const HEALTH_WINDOW_DAYS = 7;
 const CLI_PROVIDERS = new Set(["claude-cli", "copilot-cli", "antigravity-cli"]);
 const KEEP_REASON = "giữ nguyên (đề xuất không hợp lệ)";
+const EvidenceModel = z.object({ provider: z.string(), model: z.string() });
+const EvidenceMetrics = EvidenceModel.extend({ estimatedCostUsd: z.number().nonnegative().nullable() });
+const ComparisonEvidence = z.object({
+  runId: z.string().uuid(),
+  taskId: z.string(),
+  recommendation: z.enum(["candidate_eligible", "keep_baseline"]),
+  baseline: EvidenceMetrics,
+  candidate: EvidenceMetrics,
+});
+
+function recentComparisons(sqlite: Database.Database, now: Date) {
+  const since = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000).toISOString();
+  const rows = sqlite.prepare(
+    `SELECT summary_vi FROM model_eval_runs
+     WHERE status IN ('done', 'stopped') AND finished_at >= ?
+     AND json_extract(CASE WHEN json_valid(summary_vi) THEN summary_vi ELSE '{}' END, '$.recommendation') IS NOT NULL
+     ORDER BY finished_at DESC, rowid DESC LIMIT 200`,
+  ).all(since) as Array<{ summary_vi: string }>;
+  return rows.flatMap(({ summary_vi }) => {
+    const parsed = ComparisonEvidence.safeParse(JSON.parse(summary_vi));
+    return parsed.success ? [parsed.data] : [];
+  });
+}
+
+function sameModel(a: { provider: string; model: string } | null | undefined, b: { provider: string; model: string }) {
+  return a?.provider === b.provider && a.model === b.model;
+}
+
+function qualifyingComparison(
+  evidence: ReturnType<typeof recentComparisons>, taskId: string,
+  baseline: z.output<typeof EvidenceModel>, candidate: z.output<typeof EvidenceModel>,
+  budgetMode: BudgetMode,
+) {
+  const latest = evidence.find((item) =>
+    item.taskId === taskId && sameModel(item.baseline, baseline) && sameModel(item.candidate, candidate));
+  if (latest?.recommendation !== "candidate_eligible") return undefined;
+  if (budgetMode === "ECO" && (latest.candidate.estimatedCostUsd === null || latest.baseline.estimatedCostUsd === null
+    || latest.candidate.estimatedCostUsd > latest.baseline.estimatedCostUsd)) return undefined;
+  return latest;
+}
 
 export type AdvisorCatalogModel = {
   provider: string;
@@ -229,16 +270,30 @@ export function advisorCacheHash(input: {
   budgetMode: BudgetMode;
   language: string;
   health: AdvisorHealthBucket[];
+  scorecards?: unknown[];
 }): string {
   const catalogKey = input.catalog
     .map((row) => `${row.provider}|${row.model}|${row.vision ? 1 : 0}|${row.subscription ? 1 : 0}|${row.kind ?? ""}|${row.quotaStatus ?? ""}|${row.remainingRequestsToday ?? ""}`)
     .sort();
-  return createHash("sha256").update(JSON.stringify({
+  const payload: Record<string, unknown> = {
     catalog: catalogKey,
     budgetMode: input.budgetMode,
     language: input.language,
     health: healthBucketsForCache(input.health),
-  })).digest("hex");
+  };
+  if (input.scorecards && input.scorecards.length > 0) payload.scorecards = input.scorecards;
+  return createHash("sha256").update(JSON.stringify(payload)).digest("hex");
+}
+
+function loadProviderScorecards(sqlite: Database.Database): unknown[] {
+  try {
+    const rows = sqlite.prepare(
+      "SELECT json FROM provider_intel_records WHERE kind = 'scorecard' AND superseded_at IS NULL LIMIT 20",
+    ).all() as Array<{ json: string }>;
+    return rows.map((row) => JSON.parse(row.json) as unknown);
+  } catch {
+    return [];
+  }
 }
 
 export function buildAdvisorTaskInputs(): AdvisorTaskInput[] {
@@ -437,18 +492,19 @@ function buildDiff(
   current: Partial<Record<LlmTaskId, { provider: string; model: string } | null>>,
   proposed: Partial<Record<LlmTaskId, ModelAdvisorRoutePick>>,
 ): ModelAdvisorDiffEntry[] {
-  return tasks.map((task) => {
+  return tasks.flatMap((task) => {
     const cur = current[task.id] ?? null;
-    const prop = proposed[task.id]!;
+    const prop = proposed[task.id];
+    if (!prop) return [];
     const changed = !cur
       || cur.provider !== prop.provider
       || cur.model !== prop.model;
-    return {
+    return [{
       taskId: task.id,
       current: cur,
       proposed: prop,
       changed,
-    };
+    }];
   });
 }
 
@@ -463,17 +519,9 @@ function currentRoutesForScope(
   const routes: Partial<Record<LlmTaskId, { provider: string; model: string } | null>> = {};
   const tasks = buildAdvisorTaskInputs();
 
-  if (scope === "profile") {
-    for (const task of tasks) {
-      const route = profileLlm?.tasks?.[task.id] ?? profileLlm?.default;
-      routes[task.id] = route
-        ? { provider: route.provider, model: route.model ?? "" }
-        : null;
-    }
-    return routes;
-  }
-
-  const target = project ?? stubProject();
+  const target = project ?? stubProject(scope === "profile" && profileLlm
+    ? { default: profileLlm.default, tasks: profileLlm.tasks }
+    : undefined);
   for (const task of tasks) {
     try {
       const resolved = registry.resolveRoute(task.id, target, appRouting);
@@ -542,7 +590,12 @@ export async function proposeModelRoutes(input: {
     throw new AppError(400, "NO_LLM_PROVIDERS", "Không có nhà cung cấp LLM nào được cấu hình.");
   }
   const health = buildAdvisorHealth(input.sqlite, now);
-  const hash = advisorCacheHash({ catalog, budgetMode, language, health });
+  const scorecards = loadProviderScorecards(input.sqlite);
+  const current = currentRoutesForScope(input.registry, input.sqlite, input.scope, project, profileLlm);
+  const comparisons = recentComparisons(input.sqlite, now);
+  const hash = advisorCacheHash({ catalog, budgetMode, language, health, scorecards: [
+    ...scorecards, { scope: input.scope, id: input.id, current, comparisons },
+  ] });
   const cached = getCachedProposal(input.sqlite, hash, now.getTime());
   if (cached) {
     return ModelAdvisorProposalSchema.parse({
@@ -556,7 +609,6 @@ export async function proposeModelRoutes(input: {
   }
 
   const tasks = buildAdvisorTaskInputs();
-  const current = currentRoutesForScope(input.registry, input.sqlite, input.scope, project, profileLlm);
   const appRouting = getAppLlmSettings(input.sqlite);
   const routeProject = stubProject();
   const route = input.registry.resolveTask("modelAdvisor", routeProject, appRouting);
@@ -569,6 +621,8 @@ export async function proposeModelRoutes(input: {
     health,
     tasks,
     currentRoutes: current,
+    comparisonEvidence: comparisons,
+    ...(scorecards.length ? { scorecards } : {}),
   };
 
   const generated = await generateRoutedStructured({
@@ -581,6 +635,7 @@ export async function proposeModelRoutes(input: {
       "Respect budgetMode: ECO prefers cheap/subscription/fast; QUALITY/MAX prefer higher qualityWeight.",
       "For cheap tasks, prefer free models that still have allowance left (kind free_tier or subscription, quotaStatus available).",
       "Vision tasks must use vision-capable models.",
+      "Recommend changing a route only if the latest comparison qualifies against the exact current model.",
       "reason must be one short Vietnamese sentence.",
       "Never invent providers or models outside the catalog.",
       "Reply with JSON only.",
@@ -596,6 +651,22 @@ export async function proposeModelRoutes(input: {
   });
 
   const validated = validateAdvisorRoutes(generated.value, catalog, current);
+  for (const task of tasks) {
+    const baseline = current[task.id];
+    const candidate = validated.routes[task.id];
+    if (!baseline) {
+      delete validated.routes[task.id];
+    } else if (candidate && !sameModel(baseline, candidate)) {
+      const comparison = qualifyingComparison(comparisons, task.id, baseline, candidate, budgetMode);
+      const offer = catalog.find((item) => sameModel(item, candidate));
+      if (!comparison || offer?.quotaStatus === "exhausted" || offer?.quotaStatus === "cooldown"
+          || (offer?.kind !== "free_tier" && offer?.kind !== "subscription" && candidate.provider !== "mock")) {
+        validated.routes[task.id] = { ...baseline, reason: "Giữ model hiện tại vì chưa có bằng chứng phù hợp hoặc quota không khả dụng." };
+      } else {
+        validated.routes[task.id] = { ...candidate, reason: `Đạt ngưỡng trong báo cáo ${comparison.runId}.` };
+      }
+    }
+  }
   const proposalId = randomUUID();
   const createdAt = now.toISOString();
   const proposal = ModelAdvisorProposalSchema.parse({
@@ -632,18 +703,46 @@ export async function applyModelRoutes(input: {
   if (!proposal) {
     throw new AppError(404, "ADVISOR_PROPOSAL_NOT_FOUND", "Proposal not found or expired");
   }
+  if (proposal.scope !== input.scope || proposal.id !== input.id) {
+    throw new AppError(409, "ADVISOR_SCOPE_CHANGED", "Đề xuất thuộc phạm vi khác.");
+  }
+  const project = input.scope === "project" ? await input.projects?.getProject(input.id!) : undefined;
+  const profile = input.scope === "profile" ? await input.profiles?.getProfile(input.id!) : undefined;
+  if (input.scope === "project" && !project) throw new AppError(404, "PROJECT_NOT_FOUND", "Project not found");
+  if (input.scope === "profile" && !profile) throw new AppError(404, "PROFILE_NOT_FOUND", "Profile not found");
+  const baselines = currentRoutesForScope(input.registry, input.sqlite, input.scope, project, profile?.llm);
+  const comparisons = recentComparisons(input.sqlite, new Date());
 
-  const selected = (input.taskIds?.length
+  const requested = (input.taskIds?.length
     ? input.taskIds
     : (Object.keys(proposal.routes) as LlmTaskId[])
   ).filter((taskId) => proposal.routes[taskId]);
 
-  for (const taskId of selected) {
+  for (const taskId of requested) {
     const route = proposal.routes[taskId]!;
     if (!input.registry.isSupportedProvider(route.provider)) {
       throw new AppError(400, "INVALID_LLM_PROVIDER", `Unsupported provider: ${route.provider}`);
     }
+    const diff = proposal.diff.find((entry) => entry.taskId === taskId);
+    const baseline = baselines[taskId];
+    if (!baseline || !sameModel(diff?.current, baseline)) {
+      throw new AppError(409, "ADVISOR_BASELINE_CHANGED", "Model hiện tại đã đổi. Hãy tạo đề xuất mới.");
+    }
+    if (!sameModel(baseline, route)) {
+      const quota = advisorQuotaFor(input.sqlite, route.provider, route.model, new Date());
+      if (!qualifyingComparison(comparisons, taskId, baseline, route, proposal.budgetMode)
+          || quota.quotaStatus === "exhausted" || quota.quotaStatus === "cooldown"
+          || (quota.kind !== "free_tier" && quota.kind !== "subscription" && route.provider !== "mock")) {
+        throw new AppError(409, "ADVISOR_EVIDENCE_REQUIRED", "Chưa có bằng chứng phù hợp hoặc quota model không khả dụng.");
+      }
+      const { provider } = input.registry.resolveFallback(route);
+      if (buildAdvisorTaskInputs().find((task) => task.id === taskId)?.needsVision && !provider.capabilities?.vision) {
+        throw new AppError(409, "ADVISOR_CAPABILITY_CHANGED", "Model ứng viên không còn hỗ trợ tác vụ.");
+      }
+    }
   }
+
+  const selected = requested.filter((taskId) => !sameModel(baselines[taskId], proposal.routes[taskId]!));
 
   const taskRoutes = Object.fromEntries(
     selected.map((taskId) => {
@@ -658,30 +757,26 @@ export async function applyModelRoutes(input: {
       ...current,
       tasks: { ...current.tasks, ...taskRoutes },
     };
-    saveAppLlmSettings(input.sqlite, next);
+    if (selected.length) saveAppLlmSettings(input.sqlite, next);
     return { scope: "app", applied: selected, llm: next };
   }
 
   if (input.scope === "profile") {
-    const profile = await input.profiles?.getProfile(input.id!);
-    if (!profile) throw new AppError(404, "PROFILE_NOT_FOUND", "Profile not found");
-    const current = profile.llm ?? { autoModel: true };
+    const current = profile!.llm ?? { autoModel: true };
     const next: ProfileLlmSettings = {
       ...current,
       autoModel: current.autoModel ?? true,
       tasks: { ...current.tasks, ...taskRoutes },
     };
-    await input.profiles!.updateProfile(input.id!, { llm: next });
+    if (selected.length) await input.profiles!.updateProfile(input.id!, { llm: next });
     return { scope: "profile", id: input.id, applied: selected, llm: next };
   }
 
-  const project = await input.projects?.getProject(input.id!);
-  if (!project) throw new AppError(404, "PROJECT_NOT_FOUND", "Project not found");
-  const current = project.settings.llm ?? {};
+  const current = project!.settings.llm ?? {};
   const next: LlmSettings = {
     ...current,
     tasks: { ...current.tasks, ...taskRoutes },
   };
-  await input.projects!.updateProject(input.id!, { settings: { llm: next } });
+  if (selected.length) await input.projects!.updateProject(input.id!, { settings: { llm: next } });
   return { scope: "project", id: input.id, applied: selected, llm: next };
 }

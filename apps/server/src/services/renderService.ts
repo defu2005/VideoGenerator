@@ -1,6 +1,8 @@
 import { createHash, randomUUID } from "node:crypto";
-import { copyFileSync, existsSync, mkdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
-import { isAbsolute, join } from "node:path";
+import { recheckOriginalitySafely } from "../originality/recheckSafely.js";
+import { appendFileSync, copyFileSync, existsSync, mkdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { dirname, isAbsolute, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import type Database from "better-sqlite3";
 import {
   RenderVisionBatchSchema,
@@ -8,6 +10,8 @@ import {
   aspectsNeededFromAccounts,
   buildCreditsText,
   buildFinalPlan,
+  calloutAssLines,
+  sfxForEffect,
   buildMetadataText,
   buildSceneClipPlan,
   CLIP_OUTPUT_ARGS,
@@ -17,16 +21,23 @@ import {
   splitCue,
   parseBlackdetect,
   parseProgressSeconds,
+  COMPOSE_RENDER_VERSION,
   RENDER_FORMAT_VERSION,
   RenderReportSchema,
   resolveBudget,
+  resolveStyle,
+  resolveEditEngine,
   renderTargetFor,
   subtitleLayoutForAspect,
   toAss,
   VERTICAL_DURATION_WARN_SEC,
   wrapLines,
   type AspectRatio,
+  type ComposePlan,
+  type ExecuteReport,
+  type RenderBundle,
   type CreditsAsset,
+  type JobUsage,
   type Project,
   type ProjectRender,
   type Render,
@@ -49,8 +60,16 @@ import { getAppLlmSettings } from "../providers/llm/settings.js";
 import { generateRoutedStructured } from "../providers/llm/structured.js";
 import { LlmError } from "../providers/llm/types.js";
 import { getRenderSettings } from "../settings/render.js";
+import { renderMotionGraphic } from "../media/motion.js";
 import { projectDir } from "../storage/paths.js";
 import type { TimelineService } from "./timelineService.js";
+import { footageCreditLines, footageLicences, prepareComposePlan, previewRenderEstimate, probeFreezeBlack, readComposePlan, renderSceneClip } from "./composeBridge.js";
+import { llmChoiceAnswers, prepareGraphicStyle } from "../compose/render/graphicStyle.js";
+import { recordFinishedLookSafely } from "../style/recordSafely.js";
+import { executeRender } from "../render/executeRender.js";
+import { readAppVersion } from "../render/appVersion.js";
+import type { ExecuteIo, PreparedRender } from "../render/types.js";
+import { StyleService } from "../style/service.js";
 
 export type MediaTools = {
   ffmpeg: (args: string[], options: FfmpegRunOptions) => Promise<{ stdout: string; stderr: string }>;
@@ -89,10 +108,43 @@ type RenderRow = {
   variant_of: string | null;
 };
 
+/** Prepare output that never leaves the control plane. */
+export type LocalPrepared = { resolvePath: (path: string) => string; croppedPaths: Set<string> };
+
 export type RenderOptions = {
   /** When set and different from the project default, only the frame size / ASS layout change. */
   aspectRatio?: RenderVariantAspect;
 };
+
+function shotSeconds(plan: ComposePlan | null): Record<string, number> {
+  const shotSec: Record<string, number> = {};
+  if (!plan) return shotSec;
+  for (const scene of plan.scenes) {
+    for (const shot of scene.shots) shotSec[shot.id] = Math.max(0, shot.endSec - shot.startSec);
+  }
+  return shotSec;
+}
+
+function kindShareFor(timeline: Timeline, plan: ComposePlan | null): Record<string, number> {
+  if (plan) {
+    const share: Record<string, number> = {};
+    for (const [kind, value] of Object.entries(plan.stats.kindShare)) {
+      if (typeof value === "number" && value > 0) share[kind] = value;
+    }
+    return share;
+  }
+  const weights: Record<string, number> = {};
+  let total = 0;
+  for (const scene of timeline.scenes) {
+    const kind = scene.visuals[0]?.kind ?? "still";
+    weights[kind] = (weights[kind] ?? 0) + scene.durationSec;
+    total += scene.durationSec;
+  }
+  if (total <= 0) return {};
+  const share: Record<string, number> = {};
+  for (const [kind, sec] of Object.entries(weights)) share[kind] = sec / total;
+  return share;
+}
 
 function aspectFromTarget(target: { width: number; height: number }): AspectRatio {
   if (target.width === target.height) return "1:1";
@@ -174,6 +226,36 @@ export function backfillRenderVersions(sqlite: Database.Database): void {
   }
 }
 
+const SFX_DIR = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "assets", "sfx");
+
+function sfxCues(sqlite: Database.Database, projectId: string, timeline: Timeline): { name: string; startSec: number }[] {
+  const points = timeline.editPlan?.emphasis ?? [];
+  if (points.length === 0) return [];
+  const rows = sqlite.prepare("SELECT scene_id AS sceneId, words FROM voice_tracks WHERE project_id = ?")
+    .all(projectId) as Array<{ sceneId: string; words: unknown }>;
+  const wordsOf = new Map<string, Array<{ startSec: number }>>();
+  for (const row of rows) {
+    const raw = typeof row.words === "string" ? JSON.parse(row.words) as unknown : row.words;
+    if (!Array.isArray(raw)) continue;
+    wordsOf.set(row.sceneId, raw.filter((item): item is { startSec: number } =>
+      Boolean(item) && typeof item === "object" && typeof (item as { startSec?: unknown }).startSec === "number"));
+  }
+  const cues: { name: string; startSec: number }[] = [];
+  for (const point of points) {
+    const scene = timeline.scenes.find((item) => item.sceneId === point.sceneId);
+    const word = wordsOf.get(point.sceneId)?.[point.wordIndexStart];
+    if (!scene || !word) continue;
+    for (const effect of point.effects) {
+      const id = sfxForEffect(effect);
+      if (!id) continue;
+      const name = `${id}.wav`;
+      if (!existsSync(join(SFX_DIR, name))) continue;
+      cues.push({ name, startSec: scene.startSec + word.startSec });
+    }
+  }
+  return cues;
+}
+
 export class RenderService {
   private readonly recentReads = new Map<string, number>();
   private backfilled = false;
@@ -186,6 +268,10 @@ export class RenderService {
     private readonly now: () => Date = () => new Date(),
     private readonly llmProviders?: LlmProviderRegistry,
     private readonly autoReport?: import("./autoReportService.js").AutoReportService,
+    private readonly composeHooks: {
+      plan?: typeof prepareComposePlan;
+      renderScene?: typeof renderSceneClip;
+    } = {},
   ) {}
 
   private ensureBackfill(): void {
@@ -200,6 +286,14 @@ export class RenderService {
 
   renderDir(projectId: string): string {
     return join(this.dir(projectId), "render");
+  }
+
+  composePlan(projectId: string) {
+    return readComposePlan(this.renderDir(projectId));
+  }
+
+  estimate(project: Project) {
+    return previewRenderEstimate({ sqlite: this.sqlite, project, dataDir: this.config.DATA_DIR });
   }
 
   versionDir(projectId: string, renderId: string): string {
@@ -221,13 +315,14 @@ export class RenderService {
   }
 
   /** Cache key of one scene clip: everything that changes its pixels. */
-  clipHash(scene: TimelineScene, timeline: Timeline, resolvePath: (path: string) => string): string {
+  clipHash(scene: TimelineScene, timeline: Timeline, resolvePath: (path: string) => string, scenePlan?: unknown): string {
     return sha({
       v: RENDER_FORMAT_VERSION,
       target: timeline.target,
       frames: scene.durationFrames,
       fadeIn: scene.fadeInSec,
       fadeOut: scene.fadeOutSec,
+      compose: scenePlan ?? null,
       visuals: scene.visuals.map((visual) => {
         let file: { size: number; mtime: number } | null = null;
         if (visual.kind === "IMAGE" && visual.path) {
@@ -560,18 +655,56 @@ export class RenderService {
       aspectRatio: layout.aspectRatio,
       width: layout.width,
       height: layout.height,
-      fontSize: layout.fontSize,
+      fontSize: project.settings.edit?.fontSize ?? layout.fontSize,
       marginBottom: layout.marginBottom,
       fontName: "Arial",
+      ...(project.settings.edit?.highlightColor ? { highlightColor: project.settings.edit.highlightColor } : {}),
     });
   }
 
+  /**
+   * Render in three parts: prepare (control plane), execute (here or on a worker), finalize (control plane).
+   * This is the one path for both a local run and a remote one.
+   */
   async render(
     project: Project,
     signal: AbortSignal,
     onProgress: RenderProgress = () => {},
     options: RenderOptions = {},
-  ): Promise<{ render: Render; reused: boolean }> {
+  ): Promise<{ render: Render; reused: boolean; usage?: JobUsage }> {
+    const prepared = await this.prepare(project, signal, onProgress, options);
+    if (prepared.reused) return prepared.reused;
+    const { bundle } = prepared.prepared;
+    const executed = await executeRender(bundle, this.localExecuteIo(project.id, prepared.prepared, signal, onProgress));
+    return this.finalize(project, prepared.prepared, executed.outputPath, executed.report, signal, onProgress);
+  }
+
+  /** Execute io for a run on this machine: original paths, crops included, same hashes as before. */
+  localExecuteIo(projectId: string, prepared: PreparedRender, signal: AbortSignal, onProgress: RenderProgress): ExecuteIo {
+    const local = (prepared as PreparedRender & { local?: LocalPrepared }).local;
+    return {
+      resolve: local?.resolvePath ?? this.resolver(projectId),
+      dataDir: this.config.DATA_DIR,
+      renderDir: this.renderDir(projectId),
+      versionDir: this.versionDir(projectId, prepared.state.renderId),
+      sfxDir: SFX_DIR,
+      ffmpeg: this.tools.ffmpeg,
+      ...(this.composeHooks.renderScene ? { renderScene: this.composeHooks.renderScene as ExecuteIo["renderScene"] } : {}),
+      signal,
+      onProgress,
+    };
+  }
+
+  /** Control-plane part before the heavy work: plan, hashes, bundle. Returns a reusable render when one exists. */
+  async prepare(
+    project: Project,
+    signal: AbortSignal,
+    onProgress: RenderProgress = () => {},
+    options: RenderOptions = {},
+  ): Promise<
+    | { reused: { render: Render; reused: true; usage?: JobUsage }; prepared?: undefined }
+    | { reused?: undefined; prepared: PreparedRender & { local: LocalPrepared } }
+  > {
     this.ensureBackfill();
     const { timeline: baseTimeline, inputHash: timelineHash } = this.timelines.get(project.id);
     if (!baseTimeline || !timelineHash) {
@@ -587,8 +720,20 @@ export class RenderService {
       ? baseTimeline
       : { ...baseTimeline, target: renderTargetFor(outputAspect) };
 
-    const started = Date.now();
-    const resolvePath = this.resolver(project.id);
+    const startedMs = Date.now();
+    const baseResolve = this.resolver(project.id);
+    const cropByPath = new Map<string, string>();
+    for (const scene of timeline.scenes) {
+      for (const visual of scene.visuals) {
+        if (visual.kind !== "IMAGE" || !visual.path || !visual.candidateId) continue;
+        const crop = this.sqlite.prepare(
+          "SELECT output_path FROM visual_crops WHERE candidate_id = ? AND aspect = ?",
+        ).get(visual.candidateId, outputAspect) as { output_path: string } | undefined;
+        if (crop && existsSync(crop.output_path)) cropByPath.set(visual.path, crop.output_path);
+      }
+    }
+    const resolvePath = (path: string) => cropByPath.get(path) ?? baseResolve(path);
+    const croppedPaths = new Set(cropByPath.keys());
     const renderDir = this.renderDir(project.id);
     const clipsDir = join(renderDir, "clips");
     mkdirSync(clipsDir, { recursive: true });
@@ -602,8 +747,65 @@ export class RenderService {
       throw new StageError("Tệp nhạc nền không còn — chọn lại nhạc ở tab Nhạc.", "RENDER_MUSIC_MISSING", false);
     }
     const assText = this.assForAspect(baseTimeline, project, outputAspect);
-
-    const clipHashes = timeline.scenes.map((scene) => this.clipHash(scene, timeline, resolvePath));
+    const composeWarnings: string[] = [];
+    let composePlan: ComposePlan | null = null;
+    let composeUsage: JobUsage | undefined;
+    if (resolveEditEngine(project.settings.edit?.engine) === "compose") {
+      const prepared = await (this.composeHooks.plan ?? prepareComposePlan)({
+        sqlite: this.sqlite,
+        config: this.config,
+        project,
+        timeline,
+        resolvePath,
+        renderDir,
+        registry: this.llmProviders,
+        signal,
+      });
+      composePlan = prepared.plan;
+      composeUsage = prepared.usage;
+      composeWarnings.push(...prepared.warnings);
+      if (composePlan) writeFileSync(join(renderDir, "compose-plan.json"), JSON.stringify(composePlan));
+    }
+    const budgetFeatures = resolveBudget(project.settings.budget ?? { mode: "BALANCED" });
+    const recipeId = project.settings.format || project.settings.treatment?.formatId || "explainer";
+    const brandColor = project.settings.motionGraphics?.brandColor;
+    const accentColor = project.settings.motionGraphics?.accentColor;
+    const videoStyle = composePlan
+      ? prepareGraphicStyle({
+        projectId: project.id,
+        profileId: project.profileId,
+        recipeId,
+        brandColor,
+        accentColor,
+        width: timeline.target.width,
+        height: timeline.target.height,
+        shots: composePlan.scenes.flatMap((scene) => scene.shots),
+        llmChoices: llmChoiceAnswers(composePlan),
+        styles: new StyleService(this.sqlite, this.now),
+      })
+      : undefined;
+    const clipHashes = timeline.scenes.map((scene) => {
+      const plan = composePlan?.scenes.find((item) => item.sceneId === scene.sceneId) ?? null;
+      return this.clipHash(
+        scene,
+        timeline,
+        resolvePath,
+        {
+          plan,
+          composeGraphics: budgetFeatures.composeGraphics,
+          graphicGrain: budgetFeatures.graphicGrain,
+          projectId: project.id,
+          language: project.settings.language,
+          brandColor: brandColor ?? null,
+          accentColor: accentColor ?? null,
+          renderVersion: COMPOSE_RENDER_VERSION,
+          styleFingerprint: videoStyle?.fingerprint ?? null,
+          styleAxes: plan && videoStyle
+            ? plan.shots.map((shot) => ({ id: shot.id, axes: videoStyle.byShot[shot.id]?.axes ?? null }))
+            : null,
+        },
+      );
+    });
     const inputHash = sha({
       v: RENDER_FORMAT_VERSION,
       timelineHash,
@@ -619,115 +821,100 @@ export class RenderService {
       if (!existsSync(candidate.output_path)) continue;
       const render = this.toRender(candidate);
       if (render) {
+        recheckOriginalitySafely(this.sqlite, project.id, { id: render.id, plan: composePlan });
         onProgress(100, "Dùng lại bản render trước");
-        return { render, reused: true };
+        return { reused: { render, reused: true, ...(composeUsage ? { usage: composeUsage } : {}) } };
       }
     }
 
     const renderId = randomUUID();
+    const wordsByScene: Record<string, Array<{ text: string; startSec: number; endSec: number }>> = {};
+    if (assText !== null && timeline.editPlan?.emphasis?.length) {
+      const rows = this.sqlite.prepare("SELECT scene_id AS sceneId, words FROM voice_tracks WHERE project_id = ?")
+        .all(project.id) as Array<{ sceneId: string; words: unknown }>;
+      for (const row of rows) {
+        const raw = typeof row.words === "string" ? JSON.parse(row.words) as unknown : row.words;
+        if (!Array.isArray(raw)) continue;
+        wordsByScene[row.sceneId] = raw.filter((item): item is { text: string; startSec: number; endSec: number } =>
+          Boolean(item) && typeof item === "object"
+          && typeof (item as { text?: unknown }).text === "string"
+          && typeof (item as { startSec?: unknown }).startSec === "number"
+          && typeof (item as { endSec?: unknown }).endSec === "number");
+      }
+    }
+    const bundle: RenderBundle = {
+      bundleVersion: 1,
+      appVersion: readAppVersion(),
+      composeRenderVersion: COMPOSE_RENDER_VERSION,
+      projectId: project.id,
+      profileId: project.profileId ?? null,
+      renderId,
+      aspect: outputAspect,
+      timeline,
+      composePlan,
+      videoStyle: (videoStyle as RenderBundle["videoStyle"] | undefined) ?? null,
+      assText,
+      wordsByScene,
+      sfx: sfxCues(this.sqlite, project.id, timeline),
+      clipHashes,
+      croppedNames: [...croppedPaths],
+      creditsText: this.creditsText(project, timeline) + footageCreditLines(composePlan),
+      recipeId,
+      language: project.settings.language ?? null,
+      brandColor: brandColor ?? null,
+      accentColor: accentColor ?? null,
+      composeGraphics: budgetFeatures.composeGraphics,
+      graphicGrain: budgetFeatures.graphicGrain,
+      hasSrt: Boolean(timeline.subtitles && existsSync(timeline.subtitles.srtPath)),
+      files: [],
+    };
+    return {
+      prepared: {
+        bundle,
+        state: {
+          inputHash,
+          renderId,
+          outputAspect,
+          projectAspect,
+          isVariant,
+          storedAspect,
+          composeWarnings,
+          composeUsage: composeUsage ?? null,
+          startedMs,
+        },
+        local: { resolvePath, croppedPaths },
+      },
+    };
+  }
+
+  /**
+   * Control-plane part after the heavy work: sidecars, checks, report, the renders row, retention.
+   * `outputPath` is the finished video in this project's version folder.
+   */
+  async finalize(
+    project: Project,
+    prepared: PreparedRender,
+    outputPath: string,
+    executed: ExecuteReport,
+    signal: AbortSignal,
+    onProgress: RenderProgress = () => {},
+  ): Promise<{ render: Render; reused: boolean; usage?: JobUsage }> {
+    const { bundle, state } = prepared;
+    const { timeline } = bundle;
+    const composePlan = bundle.composePlan as ComposePlan | null;
+    const videoStyle = bundle.videoStyle as ReturnType<typeof prepareGraphicStyle> | null;
+    const budgetFeatures = { composeGraphics: bundle.composeGraphics, graphicGrain: bundle.graphicGrain };
+    const { renderId, inputHash, outputAspect, projectAspect, isVariant, storedAspect } = state;
+    const composeWarnings = [...state.composeWarnings, ...executed.composeWarnings];
+    const composeUsage = state.composeUsage ?? undefined;
     const versionFolder = this.versionDir(project.id, renderId);
     const thumbsDir = join(versionFolder, "thumbs");
     mkdirSync(thumbsDir, { recursive: true });
-
-    // 1. Scene clips (0–60 %), cached by content hash (includes target size).
-    const clipPaths: string[] = [];
-    let clipsReused = 0;
-    let clipsRendered = 0;
-    for (const [index, scene] of timeline.scenes.entries()) {
-      const clipPath = join(clipsDir, `${clipHashes[index]}.mp4`);
-      clipPaths.push(clipPath);
-      onProgress(Math.round((index / timeline.scenes.length) * 60), `Dựng cảnh ${index + 1}/${timeline.scenes.length}`);
-      if (existsSync(clipPath)) {
-        clipsReused += 1;
-        continue;
-      }
-      const plan = buildSceneClipPlan(scene, timeline.target, resolvePath);
-      const filterPath = join(clipsDir, `${clipHashes[index]}.filter.txt`);
-      const partPath = join(clipsDir, `${clipHashes[index]}.part.mp4`);
-      writeFileSync(filterPath, plan.filter);
-      try {
-        await this.tools.ffmpeg([
-          ...BASE_ARGS,
-          ...plan.inputArgs,
-          "-filter_complex_script", filterPath,
-          "-map", "[out]",
-          "-frames:v", String(plan.frames),
-          "-r", String(timeline.target.fps),
-          ...CLIP_OUTPUT_ARGS,
-          partPath,
-        ], { cwd: clipsDir, signal });
-        renameSync(partPath, clipPath);
-        clipsRendered += 1;
-      } catch (error) {
-        rmSync(partPath, { force: true });
-        if (isAbort(error) || signal.aborted) throw error;
-        throw new StageError(`FFmpeg lỗi khi dựng cảnh ${scene.order + 1}: ${(error as Error).message}`, "RENDER_CLIP_FAILED", false);
-      } finally {
-        rmSync(filterPath, { force: true });
-      }
-    }
-
-    // 2. Final pass (60–95 %): concat, subtitles, voice + music mix, loudnorm.
-    const concatPath = join(renderDir, "clips.txt");
-    writeFileSync(concatPath, concatListText(clipPaths));
-    const assFileName = assText !== null ? "subtitles.ass" : null;
-    if (assFileName) writeFileSync(join(renderDir, assFileName), assText!);
-    const plan = buildFinalPlan({
-      totalDurationSec: timeline.totalDurationSec,
-      scenes: timeline.scenes,
-      music: timeline.music,
-      concatListPath: concatPath,
-      resolvePath,
-      assFileName,
-    });
-    const finalFilter = "final.filter.txt";
-    writeFileSync(join(renderDir, finalFilter), plan.filter);
-    const relativePart = join("versions", renderId, "output.part.mp4");
-    const partPath = join(versionFolder, "output.part.mp4");
-    const outputPath = join(versionFolder, "output.mp4");
-    onProgress(60, "Ghép video, phụ đề và âm thanh");
-    try {
-      await this.tools.ffmpeg([
-        ...BASE_ARGS,
-        "-progress", "pipe:1",
-        "-nostats",
-        ...plan.inputArgs,
-        "-filter_complex_script", finalFilter,
-        "-map", plan.videoMap,
-        "-map", "[aout]",
-        ...(plan.reencodeVideo
-          ? ["-c:v", "libx264", "-preset", "veryfast", "-crf", "20", "-pix_fmt", "yuv420p", "-r", String(timeline.target.fps)]
-          : ["-c:v", "copy"]),
-        "-c:a", "aac", "-b:a", "192k", "-ar", "48000",
-        "-t", String(timeline.totalDurationSec),
-        "-movflags", "+faststart",
-        relativePart,
-      ], {
-        cwd: renderDir,
-        signal,
-        onStdout: (chunk) => {
-          const seconds = parseProgressSeconds(chunk);
-          if (seconds === null || timeline.totalDurationSec <= 0) return;
-          const pct = 60 + Math.min(1, seconds / timeline.totalDurationSec) * 35;
-          onProgress(Math.round(pct), "Ghép video, phụ đề và âm thanh");
-        },
-      });
-      renameSync(partPath, outputPath);
-    } catch (error) {
-      rmSync(partPath, { force: true });
-      if (isAbort(error) || signal.aborted) {
-        rmSync(versionFolder, { recursive: true, force: true });
-        throw error;
-      }
-      rmSync(versionFolder, { recursive: true, force: true });
-      throw new StageError(`FFmpeg lỗi khi ghép video: ${(error as Error).message}`, "RENDER_FINAL_FAILED", false);
-    } finally {
-      rmSync(join(renderDir, finalFilter), { force: true });
-    }
+    const { clipsReused, clipsRendered, graphicShots, joinWarnings } = executed;
 
     // 3. Sidecars.
     const creditsPath = join(versionFolder, "credits.txt");
-    writeFileSync(creditsPath, this.creditsText(project, timeline));
+    writeFileSync(creditsPath, bundle.creditsText);
     let srtPath: string | null = null;
     if (timeline.subtitles && existsSync(timeline.subtitles.srtPath)) {
       srtPath = join(versionFolder, "subtitles.srt");
@@ -737,8 +924,60 @@ export class RenderService {
     // 4. Checks (95–100 %). Issues are reported, never fatal.
     onProgress(95, "Kiểm tra video");
     const report = await this.check(timeline, outputPath, thumbsDir, signal, project, outputAspect);
-    const elapsedSec = Math.round((Date.now() - started) / 100) / 10;
-    const fullReport: RenderReport = { ...report, clipsReused, clipsRendered, elapsedSec };
+    for (const message of [...joinWarnings, ...composeWarnings]) {
+      report.issues.push({
+        code: message.includes("xfade") ? "XFADE_UNAVAILABLE" : message.startsWith("Cảnh") || message.startsWith("Không lập") ? "COMPOSE_FALLBACK" : "GRAPHIC_SKIPPED",
+        severity: "WARN",
+        sceneId: null,
+        message,
+      });
+    }
+    const elapsedSec = Math.round((Date.now() - state.startedMs) / 100) / 10;
+    const volume = await this.measureVolume(outputPath, signal);
+    const subtitlesInSync = this.subtitlesMatch(project.id, timeline, srtPath, report.durationSec);
+    let freezeSegments: number | undefined;
+    let blackSegments: number | undefined;
+    let freezeAtSec: number[] = [];
+    let blackAtSec: number[] = [];
+    if (resolveEditEngine(project.settings.edit?.engine) === "compose") {
+      try {
+        const probed = await probeFreezeBlack(this.tools.ffmpeg, outputPath, signal);
+        freezeSegments = probed.freezeSegments;
+        blackSegments = probed.blackSegments;
+        freezeAtSec = probed.freezeAtSec;
+        blackAtSec = probed.blackAtSec;
+      } catch (error) {
+        freezeSegments = 0;
+        blackSegments = 0;
+        composeWarnings.push(`Không đo được đoạn đứng hoặc đen: ${error instanceof Error ? error.message : "lỗi"}`);
+      }
+    }
+    const fullReport: RenderReport = {
+      ...report,
+      clipsReused,
+      clipsRendered,
+      elapsedSec,
+      ...volume,
+      subtitlesInSync,
+      ...(freezeSegments === undefined ? {} : { freezeSegments, blackSegments, freezeAtSec, blackAtSec }),
+      ...(composePlan ? {
+        compose: {
+          stats: composePlan.stats,
+          licences: footageLicences(composePlan),
+          warnings: composeWarnings,
+          graphicsMode: budgetFeatures.composeGraphics,
+          graphicGrain: budgetFeatures.graphicGrain,
+          graphicShots: graphicShots as NonNullable<NonNullable<RenderReport["compose"]>["graphicShots"]>,
+          ...(videoStyle ? {
+            style: {
+              packId: videoStyle.packId ?? null,
+              packVersion: videoStyle.packVersion ?? null,
+              fingerprint: videoStyle.fingerprint,
+            },
+          } : {}),
+        },
+      } : {}),
+    };
 
     const metadataSnapshot = this.currentMetadataSnapshot(project.id);
     const version = this.nextVersionNumber(project.id);
@@ -775,6 +1014,19 @@ export class RenderService {
         @version, @note, @pinned, @deleted_at, @review_thread_id, @metadata_snapshot, @aspect_ratio, @variant_of)
     `).run(row);
 
+    recheckOriginalitySafely(this.sqlite, project.id, { id: renderId, plan: composePlan });
+    await recordFinishedLookSafely(this.sqlite, {
+      projectId: project.id,
+      renderId,
+      profileId: project.profileId ?? null,
+      createdAt: row.created_at,
+      style: videoStyle?.resolved ?? resolveStyle({}, { width: fullReport.width, height: fullReport.height }),
+      picks: videoStyle?.picks ?? [],
+      shotSec: shotSeconds(composePlan),
+      kindShare: kindShareFor(timeline, composePlan),
+      thumbsDir,
+      thumbnailIds: fullReport.thumbnails,
+    }, this.now);
     try {
       this.applyRetention(project.id);
     } catch (error) {
@@ -782,7 +1034,7 @@ export class RenderService {
     }
 
     onProgress(100, "Render xong");
-    return { render: this.toRender(row)!, reused: false };
+    return { render: this.toRender(row)!, reused: false, ...(composeUsage ? { usage: composeUsage } : {}) };
   }
 
   /** Render every profile-account format that still lacks a finished render. Sequential, no LLM. */
@@ -839,6 +1091,7 @@ export class RenderService {
     outputAspect?: AspectRatio,
   ): Promise<Omit<RenderReport, "clipsReused" | "clipsRendered" | "elapsedSec">> {
     const issues: RenderIssue[] = [];
+    this.warnDuplicateVisuals(project, issues);
     const probe = await this.tools.probe(outputPath, signal);
     const expected = timeline.totalDurationSec;
     if (!probe.hasVideo) issues.push({ code: "NO_VIDEO", severity: "ERROR", sceneId: null, message: "Video không có luồng hình." });
@@ -937,6 +1190,24 @@ export class RenderService {
     };
   }
 
+  private warnDuplicateVisuals(project: Project | undefined, issues: RenderIssue[]): void {
+    if (!project) return;
+    const rows = this.sqlite.prepare(`SELECT sel.scene_id AS sceneId, sel.selected_by AS selectedBy, c.phash AS phash
+      FROM visual_selections sel JOIN visual_candidates c ON c.id = sel.candidate_id
+      WHERE sel.project_id = ? AND c.phash IS NOT NULL`).all(project.id) as Array<{ sceneId: string; selectedBy: string; phash: string }>;
+    const groups = new Map<string, Array<{ sceneId: string; selectedBy: string }>>();
+    for (const row of rows) groups.set(row.phash, [...(groups.get(row.phash) ?? []), row]);
+    for (const group of groups.values()) {
+      if (group.length < 2 || group.some((row) => row.selectedBy === "USER")) continue;
+      issues.push({
+        code: "DUPLICATE_VISUAL",
+        severity: "WARN",
+        sceneId: group[1]?.sceneId ?? null,
+        message: `${group.length} cảnh trong video đang dùng cùng một ảnh.`,
+      });
+    }
+  }
+
   private async runRenderVision(
     project: Project,
     timeline: Timeline,
@@ -1006,6 +1277,37 @@ export class RenderService {
         message: `Kiểm tra vision sau render thất bại: ${message}`,
       });
     }
+  }
+
+  private async measureVolume(outputPath: string, signal: AbortSignal): Promise<{ meanVolumeDb: number | null; maxVolumeDb: number | null }> {
+    try {
+      const { stderr } = await this.tools.ffmpeg(
+        ["-hide_banner", "-i", outputPath, "-af", "volumedetect", "-f", "null", "-"],
+        { signal },
+      );
+      const mean = /mean_volume:\s*(-?\d+(?:\.\d+)?)/.exec(stderr);
+      const max = /max_volume:\s*(-?\d+(?:\.\d+)?)/.exec(stderr);
+      return { meanVolumeDb: mean ? Number(mean[1]) : null, maxVolumeDb: max ? Number(max[1]) : null };
+    } catch {
+      return { meanVolumeDb: null, maxVolumeDb: null };
+    }
+  }
+
+  private subtitlesMatch(projectId: string, timeline: Timeline, srtPath: string | null, durationSec: number): boolean {
+    if (!srtPath || !existsSync(srtPath)) return false;
+    const cues = parseSrtCues(readFileSync(srtPath, "utf8"));
+    const last = cues.at(-1);
+    if (!last || Math.abs(durationSec - last.endSec) > 2) return false;
+    const rows = this.sqlite.prepare("SELECT scene_id AS sceneId, words FROM voice_tracks WHERE project_id = ?")
+      .all(projectId) as Array<{ sceneId: string; words: unknown }>;
+    if (rows.length === 0) return false;
+    for (const scene of timeline.scenes) {
+      const row = rows.find((item) => item.sceneId === scene.sceneId);
+      if (!row) return false;
+      const raw = typeof row.words === "string" ? JSON.parse(row.words) as unknown : row.words;
+      if (!Array.isArray(raw) || raw.length === 0) return false;
+    }
+    return true;
   }
 
   /** Credits from the DB metadata of every visual and the music used in the timeline. */

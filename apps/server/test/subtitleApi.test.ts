@@ -9,6 +9,7 @@ import type { Project, SubtitleCue } from "@vg/shared";
 import { PipelineEventBus } from "../src/jobs/eventBus.js";
 import { JobRepository } from "../src/jobs/jobRepository.js";
 import { buildApp } from "../src/app.js";
+import { testActor } from "./testActor.js";
 import { parseConfig, type AppConfig } from "../src/lib/config.js";
 import { SubtitleExecutor } from "../src/stages/subtitle/subtitleExecutor.js";
 import { projectDir } from "../src/storage/paths.js";
@@ -72,7 +73,7 @@ beforeEach(async () => {
     LOG_LEVEL: "silent",
     TTS_PROVIDER: "mock",
   });
-  app = buildApp({ config });
+  app = buildApp({ testActor,  config });
   await createProject();
   sqlite = new Database(config.DATABASE_PATH);
   repository = new JobRepository(sqlite, new PipelineEventBus());

@@ -42,6 +42,8 @@ export async function runGuidelineLlmCheck(input: {
     registry: input.registry,
     route,
     task: "guidelineCheck",
+    knowledgeProject: input.project,
+    knowledgeQuery: [input.script.title,...input.script.sections.map(s=>s.narration)].join(" ").slice(0,2500),
     system: "You check a video script against content guidelines. Return only JSON. Cite only rule keys from the list. sceneId must be a section id from the script, or null for the whole video.",
     prompt: [
       `Topic: ${input.project.topic}`,

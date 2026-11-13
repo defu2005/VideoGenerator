@@ -31,6 +31,7 @@ export function saveOperatorSettings(
       ...current.modelByKind,
       ...(parsedUpdate.modelByKind ?? {}),
     },
+    runtimeByChannel: { ...current.runtimeByChannel, ...parsedUpdate.runtimeByChannel },
     telegramEngine: parsedUpdate.telegramEngine === null
       ? undefined
       : parsedUpdate.telegramEngine ?? current.telegramEngine,

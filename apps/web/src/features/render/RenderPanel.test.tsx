@@ -234,8 +234,8 @@ describe("RenderPanel", () => {
     await waitFor(() => expect(calls.some((call) => call.init?.method === "PATCH" && String(call.init.body).includes("Ghi chú mới"))).toBe(true));
 
     fireEvent.click(screen.getAllByRole("button", { name: "Xoá" })[0]!);
+    fireEvent.click(await screen.findByRole("button", { name: "Xoá file" }));
     await waitFor(() => expect(calls.some((call) => call.init?.method === "DELETE")).toBe(true));
-    expect(window.confirm).toHaveBeenCalled();
   });
 
   it("asks for a timeline before rendering", async () => {
@@ -256,5 +256,30 @@ describe("RenderPanel", () => {
     expect(await screen.findByText("Chưa có video")).toBeInTheDocument();
     expect(screen.getByText(/hoàn tất tab Timeline trước/)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Render" })).toBeDisabled();
+  });
+
+  it("shows compose stats when a plan exists", async () => {
+    vi.stubGlobal("EventSource", undefined);
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes("/compose-plan")) {
+        return jsonResponse({
+          stats: { shotsPerMin: 12.5, kindShare: { still: 0.25 }, beatCutPct: 0.5 },
+          scenes: [{ sceneId, shots: [{ id: "s1", kind: "footage", startSec: 0, endSec: 2, reason: "baseline" }] }],
+        });
+      }
+      if (url.includes("/clips")) return jsonResponse({ eligible: true, reason: null, renderId: "r1", options: { count: 3, minSec: 20, maxSec: 45, reframe: "center" }, proposals: [], children: [], jobs: [] });
+      if (url.includes("/thumbnail")) return jsonResponse({ hasLandscape: false, hasCover: false, meta: null, candidates: [] });
+      if (url.endsWith("/pipeline")) return jsonResponse(pipelineWith("DONE"));
+      if (url.endsWith("/renders")) return jsonResponse({ renders: [version()] });
+      if (url.endsWith("/render")) return jsonResponse(render);
+      if (url.endsWith("/metadata")) {
+        return jsonResponse({ metadata: null, stale: true, extras: { chaptersText: "", creditsText: "", disclosure: "AI" } });
+      }
+      return jsonResponse(timeline);
+    }));
+    renderWithProviders(<RenderPanel project={project} />);
+    expect(await screen.findByText(/12.5 cảnh\/phút/)).toBeInTheDocument();
+    expect(screen.getByText(/Footage · 0.0–2.0s · baseline/)).toBeInTheDocument();
   });
 });

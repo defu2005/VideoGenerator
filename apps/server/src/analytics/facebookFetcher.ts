@@ -1,5 +1,6 @@
+import type { KnowledgeService } from "../knowledge/service.js";
 import { META_GRAPH_VERSION, type TokenSet } from "@vg/shared";
-import { ANALYTICS_REQUIRED_SCOPES } from "./scopes.js";
+import { analyticsScopes } from "./scopes.js";
 import {
   AnalyticsHttpError,
   type AnalyticsLogger,
@@ -24,6 +25,7 @@ const FB_METRICS = Object.keys(FB_METRIC_MAP);
 const MS_METRICS = new Set(["post_video_avg_time_watched", "post_video_view_time"]);
 
 export type FacebookFetcherOptions = {
+  knowledge?: KnowledgeService;
   fetchImpl?: typeof fetch;
   logger?: AnalyticsLogger;
   now?: () => Date;
@@ -33,14 +35,14 @@ type InsightRow = { name?: string; values?: Array<{ value?: unknown }> };
 
 export class FacebookMetricsFetcher implements MetricsFetcher {
   readonly platform = "facebook_reels" as const;
-  readonly requiredScopes = [...ANALYTICS_REQUIRED_SCOPES.facebook_reels];
+  get requiredScopes() { return analyticsScopes(this.platform, this.options.knowledge); }
 
   private readonly fetchImpl: typeof fetch;
   private readonly logger?: AnalyticsLogger;
   private readonly now: () => Date;
   private loggedRejected = new Set<string>();
 
-  constructor(options: FacebookFetcherOptions = {}) {
+  constructor(private readonly options: FacebookFetcherOptions = {}) {
     this.fetchImpl = options.fetchImpl ?? fetch;
     this.logger = options.logger;
     this.now = options.now ?? (() => new Date());

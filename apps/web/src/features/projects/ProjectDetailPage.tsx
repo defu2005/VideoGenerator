@@ -1,4 +1,4 @@
-import { recommendBrief, type Project } from "@vg/shared";
+import { recommendBrief, resolveFormat, type Project } from "@vg/shared";
 import { useQuery } from "@tanstack/react-query";
 import { Link, Navigate, NavLink, useNavigate, useParams } from "react-router-dom";
 import { useState } from "react";
@@ -6,6 +6,7 @@ import { ConfirmDialog } from "../../components/ConfirmDialog";
 import { ErrorState } from "../../components/ErrorState";
 import { Spinner } from "../../components/Spinner";
 import { StatusBadge } from "../../components/StatusBadge";
+import { Icon } from "../../components/ui/Icon";
 import { useDeleteProject, useDuplicateProject, useProject, useSetProjectArchived } from "../../hooks/useProjects";
 import { ApiRequestError } from "../../services/apiClient";
 import { getAutoReport } from "../../services/autoReportApi";
@@ -14,7 +15,7 @@ import { PipelinePanel } from "../pipeline/PipelinePanel";
 import { ScriptTab } from "../script/ScriptTab";
 import { SceneBoard } from "../scenes/SceneBoard";
 import { VisualReview } from "../visuals/VisualReview";
-import { ProjectUsagePanel } from "../usage/ProjectUsagePanel";
+import { ProjectUsagePanel, TreatmentCostCompare } from "../usage/ProjectUsagePanel";
 import { VoicePanel } from "../voice/VoicePanel";
 import { SubtitlePanel } from "../subtitles/SubtitlePanel";
 import { MusicPanel } from "../music/MusicPanel";
@@ -22,6 +23,8 @@ import { TimelinePanel } from "../timeline/TimelinePanel";
 import { RenderPanel } from "../render/RenderPanel";
 import { TranslationPanel } from "./TranslationPanel";
 import { StageStepper } from "./StageStepper";
+import { StageTimeoutPanel } from "./StageTimeoutPanel";
+import { QualityRepairPanel } from "./QualityRepairPanel";
 
 const TABS = ["overview", "script", "scenes", "visuals", "voice", "subtitles", "music", "timeline", "render", "usage"] as const;
 
@@ -39,6 +42,12 @@ function ProjectOverview({ project }: { project: Project }) {
   const duration = project.settings.targetDurationSec >= 60
     ? `${project.settings.targetDurationSec / 60} min`
     : `${project.settings.targetDurationSec} sec`;
+  const pickedFormat = resolveFormat({
+    topic: project.topic,
+    aspectRatio: project.settings.aspectRatio,
+    targetDurationSec: project.settings.targetDurationSec,
+    format: project.settings.format,
+  });
   return (
     <div className="overview-grid">
       <section className="panel overview-card">
@@ -50,8 +59,10 @@ function ProjectOverview({ project }: { project: Project }) {
           {project.settings.platform.replaceAll("_", " ")} · {project.settings.aspectRatio} · {duration} ·
           {" "}{project.settings.language} · {project.settings.style}
         </p>
+        <p>{pickedFormat.recipe.nameVi}. {project.settings.formatReason ?? pickedFormat.reason}</p>
+        <TreatmentCostCompare project={project} />
         {warnings.length > 0 && (
-          <ul className="brief-warning-list" aria-label="Brief warnings">
+          <ul className="brief-warning-list" aria-label="Cảnh báo brief">
             {warnings.map((warning) => <li key={warning}>{warning}</li>)}
           </ul>
         )}
@@ -87,6 +98,8 @@ function ProjectOverview({ project }: { project: Project }) {
           <TranslationPanel project={project} />
         </>
       )}
+      <StageTimeoutPanel project={project} />
+      <QualityRepairPanel project={project} />
     </div>
   );
 }
@@ -108,7 +121,7 @@ export function ProjectDetailPage() {
   const [actionError, setActionError] = useState("");
 
   if (!TABS.includes(tab as typeof TABS[number])) return <Navigate replace to={`/projects/${id}/overview`} />;
-  if (projectQuery.isPending) return <Spinner label="Loading project" />;
+  if (projectQuery.isPending) return <Spinner label="Đang tải dự án" />;
   if (projectQuery.isError) {
     if (projectQuery.error instanceof ApiRequestError && projectQuery.error.status === 404) {
       return <section className="state-card not-found-state"><h1>Project not found</h1><p>This project may have been deleted or is no longer available.</p><Link className="button button-secondary" to="/projects">Back to project library</Link></section>;
@@ -155,7 +168,7 @@ export function ProjectDetailPage() {
   return (
     <div className="page-stack">
       <div className="detail-back"><Link to="/projects">← Project library</Link></div>
-      <section className="detail-header panel detail-header-sticky">
+      <section className="detail-header panel">
         <div className="detail-title">
           <div><p className="eyebrow">PROJECT · V{project.version}</p><h1>{project.title}</h1></div>
           <StatusBadge status={project.status} />
@@ -179,7 +192,7 @@ export function ProjectDetailPage() {
         </div>
       </section>
       {actionError && <p className="request-error" role="alert">{actionError}</p>}
-      <nav className="tab-bar" aria-label="Project sections">
+      <nav className="tab-bar" aria-label="Mục của dự án">
         {tabs.map((value) => (
           <NavLink key={value} to={`/projects/${project.id}/${value}`} className={({ isActive }) => isActive ? "active" : ""}>
         {value === "usage" ? "Token" : `${value[0].toUpperCase()}${value.slice(1)}`}
@@ -189,7 +202,7 @@ export function ProjectDetailPage() {
       {tab === "overview"
         ? <ProjectOverview project={project} />
         : tab === "usage"
-          ? <ProjectUsagePanel projectId={project.id} />
+          ? <ProjectUsagePanel projectId={project.id} project={project} />
         : tab === "script"
           ? <ScriptTab project={project} />
           : tab === "scenes"
@@ -206,7 +219,7 @@ export function ProjectDetailPage() {
                     ? <TimelinePanel project={project} />
                   : tab === "render"
                     ? <RenderPanel project={project} />
-                  : <section className="panel coming-soon"><span className="coming-icon">◷</span><p className="eyebrow">{tab.toUpperCase()}</p><h2>Coming in a later task</h2><p>This project workspace will be available in a later task.</p></section>}
+                  : <section className="panel coming-soon"><span className="coming-icon"><Icon name="clock" size={28} /></span><p className="eyebrow">{tab.toUpperCase()}</p><h2>Coming in a later task</h2><p>This project workspace will be available in a later task.</p></section>}
       <EditProjectDialog project={project} open={editing} onClose={() => setEditing(false)} />
       <ConfirmDialog
         open={confirmDelete}

@@ -161,7 +161,7 @@ describe("LLM registry", () => {
     const listed = registry.list();
     expect(listed.map((provider) => provider.id)).toEqual(LlmProviderIdSchema.options);
     expect(listed.filter((provider) => provider.configured).map((provider) => provider.id)).toEqual(["anthropic", "openai", "ollama"]);
-    expect(listed.find((provider) => provider.id === "gemini")).toMatchObject({ configured: false, hint: expect.stringContaining("GEMINI_API_KEY") });
+    expect(listed.find((provider) => provider.id === "gemini")).toMatchObject({ configured: false, hint: expect.stringContaining("Kết nối → AI") });
     expect(JSON.stringify(registry.list())).not.toContain("secret");
     expect(registry.resolve(undefined, undefined, "script")).toMatchObject({ provider: { id: "openai" }, model: "stage-model" });
     expect(registry.resolve({ provider: "anthropic" }, { provider: "openai" }, "script"))
@@ -181,7 +181,7 @@ describe("LLM registry", () => {
   it("marks Ollama unconfigured until a model can be resolved", () => {
     const noModel = new LlmProviderRegistry(parseConfig({ LLM_ENABLE_MOCK: "false" }));
     expect(noModel.list().find((provider) => provider.id === "ollama"))
-      .toMatchObject({ configured: false, defaultModel: null, hint: "Set OLLAMA_MODEL" });
+      .toMatchObject({ configured: false, defaultModel: null, hint: "Nhập model cho Ollama trong Kết nối → AI." });
     const globalModel = new LlmProviderRegistry(parseConfig({
       LLM_ENABLE_MOCK: "false",
       LLM_DEFAULT_MODEL: "global-ollama",
@@ -355,6 +355,24 @@ describe("LLM registry", () => {
       expect(firstModels.json().models).toEqual(expect.arrayContaining(["remote-model", "configured-model"]));
       expect(secondModels.json()).toEqual(firstModels.json());
       expect(fetchImpl).toHaveBeenCalledTimes(1);
+
+      const assigned = await app.inject({
+        method: "POST",
+        url: "/api/settings/llm-routing/assign",
+        payload: {
+          assignments: [
+            { task: "vision", provider: "openai", model: "gpt-4.1" },
+          ],
+        },
+      });
+      expect(assigned.statusCode).toBe(200);
+      expect(assigned.json().tasks.visionCheck).toEqual({ provider: "openai", model: "gpt-4.1" });
+      expect(assigned.json().tasks.renderVision).toEqual({ provider: "openai", model: "gpt-4.1" });
+      expect(assigned.json().tasks.research).toEqual({ provider: "mock", model: "research-model" });
+      expect(assigned.json().markedNow).toEqual([{ provider: "openai", model: "gpt-4.1" }]);
+      registry.setVisionMarkLoader(() => [{ provider: "openai", model: "gpt-4.1" }]);
+      const project = { settings: { llm: { tasks: { visionCheck: { provider: "openai", model: "gpt-4.1" } } } } } as never;
+      expect(registry.resolveTask("visionCheck", project).provider.capabilities?.vision).toBe(true);
     } finally {
       await app.close();
       sqlite.close();
@@ -385,7 +403,7 @@ describe("LLM registry", () => {
   it("adds OmniRoute (local gateway) and OpenCode Zen as OpenAI-compatible providers", async () => {
     const off = new LlmProviderRegistry(parseConfig({ LLM_ENABLE_MOCK: "false" }));
     expect(off.list().find((item) => item.id === "omniroute")?.configured).toBe(false);
-    expect(off.list().find((item) => item.id === "opencode")?.hint).toContain("OPENCODE_API_KEY");
+    expect(off.list().find((item) => item.id === "opencode")?.hint).toContain("Kết nối → AI");
 
     const registry = new LlmProviderRegistry(parseConfig({
       LLM_ENABLE_MOCK: "false",

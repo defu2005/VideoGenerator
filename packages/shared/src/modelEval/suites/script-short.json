@@ -1,0 +1,176 @@
+{
+  "id": "script-short",
+  "titleVi": "Kịch bản ngắn",
+  "taskId": "script",
+  "rubricVi": "Lời dẫn ngắn, tiếng Việt, đúng độ dài.",
+  "cases": [
+    {
+      "id": "script-short-1",
+      "taskId": "script",
+      "input": {
+        "topic": "Kịch bản ngắn 1",
+        "seconds": 60
+      },
+      "graders": [
+        {
+          "kind": "length",
+          "min": 40,
+          "max": 800
+        },
+        {
+          "kind": "bannedPhrases",
+          "phrases": [
+            "bạn sẽ sốc"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "script-short-2",
+      "taskId": "script",
+      "input": {
+        "topic": "Kịch bản ngắn 2",
+        "seconds": 60
+      },
+      "graders": [
+        {
+          "kind": "length",
+          "min": 40,
+          "max": 800
+        },
+        {
+          "kind": "bannedPhrases",
+          "phrases": [
+            "bạn sẽ sốc"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "script-short-3",
+      "taskId": "script",
+      "input": {
+        "topic": "Kịch bản ngắn 3",
+        "seconds": 60
+      },
+      "graders": [
+        {
+          "kind": "length",
+          "min": 40,
+          "max": 800
+        },
+        {
+          "kind": "bannedPhrases",
+          "phrases": [
+            "bạn sẽ sốc"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "script-short-4",
+      "taskId": "script",
+      "input": {
+        "topic": "Kịch bản ngắn 4",
+        "seconds": 60
+      },
+      "graders": [
+        {
+          "kind": "length",
+          "min": 40,
+          "max": 800
+        },
+        {
+          "kind": "bannedPhrases",
+          "phrases": [
+            "bạn sẽ sốc"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "script-short-5",
+      "taskId": "script",
+      "input": {
+        "topic": "Kịch bản ngắn 5",
+        "seconds": 60
+      },
+      "graders": [
+        {
+          "kind": "length",
+          "min": 40,
+          "max": 800
+        },
+        {
+          "kind": "bannedPhrases",
+          "phrases": [
+            "bạn sẽ sốc"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "script-short-6",
+      "taskId": "script",
+      "input": {
+        "topic": "Kịch bản ngắn 6",
+        "seconds": 60
+      },
+      "graders": [
+        {
+          "kind": "length",
+          "min": 40,
+          "max": 800
+        },
+        {
+          "kind": "bannedPhrases",
+          "phrases": [
+            "bạn sẽ sốc"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "script-short-7",
+      "taskId": "script",
+      "input": {
+        "topic": "Kịch bản ngắn 7",
+        "seconds": 60
+      },
+      "graders": [
+        {
+          "kind": "length",
+          "min": 40,
+          "max": 800
+        },
+        {
+          "kind": "bannedPhrases",
+          "phrases": [
+            "bạn sẽ sốc"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "script-short-8",
+      "taskId": "script",
+      "input": {
+        "topic": "Kịch bản ngắn 8",
+        "seconds": 60
+      },
+      "graders": [
+        {
+          "kind": "length",
+          "min": 40,
+          "max": 800
+        },
+        {
+          "kind": "bannedPhrases",
+          "phrases": [
+            "bạn sẽ sốc"
+          ]
+        }
+      ]
+    }
+  ]
+}

@@ -236,6 +236,7 @@ export async function runProviderFallback<T>(input: {
 }): Promise<{ id: string; value: T }> {
   const attempts = input.attempts ?? 2;
   const tried: string[] = [];
+  const failureCodes: string[] = [];
   let lastError: unknown;
   for (const id of input.chain) {
     if (!input.isAvailable(id)) {
@@ -249,13 +250,17 @@ export async function runProviderFallback<T>(input: {
       } catch (error) {
         if (error instanceof Error && error.name === "AbortError") throw error;
         lastError = error;
+        failureCodes.push(error && typeof error === "object" && "code" in error ? String((error as { code?: string }).code) : "OTHER");
         tried.push(attempt === 0 ? id : `${id} lần ${attempt + 1}`);
       }
     }
   }
   const message = ttsFailureMessage(tried);
+  const lastCode = failureCodes.at(-1) ?? "";
+  if (failureCodes.length > 0 && failureCodes.every((code) => code === "TTS_NETWORK") && lastError instanceof Error) throw lastError;
   if (lastError instanceof Error && lastError.message && !lastError.message.includes("Không tạo được giọng đọc")) {
-    throw new Error(`${message} ${stripSecrets(lastError.message)}`);
+    const lastId = tried.at(-1)?.split(" ")[0] ?? "tts";
+    throw new Error(`${message} (${lastId}: ${lastCode || "TTS_FAILED"}) ${stripSecrets(lastError.message)}`);
   }
   throw new Error(message);
 }

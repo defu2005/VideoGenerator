@@ -1,0 +1,1 @@
+ALTER TABLE `nodes` ADD `capability_info` text DEFAULT '{}' NOT NULL;

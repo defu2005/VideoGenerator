@@ -1,4 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
+import { inheritWorkspace, stampWorkspace } from "../auth/requestContext.js";
 import { existsSync, mkdirSync, statSync, writeFileSync } from "node:fs";
 import { extname, join } from "node:path";
 import {
@@ -304,6 +305,7 @@ export class ClipService {
       nowIso,
       Math.round(sentences[sentences.length - 1]!.end),
     );
+      stampWorkspace(this.sqlite, "projects", projectId);
     createProjectDir(this.config.DATA_DIR, projectId);
     this.seedStages(projectId, "DONE");
     const renderId = randomUUID();
@@ -554,6 +556,7 @@ export class ClipService {
       parent.id,
       Math.round(duration),
     );
+      inheritWorkspace(this.sqlite, "projects", childId, "projects", parent.id);
     createProjectDir(this.config.DATA_DIR, childId);
     this.seedStages(childId, "RUNNING");
   }

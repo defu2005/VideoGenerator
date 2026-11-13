@@ -21,6 +21,7 @@ import { ShortsPanel } from "./ShortsPanel";
 import { MetadataPanel } from "./MetadataPanel";
 import { PublishPanel } from "./PublishPanel";
 import { RenderHistory, renderHistoryKeys } from "./RenderHistory";
+import { ComposePlanPanel } from "./ComposePlanPanel";
 
 const renderKeys = { project: (projectId: string) => ["render", projectId] as const };
 
@@ -35,6 +36,10 @@ const ISSUE_LABEL: Record<RenderIssueCode, string> = {
   SUBTITLE_ILLEGIBLE: "Phụ đề khó đọc",
   RENDER_VISION_FAILED: "Lỗi AI nhìn sau render",
   VERTICAL_TOO_LONG: "Bản dọc quá dài",
+  GRAPHIC_SKIPPED: "Bỏ đồ họa",
+  XFADE_UNAVAILABLE: "Không có chuyển cảnh xfade",
+  DUPLICATE_VISUAL: "Ảnh trùng giữa các cảnh",
+  COMPOSE_FALLBACK: "Cảnh quay lùi về ảnh tĩnh",
 };
 
 function clock(seconds: number): string {
@@ -65,6 +70,15 @@ export function RenderPanel({ project }: { project: Project }) {
     refetchIntervalInBackground: false,
   });
   const timeline = useQuery({ queryKey: ["timeline", project.id], queryFn: () => getProjectTimeline(project.id) });
+  const estimate = useQuery({
+    queryKey: ["render-estimate", project.id, project.updatedAt],
+    queryFn: async () => {
+      const response = await fetch(`/api/projects/${project.id}/render-estimate`);
+      if (!response.ok) return null;
+      const body = await response.json() as { textVi?: string };
+      return body.textVi ?? null;
+    },
+  });
 
   const stage = pipeline.data?.stages.find((record) => record.stage === "RENDER");
   const rendering = pipeline.data?.activeJob?.stage === "RENDER" || stage?.state === "RUNNING" || stage?.state === "QUEUED";
@@ -177,6 +191,7 @@ export function RenderPanel({ project }: { project: Project }) {
           )}
           {rendering && pipeline.data?.activeJob?.startedAt ? <ElapsedTime since={pipeline.data.activeJob.startedAt} /> : null}
         </div>
+        {estimate.data ? <p>{estimate.data}</p> : null}
         <div className="render-actions">
           <label className="render-format">
             <span>Định dạng</span>
@@ -212,6 +227,7 @@ export function RenderPanel({ project }: { project: Project }) {
           )}
         </div>
       </section>
+      <ComposePlanPanel projectId={project.id} />
 
       {data && (
         <>

@@ -42,6 +42,7 @@ export function writeSubtitleFiles(
   aspectRatio: string = "16:9",
   maxCharsPerLine: number = defaultMaxCharsPerLine(aspectRatio as "16:9" | "9:16" | "1:1"),
   sceneDurations?: Map<string, number>,
+  style?: { fontSize?: number; highlightColor?: string },
 ): { srtPath: string; assPath: string } {
   const targetDir = join(projectDirPath, "subtitles");
   const srtPath = join(targetDir, "subtitles.srt");
@@ -70,7 +71,12 @@ export function writeSubtitleFiles(
   });
 
   writeFileSync(srtPath, toSrt(absoluteCues), "utf8");
-  writeFileSync(assPath, toAss(absoluteCues, { aspectRatio, fontName: "Arial" }), "utf8");
+  writeFileSync(assPath, toAss(absoluteCues, {
+    aspectRatio,
+    fontName: "Arial",
+    ...(style?.fontSize ? { fontSize: style.fontSize } : {}),
+    ...(style?.highlightColor ? { highlightColor: style.highlightColor } : {}),
+  }), "utf8");
   return { srtPath, assPath };
 }
 
@@ -148,7 +154,7 @@ export class SubtitleExecutor implements StageExecutor {
         text: String(cue.text ?? "").trim(),
       })).filter((cue) => cue.text.length > 0);
       generated.push(...resolved);
-      inputParts.push(`${scene.id}\u0000${track.input_hash}\u0000${scene.narration.trim()}\u0000${aspectRatio}\u0000${maxCharsPerLine}\u0000${SUBTITLE_FORMAT_VERSION}`);
+      inputParts.push(`${scene.id}\u0000${track.input_hash}\u0000${scene.narration.trim()}\u0000${aspectRatio}\u0000${maxCharsPerLine}\u0000${project.settings.edit?.fontSize ?? ""}\u0000${project.settings.edit?.highlightColor ?? ""}\u0000${SUBTITLE_FORMAT_VERSION}`);
     }
 
     const inputHash = createHash("sha256").update(inputParts.join("\u0000")).digest("hex");
@@ -166,6 +172,10 @@ export class SubtitleExecutor implements StageExecutor {
       aspectRatio,
       maxCharsPerLine,
       sceneDurations,
+      {
+        ...(project.settings.edit?.fontSize ? { fontSize: project.settings.edit.fontSize } : {}),
+        ...(project.settings.edit?.highlightColor ? { highlightColor: project.settings.edit.highlightColor } : {}),
+      },
     );
     const finalSrtPath = filePaths.srtPath;
     const finalAssPath = filePaths.assPath;

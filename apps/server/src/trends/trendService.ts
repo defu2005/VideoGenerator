@@ -1,3 +1,5 @@
+import { flagUntrustedText } from "../operator/qualityGates.js";
+import { earlierTopic } from "../retrieval/topics.js";
 import { randomUUID } from "node:crypto";
 import type Database from "better-sqlite3";
 import {
@@ -196,6 +198,7 @@ export function createTrendService(deps: {
     const skipped: TrendRefreshResponse["skipped"] = [];
     const allowed: TrendItem[] = [];
     for (const item of items) {
+      flagUntrustedText(deps.sqlite, `trend:${item.url ?? item.title}`, item.title);
       if (!coversNews && isSensitiveText(item.title)) {
         skipped.push({ title: item.title, reason: "sensitive" });
         logSkip(profileId, item.title, "sensitive");
@@ -219,7 +222,7 @@ export function createTrendService(deps: {
         items: filtered,
       });
       const routeProject = {
-        id: profileId,
+        id: profileId, profileId, topic: profile.direction, description: profile.direction,
         mode: "AUTO" as const,
         settings: {
           language: profile.language,
@@ -232,6 +235,7 @@ export function createTrendService(deps: {
         registry: deps.llm,
         route,
         task: "trendMatch",
+        knowledgeProject: routeProject as never,
         system: built.system,
         prompt: built.prompt,
         schema: TrendMatchOutputSchema,
@@ -248,6 +252,7 @@ export function createTrendService(deps: {
         if (skip.reason === "sensitive") logSkip(profileId, skip.title, "sensitive");
       }
     }
+    ideas = await Promise.all(ideas.map(async idea=>{const duplicate=await earlierTopic(deps.sqlite,profileId,idea.title);return duplicate?{...idea,whyNow:idea.whyNow+" · đã làm: "+duplicate.title,earlierProjectId:duplicate.projectId}:idea;}));
     storeIdeas(profileId, ideas);
     return { items: filtered, ideas, skipped };
   }

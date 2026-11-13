@@ -1,0 +1,101 @@
+[
+  {
+    "id": "limit.youtube.shorts_max_sec",
+    "kind": "platform_capability",
+    "scope": {
+      "platforms": [
+        "youtube"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "platform": "youtube",
+      "name": "Shorts — thời lượng tối đa với khung vuông/dọc và điều kiện thời điểm upload",
+      "value": 180,
+      "unit": "seconds",
+      "api": true
+    },
+    "evidence": [
+      {
+        "url": "https://support.google.com/youtube/answer/10059070",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      }
+    ],
+    "confidence": "high",
+    "volatility": "quarterly",
+    "watch": [
+      {
+        "url": "https://support.google.com/youtube/answer/10059070",
+        "kind": "policy_page"
+      }
+    ],
+    "status": "active",
+    "notes": "Chỉ dùng cùng điều kiện, ngoại lệ và cửa sổ trong nguồn gốc."
+  },
+  {
+    "id": "limit.youtube.publisher",
+    "kind": "platform_capability",
+    "scope": {
+      "platforms": [
+        "youtube"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "platform": "youtube",
+      "name": "YouTube metadata và độ dài upload",
+      "api": true,
+      "value": {
+        "maxDurationSec": 43200,
+        "maxTitleChars": 100,
+        "maxDescriptionChars": 5000,
+        "maxTagChars": 500
+      }
+    },
+    "evidence": [
+      {
+        "url": "https://developers.google.com/youtube/data/reference/rest/v3/videos",
+        "checkedAt": "2026-11-11",
+        "type": "official"
+      },
+      {
+        "url": "https://support.google.com/youtube/answer/71673",
+        "checkedAt": "2026-11-11",
+        "type": "official"
+      }
+    ],
+    "watch": [
+      {
+        "url": "https://developers.google.com/youtube/data/reference/rest/v3/videos",
+        "kind": "api_revision"
+      },
+      {
+        "url": "https://support.google.com/youtube/answer/71673",
+        "kind": "api_revision"
+      }
+    ],
+    "volatility": "quarterly",
+    "confidence": "high",
+    "status": "active"
+  },
+  {
+    "id": "limit.tiktok.caption_max_utf16",
+    "kind": "platform_capability",
+    "scope": { "platforms": ["tiktok"], "markets": ["*"] },
+    "value": { "platform": "tiktok", "name": "Độ dài caption Direct Post", "value": 2200, "unit": "UTF-16", "api": true },
+    "evidence": [
+      { "url": "https://developers.tiktok.com/docs/en/content-posting-api-reference-direct-post", "checkedAt": "2026-11-11", "type": "official" }
+    ],
+    "watch": [
+      { "url": "https://developers.tiktok.com/docs/en/content-posting-api-reference-direct-post", "kind": "api_revision" }
+    ],
+    "confidence": "high",
+    "volatility": "quarterly",
+    "status": "active"
+  }
+]

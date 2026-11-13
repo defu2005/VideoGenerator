@@ -1,0 +1,160 @@
+{
+  "id": "scene-json",
+  "titleVi": "Phân cảnh JSON",
+  "taskId": "sceneQueries",
+  "rubricVi": "JSON có danh sách cảnh và khóa bắt buộc.",
+  "cases": [
+    {
+      "id": "scene-json-1",
+      "taskId": "sceneQueries",
+      "input": {
+        "narration": "Cảnh 1 ở Hà Nội."
+      },
+      "graders": [
+        {
+          "kind": "schema",
+          "schemaName": "object"
+        },
+        {
+          "kind": "requiredKeys",
+          "keys": [
+            "scenes"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "scene-json-2",
+      "taskId": "sceneQueries",
+      "input": {
+        "narration": "Cảnh 2 ở Hà Nội."
+      },
+      "graders": [
+        {
+          "kind": "schema",
+          "schemaName": "object"
+        },
+        {
+          "kind": "requiredKeys",
+          "keys": [
+            "scenes"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "scene-json-3",
+      "taskId": "sceneQueries",
+      "input": {
+        "narration": "Cảnh 3 ở Hà Nội."
+      },
+      "graders": [
+        {
+          "kind": "schema",
+          "schemaName": "object"
+        },
+        {
+          "kind": "requiredKeys",
+          "keys": [
+            "scenes"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "scene-json-4",
+      "taskId": "sceneQueries",
+      "input": {
+        "narration": "Cảnh 4 ở Hà Nội."
+      },
+      "graders": [
+        {
+          "kind": "schema",
+          "schemaName": "object"
+        },
+        {
+          "kind": "requiredKeys",
+          "keys": [
+            "scenes"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "scene-json-5",
+      "taskId": "sceneQueries",
+      "input": {
+        "narration": "Cảnh 5 ở Hà Nội."
+      },
+      "graders": [
+        {
+          "kind": "schema",
+          "schemaName": "object"
+        },
+        {
+          "kind": "requiredKeys",
+          "keys": [
+            "scenes"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "scene-json-6",
+      "taskId": "sceneQueries",
+      "input": {
+        "narration": "Cảnh 6 ở Hà Nội."
+      },
+      "graders": [
+        {
+          "kind": "schema",
+          "schemaName": "object"
+        },
+        {
+          "kind": "requiredKeys",
+          "keys": [
+            "scenes"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "scene-json-7",
+      "taskId": "sceneQueries",
+      "input": {
+        "narration": "Cảnh 7 ở Hà Nội."
+      },
+      "graders": [
+        {
+          "kind": "schema",
+          "schemaName": "object"
+        },
+        {
+          "kind": "requiredKeys",
+          "keys": [
+            "scenes"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "scene-json-8",
+      "taskId": "sceneQueries",
+      "input": {
+        "narration": "Cảnh 8 ở Hà Nội."
+      },
+      "graders": [
+        {
+          "kind": "schema",
+          "schemaName": "object"
+        },
+        {
+          "kind": "requiredKeys",
+          "keys": [
+            "scenes"
+          ]
+        }
+      ]
+    }
+  ]
+}

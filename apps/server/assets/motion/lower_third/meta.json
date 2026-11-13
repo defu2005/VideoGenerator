@@ -1,0 +1,33 @@
+{
+  "id": "lower_third",
+  "version": 1,
+  "nameVi": "Tên dưới",
+  "descriptionVi": "Tên hoặc nguồn và một dòng phụ.",
+  "kinds": [
+    "overlay"
+  ],
+  "minDurationSec": 2,
+  "maxDurationSec": 8,
+  "defaultDurationSec": 4,
+  "safeArea": "lower",
+  "origin": "written for this app",
+  "variables": [
+    {
+      "name": "name",
+      "type": "string",
+      "maxLength": 32,
+      "default": ""
+    },
+    {
+      "name": "sub",
+      "type": "string",
+      "maxLength": 40,
+      "default": ""
+    },
+    {
+      "name": "color",
+      "type": "color",
+      "default": "#38BDF8"
+    }
+  ]
+}

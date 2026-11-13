@@ -46,7 +46,7 @@ Mỗi màn tự gọi `toLocaleString`. Không có một helper “3 phút trư�
 
 ## 8. Việc còn lại, chưa đụng để khỏi đổi hành vi
 
-- CSS scene, voice, music, timeline vẫn dùng mã màu riêng. Đụng hàng loạt sẽ tạo conflict khi merge với `master`.
+- CSS cảnh, giọng, nhạc và timeline đã dùng token trong `polish.css`. Khung xem trước phụ đề giữ nền tối và màu chữ của video. Token `--color-music` phân biệt làn nhạc với làn hình.
 - Nhiều mutation (lưu cài đặt, duyệt cổng, đăng bài) vẫn báo lỗi tại chỗ, chưa đi qua toast. Hệ thống toast đã có; mới gắn vào tạm dừng tự động hoá và gửi trả lời.
 - Nhãn trạng thái dự án (`Draft`, `Review`, …) và một số nút tiếng Anh được giữ vì test và `StatusBadge` đang khoá chúng.
 - Trang hồ sơ và cài đặt AI rất dài. Chưa tách layout ngoài breadcrumb và “Tải thêm”.

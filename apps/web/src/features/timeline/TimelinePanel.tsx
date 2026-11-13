@@ -2,12 +2,14 @@ import type { Project, Timeline, TimelineWarningCode } from "@vg/shared";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { ErrorState } from "../../components/ErrorState";
+import { useToast } from "../../components/ui/Toast";
 import { Spinner } from "../../components/Spinner";
 import { pipelineKeys, usePipeline } from "../../hooks/usePipeline";
 import { approvePipelineGate, runPipeline } from "../../services/pipelineApi";
 import { getProjectTimeline } from "../../services/timelineApi";
 import { GuidelineFindings } from "../guidelines/GuidelineFindings";
 import { ReviewChatPanel } from "../review/ReviewChatPanel";
+import { EditPlanPanel } from "./EditPlanPanel";
 
 const timelineKeys = { project: (projectId: string) => ["timeline", projectId] as const };
 
@@ -85,6 +87,7 @@ function Tracks({ timeline }: { timeline: Timeline }) {
 
 export function TimelinePanel({ project }: { project: Project }) {
   const queryClient = useQueryClient();
+  const toast = useToast();
   const [error, setError] = useState("");
   const pipeline = usePipeline(project.id);
   const timeline = useQuery({ queryKey: timelineKeys.project(project.id), queryFn: () => getProjectTimeline(project.id) });
@@ -105,8 +108,10 @@ export function TimelinePanel({ project }: { project: Project }) {
       await runPipeline(project.id, "TIMELINE");
       await queryClient.invalidateQueries({ queryKey: pipelineKeys.detail(project.id) });
       await timeline.refetch();
+      toast.success("Đã xếp bước chạy");
     } catch (reason) {
       onError(reason);
+      toast.error(reason instanceof Error ? reason.message : "Không thực hiện được yêu cầu");
     }
   }
 
@@ -115,8 +120,10 @@ export function TimelinePanel({ project }: { project: Project }) {
     try {
       const next = await approvePipelineGate(project.id, "FINAL_APPROVAL");
       queryClient.setQueryData(pipelineKeys.detail(project.id), next);
+      toast.success("Đã duyệt cổng");
     } catch (reason) {
       onError(reason);
+      toast.error(reason instanceof Error ? reason.message : "Không thực hiện được yêu cầu");
     }
   }
 
@@ -162,6 +169,11 @@ export function TimelinePanel({ project }: { project: Project }) {
           {licenses.length > 0 && (
             <p className="timeline-licenses">License: {licenses.map(([kind, count]) => `${kind} ×${count}`).join(" · ")}</p>
           )}
+          <EditPlanPanel
+            projectId={project.id}
+            timeline={data}
+            onSaved={(next) => queryClient.setQueryData(timelineKeys.project(project.id), { ...timeline.data, timeline: next })}
+          />
           <GuidelineFindings project={project} stage="TIMELINE" />
           <ReviewChatPanel project={project} />
           <Tracks timeline={data} />

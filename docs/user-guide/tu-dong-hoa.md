@@ -1,6 +1,6 @@
 # Tự động hoá {#tu-dong-hoa}
 
-Lịch chỉ chạy khi bạn bật trên hồ sơ và không bấm **Tạm dừng tất cả** trên Dashboard.
+Lịch chỉ chạy khi bạn bật trên hồ sơ và không bấm **Tạm dừng tất cả** trên Dashboard. Khi lịch chạy AUTO, giọng và nhạc không chờ cổng ảnh: ảnh cần bạn thì làn ảnh dừng, làn tiếng vẫn đi tiếp.
 
 ## Hàng đợi chủ đề {#hang-doi-chu-de}
 

@@ -7,6 +7,7 @@ import { afterAll, afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { PipelineStage, Project, ReviewProposal } from "@vg/shared";
 import { STAGE_ORDER } from "@vg/shared";
 import { buildApp } from "../src/app.js";
+import { testActor } from "./testActor.js";
 import { PipelineEventBus } from "../src/jobs/eventBus.js";
 import { JobRepository } from "../src/jobs/jobRepository.js";
 import { parseConfig, type AppConfig } from "../src/lib/config.js";
@@ -45,7 +46,7 @@ beforeEach(() => {
     LLM_CACHE_ENABLED: "true",
     IMAGE_PROVIDERS: "mock",
   });
-  app = buildApp({ config });
+  app = buildApp({ testActor,  config });
   sqlite = new Database(config.DATABASE_PATH);
   repository = new JobRepository(sqlite, new PipelineEventBus());
 });
@@ -350,6 +351,18 @@ describe("review API", () => {
 
     markDone(project.id, [...STAGE_ORDER]);
     scenes.patch(project.id, sceneIds[0]!, { narration: "Narrow narration." }, { staleFrom: "VISUAL_REVIEW" });
+    expect(repository.getStage(project.id, "VISUAL_SEARCH").state).toBe("DONE");
+    expect(repository.getStage(project.id, "VOICE").state).toBe("DONE");
+    expect(repository.getStage(project.id, "SUBTITLE").state).toBe("DONE");
+    expect(repository.getStage(project.id, "TIMELINE").state).toBe("STALE");
+
+    markDone(project.id, [...STAGE_ORDER]);
+    const narration = await app.inject({
+      method: "POST",
+      url: `/api/projects/${project.id}/review/apply`,
+      payload: { proposal: { type: "EDIT_NARRATION", sceneId: sceneIds[0]!, text: "Narration changed by review." } },
+    });
+    expect(narration.statusCode).toBe(200);
     expect(repository.getStage(project.id, "VISUAL_SEARCH").state).toBe("DONE");
     expect(repository.getStage(project.id, "VOICE").state).toBe("STALE");
     expect(repository.getStage(project.id, "SUBTITLE").state).toBe("STALE");

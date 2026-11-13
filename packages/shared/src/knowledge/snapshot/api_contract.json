@@ -1,0 +1,1561 @@
+[
+  {
+    "id": "youtube.data.videos_insert",
+    "kind": "api_contract",
+    "scope": {
+      "platforms": [
+        "youtube"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "name": "YouTube videos.insert",
+      "endpoint": "POST /youtube/v3/videos",
+      "scopes": [
+        "https://www.googleapis.com/auth/youtube.upload"
+      ],
+      "quotaCost": 100,
+      "quota": {
+        "bucket": "videos.insert",
+        "unit": "calls",
+        "cost": 1,
+        "limit": 100,
+        "window": "day",
+        "reset": "America/Los_Angeles"
+      },
+      "privacyMismatch": "YouTube trả về chế độ hiển thị khác yêu cầu. Hãy kiểm tra chế độ hiển thị của video trong YouTube Studio và quyền của tài khoản đã kết nối."
+    },
+    "evidence": [
+      {
+        "url": "https://developers.google.com/youtube/data/revision_history",
+        "checkedAt": "2026-11-11",
+        "type": "official"
+      },
+      {
+        "url": "https://developers.google.com/youtube/data/determine_quota_cost",
+        "checkedAt": "2026-11-11",
+        "type": "official"
+      }
+    ],
+    "watch": [
+      {
+        "url": "https://developers.google.com/youtube/data/revision_history",
+        "kind": "api_revision"
+      },
+      {
+        "url": "https://developers.google.com/youtube/data/determine_quota_cost",
+        "kind": "api_revision"
+      }
+    ],
+    "volatility": "quarterly",
+    "confidence": "high",
+    "status": "active"
+  },
+  {
+    "id": "youtube.data.quota",
+    "kind": "api_contract",
+    "scope": {
+      "platforms": [
+        "youtube"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "name": "Quota YouTube Data API",
+      "endpoint": "/youtube/v3",
+      "scopes": null,
+      "quotaCost": null,
+      "quota": {
+        "bucket": "general",
+        "unit": "units",
+        "cost": 1,
+        "limit": 10000,
+        "window": "day",
+        "reset": "America/Los_Angeles"
+      },
+      "methodCosts": {
+        "videos.update": 50,
+        "thumbnails.set": 50,
+        "playlistItems.insert": 50,
+        "videos.list": 1,
+        "channels.list": 1,
+        "comments.insert": 50,
+        "commentThreads.list": 1
+      }
+    },
+    "evidence": [
+      {
+        "url": "https://developers.google.com/youtube/data/revision_history",
+        "checkedAt": "2026-11-11",
+        "type": "official"
+      },
+      {
+        "url": "https://developers.google.com/youtube/data/determine_quota_cost",
+        "checkedAt": "2026-11-11",
+        "type": "official"
+      }
+    ],
+    "watch": [
+      {
+        "url": "https://developers.google.com/youtube/data/revision_history",
+        "kind": "api_revision"
+      },
+      {
+        "url": "https://developers.google.com/youtube/data/determine_quota_cost",
+        "kind": "api_revision"
+      }
+    ],
+    "volatility": "quarterly",
+    "confidence": "high",
+    "status": "active"
+  },
+  {
+    "id": "youtube.data.search_list",
+    "kind": "api_contract",
+    "scope": {
+      "platforms": [
+        "youtube"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "name": "YouTube search.list",
+      "endpoint": "GET /youtube/v3/search",
+      "scopes": null,
+      "quotaCost": 100,
+      "quota": {
+        "bucket": "search.list",
+        "unit": "calls",
+        "cost": 1,
+        "limit": 100,
+        "window": "day",
+        "reset": "America/Los_Angeles"
+      }
+    },
+    "evidence": [
+      {
+        "url": "https://developers.google.com/youtube/data/revision_history",
+        "checkedAt": "2026-11-11",
+        "type": "official"
+      },
+      {
+        "url": "https://developers.google.com/youtube/data/determine_quota_cost",
+        "checkedAt": "2026-11-11",
+        "type": "official"
+      }
+    ],
+    "watch": [
+      {
+        "url": "https://developers.google.com/youtube/data/revision_history",
+        "kind": "api_revision"
+      },
+      {
+        "url": "https://developers.google.com/youtube/data/determine_quota_cost",
+        "kind": "api_revision"
+      }
+    ],
+    "volatility": "quarterly",
+    "confidence": "high",
+    "status": "active"
+  },
+  {
+    "id": "analytics.scopes.youtube",
+    "kind": "api_contract",
+    "scope": {
+      "platforms": [
+        "youtube"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "name": "OAuth youtube",
+      "endpoint": null,
+      "scopes": [
+        "https://www.googleapis.com/auth/youtube.readonly",
+        "https://www.googleapis.com/auth/yt-analytics.readonly"
+      ],
+      "quotaCost": null
+    },
+    "evidence": [
+      {
+        "url": "https://developers.google.com/youtube/analytics/reference/reports/query",
+        "checkedAt": "2026-11-11",
+        "type": "official"
+      }
+    ],
+    "watch": [
+      {
+        "url": "https://developers.google.com/youtube/analytics/reference/reports/query",
+        "kind": "api_revision"
+      }
+    ],
+    "volatility": "quarterly",
+    "confidence": "high",
+    "status": "active"
+  },
+  {
+    "id": "analytics.scopes.tiktok",
+    "kind": "api_contract",
+    "scope": {
+      "platforms": [
+        "tiktok"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "name": "OAuth tiktok",
+      "endpoint": null,
+      "scopes": [
+        "video.list",
+        "user.info.stats"
+      ],
+      "quotaCost": null
+    },
+    "evidence": [
+      {
+        "url": "https://developers.tiktok.com/docs/en/tiktok-api-v2-get-user-info",
+        "checkedAt": "2026-11-11",
+        "type": "official"
+      }
+    ],
+    "watch": [
+      {
+        "url": "https://developers.tiktok.com/docs/en/tiktok-api-v2-get-user-info",
+        "kind": "api_revision"
+      }
+    ],
+    "volatility": "quarterly",
+    "confidence": "high",
+    "status": "active"
+  },
+  {
+    "id": "analytics.scopes.facebook_reels",
+    "kind": "api_contract",
+    "scope": {
+      "platforms": [
+        "facebook_reels"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "name": "OAuth facebook_reels",
+      "endpoint": null,
+      "scopes": [
+        "read_insights"
+      ],
+      "quotaCost": null
+    },
+    "evidence": [
+      {
+        "url": "https://developers.facebook.com/docs/graph-api/reference/video/video_insights/",
+        "checkedAt": "2026-11-11",
+        "type": "official"
+      }
+    ],
+    "watch": [
+      {
+        "url": "https://developers.facebook.com/docs/graph-api/reference/video/video_insights/",
+        "kind": "api_revision"
+      }
+    ],
+    "volatility": "quarterly",
+    "confidence": "high",
+    "status": "active"
+  },
+  {
+    "id": "analytics.scopes.instagram_reels",
+    "kind": "api_contract",
+    "scope": {
+      "platforms": [
+        "instagram_reels"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "name": "OAuth instagram_reels",
+      "endpoint": null,
+      "scopes": [
+        "instagram_manage_insights"
+      ],
+      "quotaCost": null
+    },
+    "evidence": [
+      {
+        "url": "https://developers.facebook.com/docs/instagram-platform/instagram-api-with-facebook-login/insights/",
+        "checkedAt": "2026-11-11",
+        "type": "official"
+      }
+    ],
+    "watch": [
+      {
+        "url": "https://developers.facebook.com/docs/instagram-platform/instagram-api-with-facebook-login/insights/",
+        "kind": "api_revision"
+      }
+    ],
+    "volatility": "quarterly",
+    "confidence": "high",
+    "status": "active"
+  },
+  {
+    "id": "api.youtube.status.removal",
+    "kind": "api_contract",
+    "scope": {
+      "platforms": [
+        "youtube"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "platform": "youtube",
+      "name": "Gỡ video",
+      "endpoint": "GET /youtube/v3/videos?part=status",
+      "scopes": [
+        "https://www.googleapis.com/auth/youtube.readonly"
+      ],
+      "scopeNotes": "youtube.readonly",
+      "quotaCost": 1,
+      "quotaUnit": "Data API unit",
+      "quotaNotes": "1 unit/lần",
+      "rateLimit": null,
+      "details": "GET /youtube/v3/videos?part=status&id=… → status.uploadStatus=deleted nếu còn trả resource. items trống không phân biệt gỡ, xóa, private hoặc mất quyền.",
+      "delivery": "Poll; kiểm Studio → Content → Restrictions hoặc email khi không rõ. WebSub không gửi event gỡ."
+    },
+    "evidence": [
+      {
+        "url": "https://developers.google.com/youtube/data/reference/rest/v3/videos",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://developers.google.com/youtube/data/reference/rest/v3/videos/list",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://developers.google.com/youtube/data/guides/push_notifications",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://support.google.com/youtube/answer/9668091",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://developers.google.com/youtube/data/reference/rest/v3/videos",
+        "checkedAt": "2026-11-10",
+        "type": "inference"
+      }
+    ],
+    "confidence": "medium",
+    "volatility": "quarterly",
+    "watch": [
+      {
+        "url": "https://developers.google.com/youtube/data/reference/rest/v3/videos",
+        "kind": "api_revision"
+      },
+      {
+        "url": "https://developers.google.com/youtube/data/revision_history",
+        "kind": "api_revision"
+      }
+    ],
+    "status": "active",
+    "notes": "Với các flow hoặc endpoint khác nhau, xem scopeNotes. Danh sách scope không khẳng định cần xin toàn bộ quyền cùng lúc."
+  },
+  {
+    "id": "api.youtube.status.age",
+    "kind": "api_contract",
+    "scope": {
+      "platforms": [
+        "youtube"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "platform": "youtube",
+      "name": "Giới hạn tuổi",
+      "endpoint": "GET /youtube/v3/videos?part=contentDetails",
+      "scopes": [
+        "https://www.googleapis.com/auth/youtube.readonly"
+      ],
+      "scopeNotes": "youtube.readonly",
+      "quotaCost": 1,
+      "quotaUnit": "Data API unit",
+      "quotaNotes": "1 unit/lần",
+      "rateLimit": null,
+      "details": "GET /youtube/v3/videos?part=contentDetails&id=… → contentDetails.contentRating.ytRating=ytAgeRestricted nếu hiện. Không có lý do moderation đầy đủ.",
+      "delivery": "Poll; Studio → Content → Restrictions."
+    },
+    "evidence": [
+      {
+        "url": "https://developers.google.com/youtube/data/reference/rest/v3/videos",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://developers.google.com/youtube/data/reference/rest/v3/videos/list",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://support.google.com/youtube/answer/9668091",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://developers.google.com/youtube/data/reference/rest/v3/videos",
+        "checkedAt": "2026-11-10",
+        "type": "inference"
+      }
+    ],
+    "confidence": "medium",
+    "volatility": "quarterly",
+    "watch": [
+      {
+        "url": "https://developers.google.com/youtube/data/reference/rest/v3/videos",
+        "kind": "api_revision"
+      },
+      {
+        "url": "https://developers.google.com/youtube/data/revision_history",
+        "kind": "api_revision"
+      }
+    ],
+    "status": "active",
+    "notes": "Với các flow hoặc endpoint khác nhau, xem scopeNotes. Danh sách scope không khẳng định cần xin toàn bộ quyền cùng lúc."
+  },
+  {
+    "id": "api.youtube.status.region",
+    "kind": "api_contract",
+    "scope": {
+      "platforms": [
+        "youtube"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "platform": "youtube",
+      "name": "Chặn theo vùng",
+      "endpoint": "GET /youtube/v3/videos?part=contentDetails",
+      "scopes": [
+        "https://www.googleapis.com/auth/youtube.readonly"
+      ],
+      "scopeNotes": "youtube.readonly",
+      "quotaCost": 1,
+      "quotaUnit": "Data API unit",
+      "quotaNotes": "1 unit/lần",
+      "rateLimit": null,
+      "details": "GET /youtube/v3/videos?part=contentDetails&id=… → contentDetails.regionRestriction.allowed/blocked (ISO alpha-2) nếu trả trường. Không phải phép thử xem được trong mọi bối cảnh.",
+      "delivery": "Poll; xem chi tiết Copyright/Restrictions trong Studio khi cần nguyên nhân."
+    },
+    "evidence": [
+      {
+        "url": "https://developers.google.com/youtube/data/reference/rest/v3/videos",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://developers.google.com/youtube/data/reference/rest/v3/videos/list",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://support.google.com/youtube/answer/9668091",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      }
+    ],
+    "confidence": "high",
+    "volatility": "quarterly",
+    "watch": [
+      {
+        "url": "https://developers.google.com/youtube/data/reference/rest/v3/videos",
+        "kind": "api_revision"
+      },
+      {
+        "url": "https://developers.google.com/youtube/data/revision_history",
+        "kind": "api_revision"
+      }
+    ],
+    "status": "active",
+    "notes": "Với các flow hoặc endpoint khác nhau, xem scopeNotes. Danh sách scope không khẳng định cần xin toàn bộ quyền cùng lúc."
+  },
+  {
+    "id": "api.youtube.status.upload",
+    "kind": "api_contract",
+    "scope": {
+      "platforms": [
+        "youtube"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "platform": "youtube",
+      "name": "Từ chối upload / publish",
+      "endpoint": "GET /youtube/v3/videos?part=status,processingDetails",
+      "scopes": [
+        "https://www.googleapis.com/auth/youtube.readonly"
+      ],
+      "scopeNotes": "youtube.readonly",
+      "quotaCost": 1,
+      "quotaUnit": "Data API unit",
+      "quotaNotes": "1 unit/lần",
+      "rateLimit": null,
+      "details": "GET /youtube/v3/videos?part=status,processingDetails&id=… → status.uploadStatus, failureReason, rejectionReason; processingDetails dành cho owner.",
+      "delivery": "Poll sau upload; xử lý lỗi videos.insert đồng thời. Studio → Content / thông báo xử lý."
+    },
+    "evidence": [
+      {
+        "url": "https://developers.google.com/youtube/data/reference/rest/v3/videos",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://developers.google.com/youtube/data/reference/rest/v3/videos/list",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://support.google.com/youtube/answer/9668091",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      }
+    ],
+    "confidence": "high",
+    "volatility": "quarterly",
+    "watch": [
+      {
+        "url": "https://developers.google.com/youtube/data/reference/rest/v3/videos",
+        "kind": "api_revision"
+      },
+      {
+        "url": "https://developers.google.com/youtube/data/revision_history",
+        "kind": "api_revision"
+      }
+    ],
+    "status": "active",
+    "notes": "Với các flow hoặc endpoint khác nhau, xem scopeNotes. Danh sách scope không khẳng định cần xin toàn bộ quyền cùng lúc."
+  },
+  {
+    "id": "api.youtube.status.revoke",
+    "kind": "api_contract",
+    "scope": {
+      "platforms": [
+        "youtube"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "platform": "youtube",
+      "name": "Thu hồi quyền kết nối",
+      "endpoint": "POST https://oauth2.googleapis.com/token",
+      "scopes": null,
+      "scopeNotes": "Grant OAuth hiện có; không cần scope đọc mới để refresh",
+      "quotaCost": null,
+      "quotaUnit": null,
+      "quotaNotes": "null; ngoài quota Data API",
+      "rateLimit": null,
+      "details": "OAuth token endpoint → invalid_grant khi refresh bị từ chối, tài nguyên có thể trả 401. Hết hạn, thu hồi hoặc nguyên nhân khác có thể trùng lỗi; không khẳng định user revoke.",
+      "delivery": "Phát hiện khi gọi/refresh; kiểm Google Account → Third-party connections. WebSub không có tín hiệu này."
+    },
+    "evidence": [
+      {
+        "url": "https://developers.google.com/identity/protocols/oauth2/web-server",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://developers.google.com/youtube/data/guides/push_notifications",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://developers.google.com/identity/protocols/oauth2/web-server",
+        "checkedAt": "2026-11-10",
+        "type": "inference"
+      }
+    ],
+    "confidence": "medium",
+    "volatility": "quarterly",
+    "watch": [
+      {
+        "url": "https://developers.google.com/identity/protocols/oauth2/web-server",
+        "kind": "api_revision"
+      },
+      {
+        "url": "https://developers.google.com/youtube/data/revision_history",
+        "kind": "api_revision"
+      }
+    ],
+    "status": "active",
+    "notes": "Với các flow hoặc endpoint khác nhau, xem scopeNotes. Danh sách scope không khẳng định cần xin toàn bộ quyền cùng lúc."
+  },
+  {
+    "id": "api.youtube.status.eligibility",
+    "kind": "api_contract",
+    "scope": {
+      "platforms": [
+        "youtube"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "platform": "youtube",
+      "name": "Số liệu eligibility",
+      "endpoint": "GET /youtube/v3/channels; GET /v2/reports",
+      "scopes": [
+        "https://www.googleapis.com/auth/youtube.readonly",
+        "https://www.googleapis.com/auth/yt-analytics.readonly"
+      ],
+      "scopeNotes": "youtube.readonly + yt-analytics.readonly cho reports; yt-analytics-monetary.readonly nếu đọc revenue",
+      "quotaCost": null,
+      "quotaUnit": null,
+      "quotaNotes": "channels.list 1 unit; reports quota per-call null",
+      "rateLimit": null,
+      "details": "GET /youtube/v3/channels?part=statistics&mine=true → subscriberCount (làm tròn), hiddenSubscriberCount. Analytics GET /v2/reports → views, engagedViews, estimatedMinutesWatched theo kỳ/hỗ trợ. Không thay valid public watch hours/qualified Shorts views trong Earn.",
+      "delivery": "Poll; Studio → Earn là nơi xác nhận eligibility, Analytics → Advanced mode để đối chiếu."
+    },
+    "evidence": [
+      {
+        "url": "https://developers.google.com/youtube/v3/docs/channels",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://developers.google.com/youtube/v3/docs/channels/list",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://developers.google.com/youtube/analytics/reference/reports/query",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://developers.google.com/youtube/analytics/channel_reports",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://developers.google.com/youtube/analytics/metrics",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://support.google.com/youtube/answer/72851",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://developers.google.com/youtube/v3/docs/channels",
+        "checkedAt": "2026-11-10",
+        "type": "inference"
+      }
+    ],
+    "confidence": "medium",
+    "volatility": "quarterly",
+    "watch": [
+      {
+        "url": "https://developers.google.com/youtube/v3/docs/channels",
+        "kind": "api_revision"
+      },
+      {
+        "url": "https://developers.google.com/youtube/data/revision_history",
+        "kind": "api_revision"
+      }
+    ],
+    "status": "active",
+    "notes": "Với các flow hoặc endpoint khác nhau, xem scopeNotes. Danh sách scope không khẳng định cần xin toàn bộ quyền cùng lúc."
+  },
+  {
+    "id": "api.tiktok.status.suspension",
+    "kind": "api_contract",
+    "scope": {
+      "platforms": [
+        "tiktok"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "platform": "tiktok",
+      "name": "Đình chỉ / khóa",
+      "endpoint": null,
+      "scopes": null,
+      "scopeNotes": "Webhook của app cho người dùng đã cấp quyền; scope riêng null",
+      "quotaCost": null,
+      "quotaUnit": null,
+      "quotaNotes": "null",
+      "rateLimit": null,
+      "details": "Webhook authorization.removed với content.reason=4 báo tài khoản bị ban khi grant bị gỡ. Không có feed strike/suspension đầy đủ; reason=2 là xóa, không đồng nhất với ban.",
+      "delivery": "Webhook; kiểm thông báo khi mở app/Account check. Không dùng reason=0 để suy diễn."
+    },
+    "evidence": [
+      {
+        "url": "https://developers.tiktok.com/docs/en/webhooks-events",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://support.tiktok.com/en/safety-hc/account-and-user-safety/account-status",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://support.tiktok.com/en/safety-hc/account-and-user-safety/content-violations-and-bans",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://developers.tiktok.com/docs/en/webhooks-events",
+        "checkedAt": "2026-11-10",
+        "type": "inference"
+      }
+    ],
+    "confidence": "medium",
+    "volatility": "quarterly",
+    "watch": [
+      {
+        "url": "https://developers.tiktok.com/docs/en/webhooks-events",
+        "kind": "api_revision"
+      },
+      {
+        "url": "https://developers.tiktok.com/docs/en/changelog",
+        "kind": "api_revision"
+      }
+    ],
+    "status": "active",
+    "notes": "Với các flow hoặc endpoint khác nhau, xem scopeNotes. Danh sách scope không khẳng định cần xin toàn bộ quyền cùng lúc."
+  },
+  {
+    "id": "api.tiktok.status.removal",
+    "kind": "api_contract",
+    "scope": {
+      "platforms": [
+        "tiktok"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "platform": "tiktok",
+      "name": "Gỡ video",
+      "endpoint": "POST /v2/video/query/",
+      "scopes": [
+        "video.list"
+      ],
+      "scopeNotes": "video.list",
+      "quotaCost": null,
+      "quotaUnit": null,
+      "quotaNotes": "600 yêu cầu/phút theo endpoint, cửa sổ trượt",
+      "rateLimit": {
+        "requests": 600,
+        "windowSeconds": 60,
+        "per": "endpoint"
+      },
+      "details": "Webhook post.publish.no_longer_publicaly_available cho bài có publish_id báo mất public visibility, không nói lý do. POST /v2/video/query/ đối chiếu ID công khai của chủ sở hữu.",
+      "delivery": "Webhook cho bài qua Content Posting, poll bổ sung; xác nhận lý do trong Inbox hoặc Account check."
+    },
+    "evidence": [
+      {
+        "url": "https://developers.tiktok.com/docs/en/tiktok-api-v2-video-query",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://developers.tiktok.com/docs/en/tiktok-api-v2-rate-limit",
+        "checkedAt": "2026-11-10",
+        "sourceUpdatedAt": "2026-08-04",
+        "type": "official"
+      },
+      {
+        "url": "https://developers.tiktok.com/docs/en/webhooks-events",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://support.tiktok.com/en/safety-hc/account-and-user-safety/content-violations-and-bans",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://developers.tiktok.com/docs/en/content-posting-api-reference-get-video-status",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://developers.tiktok.com/docs/en/tiktok-api-v2-video-query",
+        "checkedAt": "2026-11-10",
+        "type": "inference"
+      }
+    ],
+    "confidence": "medium",
+    "volatility": "quarterly",
+    "watch": [
+      {
+        "url": "https://developers.tiktok.com/docs/en/tiktok-api-v2-video-query",
+        "kind": "api_revision"
+      },
+      {
+        "url": "https://developers.tiktok.com/docs/en/changelog",
+        "kind": "api_revision"
+      }
+    ],
+    "status": "active",
+    "notes": "Với các flow hoặc endpoint khác nhau, xem scopeNotes. Danh sách scope không khẳng định cần xin toàn bộ quyền cùng lúc."
+  },
+  {
+    "id": "api.tiktok.status.upload",
+    "kind": "api_contract",
+    "scope": {
+      "platforms": [
+        "tiktok"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "platform": "tiktok",
+      "name": "Từ chối upload / publish",
+      "endpoint": "POST /v2/post/publish/status/fetch/",
+      "scopes": [
+        "video.upload",
+        "video.publish"
+      ],
+      "scopeNotes": "video.upload hoặc video.publish",
+      "quotaCost": null,
+      "quotaUnit": null,
+      "quotaNotes": "30 yêu cầu/phút trên mỗi user access token",
+      "rateLimit": {
+        "requests": 30,
+        "windowSeconds": 60,
+        "per": "user_access_token"
+      },
+      "details": "POST /v2/post/publish/status/fetch/ → data.status, data.fail_reason, publicaly_available_post_id. Có event post.publish.failed và post.publish.complete; đọc cùng publish_id.",
+      "delivery": "Webhook hoặc poll; kiểm hộp thư và trạng thái video trong TikTok Studio nếu cần."
+    },
+    "evidence": [
+      {
+        "url": "https://developers.tiktok.com/docs/en/content-posting-api-reference-get-video-status",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://developers.tiktok.com/docs/en/webhooks-events",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      }
+    ],
+    "confidence": "high",
+    "volatility": "quarterly",
+    "watch": [
+      {
+        "url": "https://developers.tiktok.com/docs/en/content-posting-api-reference-get-video-status",
+        "kind": "api_revision"
+      },
+      {
+        "url": "https://developers.tiktok.com/docs/en/changelog",
+        "kind": "api_revision"
+      }
+    ],
+    "status": "active",
+    "notes": "Với các flow hoặc endpoint khác nhau, xem scopeNotes. Danh sách scope không khẳng định cần xin toàn bộ quyền cùng lúc."
+  },
+  {
+    "id": "api.tiktok.status.revoke",
+    "kind": "api_contract",
+    "scope": {
+      "platforms": [
+        "tiktok"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "platform": "tiktok",
+      "name": "Thu hồi quyền kết nối",
+      "endpoint": "POST /v2/oauth/token/",
+      "scopes": null,
+      "scopeNotes": "Webhook grant hiện có; scope riêng null",
+      "quotaCost": null,
+      "quotaUnit": null,
+      "quotaNotes": "null",
+      "rateLimit": null,
+      "details": "Webhook authorization.removed → content.reason (1 user disconnect, 5 developer revoke, các mã khác có nghĩa riêng). Token endpoint/HTTP 401 cho lỗi xác thực, không thay lý do webhook.",
+      "delivery": "Webhook; đối chiếu lỗi refresh; TikTok → Settings and privacy → Security & permissions → Apps and services permissions."
+    },
+    "evidence": [
+      {
+        "url": "https://developers.tiktok.com/docs/en/webhooks-events",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://developers.tiktok.com/docs/en/login-kit-manage-user-access-tokens",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://developers.tiktok.com/docs/en/tiktok-api-v2-error-handling",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      }
+    ],
+    "confidence": "high",
+    "volatility": "quarterly",
+    "watch": [
+      {
+        "url": "https://developers.tiktok.com/docs/en/webhooks-events",
+        "kind": "api_revision"
+      },
+      {
+        "url": "https://developers.tiktok.com/docs/en/changelog",
+        "kind": "api_revision"
+      }
+    ],
+    "status": "active",
+    "notes": "Với các flow hoặc endpoint khác nhau, xem scopeNotes. Danh sách scope không khẳng định cần xin toàn bộ quyền cùng lúc."
+  },
+  {
+    "id": "api.tiktok.status.eligibility",
+    "kind": "api_contract",
+    "scope": {
+      "platforms": [
+        "tiktok"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "platform": "tiktok",
+      "name": "Số liệu eligibility",
+      "endpoint": "GET /v2/user/info/; POST /v2/video/query/",
+      "scopes": [
+        "user.info.stats",
+        "video.list"
+      ],
+      "scopeNotes": "user.info.stats + video.list",
+      "quotaCost": null,
+      "quotaUnit": null,
+      "quotaNotes": "600 yêu cầu/phút cho từng endpoint nói trên",
+      "rateLimit": {
+        "requests": 600,
+        "windowSeconds": 60,
+        "per": "endpoint"
+      },
+      "details": "GET /v2/user/info/?fields=follower_count → data.user.follower_count; POST /v2/video/query/ → view_count tích lũy. Snapshot hiệu số không bảo đảm giống 30 ngày qualified hoặc official eligibility.",
+      "delivery": "Poll; Creator Rewards dashboard xác nhận ngưỡng áp dụng và loại view."
+    },
+    "evidence": [
+      {
+        "url": "https://developers.tiktok.com/docs/en/tiktok-api-v2-get-user-info",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://developers.tiktok.com/docs/en/tiktok-api-v2-video-query",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://developers.tiktok.com/docs/en/tiktok-api-v2-rate-limit",
+        "checkedAt": "2026-11-10",
+        "sourceUpdatedAt": "2026-08-04",
+        "type": "official"
+      },
+      {
+        "url": "https://support.tiktok.com/en/business-and-creator/creator-rewards-program/creator-rewards-program",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://developers.tiktok.com/docs/en/tiktok-api-v2-get-user-info",
+        "checkedAt": "2026-11-10",
+        "type": "inference"
+      }
+    ],
+    "confidence": "medium",
+    "volatility": "quarterly",
+    "watch": [
+      {
+        "url": "https://developers.tiktok.com/docs/en/tiktok-api-v2-get-user-info",
+        "kind": "api_revision"
+      },
+      {
+        "url": "https://developers.tiktok.com/docs/en/changelog",
+        "kind": "api_revision"
+      }
+    ],
+    "status": "active",
+    "notes": "Với các flow hoặc endpoint khác nhau, xem scopeNotes. Danh sách scope không khẳng định cần xin toàn bộ quyền cùng lúc."
+  },
+  {
+    "id": "api.facebook.status.removal",
+    "kind": "api_contract",
+    "scope": {
+      "platforms": [
+        "facebook"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "platform": "facebook",
+      "name": "Gỡ video",
+      "endpoint": "GET /{video-id}?fields=status",
+      "scopes": [
+        "pages_read_engagement"
+      ],
+      "scopeNotes": "Page token, pages_read_engagement theo asset/App Review; scope cho lý do gỡ null",
+      "quotaCost": null,
+      "quotaUnit": null,
+      "quotaNotes": "BUC/app limit theo trường hợp, số cố định null",
+      "rateLimit": null,
+      "details": "GET /{video-id}?fields=status với Page token đối chiếu video đã lưu. Không trả resource / lỗi Graph không chứng minh enforcement.",
+      "delivery": "Poll. Page feed webhook nếu đủ quyền chỉ là tín hiệu thay đổi, kiểm Page Status và Inbox."
+    },
+    "evidence": [
+      {
+        "url": "https://developers.facebook.com/docs/graph-api/reference/video/",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://developers.facebook.com/docs/graph-api/overview/rate-limiting/",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://developers.facebook.com/docs/graph-api/webhooks/reference/page/",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://www.facebook.com/help/1392616391875085",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://developers.facebook.com/docs/graph-api/reference/video/",
+        "checkedAt": "2026-11-10",
+        "type": "inference"
+      }
+    ],
+    "confidence": "medium",
+    "volatility": "quarterly",
+    "watch": [
+      {
+        "url": "https://developers.facebook.com/docs/graph-api/reference/video/",
+        "kind": "api_revision"
+      },
+      {
+        "url": "https://developers.facebook.com/blog/feed/",
+        "kind": "rss"
+      }
+    ],
+    "status": "active",
+    "notes": "Với các flow hoặc endpoint khác nhau, xem scopeNotes. Danh sách scope không khẳng định cần xin toàn bộ quyền cùng lúc."
+  },
+  {
+    "id": "api.facebook.status.upload",
+    "kind": "api_contract",
+    "scope": {
+      "platforms": [
+        "facebook"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "platform": "facebook",
+      "name": "Từ chối upload / publish",
+      "endpoint": "GET /{video-id}?fields=status",
+      "scopes": [
+        "pages_manage_posts",
+        "pages_read_engagement"
+      ],
+      "scopeNotes": "Page token; pages_manage_posts cho publish, pages_read_engagement cho đọc theo cấp quyền",
+      "quotaCost": null,
+      "quotaUnit": null,
+      "quotaNotes": "BUC/app limit; số cố định null",
+      "rateLimit": null,
+      "details": "GET /{video-id}?fields=status → status.video_status và các phase upload/processing/publishing khi API trả. Đọc cả lỗi init/upload/finish; không ánh xạ phase error thành strike.",
+      "delivery": "Poll session. Page video library / Meta Business Suite xác nhận khi cần."
+    },
+    "evidence": [
+      {
+        "url": "https://www.postman.com/meta/facebook/request/dtugkus/3-optional-get-upload-session-status",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://developers.facebook.com/docs/video-api/guides/reels-publishing/",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://developers.facebook.com/docs/graph-api/reference/video/",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://developers.facebook.com/docs/graph-api/overview/rate-limiting/",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      }
+    ],
+    "confidence": "high",
+    "volatility": "quarterly",
+    "watch": [
+      {
+        "url": "https://www.postman.com/meta/facebook/request/dtugkus/3-optional-get-upload-session-status",
+        "kind": "api_revision"
+      },
+      {
+        "url": "https://developers.facebook.com/blog/feed/",
+        "kind": "rss"
+      }
+    ],
+    "status": "active",
+    "notes": "Với các flow hoặc endpoint khác nhau, xem scopeNotes. Danh sách scope không khẳng định cần xin toàn bộ quyền cùng lúc."
+  },
+  {
+    "id": "api.facebook.status.revoke",
+    "kind": "api_contract",
+    "scope": {
+      "platforms": [
+        "facebook"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "platform": "facebook",
+      "name": "Thu hồi quyền kết nối",
+      "endpoint": "GET /debug_token",
+      "scopes": null,
+      "scopeNotes": "App access token để debug, hoặc token hợp lệ của developer theo tài liệu; callback không yêu cầu scope đọc Page mới",
+      "quotaCost": null,
+      "quotaUnit": null,
+      "quotaNotes": "null",
+      "rateLimit": null,
+      "details": "GET /debug_token → data.is_valid, expires_at, scopes; Graph code 190/subcode. Facebook Login có deauthorize callback cho app đã cấu hình; không đồng nhất Page role loss với user revoke.",
+      "delivery": "Callback và poll lỗi; Business Integrations / Apps and Websites để xác nhận."
+    },
+    "evidence": [
+      {
+        "url": "https://developers.facebook.com/docs/facebook-login/guides/access-tokens/debugging-and-error-handling/",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://developers.facebook.com/docs/facebook-login/guides/advanced/manual-flow/",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://developers.facebook.com/docs/graph-api/guides/error-handling/",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://developers.facebook.com/docs/facebook-login/guides/access-tokens/debugging-and-error-handling/",
+        "checkedAt": "2026-11-10",
+        "type": "inference"
+      }
+    ],
+    "confidence": "medium",
+    "volatility": "quarterly",
+    "watch": [
+      {
+        "url": "https://developers.facebook.com/docs/facebook-login/guides/access-tokens/debugging-and-error-handling/",
+        "kind": "api_revision"
+      },
+      {
+        "url": "https://developers.facebook.com/blog/feed/",
+        "kind": "rss"
+      }
+    ],
+    "status": "active",
+    "notes": "Với các flow hoặc endpoint khác nhau, xem scopeNotes. Danh sách scope không khẳng định cần xin toàn bộ quyền cùng lúc."
+  },
+  {
+    "id": "api.facebook.status.eligibility",
+    "kind": "api_contract",
+    "scope": {
+      "platforms": [
+        "facebook"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "platform": "facebook",
+      "name": "Số liệu eligibility",
+      "endpoint": "GET /{page-id}?fields=followers_count; GET /{video-id}/video_insights",
+      "scopes": [
+        "pages_read_engagement",
+        "read_insights"
+      ],
+      "scopeNotes": "Page access token, pages_read_engagement; read_insights cho Insights theo endpoint",
+      "quotaCost": null,
+      "quotaUnit": null,
+      "quotaNotes": "BUC/app limit; số cố định null",
+      "rateLimit": null,
+      "details": "GET /{page-id}?fields=followers_count nếu được hỗ trợ ở phiên bản đó; GET /{video-id}/video_insights cho metric còn hiệu lực. Không suy qualified views hay lời mời từ raw counts.",
+      "delivery": "Poll có version; đối chiếu Professional Dashboard → Monetization/Insights."
+    },
+    "evidence": [
+      {
+        "url": "https://developers.facebook.com/docs/graph-api/reference/page/",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://developers.facebook.com/docs/graph-api/reference/video/video_insights/",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://developers.facebook.com/docs/graph-api/overview/rate-limiting/",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://about.fb.com/news/2026/03/creator-fast-track-grow-your-audience-earn-money-on-facebook/",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://developers.facebook.com/docs/graph-api/reference/page/",
+        "checkedAt": "2026-11-10",
+        "type": "inference"
+      }
+    ],
+    "confidence": "medium",
+    "volatility": "quarterly",
+    "watch": [
+      {
+        "url": "https://developers.facebook.com/docs/graph-api/reference/page/",
+        "kind": "api_revision"
+      },
+      {
+        "url": "https://developers.facebook.com/blog/feed/",
+        "kind": "rss"
+      }
+    ],
+    "status": "active",
+    "notes": "Với các flow hoặc endpoint khác nhau, xem scopeNotes. Danh sách scope không khẳng định cần xin toàn bộ quyền cùng lúc."
+  },
+  {
+    "id": "api.instagram.status.removal",
+    "kind": "api_contract",
+    "scope": {
+      "platforms": [
+        "instagram"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "platform": "instagram",
+      "name": "Gỡ video",
+      "endpoint": "GET /{ig-media-id}; GET /{ig-user-id}/media",
+      "scopes": [
+        "instagram_business_basic",
+        "instagram_basic"
+      ],
+      "scopeNotes": "Instagram Login: instagram_business_basic; Facebook Login: instagram_basic và Page quyền liên quan",
+      "quotaCost": null,
+      "quotaUnit": null,
+      "quotaNotes": "Graph giới hạn theo app/use case; số cố định null",
+      "rateLimit": null,
+      "details": "GET /{ig-media-id} hoặc /{ig-user-id}/media để đối chiếu ID; thiếu ID không phân biệt xóa, restriction, quyền hoặc lỗi. Container EXPIRED không nói bài đã gỡ.",
+      "delivery": "Poll; xác nhận Account Status và Support Requests."
+    },
+    "evidence": [
+      {
+        "url": "https://www.postman.com/meta/instagram/documentation/6yqw8pt/instagram-api",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://developers.facebook.com/docs/instagram-platform/instagram-api-with-instagram-login/content-publishing/",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://developers.facebook.com/docs/graph-api/overview/rate-limiting/",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://help.instagram.com/338481628002750",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://www.postman.com/meta/instagram/documentation/6yqw8pt/instagram-api",
+        "checkedAt": "2026-11-10",
+        "type": "inference"
+      }
+    ],
+    "confidence": "medium",
+    "volatility": "quarterly",
+    "watch": [
+      {
+        "url": "https://www.postman.com/meta/instagram/documentation/6yqw8pt/instagram-api",
+        "kind": "api_revision"
+      },
+      {
+        "url": "https://developers.facebook.com/blog/feed/",
+        "kind": "rss"
+      }
+    ],
+    "status": "active",
+    "notes": "Với các flow hoặc endpoint khác nhau, xem scopeNotes. Danh sách scope không khẳng định cần xin toàn bộ quyền cùng lúc."
+  },
+  {
+    "id": "api.instagram.status.upload",
+    "kind": "api_contract",
+    "scope": {
+      "platforms": [
+        "instagram"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "platform": "instagram",
+      "name": "Từ chối upload / publish",
+      "endpoint": "GET /{ig-container-id}?fields=status_code,status",
+      "scopes": [
+        "instagram_business_basic",
+        "instagram_business_content_publish",
+        "instagram_basic",
+        "instagram_content_publish"
+      ],
+      "scopeNotes": "Instagram Login: instagram_business_basic + instagram_business_content_publish. Facebook Login: instagram_basic + instagram_content_publish, Page access theo flow",
+      "quotaCost": null,
+      "quotaUnit": null,
+      "quotaNotes": "Graph số cố định null; publishing cap là giới hạn khác",
+      "rateLimit": null,
+      "details": "GET /{ig-container-id}?fields=status_code,status → IN_PROGRESS, FINISHED, ERROR, EXPIRED, PUBLISHED. Phân biệt container fail và media đã publish.",
+      "delivery": "Poll container; đối chiếu lỗi media_publish, xem nội dung trong app."
+    },
+    "evidence": [
+      {
+        "url": "https://www.postman.com/meta/instagram/documentation/6yqw8pt/instagram-api",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://developers.facebook.com/docs/instagram-platform/instagram-api-with-instagram-login/content-publishing/",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://developers.facebook.com/docs/instagram-platform/instagram-api-with-facebook-login/content-publishing/",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://developers.facebook.com/docs/graph-api/overview/rate-limiting/",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      }
+    ],
+    "confidence": "high",
+    "volatility": "quarterly",
+    "watch": [
+      {
+        "url": "https://www.postman.com/meta/instagram/documentation/6yqw8pt/instagram-api",
+        "kind": "api_revision"
+      },
+      {
+        "url": "https://developers.facebook.com/blog/feed/",
+        "kind": "rss"
+      }
+    ],
+    "status": "active",
+    "notes": "Với các flow hoặc endpoint khác nhau, xem scopeNotes. Danh sách scope không khẳng định cần xin toàn bộ quyền cùng lúc."
+  },
+  {
+    "id": "api.instagram.status.revoke",
+    "kind": "api_contract",
+    "scope": {
+      "platforms": [
+        "instagram"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "platform": "instagram",
+      "name": "Thu hồi quyền kết nối",
+      "endpoint": "GET /debug_token (Facebook Login)",
+      "scopes": null,
+      "scopeNotes": "App access token để debug Facebook Login; không dùng chéo host/flow",
+      "quotaCost": null,
+      "quotaUnit": null,
+      "quotaNotes": "null",
+      "rateLimit": null,
+      "details": "Facebook Login: Graph code 190, debug_token và deauthorize callback của Facebook Login. Instagram Login: token không hợp lệ/expired; chưa xác nhận callback tương đương cho mọi flow, lý do null.",
+      "delivery": "Phát hiện lúc gọi hoặc refresh; Apps and Websites / Website permissions trong Instagram."
+    },
+    "evidence": [
+      {
+        "url": "https://www.postman.com/meta/instagram/documentation/6yqw8pt/instagram-api",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://developers.facebook.com/docs/facebook-login/guides/access-tokens/debugging-and-error-handling/",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://developers.facebook.com/docs/facebook-login/guides/advanced/manual-flow/",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://developers.facebook.com/docs/graph-api/guides/error-handling/",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://www.postman.com/meta/instagram/documentation/6yqw8pt/instagram-api",
+        "checkedAt": "2026-11-10",
+        "type": "inference"
+      }
+    ],
+    "confidence": "medium",
+    "volatility": "quarterly",
+    "watch": [
+      {
+        "url": "https://www.postman.com/meta/instagram/documentation/6yqw8pt/instagram-api",
+        "kind": "api_revision"
+      },
+      {
+        "url": "https://developers.facebook.com/blog/feed/",
+        "kind": "rss"
+      }
+    ],
+    "status": "active",
+    "notes": "Với các flow hoặc endpoint khác nhau, xem scopeNotes. Danh sách scope không khẳng định cần xin toàn bộ quyền cùng lúc."
+  },
+  {
+    "id": "api.instagram.status.eligibility",
+    "kind": "api_contract",
+    "scope": {
+      "platforms": [
+        "instagram"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "platform": "instagram",
+      "name": "Số liệu eligibility",
+      "endpoint": "GET /{ig-user-id}; GET /{ig-user-id}/insights; GET /{ig-media-id}/insights",
+      "scopes": [
+        "instagram_business_basic",
+        "instagram_business_manage_insights",
+        "instagram_basic",
+        "instagram_manage_insights"
+      ],
+      "scopeNotes": "Instagram Login: instagram_business_basic, instagram_business_manage_insights. Facebook Login: instagram_basic, instagram_manage_insights và Page permissions theo asset",
+      "quotaCost": null,
+      "quotaUnit": null,
+      "quotaNotes": "Graph số cố định null",
+      "rateLimit": null,
+      "details": "GET /{ig-user-id}?fields=followers_count và /{ig-user-id}/insights, /{ig-media-id}/insights cho metric views khi hỗ trợ. Không dùng thay eligibility/gifts/bonus qualified metrics.",
+      "delivery": "Poll; đối chiếu Professional Dashboard. Phân biệt followers_count field và follower_count insight."
+    },
+    "evidence": [
+      {
+        "url": "https://www.postman.com/meta/instagram/documentation/6yqw8pt/instagram-api",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://developers.facebook.com/docs/instagram-platform/instagram-api-with-instagram-login/insights/",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://developers.facebook.com/docs/instagram-platform/instagram-api-with-facebook-login/insights/",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://developers.facebook.com/docs/graph-api/overview/rate-limiting/",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://help.instagram.com/2635536099905516",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://www.postman.com/meta/instagram/documentation/6yqw8pt/instagram-api",
+        "checkedAt": "2026-11-10",
+        "type": "inference"
+      }
+    ],
+    "confidence": "medium",
+    "volatility": "quarterly",
+    "watch": [
+      {
+        "url": "https://www.postman.com/meta/instagram/documentation/6yqw8pt/instagram-api",
+        "kind": "api_revision"
+      },
+      {
+        "url": "https://developers.facebook.com/blog/feed/",
+        "kind": "rss"
+      }
+    ],
+    "status": "active",
+    "notes": "Với các flow hoặc endpoint khác nhau, xem scopeNotes. Danh sách scope không khẳng định cần xin toàn bộ quyền cùng lúc."
+  }
+]

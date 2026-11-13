@@ -1,3 +1,5 @@
+import { buildXfadeFilter, sfxMixFilter, type TransitionType } from "../edit/plan.js";
+import { buildOverlayFilter } from "../motion/plan.js";
 import type { RenderTarget, TimelineMusic, TimelineScene, TimelineVisual } from "../schemas/timeline.js";
 
 /** Bump when clip or mix rules change, so cached clips and renders are rebuilt. */
@@ -47,12 +49,22 @@ function point(raw: Record<string, number> | undefined): Point {
   };
 }
 
-/** zoompan expressions moving from motion.from to motion.to over `frames`, eased with smoothstep. */
-export function zoompanExprs(motion: TimelineVisual["motion"], frames: number): { z: string; x: string; y: string } {
+/**
+ * zoompan expressions moving from motion.from to motion.to.
+ * Smoothstep by default. `punch_in` uses ease-out over `easeFrames`, then holds.
+ */
+export function zoompanExprs(
+  motion: TimelineVisual["motion"],
+  frames: number,
+  options?: { easing?: "smoothstep" | "easeOut"; easeFrames?: number },
+): { z: string; x: string; y: string } {
   const from = point(motion?.from);
   const to = point(motion?.to);
-  const p = frames > 1 ? `min(on/${frames - 1},1)` : "0";
-  const ease = `(${p})*(${p})*(3-2*(${p}))`;
+  const span = Math.max(1, options?.easeFrames ?? frames);
+  const p = span > 1 ? `min(on/${span - 1},1)` : "0";
+  const ease = options?.easing === "easeOut"
+    ? `(1-(1-(${p}))*(1-(${p})))`
+    : `(${p})*(${p})*(3-2*(${p}))`;
   const lerp = (a: number, b: number) => (a === b ? num(a) : `(${num(a)}+(${num(b - a)})*${ease})`);
   return {
     z: lerp(from.zoom, to.zoom),
@@ -71,6 +83,7 @@ export function buildSceneClipPlan(
   scene: TimelineScene,
   target: RenderTarget,
   resolvePath: (path: string) => string,
+  options?: { croppedPaths?: ReadonlySet<string> },
 ): { inputs: ClipInput[]; inputArgs: string[]; filter: string; frames: number } {
   const { width: w, height: h, fps } = target;
   const frames = splitFrames(scene, fps);
@@ -85,13 +98,16 @@ export function buildSceneClipPlan(
       inputs.push({ kind: "IMAGE", path });
       inputArgs.push("-i", path);
       const { z, x, y } = zoompanExprs(visual.motion, count);
-      // Cover + crop. Prefer stored motion focus (vision/Ken Burns centre); else geometric centre.
+      const alreadyCropped = options?.croppedPaths?.has(visual.path) === true;
       const focus = point(visual.motion?.from);
       const sw = w * SUPERSAMPLE;
       const sh = h * SUPERSAMPLE;
+      const fit = alreadyCropped
+        ? `scale=${w}:${h}:flags=lanczos,setsar=1,`
+        : `scale=${sw}:${sh}:force_original_aspect_ratio=increase:flags=lanczos,`
+          + `crop=${sw}:${sh}:(iw-${sw})*${num(focus.x)}:(ih-${sh})*${num(focus.y)},setsar=1,`;
       chains.push(
-        `[${index}:v]select='eq(n,0)',scale=${sw}:${sh}:force_original_aspect_ratio=increase:flags=lanczos,`
-        + `crop=${sw}:${sh}:(iw-${sw})*${num(focus.x)}:(ih-${sh})*${num(focus.y)},setsar=1,`
+        `[${index}:v]select='eq(n,0)',${fit}`
         + `zoompan=z='${z}':x='${x}':y='${y}':d=${count}:s=${w}x${h}:fps=${fps},`
         + `trim=end_frame=${count},setpts=PTS-STARTPTS${label}`,
       );
@@ -155,19 +171,63 @@ export type FinalPlanInput = {
   resolvePath: (path: string) => string;
   /** File name of the ASS file inside the render working directory, or null for no burn-in. */
   assFileName: string | null;
+  /** Per-scene clips. Used instead of the concat list when a transition is not a cut. */
+  sceneClips?: {
+    path: string;
+    sceneId: string;
+    startSec: number;
+    durationSec: number;
+    transitionOut?: { type: TransitionType; durationSec: number } | null;
+  }[];
+  xfadeAvailable?: boolean;
+  /** Transparent graphics drawn before subtitles. */
+  graphics?: { path: string; startSec: number; endSec: number }[];
+  /** Short effects mixed at a word start, already at −14 dB. */
+  sfx?: { path: string; startSec: number }[];
 };
 
 /** The final pass: concat clips, burn subtitles, mix voice + ducked music, loudnorm. */
-export function buildFinalPlan(input: FinalPlanInput): { inputArgs: string[]; filter: string; videoMap: string; reencodeVideo: boolean } {
+export function buildFinalPlan(input: FinalPlanInput): { inputArgs: string[]; filter: string; videoMap: string; reencodeVideo: boolean; warning: string | null } {
   const total = num(input.totalDurationSec);
-  const inputArgs = ["-f", "concat", "-safe", "0", "-i", input.concatListPath];
+  const clips = input.sceneClips ?? [];
+  const crossfade = clips.length > 1 && clips.some((clip) => clip.transitionOut && clip.transitionOut.type !== "cut");
+  const inputArgs: string[] = [];
   const lines: string[] = [];
   let next = 1;
+  let picture = "[0:v]";
+  let warning: string | null = null;
+  if (crossfade) {
+    for (const clip of clips) inputArgs.push("-i", clip.path);
+    const joined = buildXfadeFilter(clips, { xfadeAvailable: input.xfadeAvailable !== false });
+    warning = joined.warning;
+    lines.push(joined.filter.replace("[vout]", "[joined]"));
+    picture = "[joined]";
+    next = clips.length;
+  } else {
+    inputArgs.push("-f", "concat", "-safe", "0", "-i", input.concatListPath);
+  }
+  const graphicStart = next;
+  for (const graphic of input.graphics ?? []) {
+    inputArgs.push("-i", input.resolvePath(graphic.path));
+    next += 1;
+  }
+  if ((input.graphics ?? []).length > 0) {
+    const overlay = buildOverlayFilter((input.graphics ?? []).map((graphic, index) => ({
+      id: String(index),
+      startSec: graphic.startSec,
+      endSec: graphic.endSec,
+      inputIndex: graphicStart + index,
+    })));
+    lines.push(overlay.filter);
+    picture = overlay.videoMap;
+  }
 
   let videoMap = "0:v";
   if (input.assFileName) {
-    lines.push(`[0:v]ass='${input.assFileName}'[vout]`);
+    lines.push(`${picture}ass='${input.assFileName}'[vout]`);
     videoMap = "[vout]";
+  } else if (picture !== "[0:v]") {
+    videoMap = picture;
   }
 
   const voiced = input.scenes.filter((scene) => scene.voice && scene.voice.durationSec > 0);
@@ -189,6 +249,19 @@ export function buildFinalPlan(input: FinalPlanInput): { inputArgs: string[]; fi
   }
   lines.push(`[voice]apad=whole_dur=${total},atrim=0:${total},asetpts=PTS-STARTPTS[voicep]`);
 
+  const sfxLabels: string[] = [];
+  for (const effect of input.sfx ?? []) {
+    inputArgs.push("-i", input.resolvePath(effect.path));
+    lines.push(sfxMixFilter(effect.startSec, next));
+    sfxLabels.push(`[sfx${next}]`);
+    next += 1;
+  }
+  let voiceLabel = "[voicep]";
+  if (sfxLabels.length > 0) {
+    lines.push(`[voicep]${sfxLabels.join("")}amix=inputs=${1 + sfxLabels.length}:normalize=0:duration=first:dropout_transition=0[voicebed]`);
+    voiceLabel = "[voicebed]";
+  }
+
   const music = input.music;
   if (music) {
     if (music.loop) inputArgs.push("-stream_loop", "-1");
@@ -208,13 +281,19 @@ export function buildFinalPlan(input: FinalPlanInput): { inputArgs: string[]; fi
       chain.push(`afade=t=out:st=${num(Math.max(0, input.totalDurationSec - music.fadeOutSec))}:d=${num(music.fadeOutSec)}`);
     }
     lines.push(`[${next}:a]${chain.join(",")}[music]`);
-    lines.push("[voicep][music]amix=inputs=2:normalize=0:duration=first:dropout_transition=0[mix]");
+    lines.push(`${voiceLabel}[music]amix=inputs=2:normalize=0:duration=first:dropout_transition=0[mix]`);
     lines.push(`[mix]${LOUDNORM},aresample=48000[aout]`);
   } else {
-    lines.push(`[voicep]${LOUDNORM},aresample=48000[aout]`);
+    lines.push(`${voiceLabel}${LOUDNORM},aresample=48000[aout]`);
   }
 
-  return { inputArgs, filter: lines.join(";\n"), videoMap, reencodeVideo: Boolean(input.assFileName) };
+  return {
+    inputArgs,
+    filter: lines.join(";\n"),
+    videoMap,
+    reencodeVideo: Boolean(input.assFileName) || picture !== "[0:v]",
+    warning,
+  };
 }
 
 /** One `file '...'` line per clip; single quotes escaped the way the concat demuxer expects. */

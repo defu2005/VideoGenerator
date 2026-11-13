@@ -14,6 +14,8 @@ import type { JobRepository } from "../jobs/jobRepository.js";
 import { probeDurationSec } from "../media/ffmpeg.js";
 import type { TtsCue } from "../providers/tts/types.js";
 import { defaultVoiceFor } from "../lib/defaultVoice.js";
+import { marketVoiceLocale } from "@vg/shared";
+import { resolveMarket } from "../knowledge/markets.js";
 
 const ProjectParams = z.object({ id: z.string().uuid() }).strict();
 const SceneParams = z.object({ id: z.string().uuid(), sceneId: z.string().uuid() }).strict();
@@ -164,7 +166,10 @@ export function registerVoiceRoutes(
     if (!scene) throw new AppError(404, "SCENE_NOT_FOUND", "Scene not found");
     const body = RegenerateBody.parse(request.body ?? {});
     const voices = await registry.listVoices();
-    const voice = body.voice ?? project.settings.voice?.voice ?? defaultVoiceFor(project.settings.language, voices, config, () => undefined);
+    const market = resolveMarket(db, project.settings.market);
+    const locale = marketVoiceLocale(market?.pack ?? null, project.settings.language);
+    const voice = body.voice ?? project.settings.voice?.voice
+      ?? defaultVoiceFor(locale, voices, config, undefined, market !== null);
     const rate = body.rate ?? project.settings.voice?.rate ?? config.TTS_RATE;
     const provider = registry.resolve();
     const hash = createHash("sha256").update(`${scene.narration}\u0000${voice}\u0000${rate}\u0000${provider.id}`).digest("hex");

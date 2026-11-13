@@ -179,7 +179,7 @@ export function AutomationTab({ profile }: { profile: ProfileDetail }) {
           <div className="section-heading">
             <div><p className="eyebrow">NHẬT KÝ</p><h2>Gần đây</h2></div>
           </div>
-          <ul className="recent-error-list">
+          <ul className="recent-error-list automation-log-list">
             {data.logs.slice(0, 10).map((log) => (
               <li key={log.id}>
                 <strong>{log.level}</strong>

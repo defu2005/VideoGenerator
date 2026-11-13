@@ -1,10 +1,13 @@
 import { z } from "zod";
+import { stageTimeoutInputHash, stageTimeoutPlanIsFresh, timeoutBriefFromSettings, type StageTimeoutPlan } from "../pipeline/stageTimeouts.js";
 import { VISION_IMAGE_TOKEN_ESTIMATE } from "../schemas/vision.js";
 
 export const BudgetModeSchema = z.enum(["ECO", "BALANCED", "QUALITY", "MAX", "CUSTOM"]);
 export type BudgetMode = z.infer<typeof BudgetModeSchema>;
 
 export const BudgetFeaturesSchema = z.object({
+  knowledgeContext: z.number().int().min(0).max(6000),
+  knowledgeEmbeddings: z.boolean(),
   storyMode: z.enum(["merged", "separate"]),
   repairAttempts: z.union([z.literal(0), z.literal(1), z.literal(2)]),
   scriptReview: z.boolean(),
@@ -15,11 +18,11 @@ export const BudgetFeaturesSchema = z.object({
   semanticImageRerank: z.boolean(),
   visionCheck: z.boolean(),
   /** Automatic re-search rounds when vision fit is below threshold (MAX / CUSTOM). */
-  visionRetryRounds: z.union([z.literal(0), z.literal(1), z.literal(2)]),
+  visionRetryRounds: z.union([z.literal(0), z.literal(1), z.literal(2), z.literal(3)]),
   /** Minimum vision fit / 10 to accept a candidate (default 7). */
   visionThreshold: z.number().min(0).max(10),
   /** Stop visual search once this many relevant candidates exist per scene. */
-  visualSearchBreadth: z.union([z.literal(8), z.literal(16)]),
+  visualSearchBreadth: z.union([z.literal(8), z.literal(16), z.literal(32)]),
   /** Post-render vision verification of mid-frame thumbnails. */
   renderVerify: z.boolean(),
   /** Vision pick of the thumbnail frame, overlay text and position. */
@@ -53,11 +56,45 @@ export const BudgetFeaturesSchema = z.object({
   trendMatch: z.boolean(),
   /** Translate a finished script into another language. */
   translateScript: z.boolean(),
+  /** Extract provider facts from an official page. Off in ECO. */
+  providerIntelExtract: z.boolean(),
+  /** LLM edit plan (transitions, motion, emphasis). Off in ECO uses the code rhythm. */
+  editPlan: z.boolean(),
+  /** Pick a format recipe. Off in ECO uses the code fallback. */
+  formatPick: z.boolean(),
+  /** One call that sizes each stage ceiling. On in every preset. */
+  stageTimeouts: z.boolean(),
+  /** Turn an owner goal into a spec. On in every preset. */
+  operatorPlan: z.boolean(),
+  /** Classify an owner message. On in every preset. */
+  operatorClassify: z.boolean(),
   outputHeadroom: z.union([z.literal(1), z.literal(1.5), z.literal(2)]),
+  /** Full-scene compose graphics: none, one finished frame, or the GSAP clip. */
+  composeGraphics: z.enum(["off", "static", "animated"]),
+  /** Variant grain in compose templates. False skips the canvas noise. */
+  graphicGrain: z.boolean(),
 }).strict();
 export type BudgetFeatures = z.infer<typeof BudgetFeaturesSchema>;
 
 /** Cap scenes for web image search; 999 means every low-relevance scene. */
+export type VisualQuality = "budget" | "best";
+
+/** Visual-stage features. "best" ignores the budget preset for image search only. */
+export function visualFeaturesFor(features: BudgetFeatures, quality: VisualQuality = "budget"): BudgetFeatures {
+  if (quality !== "best") return features;
+  return {
+    ...features,
+    visualSearchBreadth: 32,
+    altQueryAssist: true,
+    sceneQueryAssist: true,
+    semanticImageRerank: true,
+    visionCheck: true,
+    visionRetryRounds: 3,
+    visionThreshold: 7,
+    webImageSearch: 999,
+  };
+}
+
 export function webImageSearchSceneCap(features: Pick<BudgetFeatures, "webImageSearch">, lowSceneCount: number): number {
   if (features.webImageSearch <= 0 || lowSceneCount <= 0) return 0;
   if (features.webImageSearch >= 999) return lowSceneCount;
@@ -78,6 +115,7 @@ export type BudgetSettingsInput = z.infer<typeof BudgetSettingsInputSchema>;
 
 const PRESETS: Record<Exclude<BudgetMode, "CUSTOM">, BudgetFeatures> = {
   ECO: {
+    knowledgeContext: 600, knowledgeEmbeddings: false,
     storyMode: "merged",
     repairAttempts: 0,
     scriptReview: false,
@@ -106,9 +144,18 @@ const PRESETS: Record<Exclude<BudgetMode, "CUSTOM">, BudgetFeatures> = {
     commentAssist: false,
     trendMatch: true,
     translateScript: false,
+    providerIntelExtract: false,
+    editPlan: false,
+    formatPick: false,
+    stageTimeouts: true,
+    operatorPlan: true,
+    operatorClassify: true,
     outputHeadroom: 1,
+    composeGraphics: "off",
+    graphicGrain: false,
   },
   BALANCED: {
+    knowledgeContext: 1500, knowledgeEmbeddings: true,
     storyMode: "separate",
     repairAttempts: 1,
     scriptReview: true,
@@ -137,9 +184,18 @@ const PRESETS: Record<Exclude<BudgetMode, "CUSTOM">, BudgetFeatures> = {
     commentAssist: true,
     trendMatch: true,
     translateScript: true,
+    providerIntelExtract: true,
+    editPlan: true,
+    formatPick: true,
+    stageTimeouts: true,
+    operatorPlan: true,
+    operatorClassify: true,
     outputHeadroom: 1.5,
+    composeGraphics: "static",
+    graphicGrain: false,
   },
   QUALITY: {
+    knowledgeContext: 3000, knowledgeEmbeddings: true,
     storyMode: "separate",
     repairAttempts: 2,
     scriptReview: true,
@@ -168,9 +224,18 @@ const PRESETS: Record<Exclude<BudgetMode, "CUSTOM">, BudgetFeatures> = {
     commentAssist: true,
     trendMatch: true,
     translateScript: true,
+    providerIntelExtract: true,
+    editPlan: true,
+    formatPick: true,
+    stageTimeouts: true,
+    operatorPlan: true,
+    operatorClassify: true,
     outputHeadroom: 2,
+    composeGraphics: "animated",
+    graphicGrain: false,
   },
   MAX: {
+    knowledgeContext: 3000, knowledgeEmbeddings: true,
     storyMode: "separate",
     repairAttempts: 2,
     scriptReview: true,
@@ -199,7 +264,15 @@ const PRESETS: Record<Exclude<BudgetMode, "CUSTOM">, BudgetFeatures> = {
     commentAssist: true,
     trendMatch: true,
     translateScript: true,
+    providerIntelExtract: true,
+    editPlan: true,
+    formatPick: true,
+    stageTimeouts: true,
+    operatorPlan: true,
+    operatorClassify: true,
     outputHeadroom: 2,
+    composeGraphics: "animated",
+    graphicGrain: true,
   },
 };
 
@@ -219,7 +292,10 @@ export function resolveBudget(
       ? modeOrProject.settings.budget ?? { mode: "BALANCED" as const }
       : modeOrProject;
   const mode = budget.mode ?? "BALANCED";
-  const defaults = mode === "CUSTOM" ? PRESETS.BALANCED : PRESETS[mode];
+  // CUSTOM keeps the BALANCED feature set, except graphics, which start from QUALITY.
+  const defaults = mode === "CUSTOM"
+    ? { ...PRESETS.BALANCED, composeGraphics: PRESETS.QUALITY.composeGraphics, graphicGrain: PRESETS.QUALITY.graphicGrain }
+    : PRESETS[mode];
   const overrides = mode === "CUSTOM" ? budget.features ?? {} : {};
   const resolved = {
     ...defaults,
@@ -291,6 +367,12 @@ export type BudgetEstimateInput = {
     sceneDurationSec?: number;
     researchMode?: "merged" | "separate" | "off";
     userSet?: string[];
+    format?: string | null;
+    style?: string;
+    platform?: string;
+    aspectRatio?: string;
+    stageTimeouts?: StageTimeoutPlan | null;
+    visuals?: { quality?: "budget" | "best" };
   };
 };
 
@@ -308,7 +390,7 @@ export function estimateBudget(
   stages: readonly { stage: string; state: string }[] = [],
 ): BudgetEstimate {
   const budget = project.settings.budget ?? { mode: "BALANCED" as const };
-  const features = resolveBudget(budget);
+  const features = visualFeaturesFor(resolveBudget(budget), project.settings.visuals?.quality === "best" ? "best" : "budget");
   const mode = budget.mode ?? "BALANCED";
   const storyMode = storyModeForProject(project);
   const stateFor = (stage: BudgetEstimateStage["stage"]) =>
@@ -321,9 +403,15 @@ export function estimateBudget(
   const perStage: BudgetEstimateStage[] = [];
 
   const researchCalls = storyMode === "off" || researchDone ? 0 : 1;
+  const timeoutBrief = timeoutBriefFromSettings(project.settings, project.topic);
+  const freshTimeoutPlan = stageTimeoutPlanIsFresh(
+    { stageTimeouts: project.settings.stageTimeouts },
+    stageTimeoutInputHash(timeoutBrief),
+  );
+  const stageTimeoutCalls = features.stageTimeouts && !freshTimeoutPlan && !researchDone ? 1 : 0;
   perStage.push({
     stage: "RESEARCH",
-    calls: { min: researchCalls, max: researchCalls * (1 + repairs) },
+    calls: { min: researchCalls + stageTimeoutCalls, max: researchCalls * (1 + repairs) + stageTimeoutCalls },
     reason: storyMode === "off"
       ? "Research is disabled; the script stage handles the topic."
       : researchDone ? "Research is already complete and unchanged."
@@ -377,7 +465,8 @@ export function estimateBudget(
   const guidelineMin = scriptDone || features.guidelineCheck === "off" ? 0 : 1;
   // checkAndFix: check, then one fix review and one re-check when the check finds problems.
   const guidelineMax = guidelineMin && features.guidelineCheck === "checkAndFix" ? 3 : guidelineMin;
-  const scriptMin = scriptBaseCalls + reviewCalls + guidelineMin + factCheckCalls;
+  const formatPickCalls = scriptDone || !features.formatPick || project.settings.format ? 0 : 1;
+  const scriptMin = scriptBaseCalls + reviewCalls + guidelineMin + factCheckCalls + formatPickCalls;
   const repairableCalls = scriptBaseCalls + reviewCalls + guidelineMax + factCheckCalls;
   perStage.push({
     stage: "SCRIPT",
@@ -418,14 +507,18 @@ export function estimateBudget(
 
   const timelineDone = stateFor("TIMELINE") === "DONE";
   const metadataCalls = !timelineDone && features.metadata ? 1 : 0;
+  const editPlanCalls = !timelineDone && features.editPlan ? 1 : 0;
+  const timelineCalls = metadataCalls + editPlanCalls;
   perStage.push({
     stage: "TIMELINE",
-    calls: { min: metadataCalls, max: metadataCalls },
+    calls: { min: timelineCalls, max: timelineCalls },
     reason: timelineDone
       ? "Timeline is already complete and unchanged."
-      : metadataCalls
-        ? "One metadata call drafts titles, description, tags and hashtags after the timeline."
-        : "Publishing metadata uses a code draft only.",
+      : [
+        metadataCalls ? "One metadata call drafts titles, description, tags and hashtags after the timeline." : "",
+        editPlanCalls ? "One edit-plan call chooses transitions, motion and emphasis." : "",
+        !metadataCalls && !editPlanCalls ? "Publishing metadata and the edit plan use code only." : "",
+      ].filter(Boolean).join(" "),
   });
 
   const renderDone = stateFor("RENDER") === "DONE";
@@ -480,13 +573,16 @@ export function estimateBudget(
     thumbnailPick: { min: thumbnailPickCalls, max: thumbnailPickCalls },
     musicAssist: { min: musicAssistCalls, max: musicAssistCalls },
     metadata: { min: metadataCalls, max: metadataCalls },
+    editPlan: { min: editPlanCalls, max: editPlanCalls },
+    formatPick: { min: formatPickCalls, max: formatPickCalls },
+    stageTimeouts: { min: stageTimeoutCalls, max: stageTimeoutCalls },
   };
   for (const stage of perStage) {
-    const taskIds = stage.stage === "RESEARCH" ? ["research"]
-      : stage.stage === "SCRIPT" ? ["script", "scriptReview", "factCheck", "guidelineCheck"]
+    const taskIds = stage.stage === "RESEARCH" ? ["research", "stageTimeouts"]
+      : stage.stage === "SCRIPT" ? ["script", "scriptReview", "factCheck", "guidelineCheck", "formatPick"]
         : stage.stage === "SCENE_PLAN" ? ["sceneQueries"]
           : stage.stage === "MUSIC_SEARCH" ? ["musicAssist"]
-            : stage.stage === "TIMELINE" ? ["metadata"]
+            : stage.stage === "TIMELINE" ? ["metadata", "editPlan"]
               : stage.stage === "RENDER" ? ["renderVision", "thumbnailPick"]
                 : ["visualAltQueries", "visualRerank", "visionCheck", "visionResearch", "visionConsistency", "webImageGrounding"];
     stage.tasks = taskIds.map((task) => {
@@ -569,7 +665,8 @@ function estimateBudgetTokens(
   const renderCalls = stages.find((stage) => stage.stage === "RENDER")?.calls.max ?? 0;
 
   // Text-call input: overhead + stage context (script/research for script-like stages).
-  let input = 0;
+  let input = (researchCalls + scriptCalls + metadataCalls) * features.knowledgeContext;
+  if (features.knowledgeEmbeddings) input += scriptOutput + researchOutput;
   input += researchCalls * (SYSTEM_PROMPT_OVERHEAD_TOKENS + SMALL_CONTEXT_TOKENS);
   input += scriptCalls * (SYSTEM_PROMPT_OVERHEAD_TOKENS + scriptContext);
   input += scenePlanCalls * (SYSTEM_PROMPT_OVERHEAD_TOKENS + scriptContext);

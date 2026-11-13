@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { AspectRatioSchema } from "../enums.js";
+import { OriginalitySettingsSchema } from "../originality/settings.js";
 
 /** Where a rule applies; prompts pick the rules for their own target. */
 export const GuidelineTargetSchema = z.enum(["script", "visuals", "music", "subtitles", "metadata"]);
@@ -8,7 +9,7 @@ export type GuidelineTarget = z.infer<typeof GuidelineTargetSchema>;
 export const GuidelineSeveritySchema = z.enum(["MUST", "SHOULD", "TIP"]);
 export type GuidelineSeverity = z.infer<typeof GuidelineSeveritySchema>;
 
-export const GuidelinePackKindSchema = z.enum(["PLATFORM", "CHANNEL", "CUSTOM"]);
+export const GuidelinePackKindSchema = z.enum(["PLATFORM", "MARKET", "CHANNEL", "CUSTOM"]);
 export type GuidelinePackKind = z.infer<typeof GuidelinePackKindSchema>;
 
 export const GuidelineStrictnessSchema = z.enum(["REMIND", "FILTER"]);
@@ -43,7 +44,7 @@ export const GuidelinePackParamsSchema = z.object({
 export type GuidelinePackParams = z.infer<typeof GuidelinePackParamsSchema>;
 
 export const GuidelinePackSchema = z.object({
-  id: SlugSchema,
+  id: z.union([SlugSchema, z.string().regex(/^market:[A-Z]{2}$/)]),
   kind: GuidelinePackKindSchema,
   name: z.string().trim().min(1).max(80),
   description: z.string().max(400).default(""),
@@ -61,6 +62,7 @@ export const GUIDELINE_DISCLAIMER = "Đây là nhắc nhở tóm tắt, không t
 
 /** Per-project choice. `platformPack: "auto"` follows the project's platform; `channelPacks` unset follows its style. */
 export const GuidelineSettingsSchema = z.object({
+  originality: OriginalitySettingsSchema.optional(),
   platformPack: z.string().nullable().default("auto"),
   channelPacks: z.array(z.string()).max(3).optional(),
   customRules: z.array(z.string().trim().min(1).max(300)).max(20).default([]),
@@ -70,6 +72,7 @@ export const GuidelineSettingsSchema = z.object({
 export type GuidelineSettings = z.infer<typeof GuidelineSettingsSchema>;
 
 export const GuidelineSettingsInputSchema = z.object({
+  originality: OriginalitySettingsSchema.optional(),
   platformPack: z.string().nullable().optional(),
   channelPacks: z.array(z.string()).max(3).nullable().optional(),
   customRules: z.array(z.string().trim().min(1).max(300)).max(20).optional(),

@@ -1,0 +1,14 @@
+<!DOCTYPE html><html><head><meta charset="utf-8"><style>@font-face{font-family:"Be Vietnam Pro";src:url("font.woff2") format("woff2");font-weight:400}@font-face{font-family:"Be Vietnam Pro";src:url("font-bold.woff2") format("woff2");font-weight:700}html,body{margin:0;background:transparent;color:#fff;font-family:"Be Vietnam Pro",sans-serif}
+#root{width:100%;height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:8%}
+h1,h2,p,blockquote{margin:0;max-width:90%}
+#bar{height:8px;width:40%}
+#fill{height:10px;width:100%}
+#chart{display:flex;align-items:flex-end;gap:12px;height:220px}
+.col{width:48px}</style><script src="gsap.min.js"></script></head><body><div id="root" data-composition-id="main" data-start="0" data-duration="3" data-width="1080" data-height="1920" data-fps="30" data-composition-variables='{"line":{"type":"string","default":"Theo dõi để xem thêm","maxLength":40},"channel":{"type":"string","default":"","maxLength":32},"color":{"type":"color","default":"#F8FAFC"}}'><h2 id="line"></h2><p id="channel"></p><script>const v = (window.__hyperframes && window.__hyperframes.getVariables && window.__hyperframes.getVariables()) || {};
+document.getElementById("line").textContent = v.line || "Theo dõi để xem thêm";
+document.getElementById("channel").textContent = v.channel || "";
+document.getElementById("line").style.color = v.color || "#F8FAFC";
+const tl = gsap.timeline({ paused: true });
+tl.from("#line", { y: 20, opacity: 0, duration: 0.45 }, 0);
+tl.from("#channel", { opacity: 0, duration: 0.35 }, 0.2);
+window.__timelines = { main: tl };</script></div></body></html>

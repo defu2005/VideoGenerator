@@ -1,0 +1,8 @@
+# Env vars are expanded by Litestream. Set LITESTREAM_REPLICA_URL when the
+# compose profile "litestream" is on, for example:
+#   s3://bucket/vg
+#   file:///backup/vg
+dbs:
+  - path: /data/app.db
+    replicas:
+      - url: ${LITESTREAM_REPLICA_URL}

@@ -1,3 +1,4 @@
+import { KnowledgeUsesPanel } from "../profiles/KnowledgeUsesPanel";
 import {
   DEFAULT_AI_DISCLOSURE,
   appendDescriptionExtras,
@@ -7,6 +8,8 @@ import {
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { ErrorState } from "../../components/ErrorState";
+import { useConfirm } from "../../components/useConfirm";
+import { useToast } from "../../components/ui/Toast";
 import { Spinner } from "../../components/Spinner";
 import { generateProjectMetadata, getProjectMetadata, saveProjectMetadata } from "../../services/metadataApi";
 import { getProjectTimeline } from "../../services/timelineApi";
@@ -30,12 +33,14 @@ async function copyText(label: string, text: string): Promise<string> {
 
 export function MetadataPanel({ project }: { project: Project }) {
   const queryClient = useQueryClient();
+  const toast = useToast();
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [includeChapters, setIncludeChapters] = useState(true);
   const [includeCredits, setIncludeCredits] = useState(true);
   const [includeDisclosure, setIncludeDisclosure] = useState(true);
   const [form, setForm] = useState<VideoMetadataDraft | null>(null);
+  const { ask, dialog: regenerateDialog } = useConfirm();
 
   const metadata = useQuery({
     queryKey: metadataKeys.project(project.id),
@@ -72,13 +77,18 @@ export function MetadataPanel({ project }: { project: Project }) {
     })
     : "";
 
-  const onError = (reason: unknown) => setError(reason instanceof Error ? reason.message : "Không thực hiện được yêu cầu");
+  const onError = (reason: unknown) => {
+    const message = reason instanceof Error ? reason.message : "Không thực hiện được yêu cầu";
+    setError(message);
+    toast.error(message);
+  };
 
   const save = useMutation({
     mutationFn: (draft: VideoMetadataDraft) => saveProjectMetadata(project.id, draft),
     onSuccess: (data) => {
       queryClient.setQueryData(metadataKeys.project(project.id), data);
       setNotice("Đã lưu chỉnh sửa");
+      toast.success("Đã lưu thông tin đăng tải");
     },
     onError,
   });
@@ -88,6 +98,7 @@ export function MetadataPanel({ project }: { project: Project }) {
     onSuccess: (data) => {
       queryClient.setQueryData(metadataKeys.project(project.id), data);
       setNotice("Đã tạo lại metadata");
+      toast.success("Đã tạo lại thông tin đăng tải");
     },
     onError,
   });
@@ -111,7 +122,12 @@ export function MetadataPanel({ project }: { project: Project }) {
     setError("");
     setNotice("");
     const hasEdits = Boolean(metadata.data?.metadata?.edited);
-    if (hasEdits && !window.confirm("Bạn đã sửa metadata. Tạo lại sẽ xóa bản sửa — tiếp tục?")) return;
+    if (hasEdits && !await ask({
+      title: "Tạo lại thông tin đăng tải?",
+      message: "Bạn đã sửa metadata. Tạo lại sẽ xóa bản sửa.",
+      confirmLabel: "Tạo lại",
+      cancelLabel: "Giữ bản sửa",
+    })) return;
     generate.mutate(hasEdits);
   }
 
@@ -122,6 +138,7 @@ export function MetadataPanel({ project }: { project: Project }) {
 
   return (
     <section className="panel metadata-panel" aria-label="Thông tin đăng tải">
+      <KnowledgeUsesPanel projectId={project.id} tasks={["metadata"]} />
       <div className="metadata-header">
         <div>
           <p className="eyebrow">THÔNG TIN ĐĂNG TẢI</p>
@@ -297,6 +314,7 @@ export function MetadataPanel({ project }: { project: Project }) {
           </button>
         </>
       )}
+      {regenerateDialog}
     </section>
   );
 }

@@ -23,6 +23,27 @@ const overview = {
 };
 
 describe("OperatorPage", () => {
+  it("resumes only the latest run of a workflow", async () => {
+    const resume = vi.fn();
+    const run = { ...overview.runs[0], status: "failed", canResume: true, workflowId: "root" };
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.includes("/operator/overview")) {
+        return jsonResponse({ ...overview, runs: [{ ...run, id: "latest" }, { ...run, id: "root" }] });
+      }
+      if (url.includes("/operator/runs/latest/resume")) {
+        resume(init?.method);
+        return jsonResponse({ runId: "next", message: "Đã nhận lượt tiếp tục" });
+      }
+      return jsonResponse({ messages: [] });
+    }));
+    renderWithProviders(<OperatorPage />);
+    fireEvent.click(await screen.findByRole("button", { name: "Tiếp tục" }));
+    expect(screen.getAllByRole("button", { name: "Tiếp tục" })).toHaveLength(1);
+    expect(await screen.findByText("Đã nhận lượt tiếp tục")).toBeInTheDocument();
+    expect(resume).toHaveBeenCalledWith("POST");
+  });
+
   it("shows status, a pending card and the resume command", async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);

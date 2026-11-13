@@ -9,6 +9,10 @@ type Settings = {
   sceneDurationSec: number;
   wordsPerMinute: number;
   language: string;
+  /** Recipe range. The midpoint replaces the project scene length when set. */
+  targetSceneSec?: [number, number];
+  /** Preferred visual kinds from the recipe, rotated onto search queries. */
+  visualMix?: Array<"photo" | "illustration" | "chart" | "text">;
 };
 
 type Unit = {
@@ -28,6 +32,11 @@ type QueryAssignment = {
 type AssignQueries = (section: ScriptSection | null) => QueryAssignment;
 
 const QUERY_VARIANT_MODIFIERS = ["close-up", "wide shot", "archival photo", "detail", "portrait", "illustration"];
+
+function sceneTarget(settings: Settings): number {
+  if (!settings.targetSceneSec) return settings.sceneDurationSec;
+  return (settings.targetSceneSec[0] + settings.targetSceneSec[1]) / 2;
+}
 
 export function ensureConsecutiveQueryVariety(scenes: SceneDraft[]): void {
   for (let index = 1; index < scenes.length; index += 1) {
@@ -86,7 +95,7 @@ function splitLongSentence(sentence: string, settings: Settings): string[] {
       result.push(part.trim());
       continue;
     }
-    const target = settings.sceneDurationSec;
+    const target = sceneTarget(settings);
     // Closest part count to the target, never fewer than the 1.6× limit allows.
     const partCount = Math.min(
       tokens.length,
@@ -138,7 +147,7 @@ function packUnit(unit: Unit, settings: Settings, assignQueries: AssignQueries):
     .flatMap((sentence) => splitLongSentence(sentence, settings));
   if (sentences.length === 0) return [];
 
-  const target = settings.sceneDurationSec;
+  const target = sceneTarget(settings);
   const packed: string[] = [];
   let current: string[] = [];
   for (const sentence of sentences) {
@@ -274,6 +283,12 @@ export function planScenes(script: Script, settings: Settings): SceneDraft[] {
       position += 1;
     } while (primary === previousPrimary);
     queryPositions.set(positionKey, position);
+    const mix = settings.visualMix ?? [];
+    if (mix.length > 0) {
+      const kind = mix[(position - 1) % mix.length];
+      const word = kind === "photo" ? "photograph" : kind === "text" ? "text graphic" : kind;
+      if (word && !primary.toLowerCase().includes(word)) primary = `${primary} ${word}`;
+    }
     previousPrimary = primary;
     const variantQueries = QUERY_VARIANT_MODIFIERS.map((modifier) => `${section.visualQueries.primary} ${modifier}`.trim());
     const alternatives = [...pool, ...variantQueries]

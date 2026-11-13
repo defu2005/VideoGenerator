@@ -1,6 +1,5 @@
 import {
   ApiErrorSchema,
-  BUILT_IN_GUIDELINE_PACKS,
   GUIDELINE_DISCLAIMER,
   GuidelineFindingsResponseSchema,
   GuidelinePacksResponseSchema,
@@ -40,7 +39,7 @@ export function registerGuidelineRoutes(
   app.get("/api/guidelines/packs", {
     schema: { response: { 200: GuidelinePacksResponseSchema } },
   }, async () => ({
-    builtIn: [...BUILT_IN_GUIDELINE_PACKS],
+    builtIn: guidelines.builtInPacks(),
     custom: getGuidelinePacks(sqlite),
     disclaimer: GUIDELINE_DISCLAIMER,
   }));
@@ -60,7 +59,7 @@ export function registerGuidelineRoutes(
     }
     saveGuidelinePacks(sqlite, body.packs);
     return {
-      builtIn: [...BUILT_IN_GUIDELINE_PACKS],
+      builtIn: guidelines.builtInPacks(),
       custom: body.packs,
       disclaimer: GUIDELINE_DISCLAIMER,
     };

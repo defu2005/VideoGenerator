@@ -162,6 +162,9 @@ describe("research and script stages", () => {
     expect(harness.sqlite.prepare("SELECT COUNT(*) AS count FROM scripts WHERE project_id = ?").get(harness.projectId))
       .toMatchObject({ count: 1 });
 
+    if (harness.orchestrator.getPipeline(harness.projectId).activeJob) {
+      harness.orchestrator.cancel(harness.projectId);
+    }
     harness.orchestrator.runStage(harness.projectId, "RESEARCH");
     await harness.worker.tick();
     const cachedJob = harness.repository.listJobs(harness.projectId, 20).find((job) => job.stage === "RESEARCH");
@@ -171,8 +174,8 @@ describe("research and script stages", () => {
 
   it.each([
     ["ECO", 1],
-    ["BALANCED", 4],
-    ["QUALITY", 5],
+    ["BALANCED", 5],
+    ["QUALITY", 6],
   ] as const)("uses %s mode with %i provider calls through SCRIPT and caches its rerun", async (mode, expectedCalls) => {
     const harness = makeHarness({
       LLM_DEFAULT_PROVIDER: "mock",
@@ -203,12 +206,50 @@ describe("research and script stages", () => {
     const scriptJob = jobs.find((job) => job.stage === "SCRIPT");
     expect(researchJob?.usage?.features).toEqual({ [mode === "ECO" ? "story" : "research"]: 1 });
     expect(scriptJob?.usage?.features).toEqual(
-      mode === "ECO" ? undefined : mode === "QUALITY" ? { script: 1, review: 2, guidelineCheck: 1 } : { script: 1, review: 1, guidelineCheck: 1 },
+      mode === "ECO" ? undefined : mode === "QUALITY" ? { script: 1, review: 2, guidelineCheck: 1, formatPick: 1 } : { script: 1, review: 1, guidelineCheck: 1, formatPick: 1 },
     );
 
     await new ResearchExecutor(harness.sqlite, registry, harness.config).run(contextFor(harness, "RESEARCH").context);
     await new ScriptExecutor(harness.sqlite, registry, harness.config).run(contextFor(harness, "SCRIPT").context);
-    expect(generate).toHaveBeenCalledTimes(expectedCalls);
+    expect(generate).toHaveBeenCalledTimes(expectedCalls + (mode === "ECO" ? 0 : 1));
+  });
+
+  it("repairs a chosen format once, then accepts the script", async () => {
+    const harness = makeHarness({
+      LLM_DEFAULT_PROVIDER: "mock",
+      LLM_ENABLE_MOCK: true,
+      FAKE_STAGE_DELAY_MS: 0,
+    });
+    const initialProject = harness.repository.getProject(harness.projectId)!;
+    harness.sqlite.prepare("UPDATE projects SET settings = ? WHERE id = ?")
+      .run(JSON.stringify({
+        ...initialProject.settings,
+        format: "explainer",
+        budget: { mode: "BALANCED" },
+      }), harness.projectId);
+    const registry = new LlmProviderRegistry(harness.config);
+    const provider = registry.get("mock")!;
+    const originalGenerate = provider.generate.bind(provider);
+    const generate = vi.spyOn(provider, "generate").mockImplementation(async (request, signal) => {
+      const response = await originalGenerate(request, signal);
+      if (request.schemaName === "Script" || request.schemaName === "MergedStory") {
+        const body = JSON.parse(response.text) as { sections?: Array<{ sectionKey?: string }>; script?: { sections?: Array<{ sectionKey?: string }> } };
+        for (const section of body.sections ?? body.script?.sections ?? []) delete section.sectionKey;
+        response.text = JSON.stringify(body);
+      }
+      return response;
+    });
+    harness.executors.set("RESEARCH", new ResearchExecutor(harness.sqlite, registry, harness.config));
+    harness.executors.set("SCRIPT", new ScriptExecutor(harness.sqlite, registry, harness.config));
+    harness.orchestrator.runAll(harness.projectId);
+    await drainUntilGate(harness);
+    const saved = harness.sqlite.prepare("SELECT data, review_notes FROM scripts WHERE project_id = ?")
+      .get(harness.projectId) as { data: string; review_notes: string | null };
+    const script = JSON.parse(saved.data) as { title: string; sections: Array<{ sectionKey?: string }> };
+    expect(script.title).toBe("Đã đủ mục");
+    expect(script.sections.map((section) => section.sectionKey)).toEqual(["hook", "context", "point", "takeaway", "cta"]);
+    expect(saved.review_notes ?? "").not.toContain("Thiếu mục bắt buộc");
+    expect(generate.mock.calls.some((call) => call[0].schemaName === "ScriptSectionRepair")).toBe(true);
   });
 
   it("stores the QUALITY revised script, review notes, version, and usage features", async () => {
@@ -236,11 +277,11 @@ describe("research and script stages", () => {
       "Tightened the opening for clarity.",
     ]);
     expect(saved.version).toBe(2);
-    expect(generate).toHaveBeenCalledTimes(5);
+    expect(generate).toHaveBeenCalledTimes(6);
     const scriptJob = harness.repository.listJobs(harness.projectId, 20).find((job) => job.stage === "SCRIPT");
     expect(scriptJob?.usage).toMatchObject({
-      llmCalls: 4,
-      features: { script: 1, review: 2, guidelineCheck: 1 },
+      llmCalls: 5,
+      features: { script: 1, review: 2, guidelineCheck: 1, formatPick: 1 },
     });
   });
 
@@ -266,7 +307,7 @@ describe("research and script stages", () => {
         const output = JSON.parse(response.text) as {
           revisedScript: { sections: { narration: string }[] };
         };
-        output.revisedScript.sections[0].narration = "brief";
+        for (const section of output.revisedScript.sections) section.narration = "brief";
         response.text = JSON.stringify(output);
       }
       return response;
@@ -285,11 +326,11 @@ describe("research and script stages", () => {
       .get(harness.projectId) as { data: string; review_notes: string | null };
     expect(JSON.parse(saved.data)).toMatchObject({ title: "Testing pipeline behavior: A Carefully Told Story" });
     expect(saved.review_notes).toBeNull();
-    expect(generate).toHaveBeenCalledTimes(6);
+    expect(generate).toHaveBeenCalledTimes(7);
     const scriptJob = harness.repository.listJobs(harness.projectId, 20).find((job) => job.stage === "SCRIPT");
     expect(scriptJob?.usage).toMatchObject({
-      llmCalls: 5,
-      features: { script: 1, review: 3, guidelineCheck: 1 },
+      llmCalls: 6,
+      features: { script: 1, review: 3, guidelineCheck: 1, formatPick: 1 },
     });
   });
 
@@ -343,7 +384,7 @@ describe("research and script stages", () => {
     harness.orchestrator.runAll(harness.projectId);
     await drainUntilGate(harness);
 
-    expect(generate).toHaveBeenCalledTimes(3);
+    expect(generate).toHaveBeenCalledTimes(4);
     const script = harness.sqlite.prepare("SELECT review_notes, version FROM scripts WHERE project_id = ?")
       .get(harness.projectId) as { review_notes: string; version: number };
     expect(JSON.parse(script.review_notes)).toEqual(["Tightened the opening for clarity."]);
@@ -373,8 +414,8 @@ describe("research and script stages", () => {
 
     expect(harness.orchestrator.getPipeline(harness.projectId).stages.find((stage) => stage.stage === "RESEARCH")?.state)
       .toBe("SKIPPED");
-    expect(generate).toHaveBeenCalledTimes(3);
-    expect(generate.mock.calls[0][0].messages[0]?.content).toContain("No research notes are available");
+    expect(generate).toHaveBeenCalledTimes(4);
+    expect(generate.mock.calls.some((call) => String(call[0].messages[0]?.content).includes("No research notes are available"))).toBe(true);
   });
 
   it("uses the project research-mode override and reads legacy visual ideas", async () => {
@@ -394,7 +435,7 @@ describe("research and script stages", () => {
     harness.executors.set("SCRIPT", new ScriptExecutor(harness.sqlite, registry, harness.config));
     harness.orchestrator.runAll(harness.projectId);
     await drainUntilGate(harness);
-    expect(generate).toHaveBeenCalledTimes(3);
+    expect(generate).toHaveBeenCalledTimes(4);
 
     const legacy = ScriptSchema.parse({
       title: "Legacy",
@@ -518,9 +559,9 @@ describe("research and script stages", () => {
     const scriptCall = contextFor(harness, "SCRIPT");
     await scriptExecutor.run(scriptCall.context);
 
-    expect(generate).toHaveBeenCalledTimes(4);
-    expect(generate.mock.calls[1][0].messages[0]?.content).toContain("Research notes");
-    expect(scriptCall.usage[0]).toMatchObject({ llmCalls: 3, inputTokens: 30, outputTokens: 60 });
+    expect(generate).toHaveBeenCalledTimes(5);
+    expect(generate.mock.calls.some((call) => String(call[0].messages[0]?.content).includes("Research notes"))).toBe(true);
+    expect(scriptCall.usage[0]).toMatchObject({ llmCalls: 4, inputTokens: 40, outputTokens: 80 });
   });
 
   it("uses preflight to keep short stories merged, split medium stories, and reject oversized stories", async () => {

@@ -3,6 +3,7 @@ import { thumbnailUploadError } from "@vg/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { ApiRequestError } from "../../services/apiClient";
+import { useToast } from "../../components/ui/Toast";
 import {
   getThumbnail,
   recomposeThumbnail,
@@ -19,6 +20,7 @@ const POSITIONS: { value: ThumbnailPosition; label: string }[] = [
 
 export function ThumbnailCard({ project }: { project: Project }) {
   const queryClient = useQueryClient();
+  const toast = useToast();
   const query = useQuery({
     queryKey: ["thumbnail", project.id],
     queryFn: () => getThumbnail(project.id),
@@ -43,8 +45,13 @@ export function ThumbnailCard({ project }: { project: Project }) {
     onSuccess: async (next) => {
       setError("");
       await refresh(next);
+      toast.success("Đã cập nhật ảnh bìa");
     },
-    onError: (err) => setError(messageOf(err)),
+    onError: (err) => {
+      const text = messageOf(err);
+      setError(text);
+      toast.error(text);
+    },
   });
 
   const regenerate = useMutation({
@@ -52,8 +59,13 @@ export function ThumbnailCard({ project }: { project: Project }) {
     onSuccess: async (next) => {
       setError("");
       await refresh(next);
+      toast.success("Đã tạo lại ảnh bìa");
     },
-    onError: (err) => setError(messageOf(err)),
+    onError: (err) => {
+      const text = messageOf(err);
+      setError(text);
+      toast.error(text);
+    },
   });
 
   const upload = useMutation({
@@ -61,8 +73,13 @@ export function ThumbnailCard({ project }: { project: Project }) {
     onSuccess: async (next) => {
       setError("");
       await refresh(next);
+      toast.success("Đã tải ảnh bìa");
     },
-    onError: (err) => setError(messageOf(err)),
+    onError: (err) => {
+      const text = messageOf(err);
+      setError(text);
+      toast.error(text);
+    },
   });
 
   const data = query.data;
@@ -77,13 +94,13 @@ export function ThumbnailCard({ project }: { project: Project }) {
         <figure style={{ margin: 0 }}>
           <figcaption>YouTube 16:9</figcaption>
           {data?.hasLandscape
-            ? <img alt="Thumbnail ngang" src={thumbnailImageUrl(project.id, "landscape", bust)} style={{ width: 240, height: 135, objectFit: "cover" }} />
+            ? <img alt="Thumbnail ngang" src={thumbnailImageUrl(project.id, "landscape", bust)} loading="lazy" style={{ width: 240, height: 135, objectFit: "cover" }} />
             : <p className="page-subtitle">Chưa có ảnh ngang.</p>}
         </figure>
         <figure style={{ margin: 0 }}>
           <figcaption>Bìa dọc</figcaption>
           {data?.hasCover
-            ? <img alt="Ảnh bìa dọc" src={thumbnailImageUrl(project.id, "cover", bust)} style={{ width: 120, height: 213, objectFit: "cover" }} />
+            ? <img alt="Ảnh bìa dọc" src={thumbnailImageUrl(project.id, "cover", bust)} loading="lazy" style={{ width: 120, height: 213, objectFit: "cover" }} />
             : <p className="page-subtitle">Chưa có ảnh dọc.</p>}
         </figure>
       </div>
@@ -104,6 +121,7 @@ export function ThumbnailCard({ project }: { project: Project }) {
             >
               <img
                 alt=""
+                loading="lazy"
                 src={thumbnailImageUrl(project.id, frame.id, String(frame.timeSec))}
                 style={{ width: "100%", height: 64, objectFit: "cover", display: "block" }}
               />

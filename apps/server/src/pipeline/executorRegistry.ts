@@ -18,5 +18,6 @@ export function createExecutorRegistry(
   }
   if (overrides.PUBLISH) registry.set("PUBLISH", overrides.PUBLISH);
   if (overrides.CLIP) registry.set("CLIP", overrides.CLIP);
+  if (overrides.MEDIA_FETCH) registry.set("MEDIA_FETCH", overrides.MEDIA_FETCH);
   return registry;
 }

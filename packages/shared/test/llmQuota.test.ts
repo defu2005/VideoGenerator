@@ -8,6 +8,8 @@ import {
   isDailyQuotaMessage,
   nextBackoffMs,
   nextReset,
+  callTargetsOmniProvider,
+  preferCheapestQualified,
   resolveEffectiveRules,
 } from "../src/index.js";
 
@@ -101,5 +103,25 @@ describe("quota presets", () => {
     expect(found?.source).toBe("user");
     expect(found?.limits).toEqual([{ window: "day", requests: 3 }]);
     expect(effective.some((rule) => rule.source === "preset")).toBe(true);
+  });
+});
+
+describe("omniroute provider match", () => {
+  it("does not treat two unknown prefixes as the same provider", () => {
+    expect(callTargetsOmniProvider("omniroute", "sopen/gemini-3.8-flash-high", "grok-cli")).toBe(false);
+    expect(callTargetsOmniProvider("omniroute", "sopen/gemini-3.8-flash-high", "other-unknown")).toBe(false);
+    expect(callTargetsOmniProvider("omniroute", "gemini-3.8-flash-high", "gemini")).toBe(false);
+    expect(callTargetsOmniProvider("omniroute", "agy/model", "antigravity")).toBe(true);
+  });
+});
+
+describe("eco model order", () => {
+  it("keeps models at the quality floor and sorts by cost", () => {
+    const ordered = preferCheapestQualified([
+      { kind: "paid" as const, quality: 9, costUsd: 0.2 },
+      { kind: "paid" as const, quality: 4, costUsd: 0.01 },
+      { kind: "free_tier" as const, quality: 7.2, costUsd: 0 },
+    ], 7);
+    expect(ordered.map((item) => item.costUsd)).toEqual([0, 0.2]);
   });
 });

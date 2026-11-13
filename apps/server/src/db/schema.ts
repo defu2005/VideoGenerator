@@ -1,4 +1,5 @@
-import { integer, index, primaryKey, real, sqliteTable, text, uniqueIndex, type AnySQLiteColumn } from "drizzle-orm/sqlite-core";
+import { sql } from "drizzle-orm";
+import { blob, integer, index, primaryKey, real, sqliteTable, text, uniqueIndex, type AnySQLiteColumn } from "drizzle-orm/sqlite-core";
 import type {
   AccountConnection,
   AccountFormat,
@@ -15,16 +16,21 @@ import type {
   ClipProposal,
   ReframeMode,
   PublishSettings,
+  StylePack,
+  StyleTokensPatch,
   TopicSource,
   TopicStatus,
+  VideoLook,
 } from "@vg/shared";
 
 export const profiles = sqliteTable("profiles", {
+  workspaceId: text("workspace_id"),
   id: text("id").primaryKey(),
   name: text("name").notNull().unique(),
   description: text("description").notNull().default(""),
   direction: text("direction").notNull().default(""),
   language: text("language").notNull().default("vi"),
+  market: text("market"),
   defaultBrief: text("default_brief", { mode: "json" }).$type<ProfileDefaultBrief>().notNull(),
   voice: text("voice", { mode: "json" }).$type<{ voice?: string; rate?: string; provider?: string; model?: string; style?: string } | null>(),
   guidelines: text("guidelines", { mode: "json" }).$type<GuidelineSettings>().notNull(),
@@ -52,15 +58,35 @@ export const profiles = sqliteTable("profiles", {
   } | null>(),
   avatarPath: text("avatar_path"),
   color: text("color").notNull().default("#3B82F6"),
+  /** Pack id, not a version. The version used for a video is stored on that video. */
+  stylePackId: text("style_pack_id"),
   archivedAt: text("archived_at"),
   createdAt: text("created_at").notNull(),
   updatedAt: text("updated_at").notNull(),
 }, (table) => [
+  index("profiles_workspace_idx").on(table.workspaceId),
   index("profiles_archived_at_idx").on(table.archivedAt),
   index("profiles_updated_at_idx").on(table.updatedAt),
 ]);
 
 export type ProfileRow = typeof profiles.$inferSelect;
+
+/** One row per pack version. Insert only: a new look is a new version (TASK-109). */
+export const stylePacks = sqliteTable("style_packs", {
+  workspaceId: text("workspace_id"),
+  id: text("id").notNull(),
+  version: integer("version").notNull(),
+  name: text("name").notNull(),
+  origin: text("origin", { mode: "json" }).$type<StylePack["origin"]>().notNull(),
+  seed: text("seed"),
+  tokens: text("tokens", { mode: "json" }).$type<StyleTokensPatch>().notNull(),
+  createdAt: text("created_at").notNull(),
+}, (table) => [
+  index("style_packs_workspace_idx").on(table.workspaceId),
+  primaryKey({ columns: [table.id, table.version] }),
+]);
+
+export type StylePackRow = typeof stylePacks.$inferSelect;
 
 export const platformAccounts = sqliteTable("platform_accounts", {
   id: text("id").primaryKey(),
@@ -301,6 +327,7 @@ export const comments = sqliteTable("comments", {
 export type CommentRow = typeof comments.$inferSelect;
 
 export const projects = sqliteTable("projects", {
+  workspaceId: text("workspace_id"),
   id: text("id").primaryKey(),
   title: text("title").notNull(),
   description: text("description").notNull().default(""),
@@ -323,6 +350,7 @@ export const projects = sqliteTable("projects", {
   updatedAt: text("updated_at").notNull(),
   archivedAt: text("archived_at"),
 }, (table) => [
+  index("projects_workspace_idx").on(table.workspaceId),
   index("projects_status_idx").on(table.status),
   index("projects_updated_at_idx").on(table.updatedAt),
   index("projects_archived_at_idx").on(table.archivedAt),
@@ -392,7 +420,8 @@ export type NotificationLogRow = typeof notificationLog.$inferSelect;
 
 export const jobs = sqliteTable("jobs", {
   id: text("id").primaryKey(),
-  projectId: text("project_id").notNull().references(() => projects.id, { onDelete: "cascade" }),
+  /** Null for assistant-chat usage, which is not tied to one video. */
+  projectId: text("project_id").references(() => projects.id, { onDelete: "cascade" }),
   stage: text("stage").notNull(),
   scope: text("scope"),
   status: text("status").notNull(),
@@ -427,9 +456,45 @@ export const jobs = sqliteTable("jobs", {
   finishedAt: text("finished_at"),
   runAfter: text("run_after").notNull(),
   previousState: text("previous_state").notNull().default("PENDING"),
+  /** TASK-118: the worker node that holds this job. Null means the main machine. */
+  nodeId: text("node_id"),
+  /** Fencing token of the current lease. A node that sends another id gets 409. */
+  leaseId: text("lease_id"),
+  leaseUntil: text("lease_until"),
+  heartbeatAt: text("heartbeat_at"),
+  /** TASK-125: set when the stage passes its limit. The job keeps running; nothing kills it by the clock. */
+  overdueAt: text("overdue_at"),
+  nextCheckAt: text("next_check_at"),
+  /** checking | waiting_decision */
+  overdueState: text("overdue_state"),
 }, (table) => [
   index("jobs_status_run_after_idx").on(table.status, table.runAfter),
   index("jobs_project_created_idx").on(table.projectId, table.createdAt),
+  index("jobs_node_lease_idx").on(table.nodeId, table.leaseUntil),
+  index("jobs_stage_status_finished_idx").on(table.stage, table.status, table.finishedAt),
+]);
+
+/** TASK-125: one row per check of an overdue stage, and per decision by Hermes or the user. */
+export const stageOverdueChecks = sqliteTable("stage_overdue_checks", {
+  id: text("id").primaryKey(),
+  jobId: text("job_id").notNull(),
+  attempt: integer("attempt").notNull(),
+  projectId: text("project_id").notNull(),
+  workspaceId: text("workspace_id"),
+  stage: text("stage").notNull(),
+  checkNo: integer("check_no").notNull(),
+  at: text("at").notNull(),
+  facts: text("facts", { mode: "json" }),
+  action: text("action").notNull(),
+  extendMs: integer("extend_ms"),
+  /** ladder | llm | override | hermes | user */
+  source: text("source").notNull(),
+  actor: text("actor"),
+  reason: text("reason").notNull(),
+  costUsd: real("cost_usd").notNull().default(0),
+}, (table) => [
+  index("stage_overdue_checks_job_idx").on(table.jobId, table.attempt),
+  index("stage_overdue_checks_workspace_idx").on(table.workspaceId, table.at),
 ]);
 
 export const projectStages = sqliteTable("project_stages", {
@@ -468,6 +533,9 @@ export const scripts = sqliteTable("scripts", {
   updatedAt: text("updated_at").notNull(),
   mergedCall: integer("merged_call", { mode: "boolean" }).notNull().default(false),
   reviewNotes: text("review_notes", { mode: "json" }).$type<string[] | null>(),
+  qualityScore: real("quality_score"),
+  blockingFacts: integer("blocking_facts").notNull().default(0),
+  reviseRound: integer("revise_round").notNull().default(0),
 });
 
 export const scenes = sqliteTable("scenes", {
@@ -570,6 +638,8 @@ export const visualCandidates = sqliteTable("visual_candidates", {
   downloadedAt: text("downloaded_at"),
   downloadError: text("download_error"),
   visionCheck: text("vision_check", { mode: "json" }),
+  phash: text("phash"),
+  phashCenter: text("phash_center"),
   createdAt: text("created_at").notNull(),
   searchHash: text("search_hash").notNull(),
 }, (table) => [
@@ -595,6 +665,27 @@ export const visualSelections = sqliteTable("visual_selections", {
   index("visual_selections_project_scene_idx").on(table.projectId, table.sceneId),
 ]);
 
+export const visualCrops = sqliteTable("visual_crops", {
+  id: text("id").primaryKey(),
+  candidateId: text("candidate_id").notNull().references(() => visualCandidates.id, { onDelete: "cascade" }),
+  sceneId: text("scene_id").notNull().references(() => scenes.id, { onDelete: "cascade" }),
+  aspect: text("aspect").notNull(),
+  boxX: integer("box_x").notNull(),
+  boxY: integer("box_y").notNull(),
+  boxW: integer("box_w").notNull(),
+  boxH: integer("box_h").notNull(),
+  rule: text("rule").notNull(),
+  focusSource: text("focus_source").notNull(),
+  manual: integer("manual", { mode: "boolean" }).notNull().default(false),
+  outputPath: text("output_path").notNull(),
+  outputWidth: integer("output_width").notNull(),
+  outputHeight: integer("output_height").notNull(),
+  lowRes: integer("low_res", { mode: "boolean" }).notNull().default(false),
+  createdAt: text("created_at").notNull(),
+}, (table) => [
+  uniqueIndex("visual_crops_candidate_aspect_uq").on(table.candidateId, table.aspect),
+]);
+
 export const visualSearchState = sqliteTable("visual_search_state", {
   sceneId: text("scene_id").primaryKey().references(() => scenes.id, { onDelete: "cascade" }),
   projectId: text("project_id").notNull().references(() => projects.id, { onDelete: "cascade" }),
@@ -603,6 +694,18 @@ export const visualSearchState = sqliteTable("visual_search_state", {
   updatedAt: text("updated_at").notNull(),
 }, (table) => [
   index("visual_search_state_project_idx").on(table.projectId),
+]);
+
+/** Finished image searches kept across a VISUAL_SEARCH retry. Deleted after a successful stage. */
+export const visualSearchCheckpoints = sqliteTable("visual_search_checkpoints", {
+  sceneId: text("scene_id").primaryKey(),
+  projectId: text("project_id").notNull(),
+  searchHash: text("search_hash").notNull(),
+  queries: text("queries").notNull(),
+  candidates: text("candidates").notNull(),
+  createdAt: text("created_at").notNull(),
+}, (table) => [
+  index("visual_search_checkpoints_project_idx").on(table.projectId),
 ]);
 
 export const imageSearchCache = sqliteTable("image_search_cache", {
@@ -671,6 +774,18 @@ export const videoMetadata = sqliteTable("video_metadata", {
   updatedAt: text("updated_at").notNull(),
 });
 
+export const timelineSnapshots = sqliteTable("timeline_snapshots", {
+  id: text("id").primaryKey(),
+  projectId: text("project_id").notNull().references(() => projects.id, { onDelete: "cascade" }),
+  revision: integer("revision").notNull(),
+  snapshot: text("snapshot", { mode: "json" }).$type<Record<string, unknown>>().notNull(),
+  source: text("source", { enum: ["chat", "assistant", "mcp", "manual"] }).notNull(),
+  summary: text("summary").notNull(),
+  createdAt: text("created_at").notNull(),
+}, (table) => [
+  index("timeline_snapshots_project_idx").on(table.projectId, table.createdAt),
+]);
+
 export const timelines = sqliteTable("timelines", {
   projectId: text("project_id").primaryKey().references(() => projects.id, { onDelete: "cascade" }),
   data: text("data", { mode: "json" }).$type<Record<string, unknown>>().notNull(),
@@ -679,6 +794,18 @@ export const timelines = sqliteTable("timelines", {
   createdAt: text("created_at").notNull(),
   updatedAt: text("updated_at").notNull(),
 });
+
+/** Latest evidence per project. Dismissal history is retained inside manifest JSON. */
+export const sourceManifests = sqliteTable("source_manifests", {
+  id: text("id").primaryKey(),
+  projectId: text("project_id").notNull().references(() => projects.id, { onDelete: "cascade" }),
+  renderId: text("render_id"),
+  manifest: text("manifest", { mode: "json" }).$type<import("@vg/shared").SourceManifest>().notNull(),
+  scores: text("scores", { mode: "json" }).$type<import("@vg/shared").OriginalityScores>().notNull(),
+  verdict: text("verdict", { enum: ["OK", "REVIEW"] }).notNull(),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+}, (table) => [uniqueIndex("source_manifests_project_uq").on(table.projectId)]);
 
 export const guidelineFindings = sqliteTable("guideline_findings", {
   id: text("id").primaryKey(),
@@ -741,6 +868,25 @@ export const renders = sqliteTable("renders", {
   index("renders_project_created_idx").on(table.projectId, table.createdAt),
 ]);
 
+/** One finished render's look. The picker and a later sameness check both read `look`. */
+export const videoLooks = sqliteTable("video_looks", {
+  workspaceId: text("workspace_id"),
+  id: text("id").primaryKey(),
+  projectId: text("project_id").notNull().references(() => projects.id, { onDelete: "cascade" }),
+  renderId: text("render_id").notNull().references(() => renders.id, { onDelete: "cascade" }),
+  profileId: text("profile_id").references(() => profiles.id, { onDelete: "set null" }),
+  packId: text("pack_id").notNull(),
+  packVersion: integer("pack_version"),
+  fingerprint: text("fingerprint").notNull(),
+  look: text("look", { mode: "json" }).$type<VideoLook>().notNull(),
+  createdAt: text("created_at").notNull(),
+}, (table) => [
+  index("video_looks_workspace_idx").on(table.workspaceId),
+  index("video_looks_profile_created_idx").on(table.profileId, table.createdAt),
+]);
+
+export type VideoLookRow = typeof videoLooks.$inferSelect;
+
 export const reviewThreads = sqliteTable("review_threads", {
   id: text("id").primaryKey(),
   projectId: text("project_id").notNull().references(() => projects.id, { onDelete: "cascade" }),
@@ -777,12 +923,15 @@ export const reviewProposalApplications = sqliteTable("review_proposal_applicati
 ]);
 
 export const assistantConversations = sqliteTable("assistant_conversations", {
+  workspaceId: text("workspace_id"),
   id: text("id").primaryKey(),
   channel: text("channel", { enum: ["web", "telegram"] }).notNull(),
   title: text("title").notNull(),
   createdAt: text("created_at").notNull(),
   updatedAt: text("updated_at").notNull(),
-});
+}, (table) => [
+  index("assistant_conversations_workspace_idx").on(table.workspaceId),
+]);
 
 export const assistantMessages = sqliteTable("assistant_messages", {
   id: text("id").primaryKey(),
@@ -795,6 +944,8 @@ export const assistantMessages = sqliteTable("assistant_messages", {
 ]);
 
 export const assistantPendingActions = sqliteTable("assistant_pending_actions", {
+  workspaceId: text("workspace_id"),
+  actorUserId: text("actor_user_id"),
   id: text("id").primaryKey(),
   conversationId: text("conversation_id").notNull().references(() => assistantConversations.id, { onDelete: "cascade" }),
   tool: text("tool").notNull(),
@@ -807,6 +958,7 @@ export const assistantPendingActions = sqliteTable("assistant_pending_actions", 
   createdAt: text("created_at").notNull(),
   expiresAt: text("expires_at").notNull(),
 }, (table) => [
+  index("assistant_pending_actions_workspace_idx").on(table.workspaceId),
   index("assistant_pending_actions_conversation_idx").on(table.conversationId),
 ]);
 
@@ -821,6 +973,7 @@ export type CurrencyRateRow = typeof currencyRates.$inferSelect;
 
 /** Revenue in (API sync + manual + CSV). */
 export const revenueEntries = sqliteTable("revenue_entries", {
+  workspaceId: text("workspace_id"),
   id: text("id").primaryKey(),
   accountId: text("account_id").references(() => platformAccounts.id, { onDelete: "set null" }),
   publicationId: text("publication_id").references(() => publications.id, { onDelete: "set null" }),
@@ -835,6 +988,7 @@ export const revenueEntries = sqliteTable("revenue_entries", {
   externalKey: text("external_key"),
   createdAt: text("created_at").notNull(),
 }, (table) => [
+  index("revenue_entries_workspace_idx").on(table.workspaceId),
   uniqueIndex("revenue_entries_source_external_uidx").on(table.source, table.externalKey),
   index("revenue_entries_period_idx").on(table.periodStart, table.periodEnd),
   index("revenue_entries_account_idx").on(table.accountId),
@@ -846,6 +1000,7 @@ export type RevenueEntryRow = typeof revenueEntries.$inferSelect;
 
 /** Manual cost entries (LLM/TTS usage is read live from jobs, not copied here). */
 export const costEntries = sqliteTable("cost_entries", {
+  workspaceId: text("workspace_id"),
   id: text("id").primaryKey(),
   profileId: text("profile_id").references(() => profiles.id, { onDelete: "set null" }),
   projectId: text("project_id").references(() => projects.id, { onDelete: "set null" }),
@@ -857,6 +1012,7 @@ export const costEntries = sqliteTable("cost_entries", {
   note: text("note"),
   createdAt: text("created_at").notNull(),
 }, (table) => [
+  index("cost_entries_workspace_idx").on(table.workspaceId),
   index("cost_entries_date_idx").on(table.date),
   index("cost_entries_profile_idx").on(table.profileId),
   index("cost_entries_project_idx").on(table.projectId),
@@ -866,23 +1022,41 @@ export type CostEntryRow = typeof costEntries.$inferSelect;
 
 /** Per-account payout threshold + manual balance (TASK-034). */
 export const payoutThresholds = sqliteTable("payout_thresholds", {
+  workspaceId: text("workspace_id"),
   accountId: text("account_id").primaryKey().references(() => platformAccounts.id, { onDelete: "cascade" }),
   thresholdAmount: real("threshold_amount").notNull(),
   currency: text("currency").notNull(),
   currentBalance: real("current_balance"),
   lastNotifiedAt: text("last_notified_at"),
-});
+}, (table) => [
+  index("payout_thresholds_workspace_idx").on(table.workspaceId),
+]);
 
 export type PayoutThresholdRow = typeof payoutThresholds.$inferSelect;
 
 /** Generated monthly finance report (YYYY-MM). */
 export const monthlyReports = sqliteTable("monthly_reports", {
-  month: text("month").primaryKey(),
+  workspaceId: text("workspace_id").notNull(),
+  month: text("month").notNull(),
   json: text("json", { mode: "json" }).$type<Record<string, unknown>>().notNull(),
   createdAt: text("created_at").notNull(),
-});
+}, (table) => [
+  primaryKey({ columns: [table.workspaceId, table.month] }),
+]);
 
 export type MonthlyReportRow = typeof monthlyReports.$inferSelect;
+
+/** User-confirmed context that stays scoped to a profile (TASK-052). */
+export const profileMemories = sqliteTable("profile_memories", {
+  id: text("id").primaryKey(),
+  profileId: text("profile_id").notNull().references(() => profiles.id, { onDelete: "cascade" }),
+  text: text("text").notNull(),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+  version: integer("version").notNull().default(1),
+}, (table) => [
+  index("profile_memories_profile_idx").on(table.profileId, table.updatedAt),
+]);
 
 /** Stored performance insights per profile (TASK-035). */
 export const profileInsights = sqliteTable("profile_insights", {
@@ -982,13 +1156,16 @@ export type LlmProviderQuotaSnapshotRow = typeof llmProviderQuotaSnapshots.$infe
 
 /** Cursor operator chats (TASK-047). Separate from the built-in assistant. */
 export const operatorConversations = sqliteTable("operator_conversations", {
+  workspaceId: text("workspace_id"),
   id: text("id").primaryKey(),
   channel: text("channel", { enum: ["web", "telegram"] }).notNull(),
   title: text("title").notNull(),
   cursorChatId: text("cursor_chat_id"),
   createdAt: text("created_at").notNull(),
   updatedAt: text("updated_at").notNull(),
-});
+}, (table) => [
+  index("operator_conversations_workspace_idx").on(table.workspaceId),
+]);
 
 export const operatorRuns = sqliteTable("operator_runs", {
   id: text("id").primaryKey(),
@@ -1000,6 +1177,8 @@ export const operatorRuns = sqliteTable("operator_runs", {
   partialText: text("partial_text").notNull().default(""),
   toolChips: text("tool_chips", { mode: "json" }).$type<string[]>().notNull(),
   model: text("model"),
+  runtimeId: text("runtime_id"),
+  workflowId: text("workflow_id"),
   error: text("error"),
   outcome: text("outcome"),
   origin: text("origin").notNull(),
@@ -1011,6 +1190,56 @@ export const operatorRuns = sqliteTable("operator_runs", {
 }, (table) => [
   index("operator_runs_conversation_idx").on(table.conversationId, table.createdAt),
   index("operator_runs_day_idx").on(table.dayKey),
+  index("operator_runs_workflow_idx").on(table.workflowId),
+]);
+
+export const operatorCheckpoints = sqliteTable("operator_checkpoints", {
+  workflowId: text("workflow_id").notNull().references(() => operatorRuns.id, { onDelete: "cascade" }),
+  actionKey: text("action_key").notNull(),
+  tool: text("tool").notNull(),
+  receipt: text("receipt"),
+  createdAt: text("created_at").notNull(),
+}, (table) => [
+  primaryKey({ columns: [table.workflowId, table.actionKey] }),
+]);
+
+export const operatorToolProposals = sqliteTable("operator_tool_proposals", {
+  id: text("id").primaryKey(),
+  kind: text("kind").notNull(),
+  name: text("name").notNull(),
+  details: text("details").notNull(),
+  status: text("status").notNull(),
+  createdAt: text("created_at").notNull(),
+}, (table) => [
+  index("operator_tool_proposals_status_idx").on(table.status, table.createdAt),
+]);
+
+export const operatorEvents = sqliteTable("operator_events", {
+  id: text("id").primaryKey(),
+  kind: text("kind").notNull(),
+  profileId: text("profile_id"),
+  projectId: text("project_id"),
+  jobId: text("job_id"),
+  pendingId: text("pending_id"),
+  runId: text("run_id"),
+  wakeRunId: text("wake_run_id"),
+  telegramSentAt: text("telegram_sent_at"),
+  detail: text("detail"),
+  occurredAt: text("occurred_at").notNull(),
+}, (table) => [
+  index("operator_events_time_idx").on(table.occurredAt),
+]);
+
+export const operatorSkillVersions = sqliteTable("operator_skill_versions", {
+  name: text("name").notNull(),
+  version: integer("version").notNull(),
+  markdown: text("markdown").notNull(),
+  evidence: text("evidence").notNull(),
+  score: integer("score").notNull(),
+  status: text("status").notNull(),
+  createdAt: text("created_at").notNull(),
+}, (table) => [
+  primaryKey({ columns: [table.name, table.version] }),
 ]);
 
 export const operatorMessages = sqliteTable("operator_messages", {
@@ -1049,12 +1278,267 @@ export const operatorToolAudit = sqliteTable("operator_tool_audit", {
   pendingActionId: text("pending_action_id"),
   runId: text("run_id"),
   createdAt: text("created_at").notNull(),
+  agentKind: text("agent_kind"),
+  agentName: text("agent_name"),
+  agentModel: text("agent_model"),
+  agentEnvironment: text("agent_environment"),
+  autonomyLevel: text("autonomy_level"),
+  grant: text("grant"),
+  origin: text("origin"),
+  reason: text("reason"),
+  undo: text("undo", { mode: "json" }).$type<unknown>(),
 }, (table) => [
   index("operator_tool_audit_created_idx").on(table.createdAt),
 ]);
 
+/** One row per quality repair action the agent or the default ladder ran (TASK-121). */
+export const qualityRepairs = sqliteTable("quality_repairs", {
+  id: text("id").primaryKey(),
+  projectId: text("project_id").notNull(),
+  profileId: text("profile_id"),
+  gate: text("gate").notNull(),
+  issueKind: text("issue_kind").notNull(),
+  sceneId: text("scene_id"),
+  action: text("action").notNull(),
+  chosenBy: text("chosen_by", { enum: ["agent", "ladder"] }).notNull(),
+  attempt: integer("attempt").notNull(),
+  costUsd: real("cost_usd").notNull().default(0),
+  renderUsed: integer("render_used").notNull().default(0),
+  /** pending until the next gate check; then passed, failed or error. */
+  outcome: text("outcome").notNull().default("pending"),
+  gateBefore: text("gate_before", { mode: "json" }).$type<unknown>(),
+  gateAfter: text("gate_after", { mode: "json" }).$type<unknown>(),
+  createdAt: text("created_at").notNull(),
+}, (table) => [
+  index("quality_repairs_project_idx").on(table.projectId, table.createdAt),
+  index("quality_repairs_profile_idx").on(table.profileId, table.issueKind),
+]);
+
+export const operatorGoals = sqliteTable("operator_goals", {
+  workspaceId: text("workspace_id"),
+  id: text("id").primaryKey(),
+  profileId: text("profile_id"),
+  text: text("text").notNull(),
+  spec: text("spec", { mode: "json" }).$type<unknown>().notNull(),
+  status: text("status").notNull(),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+  source: text("source").notNull(),
+}, (table) => [
+  index("operator_goals_workspace_idx").on(table.workspaceId),
+  index("operator_goals_profile_idx").on(table.profileId, table.status),
+]);
+
+export const operatorPreferences = sqliteTable("operator_preferences", {
+  workspaceId: text("workspace_id"),
+  id: text("id").primaryKey(),
+  profileId: text("profile_id"),
+  rule: text("rule").notNull(),
+  quote: text("quote").notNull(),
+  scope: text("scope").notNull(),
+  createdAt: text("created_at").notNull(),
+  active: integer("active", { mode: "boolean" }).notNull(),
+}, (table) => [
+  index("operator_preferences_workspace_idx").on(table.workspaceId),
+  index("operator_preferences_profile_idx").on(table.profileId, table.active),
+]);
+
+export const operatorRequests = sqliteTable("operator_requests", {
+  id: text("id").primaryKey(),
+  profileId: text("profile_id"),
+  kind: text("kind").notNull(),
+  title: text("title").notNull(),
+  whyVi: text("why_vi").notNull(),
+  actionUrl: text("action_url").notNull(),
+  dedupeKey: text("dedupe_key").notNull(),
+  status: text("status").notNull(),
+  createdAt: text("created_at").notNull(),
+  resolvedAt: text("resolved_at"),
+  checkKind: text("check_kind").notNull(),
+  checkArgs: text("check_args", { mode: "json" }).$type<unknown>().notNull(),
+}, (table) => [
+  index("operator_requests_status_idx").on(table.status, table.createdAt),
+]);
+
+export const operatorUserTouches = sqliteTable("operator_user_touches", {
+  objectKey: text("object_key").primaryKey(),
+  touchedAt: text("touched_at").notNull(),
+});
+
+export const routingCanaries = sqliteTable("routing_canaries", {
+  id: text("id").primaryKey(),
+  profileId: text("profile_id").notNull(),
+  stage: text("stage").notNull(),
+  before: text("before", { mode: "json" }).$type<unknown>().notNull(),
+  after: text("after", { mode: "json" }).$type<unknown>().notNull(),
+  reason: text("reason").notNull(),
+  remaining: integer("remaining").notNull(),
+  status: text("status").notNull(),
+  createdAt: text("created_at").notNull(),
+});
+
+export const operatorActionAttempts = sqliteTable("operator_action_attempts", {
+  id: integer("id").primaryKey(),
+  actionKey: text("action_key").notNull(),
+  runId: text("run_id").notNull(),
+  attemptedAt: text("attempted_at").notNull(),
+  failedAt: text("failed_at"),
+}, (table) => [
+  index("operator_attempt_action_idx").on(table.actionKey, table.runId, table.attemptedAt),
+  index("operator_attempt_time_idx").on(table.attemptedAt),
+]);
+
+export const autonomyJobClaims = sqliteTable("autonomy_job_claims", {
+  id: integer("id").primaryKey(),
+  day: text("day").notNull(),
+  stage: text("stage").notNull(),
+  profileId: text("profile_id"),
+  accountId: text("account_id"),
+}, (table) => [
+  index("autonomy_claim_day_stage_idx").on(table.day, table.stage, table.profileId),
+  index("autonomy_claim_day_account_idx").on(table.day, table.accountId),
+]);
+
+export const supervisorFindings = sqliteTable("supervisor_findings", {
+  id: text("id").primaryKey(),
+  profileId: text("profile_id").references(() => profiles.id, { onDelete: "set null" }),
+  kind: text("kind").notNull(),
+  severity: text("severity").notNull(),
+  dedupeKey: text("dedupe_key").notNull().unique(),
+  detail: text("detail", { mode: "json" }).$type<unknown>().notNull(),
+  firstSeenAt: text("first_seen_at").notNull(),
+  lastSeenAt: text("last_seen_at").notNull(),
+  status: text("status").notNull(),
+  resolution: text("resolution"),
+});
+
+export const supervisorHeartbeats = sqliteTable("supervisor_heartbeats", {
+  id: integer("id").primaryKey(),
+  observedAt: text("observed_at").notNull(),
+  runningJobs: integer("running_jobs").notNull(),
+  queuedJobs: integer("queued_jobs").notNull(),
+  findingCount: integer("finding_count").notNull(),
+}, (table) => [
+  index("supervisor_heartbeat_time_idx").on(table.observedAt),
+]);
+
+/** Append-only provider intelligence documents. Old versions stay, with superseded_at set. */
+export const providerIntelRecords = sqliteTable("provider_intel_records", {
+  id: text("id").primaryKey(),
+  kind: text("kind").notNull(),
+  recordKey: text("key").notNull(),
+  body: text("json").notNull(),
+  version: integer("version").notNull(),
+  createdAt: text("created_at").notNull(),
+  supersededAt: text("superseded_at"),
+}, (table) => [
+  index("provider_intel_records_current_idx").on(table.kind, table.recordKey, table.supersededAt),
+]);
+
+/** Last fetch of an official provider page. */
+export const providerIntelPages = sqliteTable("provider_intel_pages", {
+  id: text("id").primaryKey(),
+  url: text("url").notNull(),
+  providerId: text("provider_id").notNull(),
+  pageKind: text("page_kind").notNull(),
+  contentHash: text("content_hash").notNull(),
+  bodyText: text("body_text").notNull(),
+  lastFetchedAt: text("last_fetched_at").notNull(),
+  lastChangedAt: text("last_changed_at").notNull(),
+  status: text("status").notNull(),
+}, (table) => [
+  index("provider_intel_pages_url_idx").on(table.url),
+  index("provider_intel_pages_provider_idx").on(table.providerId),
+]);
+
+export const providerIntelProbes = sqliteTable("provider_intel_probes", {
+  id: text("id").primaryKey(),
+  providerId: text("provider_id").notNull(),
+  model: text("model").notNull(),
+  at: text("at").notNull(),
+  ok: integer("ok", { mode: "boolean" }).notNull(),
+  latencyMs: integer("latency_ms").notNull(),
+  errorKind: text("error_kind"),
+}, (table) => [
+  index("provider_intel_probes_model_idx").on(table.providerId, table.model, table.at),
+]);
+
+export const providerIntelChanges = sqliteTable("provider_intel_changes", {
+  id: text("id").primaryKey(),
+  providerId: text("provider_id").notNull(),
+  what: text("what").notNull(),
+  oldSummary: text("old_summary").notNull(),
+  newSummary: text("new_summary").notNull(),
+  needsReview: integer("needs_review", { mode: "boolean" }).notNull(),
+  reviewedAt: text("reviewed_at"),
+  createdAt: text("created_at").notNull(),
+}, (table) => [
+  index("provider_intel_changes_review_idx").on(table.needsReview, table.createdAt),
+]);
+
+export const providerIntelResearchQueue = sqliteTable("provider_intel_research_queue", {
+  providerId: text("provider_id").primaryKey(),
+  status: text("status").notNull(),
+  attempts: integer("attempts").notNull().default(0),
+  lastRunAt: text("last_run_at"),
+  note: text("note"),
+});
+
+export const modelTaskStats = sqliteTable("model_task_stats", {
+  id: text("id").primaryKey(),
+  provider: text("provider").notNull(),
+  model: text("model").notNull(),
+  taskId: text("task_id").notNull(),
+  day: text("day").notNull(),
+  calls: integer("calls").notNull(),
+  successRate: text("success_rate").notNull(),
+  schemaValidRate: text("schema_valid_rate").notNull(),
+  retries: integer("retries").notNull(),
+  fallbackRate: text("fallback_rate").notNull(),
+  fallbackReasons: text("fallback_reasons").notNull(),
+  p50LatencyMs: integer("p50_latency_ms"),
+  p95LatencyMs: integer("p95_latency_ms"),
+  p50Tokens: integer("p50_tokens"),
+  p95Tokens: integer("p95_tokens"),
+  p50CostUsd: text("p50_cost_usd"),
+  p95CostUsd: text("p95_cost_usd"),
+  quality: text("quality").notNull(),
+  confidence: text("confidence").notNull(),
+}, (table) => [
+  index("model_task_stats_task_idx").on(table.taskId, table.day),
+]);
+
+export const modelEvalRuns = sqliteTable("model_eval_runs", {
+  id: text("id").primaryKey(),
+  suiteIds: text("suite_ids").notNull(),
+  modelIds: text("model_ids").notNull(),
+  status: text("status").notNull(),
+  callsUsed: integer("calls_used").notNull(),
+  maxCalls: integer("max_calls").notNull(),
+  pendingActionId: text("pending_action_id"),
+  summaryVi: text("summary_vi").notNull(),
+  startedAt: text("started_at").notNull(),
+  finishedAt: text("finished_at"),
+});
+
+export const modelEvalResults = sqliteTable("model_eval_results", {
+  id: text("id").primaryKey(),
+  runId: text("run_id").notNull(),
+  suiteId: text("suite_id").notNull(),
+  caseId: text("case_id").notNull(),
+  modelId: text("model_id").notNull(),
+  outputJson: text("output_json").notNull(),
+  gradesJson: text("grades_json").notNull(),
+  judgeScore: text("judge_score"),
+  cached: integer("cached", { mode: "boolean" }).notNull(),
+  createdAt: text("created_at").notNull(),
+}, (table) => [
+  index("model_eval_results_run_idx").on(table.runId),
+]);
+
 /** User and module standing orders. Seeded rows start disabled. */
 export const standingOrders = sqliteTable("standing_orders", {
+  workspaceId: text("workspace_id"),
   id: text("id").primaryKey(),
   title: text("title").notNull(),
   prompt: text("prompt").notNull(),
@@ -1065,4 +1549,509 @@ export const standingOrders = sqliteTable("standing_orders", {
   createdAt: text("created_at").notNull(),
   updatedAt: text("updated_at").notNull(),
   lastFiredAt: text("last_fired_at"),
+}, (table) => [
+  index("standing_orders_workspace_idx").on(table.workspaceId),
+]);
+
+// TASK-057: FTS is a derived runtime cache; source rows are migrated normally.
+export const retrievalChunks = sqliteTable("retrieval_chunks", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  profileId: text("profile_id").references(() => profiles.id, { onDelete: "cascade" }),
+  projectId: text("project_id").references(() => projects.id, { onDelete: "cascade" }),
+  kind: text("kind").notNull(), sourceId: text("source_id").notNull(), sourceVersion: text("source_version").notNull(),
+  contentHash: text("content_hash").notNull(), title: text("title").notNull(), text: text("text").notNull(),
+  meta: text("meta", { mode: "json" }).notNull().default({}), embedding: blob("embedding", { mode: "buffer" }),
+  embeddingModel: text("embedding_model"), createdAt: text("created_at").notNull(), updatedAt: text("updated_at").notNull(),
+}, (t) => [index("retrieval_profile_kind_idx").on(t.profileId,t.kind), index("retrieval_project_idx").on(t.projectId), uniqueIndex("retrieval_source_hash_uq").on(t.kind,t.sourceId,t.contentHash)]);
+export const retrievalUses = sqliteTable("retrieval_uses", {
+  id: integer("id").primaryKey({ autoIncrement: true }), projectId: text("project_id").notNull().references(() => projects.id, { onDelete: "cascade" }),
+  stage: text("stage").notNull(), taskId: text("task_id").notNull(), chunkIds: text("chunk_ids", { mode: "json" }).notNull(),
+  scores: text("scores", { mode: "json" }).notNull(), tokens: integer("tokens").notNull(), mode: text("mode").notNull(), createdAt: text("created_at").notNull(),
 });
+export const retrievalExclusions = sqliteTable("retrieval_exclusions", {
+  projectId: text("project_id").notNull().references(() => projects.id, { onDelete: "cascade" }),
+  chunkId: integer("chunk_id").notNull().references(() => retrievalChunks.id, { onDelete: "cascade" }), createdAt: text("created_at").notNull(),
+}, (t) => [primaryKey({ columns: [t.projectId,t.chunkId] })]);
+
+export const webhookEndpoints = sqliteTable("webhook_endpoints", {
+  workspaceId: text("workspace_id"),
+  id: text("id").primaryKey(),
+  name: text("name").notNull(),
+  url: text("url").notNull(),
+  eventTypes: text("event_types", { mode: "json" }).notNull().default([]),
+  allowPrivate: integer("allow_private", { mode: "boolean" }).notNull().default(false),
+  enabled: integer("enabled", { mode: "boolean" }).notNull().default(true),
+  disabledReason: text("disabled_reason"),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+}, (table) => [
+  index("webhook_endpoints_workspace_idx").on(table.workspaceId),
+]);
+
+export const webhookDeliveries = sqliteTable("webhook_deliveries", {
+  id: text("id").primaryKey(),
+  endpointId: text("endpoint_id").notNull().references(() => webhookEndpoints.id, { onDelete: "cascade" }),
+  eventId: text("event_id").notNull(),
+  payload: text("payload", { mode: "json" }).notNull(),
+  attempt: integer("attempt").notNull().default(0),
+  status: text("status").notNull().default("pending"),
+  nextAttemptAt: text("next_attempt_at").notNull(),
+  lastError: text("last_error"),
+  createdAt: text("created_at").notNull(),
+}, (t) => [index("webhook_deliveries_due_idx").on(t.status, t.nextAttemptAt)]);
+
+export const agents = sqliteTable("agents", {
+  workspaceId: text("workspace_id"),
+  id: text("id").primaryKey(),
+  kind: text("kind").notNull(),
+  name: text("name").notNull(),
+  environment: text("environment").notNull(),
+  model: text("model"),
+  firstSeenAt: text("first_seen_at").notNull(),
+  lastSeenAt: text("last_seen_at").notNull(),
+  calls: integer("calls").notNull().default(1),
+}, (table) => [
+  index("agents_workspace_idx").on(table.workspaceId),
+  uniqueIndex("agents_identity_uq").on(table.kind, table.name, table.environment),
+]);
+
+export const skillClaims = sqliteTable("skill_claims", {
+  id: text("id").primaryKey(),
+  skill: text("skill").notNull(),
+  profileId: text("profile_id").references(() => profiles.id, { onDelete: "set null" }),
+  agentKind: text("agent_kind").notNull(),
+  agentName: text("agent_name").notNull(),
+  agentEnvironment: text("agent_environment").notNull(),
+  claimedAt: text("claimed_at").notNull(),
+  expiresAt: text("expires_at").notNull(),
+  releasedAt: text("released_at"),
+  reportId: text("report_id"),
+}, (table) => [
+  index("skill_claims_open_idx").on(table.skill, table.profileId, table.releasedAt),
+]);
+
+export const skillReports = sqliteTable("skill_reports", {
+  id: text("id").primaryKey(),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+  skill: text("skill").notNull(),
+  skillHash: text("skill_hash").notNull(),
+  profileId: text("profile_id").references(() => profiles.id, { onDelete: "set null" }),
+  profileName: text("profile_name"),
+  subjects: text("subjects", { mode: "json" }).$type<{ projectIds?: string[]; publicationIds?: string[]; topicIds?: string[] }>().notNull(),
+  agentKind: text("agent_kind").notNull(),
+  agentName: text("agent_name").notNull(),
+  agentModel: text("agent_model"),
+  agentEnvironment: text("agent_environment").notNull(),
+  appEnvironment: text("app_environment").notNull(),
+  startedAt: text("started_at").notNull(),
+  status: text("status").notNull(),
+  inputs: text("inputs"),
+  decision: text("decision"),
+  hypothesis: text("hypothesis"),
+  notes: text("notes"),
+  lesson: text("lesson"),
+  actions: text("actions", { mode: "json" }).$type<Array<{ tool: string; result: "pending_action" | "done" | "blocked"; ref?: string }>>().notNull(),
+  metrics: text("metrics", { mode: "json" }).$type<Array<{ name: string; baseline: number | null; target: number | null; actual: number | null; direction: "up" | "down" }>>().notNull(),
+  checkAt: text("check_at"),
+  verdict: text("verdict"),
+  verdictSource: text("verdict_source"),
+  checkedAt: text("checked_at"),
+  checkedByKind: text("checked_by_kind"),
+  checkedByName: text("checked_by_name"),
+  runId: text("run_id"),
+  claimId: text("claim_id"),
+  source: text("source").notNull(),
+  importKey: text("import_key").notNull(),
+  importedByKind: text("imported_by_kind"),
+  importedByName: text("imported_by_name"),
+}, (table) => [
+  uniqueIndex("skill_reports_import_key_uq").on(table.importKey),
+  index("skill_reports_profile_idx").on(table.profileId, table.skill, table.createdAt),
+  index("skill_reports_due_idx").on(table.checkAt, table.verdict),
+  index("skill_reports_agent_idx").on(table.agentKind, table.agentEnvironment),
+]);
+
+export const knowledgeEntries = sqliteTable("knowledge_entries", {
+  workspaceId: text("workspace_id"),
+  id: text("id").primaryKey(),
+  kind: text("kind").notNull(),
+  json: text("json"),
+  revision: integer("revision").notNull(),
+  updatedAt: text("updated_at").notNull(),
+}, (table) => [
+  index("knowledge_entries_workspace_idx").on(table.workspaceId),
+]);
+
+export const knowledgeRevisions = sqliteTable("knowledge_revisions", {
+  id: text("id").primaryKey(),
+  entryId: text("entry_id").notNull(),
+  revision: integer("revision").notNull(),
+  before: text("before"),
+  after: text("after"),
+  patch: text("patch").notNull(),
+  origin: text("origin").notNull(),
+  actor: text("actor").notNull(),
+  reason: text("reason").notNull(),
+  changeEventId: text("change_event_id"),
+  createdAt: text("created_at").notNull(),
+}, (table) => [uniqueIndex("knowledge_revisions_entry_revision").on(table.entryId, table.revision)]);
+
+export const knowledgeProposals = sqliteTable("knowledge_proposals", {
+  id: text("id").primaryKey(),
+  entryId: text("entry_id").notNull(),
+  kind: text("kind").notNull(),
+  proposed: text("proposed").notNull(),
+  patch: text("patch").notNull(),
+  origin: text("origin").notNull(),
+  evidence: text("evidence").notNull(),
+  risk: text("risk").notNull(),
+  status: text("status").notNull(),
+  changeEventId: text("change_event_id"),
+  createdAt: text("created_at").notNull(),
+  decidedAt: text("decided_at"),
+  decidedBy: text("decided_by"),
+  baseRevision: integer("base_revision").notNull(),
+  reason: text("reason").notNull(),
+}, (table) => [index("knowledge_proposals_entry_status").on(table.entryId, table.status)]);
+
+export const changeEvents = sqliteTable("change_events", {
+  id: text("id").primaryKey(),
+  category: text("category").notNull(),
+  detector: text("detector").notNull(),
+  subject: text("subject").notNull(),
+  summary: text("summary").notNull(),
+  evidence: text("evidence").notNull(),
+  severity: text("severity").notNull(),
+  fingerprint: text("fingerprint").notNull(),
+  consumers: text("consumers").notNull(),
+  reaction: text("reaction").notNull(),
+  status: text("status").notNull(),
+  seenCount: integer("seen_count").notNull().default(1),
+  lastSeenAt: text("last_seen_at").notNull(),
+  inDigest: integer("in_digest").notNull().default(0),
+  createdAt: text("created_at").notNull(),
+  resolvedAt: text("resolved_at"),
+}, (table) => [index("change_events_status_severity").on(table.status, table.severity)]);
+
+export const changeHolds = sqliteTable("change_holds", {
+  id: text("id").primaryKey(),
+  eventId: text("event_id").notNull(),
+  consumer: text("consumer").notNull(),
+  subjectType: text("subject_type").notNull(),
+  subjectId: text("subject_id").notNull(),
+  reason: text("reason").notNull(),
+  active: integer("active").notNull().default(1),
+  createdAt: text("created_at").notNull(),
+}, (table) => [index("change_holds_active_subject").on(table.active, table.subjectType, table.subjectId)]);
+
+export const changeSignalHits = sqliteTable("change_signal_hits", {
+  id: text("id").primaryKey(),
+  fingerprint: text("fingerprint").notNull(),
+  seenAt: text("seen_at").notNull(),
+}, (table) => [index("change_signal_hits_fingerprint").on(table.fingerprint, table.seenAt)]);
+
+const authTimestamp = sql`(cast(unixepoch('subsecond') * 1000 as integer))`;
+
+/** Better Auth user. `role` is an extra column (not the admin plugin). */
+export const user = sqliteTable("user", {
+  id: text("id").primaryKey(),
+  name: text("name").notNull(),
+  email: text("email").notNull().unique(),
+  emailVerified: integer("email_verified", { mode: "boolean" }).default(false).notNull(),
+  image: text("image"),
+  createdAt: integer("created_at", { mode: "timestamp_ms" }).default(authTimestamp).notNull(),
+  updatedAt: integer("updated_at", { mode: "timestamp_ms" }).default(authTimestamp).$onUpdate(() => new Date()).notNull(),
+  twoFactorEnabled: integer("two_factor_enabled", { mode: "boolean" }).default(false),
+  role: text("role").default("member"),
+});
+
+export const session = sqliteTable("session", {
+  id: text("id").primaryKey(),
+  expiresAt: integer("expires_at", { mode: "timestamp_ms" }).notNull(),
+  token: text("token").notNull().unique(),
+  createdAt: integer("created_at", { mode: "timestamp_ms" }).default(authTimestamp).notNull(),
+  updatedAt: integer("updated_at", { mode: "timestamp_ms" }).$onUpdate(() => new Date()).notNull(),
+  ipAddress: text("ip_address"),
+  userAgent: text("user_agent"),
+  userId: text("user_id").notNull().references(() => user.id, { onDelete: "cascade" }),
+  activeOrganizationId: text("active_organization_id"),
+}, (table) => [index("session_userId_idx").on(table.userId)]);
+
+export const account = sqliteTable("account", {
+  id: text("id").primaryKey(),
+  accountId: text("account_id").notNull(),
+  providerId: text("provider_id").notNull(),
+  userId: text("user_id").notNull().references(() => user.id, { onDelete: "cascade" }),
+  accessToken: text("access_token"),
+  refreshToken: text("refresh_token"),
+  idToken: text("id_token"),
+  accessTokenExpiresAt: integer("access_token_expires_at", { mode: "timestamp_ms" }),
+  refreshTokenExpiresAt: integer("refresh_token_expires_at", { mode: "timestamp_ms" }),
+  scope: text("scope"),
+  password: text("password"),
+  createdAt: integer("created_at", { mode: "timestamp_ms" }).default(authTimestamp).notNull(),
+  updatedAt: integer("updated_at", { mode: "timestamp_ms" }).$onUpdate(() => new Date()).notNull(),
+}, (table) => [index("account_userId_idx").on(table.userId)]);
+
+export const verification = sqliteTable("verification", {
+  id: text("id").primaryKey(),
+  identifier: text("identifier").notNull(),
+  value: text("value").notNull(),
+  expiresAt: integer("expires_at", { mode: "timestamp_ms" }).notNull(),
+  createdAt: integer("created_at", { mode: "timestamp_ms" }).default(authTimestamp).notNull(),
+  updatedAt: integer("updated_at", { mode: "timestamp_ms" }).default(authTimestamp).$onUpdate(() => new Date()).notNull(),
+}, (table) => [index("verification_identifier_idx").on(table.identifier)]);
+
+export const twoFactor = sqliteTable("two_factor", {
+  id: text("id").primaryKey(),
+  secret: text("secret").notNull(),
+  backupCodes: text("backup_codes").notNull(),
+  userId: text("user_id").notNull().references(() => user.id, { onDelete: "cascade" }),
+  verified: integer("verified", { mode: "boolean" }).default(true),
+  failedVerificationCount: integer("failed_verification_count").default(0),
+  lockedUntil: integer("locked_until", { mode: "timestamp_ms" }),
+}, (table) => [
+  index("twoFactor_secret_idx").on(table.secret),
+  index("twoFactor_userId_idx").on(table.userId),
+]);
+
+export const apikey = sqliteTable("apikey", {
+  id: text("id").primaryKey(),
+  configId: text("config_id").default("default").notNull(),
+  name: text("name"),
+  start: text("start"),
+  referenceId: text("reference_id").notNull(),
+  prefix: text("prefix"),
+  key: text("key").notNull(),
+  refillInterval: integer("refill_interval"),
+  refillAmount: integer("refill_amount"),
+  lastRefillAt: integer("last_refill_at", { mode: "timestamp_ms" }),
+  enabled: integer("enabled", { mode: "boolean" }).default(true),
+  rateLimitEnabled: integer("rate_limit_enabled", { mode: "boolean" }).default(true),
+  rateLimitTimeWindow: integer("rate_limit_time_window").default(86400000),
+  rateLimitMax: integer("rate_limit_max").default(10),
+  requestCount: integer("request_count").default(0),
+  remaining: integer("remaining"),
+  lastRequest: integer("last_request", { mode: "timestamp_ms" }),
+  expiresAt: integer("expires_at", { mode: "timestamp_ms" }),
+  createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull(),
+  updatedAt: integer("updated_at", { mode: "timestamp_ms" }).notNull(),
+  permissions: text("permissions"),
+  metadata: text("metadata"),
+}, (table) => [
+  index("apikey_configId_idx").on(table.configId),
+  index("apikey_referenceId_idx").on(table.referenceId),
+  index("apikey_key_idx").on(table.key),
+]);
+
+export const organization = sqliteTable("organization", {
+  id: text("id").primaryKey(),
+  name: text("name").notNull(),
+  slug: text("slug").notNull().unique(),
+  logo: text("logo"),
+  createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull(),
+  metadata: text("metadata"),
+}, (table) => [uniqueIndex("organization_slug_uidx").on(table.slug)]);
+
+export const member = sqliteTable("member", {
+  id: text("id").primaryKey(),
+  organizationId: text("organization_id").notNull().references(() => organization.id, { onDelete: "cascade" }),
+  userId: text("user_id").notNull().references(() => user.id, { onDelete: "cascade" }),
+  role: text("role").default("member").notNull(),
+  createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull(),
+}, (table) => [
+  index("member_organizationId_idx").on(table.organizationId),
+  index("member_userId_idx").on(table.userId),
+]);
+
+export const invitation = sqliteTable("invitation", {
+  id: text("id").primaryKey(),
+  organizationId: text("organization_id").notNull().references(() => organization.id, { onDelete: "cascade" }),
+  email: text("email").notNull(),
+  role: text("role"),
+  status: text("status").default("pending").notNull(),
+  expiresAt: integer("expires_at", { mode: "timestamp_ms" }).notNull(),
+  createdAt: integer("created_at", { mode: "timestamp_ms" }).default(authTimestamp).notNull(),
+  inviterId: text("inviter_id").notNull().references(() => user.id, { onDelete: "cascade" }),
+}, (table) => [
+  index("invitation_organizationId_idx").on(table.organizationId),
+  index("invitation_email_idx").on(table.email),
+]);
+
+/** TASK-115: narrows (never widens) a member's role to one channel. */
+export const channelGrants = sqliteTable("channel_grants", {
+  id: text("id").primaryKey(),
+  workspaceId: text("workspace_id").notNull(),
+  userId: text("user_id").notNull(),
+  profileId: text("profile_id").notNull(),
+  role: text("role").notNull(),
+  createdAt: text("created_at").notNull(),
+  createdBy: text("created_by"),
+}, (table) => [
+  uniqueIndex("channel_grants_member_channel_uq").on(table.workspaceId, table.userId, table.profileId),
+  index("channel_grants_user_idx").on(table.userId),
+]);
+
+/** TASK-115: who did what, kept 180 days. Payload is redacted and capped at 4 KB. */
+export const auditLog = sqliteTable("audit_log", {
+  id: text("id").primaryKey(),
+  at: text("at").notNull(),
+  workspaceId: text("workspace_id"),
+  actorKind: text("actor_kind"),
+  actorUserId: text("actor_user_id"),
+  actorKeyId: text("actor_key_id"),
+  action: text("action").notNull(),
+  targetType: text("target_type"),
+  targetId: text("target_id"),
+  outcome: text("outcome", { enum: ["ok", "denied", "error"] }).notNull(),
+  statusCode: integer("status_code"),
+  source: text("source", { enum: ["api", "assistant", "mcp", "operator", "system"] }).notNull(),
+  summary: text("summary"),
+  payload: text("payload"),
+  requestId: text("request_id"),
+}, (table) => [
+  index("audit_log_workspace_at_idx").on(table.workspaceId, table.at),
+  index("audit_log_actor_at_idx").on(table.actorUserId, table.at),
+]);
+
+/** TASK-118: a machine that joined to render. Only token hashes are stored. */
+export const nodes = sqliteTable("nodes", {
+  id: text("id").primaryKey(),
+  name: text("name").notNull(),
+  tokenHash: text("token_hash"),
+  status: text("status", { enum: ["online", "offline", "draining", "revoked", "version_mismatch"] }).notNull().default("offline"),
+  version: text("version"),
+  capabilities: text("capabilities", { mode: "json" }).$type<Record<string, unknown> | null>(),
+  resources: text("resources", { mode: "json" }).$type<Record<string, unknown> | null>(),
+  desiredConfig: text("desired_config", { mode: "json" }).$type<{ concurrency: number; drain: boolean; capabilities: string[] } | null>(),
+  lastSeenAt: text("last_seen_at"),
+  createdAt: text("created_at").notNull(),
+  revokedAt: text("revoked_at"),
+  /** TASK-119: result of the node's real capability probe (JSON). */
+  probe: text("probe"),
+  /** TASK-120: version per declared capability (JSON object). */
+  capabilityInfo: text("capability_info").notNull().default("{}"),
+}, (table) => [
+  uniqueIndex("nodes_token_hash_uq").on(table.tokenHash),
+  index("nodes_status_idx").on(table.status),
+]);
+
+/**
+ * TASK-120: audit and revocation record for a key sent to a node for one lease.
+ * Only a hash of the key and metadata are stored, never the key itself.
+ */
+export const nodeLeaseSecrets = sqliteTable("node_lease_secrets", {
+  id: text("id").primaryKey(),
+  leaseId: text("lease_id").notNull(),
+  jobId: text("job_id").notNull(),
+  nodeId: text("node_id").notNull(),
+  stage: text("stage").notNull(),
+  scope: text("scope").notNull(),
+  label: text("label").notNull(),
+  secretHash: text("secret_hash").notNull(),
+  createdAt: text("created_at").notNull(),
+  expiresAt: text("expires_at").notNull(),
+  revokedAt: text("revoked_at"),
+  revokedReason: text("revoked_reason"),
+}, (table) => [
+  index("node_lease_secrets_lease_idx").on(table.leaseId),
+  index("node_lease_secrets_node_idx").on(table.nodeId, table.createdAt),
+]);
+
+/** TASK-118: one-time token that lets a machine join. Single use, one hour. */
+export const nodeJoinTokens = sqliteTable("node_join_tokens", {
+  id: text("id").primaryKey(),
+  tokenHash: text("token_hash").notNull(),
+  createdBy: text("created_by"),
+  createdAt: text("created_at").notNull(),
+  expiresAt: text("expires_at").notNull(),
+  usedAt: text("used_at"),
+  usedByNodeId: text("used_by_node_id"),
+}, (table) => [
+  uniqueIndex("node_join_tokens_hash_uq").on(table.tokenHash),
+]);
+
+/** TASK-118: content-addressed files a node may pull, hashed once per path, mtime and size. */
+export const artifacts = sqliteTable("artifacts", {
+  sha256: text("sha256").primaryKey(),
+  size: integer("size").notNull(),
+  path: text("path").notNull(),
+  mtimeMs: integer("mtime_ms").notNull(),
+  createdAt: text("created_at").notNull(),
+}, (table) => [
+  index("artifacts_path_idx").on(table.path),
+]);
+
+/** TASK-122: who a machine key belongs to. Kept beside Better Auth's apikey table, which we do not alter. */
+export const agentKeyProfiles = sqliteTable("agent_key_profiles", {
+  keyId: text("key_id").primaryKey(),
+  agentKind: text("agent_kind").notNull().default("other"),
+  instanceName: text("instance_name").notNull().default("unknown"),
+  canSupervise: integer("can_supervise", { mode: "boolean" }).notNull().default(false),
+  updatedAt: text("updated_at").notNull(),
+});
+
+/** TASK-122: short lease on an object, so two agents never change the same thing at once. */
+export const agentLeases = sqliteTable("agent_leases", {
+  resourceKind: text("resource_kind").notNull(),
+  resourceId: text("resource_id").notNull(),
+  holderKind: text("holder_kind").notNull(),
+  holderInstance: text("holder_instance").notNull(),
+  rank: integer("rank").notNull(),
+  fence: integer("fence").notNull().default(1),
+  runId: text("run_id"),
+  acquiredAt: text("acquired_at").notNull(),
+  expiresAt: text("expires_at").notNull(),
+  preemptedBy: text("preempted_by"),
+}, (table) => [
+  uniqueIndex("agent_leases_resource_uq").on(table.resourceKind, table.resourceId),
+  index("agent_leases_expires_idx").on(table.expiresAt),
+]);
+
+/** TASK-122: an agent's result for a repeated call with the same idempotencyKey (24 hours). */
+export const agentIdempotency = sqliteTable("agent_idempotency", {
+  instance: text("instance").notNull(),
+  key: text("key").notNull(),
+  tool: text("tool").notNull(),
+  result: text("result").notNull(),
+  createdAt: text("created_at").notNull(),
+}, (table) => [
+  uniqueIndex("agent_idempotency_uq").on(table.instance, table.key),
+]);
+
+/** TASK-122: every agent process that called with a machine key, and who is on duty. */
+export const agentInstances = sqliteTable("agent_instances", {
+  instance: text("instance").primaryKey(),
+  kind: text("kind").notNull(),
+  environment: text("environment").notNull().default("unknown"),
+  version: text("version"),
+  lastSeenAt: text("last_seen_at").notNull(),
+  lastToolAt: text("last_tool_at"),
+  dutyHeartbeatAt: text("duty_heartbeat_at"),
+  onDuty: integer("on_duty", { mode: "boolean" }).notNull().default(false),
+});
+
+/** TASK-122: hand-offs between the operator, Hermes and the user. */
+export const agentEscalations = sqliteTable("agent_escalations", {
+  id: text("id").primaryKey(),
+  fromKind: text("from_kind").notNull(),
+  fromInstance: text("from_instance").notNull(),
+  toKind: text("to_kind").notNull(),
+  kind: text("kind").notNull(),
+  objectRef: text("object_ref").notNull().default(""),
+  summary: text("summary").notNull(),
+  evidence: text("evidence", { mode: "json" }).$type<Record<string, unknown>>().notNull(),
+  status: text("status").notNull().default("open"),
+  deadlineAt: text("deadline_at"),
+  hops: integer("hops").notNull().default(0),
+  claimedBy: text("claimed_by"),
+  resolvedBy: text("resolved_by"),
+  outcome: text("outcome"),
+  note: text("note"),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+}, (table) => [
+  index("agent_escalations_status_idx").on(table.status, table.toKind),
+  index("agent_escalations_object_idx").on(table.kind, table.objectRef),
+]);

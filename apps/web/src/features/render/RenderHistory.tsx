@@ -1,6 +1,7 @@
 import { renderAspectLabel, type RenderVersion } from "@vg/shared";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
+import { ConfirmDialog } from "../../components/ConfirmDialog";
 import { deleteProjectRender, patchProjectRender, renderExportUrl, renderFileUrl } from "../../services/renderApi";
 
 const renderKeys = {
@@ -60,6 +61,7 @@ export function RenderHistory({
   const queryClient = useQueryClient();
   const [draftNotes, setDraftNotes] = useState<Record<string, string>>({});
   const [error, setError] = useState("");
+  const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
 
   const patch = useMutation({
     mutationFn: ({ renderId, body }: { renderId: string; body: { note?: string | null; pinned?: boolean } }) =>
@@ -168,13 +170,7 @@ export function RenderHistory({
                       type="button"
                       className="button button-secondary"
                       disabled={remove.isPending}
-                      onClick={() => {
-                        if (!window.confirm(`Xoá file của bản v${item.version}?`)) return;
-                        setError("");
-                        remove.mutate(item.id, {
-                          onError: (reason) => setError(reason instanceof Error ? reason.message : "Không xoá được"),
-                        });
-                      }}
+                      onClick={() => setPendingDeleteId(item.id)}
                     >
                       Xoá
                     </button>
@@ -185,6 +181,24 @@ export function RenderHistory({
           );
         })}
       </ul>
+      <ConfirmDialog
+        open={pendingDeleteId !== null}
+        title="Xoá file render?"
+        message="File video của bản này sẽ bị xoá khỏi đĩa. Ghi chú của bản vẫn còn trong danh sách."
+        confirmLabel="Xoá file"
+        cancelLabel="Giữ lại"
+        busy={remove.isPending}
+        onCancel={() => setPendingDeleteId(null)}
+        onConfirm={() => {
+          const renderId = pendingDeleteId;
+          if (!renderId) return;
+          setError("");
+          remove.mutate(renderId, {
+            onSuccess: () => setPendingDeleteId(null),
+            onError: (reason) => setError(reason instanceof Error ? reason.message : "Không xoá được"),
+          });
+        }}
+      />
     </section>
   );
 }

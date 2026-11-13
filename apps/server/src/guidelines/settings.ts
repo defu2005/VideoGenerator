@@ -56,6 +56,7 @@ export function normalizeGuidelineSettings(input: GuidelineSettingsInput, base?:
     ? base?.strictness
     : input.strictness === null ? undefined : input.strictness;
   return GuidelineSettingsSchema.parse({
+    ...(input.originality ?? base?.originality ? { originality: input.originality ?? base?.originality } : {}),
     platformPack,
     customRules,
     ...(channelPacks !== undefined ? { channelPacks } : {}),

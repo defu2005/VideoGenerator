@@ -1,10 +1,13 @@
+import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { PROTECTED_PROJECT_ID } from "@vg/shared";
 import { VideoAgentApiClient } from "../src/apiClient.js";
-import { registerVideoAgentTools } from "../src/tools.js";
+import { registerVideoAgentTools, type RegistryCatalogTool } from "../src/tools.js";
 
 const projectId = "11111111-1111-4111-8111-111111111111";
 
@@ -27,9 +30,9 @@ const pipeline = {
 
 const opened: { server: McpServer; client: Client }[] = [];
 
-async function connect(fetchImpl: typeof fetch = vi.fn() as typeof fetch) {
+async function connect(fetchImpl: typeof fetch = vi.fn() as typeof fetch, catalog: RegistryCatalogTool[] = []) {
   const server = new McpServer({ name: "test-video-agent", version: "0.1.0" });
-  registerVideoAgentTools(server, new VideoAgentApiClient("http://127.0.0.1:3001", fetchImpl));
+  registerVideoAgentTools(server, new VideoAgentApiClient("http://127.0.0.1:3001", fetchImpl), catalog);
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
   const client = new Client({ name: "test-client", version: "0.1.0" });
   await server.connect(serverTransport);
@@ -38,7 +41,13 @@ async function connect(fetchImpl: typeof fetch = vi.fn() as typeof fetch) {
   return client;
 }
 
+beforeEach(() => {
+  vi.stubEnv("VG_API_KEY", "");
+  vi.stubEnv("DATA_DIR", join(tmpdir(), "vg-mcp-no-local-key"));
+});
+
 afterEach(async () => {
+  vi.unstubAllEnvs();
   await Promise.all(opened.splice(0).flatMap(({ server, client }) => [client.close(), server.close()]));
 });
 
@@ -53,13 +62,17 @@ describe("Video Agent MCP tools", () => {
     const prompts = await client.listPrompts();
     expect(tools.tools.map((tool) => tool.name).sort()).toEqual([
       "add_topic",
+      "app_api",
       "apply_review_proposal",
       "approve_scene_visual",
       "approve_topics",
       "automation_status",
+      "compose_plan_preview",
       "create_project",
       "get_auto_report",
+      "get_events",
       "get_guidelines",
+      "get_llm_health",
       "get_llm_quota_status",
       "get_llm_routes",
       "get_pipeline",
@@ -78,14 +91,18 @@ describe("Video Agent MCP tools", () => {
       "list_publications",
       "list_renders",
       "list_topics",
+      "list_vision_models",
       "publish_project",
       "recommend_brief",
+      "retry_stage",
       "run_pipeline",
       "save_research",
       "save_script",
       "save_story",
       "search_user_guide",
       "select_scene_visual",
+      "set_llm_models",
+      "set_stage_timeout",
       "suggest_topics",
     ]);
     expect(prompts.prompts.map((prompt) => prompt.name).sort()).toEqual([
@@ -413,6 +430,66 @@ describe("Video Agent MCP tools", () => {
     expect(body.sections[0]?.anchor).toBe("telegram");
   });
 
+  it("exposes only registry tools to the background operator", async () => {
+    vi.stubEnv("VG_TOOL_SOURCE", "operator");
+    vi.stubEnv("VG_OPERATOR_MANAGED", "1");
+    vi.stubEnv("VG_OPERATOR_INVOCATION", "fixture-invocation");
+    const fetchImpl = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+      expect(new Headers(init?.headers).get("x-vg-tool-source")).toBe("operator");
+      expect(new Headers(init?.headers).get("x-vg-operator-managed")).toBe("1");
+      expect(new Headers(init?.headers).get("x-vg-operator-invocation")).toBe("fixture-invocation");
+      return jsonResponse({ pendingActionId: "fixture-confirmation" });
+    });
+    const client = await connect(fetchImpl as typeof fetch, [{
+      name: "create_project", description: "Registry version", properties: { topic: "string" },
+    }]);
+    expect((await client.listTools()).tools.map((tool) => tool.name)).toEqual(["create_project"]);
+    const result = await client.callTool({ name: "create_project", arguments: { topic: "Thử" } });
+    expect(resultText(result)).toContain("fixture-confirmation");
+    expect(String(fetchImpl.mock.calls[0]?.[0])).toContain("/api/registry/invoke");
+  });
+
+  it("advertises and validates the full input schema for a registry tool", async () => {
+    const fetchImpl = vi.fn(async () => jsonResponse({ result: { ok: true } }));
+    const client = await connect(fetchImpl as typeof fetch, [{
+      name: "fixture_registry_tool",
+      description: "Fixture registry tool",
+      inputSchema: {
+        type: "object",
+        properties: { count: { type: "integer", minimum: 1 } },
+        required: ["count"],
+        additionalProperties: false,
+      },
+    }]);
+    const { tools } = await client.listTools();
+    expect(tools.find((tool) => tool.name === "fixture_registry_tool")?.inputSchema).toMatchObject({
+      properties: { count: { type: "integer", minimum: 1 } },
+      required: ["count"],
+    });
+    expect((await client.callTool({ name: "fixture_registry_tool", arguments: { count: 0 } })).isError).toBe(true);
+    expect(fetchImpl).not.toHaveBeenCalled();
+    expect((await client.callTool({ name: "fixture_registry_tool", arguments: { count: 1 } })).isError).toBeFalsy();
+    expect(fetchImpl).toHaveBeenCalledOnce();
+  });
+
+  it("exposes propose_skill from the registry catalog and sends it through the registry", async () => {
+    const fetchImpl = vi.fn(async () => jsonResponse({ result: { name: "video-moi", version: 1, status: "draft" } }));
+    const client = await connect(fetchImpl as typeof fetch, [{
+      name: "propose_skill",
+      description: "Đề xuất skill nháp",
+      inputSchema: {
+        type: "object",
+        properties: { markdown: { type: "string" }, reason: { type: "string" } },
+        required: ["markdown", "reason"],
+        additionalProperties: false,
+      },
+    }]);
+    expect((await client.listTools()).tools.map((tool) => tool.name)).toContain("propose_skill");
+    const result = await client.callTool({ name: "propose_skill", arguments: { markdown: "---\nname: video-moi\n---", reason: "lặp lại" } });
+    expect(resultText(result)).toContain("draft");
+    expect(String(fetchImpl.mock.calls[0]?.[0])).toContain("/api/registry/invoke");
+  });
+
   it("gates confirm tools through the registry and refuses the protected project", async () => {
     const fetchImpl = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       expect(String(input)).toContain("/api/registry/invoke");
@@ -425,6 +502,14 @@ describe("Video Agent MCP tools", () => {
       name: "find_skills",
       description: "Tìm kỹ năng",
       properties: { query: "string" },
+    }, {
+      name: "get_stage_timeouts",
+      description: "Đọc thời gian chờ",
+      inputSchema: { type: "object", properties: { projectId: { type: "string" } }, required: ["projectId"], additionalProperties: false },
+    }, {
+      name: "update_stage_timeouts",
+      description: "Đề xuất thời gian chờ",
+      inputSchema: { type: "object", properties: { projectId: { type: "string" }, stages: { type: "object" } }, required: ["projectId", "stages"], additionalProperties: false },
     }]);
     const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
     const client = new Client({ name: "test-client", version: "0.1.0" });
@@ -433,6 +518,8 @@ describe("Video Agent MCP tools", () => {
     opened.push({ server, client });
     const names = (await client.listTools()).tools.map((tool) => tool.name);
     expect(names).toContain("find_skills");
+    expect(names).toContain("get_stage_timeouts");
+    expect(names).toContain("update_stage_timeouts");
     const published = await client.callTool({
       name: "publish_project",
       arguments: {
@@ -450,11 +537,124 @@ describe("Video Agent MCP tools", () => {
     expect(fetchImpl).toHaveBeenCalledTimes(1);
   });
 
+  it("app_api calls an allowed route and refuses secrets", async () => {
+    const fetchImpl = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      expect(String(input)).toContain("/api/projects/");
+      expect(init?.method).toBe("PATCH");
+      return jsonResponse({ ok: true });
+    }) as typeof fetch;
+    const client = await connect(fetchImpl);
+    const ok = await client.callTool({
+      name: "app_api",
+      arguments: {
+        method: "PATCH",
+        path: `/api/projects/${projectId}/stage-timeouts`,
+        body: { RENDER: 120000 },
+      },
+    });
+    expect(resultText(ok)).toContain("ok");
+    const secret = await client.callTool({
+      name: "app_api",
+      arguments: { method: "PUT", path: "/api/notifications/telegram/token", body: { token: "x" } },
+    });
+    expect(secret.isError).toBe(true);
+    for (const [method, path] of [
+      ["POST", "/api/autonomy/app"],
+      ["DELETE", `/api/projects/${projectId}`],
+      ["POST", `/api/projects/${projectId}/pipeline/gates/SCRIPT/approve`],
+      ["POST", `/api/projects/${projectId}/publications`],
+    ]) {
+      const blocked = await client.callTool({ name: "app_api", arguments: { method, path } });
+      expect(blocked.isError, path).toBe(true);
+    }
+    for (const path of [
+      "/api/connections/platform-apps/youtube",
+      "/api/connections/platform-apps/youtube/verify",
+      "/api/oauth/youtube/start",
+      "/api/profiles/profile/accounts/account/app-credentials",
+    ]) {
+      const blocked = await client.callTool({ name: "app_api", arguments: { method: "GET", path } });
+      expect(blocked.isError, path).toBe(true);
+    }
+    const memory = await client.callTool({
+      name: "app_api",
+      arguments: { method: "POST", path: `/api/operator/profiles/${projectId}/%6demory`, body: { text: "Thử" } },
+    });
+    expect(memory.isError).toBe(true);
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+  });
+
+  it("lists vision models and retries a failed stage", async () => {
+    const fetchImpl = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.endsWith("/llm-vision-models")) return jsonResponse({ models: [{ provider: "omniroute", model: "grok-cli/grok-4.7" }] });
+      if (url.endsWith("/llm-routing")) return jsonResponse({ tasks: {} });
+      expect(url).toContain("/pipeline/stages/VISUAL_SEARCH/retry");
+      expect(init?.method).toBe("POST");
+      return jsonResponse({ status: "QUEUED" });
+    }) as typeof fetch;
+    const client = await connect(fetchImpl);
+    const listed = await client.callTool({ name: "list_vision_models", arguments: {} });
+    expect(resultText(listed)).toContain("grok-cli/grok-4.7");
+    const retried = await client.callTool({
+      name: "retry_stage",
+      arguments: { projectId, stage: "VISUAL_SEARCH" },
+    });
+    expect(resultText(retried)).toContain("QUEUED");
+  });
+
+  it("set_llm_models posts route assignments", async () => {
+    const fetchImpl = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      expect(String(input)).toContain("/api/settings/llm-routing/assign");
+      expect(init?.method).toBe("POST");
+      expect(JSON.parse(String(init?.body))).toEqual({
+        scope: "app",
+        assignments: [{ task: "vision", provider: "openai", model: "gpt-4.1" }],
+      });
+      return jsonResponse({ markedNow: [{ provider: "openai", model: "gpt-4.1" }] });
+    }) as typeof fetch;
+    const client = await connect(fetchImpl);
+    const result = await client.callTool({
+      name: "set_llm_models",
+      arguments: {
+        scope: "app",
+        assignments: [{ task: "vision", provider: "openai", model: "gpt-4.1" }],
+      },
+    });
+    expect(resultText(result)).toContain("gpt-4.1");
+  });
+
   it("returns the prompt tools with write instructions", async () => {
     const client = await connect();
     const prompt = await client.getPrompt({ name: "write_story", arguments: { projectId } });
     expect(JSON.stringify(prompt.messages)).toContain("save_story");
     expect(JSON.stringify(prompt.messages)).toContain(projectId);
+  });
+
+  it("sends x-api-key from VG_API_KEY", async () => {
+    vi.stubEnv("VG_API_KEY", "env-service-key");
+    const fetchImpl = vi.fn(async () => jsonResponse({ count: 0, items: [] })) as typeof fetch;
+    const client = new VideoAgentApiClient("http://127.0.0.1:3001", fetchImpl);
+    await client.listProjects();
+    expect(fetchImpl).toHaveBeenCalledWith(
+      "http://127.0.0.1:3001/api/projects?pageSize=20",
+      { headers: { Accept: "application/json", "x-api-key": "env-service-key" } },
+    );
+  });
+
+  it("sends x-api-key from the local secret file when the env key is empty", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "vg-mcp-key-"));
+    mkdirSync(join(dir, "secrets"));
+    writeFileSync(join(dir, "secrets", "local-services.key"), "file-service-key\n", "utf8");
+    vi.stubEnv("VG_API_KEY", "");
+    vi.stubEnv("DATA_DIR", dir);
+    const fetchImpl = vi.fn(async () => jsonResponse({ count: 0, items: [] })) as typeof fetch;
+    const client = new VideoAgentApiClient("http://127.0.0.1:3001", fetchImpl);
+    await client.listProjects();
+    expect(fetchImpl).toHaveBeenCalledWith(
+      "http://127.0.0.1:3001/api/projects?pageSize=20",
+      { headers: { Accept: "application/json", "x-api-key": "file-service-key" } },
+    );
   });
 });
 

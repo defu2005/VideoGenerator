@@ -1,4 +1,5 @@
 import type Database from "better-sqlite3";
+import { profileScopeSql } from "../auth/requestContext.js";
 import { scoreMapForProfiles } from "../learning/loadRows.js";
 import type {
   AnalyticsDayPoint,
@@ -137,6 +138,9 @@ function loadPublishedVideos(
     "date(p.published_at) <= date(?)",
   ];
   const params: unknown[] = [from, to];
+  const scoped = profileScopeSql("a.profile_id");
+  where.push(scoped.sql);
+  params.push(...scoped.args);
 
   if (profileId) {
     where.push("(proj.profile_id = ? OR a.profile_id = ?)");
@@ -194,6 +198,9 @@ function followersDeltaForRange(
     "d.followers IS NOT NULL",
   ];
   const params: unknown[] = [from, to];
+  const scoped = profileScopeSql("a.profile_id");
+  where.push(scoped.sql);
+  params.push(...scoped.args);
   if (profileId) {
     where.push("a.profile_id = ?");
     params.push(profileId);
@@ -236,6 +243,9 @@ function buildSeries(
 ): AnalyticsDayPoint[] {
   const accountWhere: string[] = [];
   const accountParams: unknown[] = [];
+  const scopedAcc = profileScopeSql("a.profile_id");
+  accountWhere.push(scopedAcc.sql);
+  accountParams.push(...scopedAcc.args);
   if (profileId) {
     accountWhere.push("a.profile_id = ?");
     accountParams.push(profileId);
@@ -260,6 +270,8 @@ function buildSeries(
     "date(s.fetched_at) <= date(?)",
   ];
   const snapParams: unknown[] = [from, to];
+  snapWhere.push(scopedAcc.sql);
+  snapParams.push(...scopedAcc.args);
   if (profileId) {
     snapWhere.push("(proj.profile_id = ? OR a.profile_id = ?)");
     snapParams.push(profileId, profileId);
@@ -437,11 +449,13 @@ export function buildOverview(
        AND p.published_at IS NOT NULL
        AND date(p.published_at) >= date(?)
        AND date(p.published_at) <= date(?)
+       AND ${profileScopeSql("a.profile_id").sql}
        ${profileId ? "AND (proj.profile_id = ? OR a.profile_id = ?)" : ""}
        ${platform ? "AND a.platform = ?" : ""}`,
   ).all(
     from,
     to,
+    ...profileScopeSql("a.profile_id").args,
     ...(profileId ? [profileId, profileId] : []),
     ...(platform ? [platform] : []),
   ) as Array<{ id: string; latest_metrics: string | null }>) {

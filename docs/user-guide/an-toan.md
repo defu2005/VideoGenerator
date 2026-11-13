@@ -23,6 +23,7 @@ Các việc sau dừng lại cho đến khi bạn bấm nút hoặc xác nhận 
 - Không hiện lại full token. Chỗ cần đối chiếu chỉ còn vài ký tự cuối.
 - Không dùng giấy phép ảnh để chặn cứng. Giấy phép là thông tin để bạn đọc.
 - Không gửi video hay khoá lên dịch vụ lạ ngoài nhà cung cấp bạn đã cấu hình.
+- Trang nhà cung cấp không tự thêm thẻ, không bật nạp tiền tự động, và không chấp nhận điều khoản. Combo OmniRoute chỉ đổi sau khi bạn bấm và bản sao lưu đã xong.
 
 ## Dự án đang sản xuất {#du-an-dang-dung}
 

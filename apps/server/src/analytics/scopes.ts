@@ -1,29 +1,32 @@
 import {
-  YOUTUBE_ANALYTICS_READONLY_SCOPE,
-  YOUTUBE_FULL_SCOPE,
-  YOUTUBE_READONLY_SCOPE,
-  type PlatformId,
+  ApiContractSchema, YOUTUBE_FULL_SCOPE, YOUTUBE_READONLY_SCOPE, snapshotKnowledge, type PlatformId,
 } from "@vg/shared";
+import type { KnowledgeService } from "../knowledge/service.js";
 
-/** Scopes each platform fetcher needs for analytics (beyond upload). */
+const ids = {
+  youtube: "analytics.scopes.youtube", tiktok: "analytics.scopes.tiktok",
+  facebook_reels: "analytics.scopes.facebook_reels", instagram_reels: "analytics.scopes.instagram_reels",
+} as const;
+
+export function analyticsScopes(platform: PlatformId, knowledge?: KnowledgeService): string[] {
+  if (platform === "mock") return [];
+  const id = ids[platform];
+  const fallback = ApiContractSchema.parse(snapshotKnowledge(id)!.value);
+  const current = ApiContractSchema.safeParse(knowledge?.value(id, fallback));
+  return [...(current.data?.scopes ?? fallback.scopes ?? [])];
+}
+
 export const ANALYTICS_REQUIRED_SCOPES: Record<PlatformId, string[]> = {
-  youtube: [YOUTUBE_READONLY_SCOPE, YOUTUBE_ANALYTICS_READONLY_SCOPE],
-  tiktok: ["video.list", "user.info.stats"],
-  instagram_reels: ["instagram_manage_insights"],
-  facebook_reels: ["read_insights"],
+  youtube: analyticsScopes("youtube"),
+  tiktok: analyticsScopes("tiktok"),
+  instagram_reels: analyticsScopes("instagram_reels"),
+  facebook_reels: analyticsScopes("facebook_reels"),
   mock: [],
 };
 
-/**
- * Return required scopes not present in `granted`.
- * YouTube full scope (`youtube`) satisfies `youtube.readonly`.
- */
+/** YouTube full scope also satisfies older youtube.readonly grants. */
 export function missingScopes(granted: string[], required: string[]): string[] {
   const set = new Set(granted);
-  const hasYoutubeData =
-    set.has(YOUTUBE_READONLY_SCOPE) || set.has(YOUTUBE_FULL_SCOPE);
-  return required.filter((scope) => {
-    if (scope === YOUTUBE_READONLY_SCOPE) return !hasYoutubeData;
-    return !set.has(scope);
-  });
+  if (set.has(YOUTUBE_FULL_SCOPE)) set.add(YOUTUBE_READONLY_SCOPE);
+  return required.filter((scope) => !set.has(scope));
 }

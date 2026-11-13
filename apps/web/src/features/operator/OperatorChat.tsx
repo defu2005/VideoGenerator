@@ -56,7 +56,7 @@ export function OperatorChat() {
   const active = overview.data?.runs.find((run) => run.id === overview.data?.activeRunId);
 
   return (
-    <section className="panel operator-chat" aria-label="Chat Cursor operator">
+    <section className="panel operator-chat" aria-label="Chat Agent operator">
       <div className="operator-chat-toolbar">
         <button type="button" className="button button-secondary" onClick={() => void stopOperator(conversationId).then(refresh)} disabled={!conversationId}>
           Dừng
@@ -83,7 +83,7 @@ export function OperatorChat() {
       </div>
       <div className="assistant-pending-list">
         {(overview.data?.pending ?? []).map((action) => (
-          <article key={action.id} className="assistant-pending-card">
+          <article key={action.id} id={`operator-approval-${action.id}`} className="assistant-pending-card">
             <p>{action.summary}</p>
             <div className="assistant-pending-actions">
               <button type="button" className="button button-primary" onClick={() => void confirmAssistantAction(action.id).then(refresh)}>Duyệt</button>
@@ -93,7 +93,7 @@ export function OperatorChat() {
         ))}
       </div>
       <form className="assistant-input" onSubmit={onSubmit}>
-        <textarea aria-label="Nhắn Cursor operator" value={draft} onChange={(event) => setDraft(event.target.value)} rows={3} />
+        <textarea aria-label="Nhắn Agent operator" value={draft} onChange={(event) => setDraft(event.target.value)} rows={3} />
         <div className="assistant-input-actions">
           <button type="submit" className="button button-primary" disabled={send.isPending || !conversationId}>Gửi</button>
         </div>

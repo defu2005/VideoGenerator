@@ -72,7 +72,7 @@ function catalogPayload() {
 }
 
 describe("OmniRoute catalog and health", () => {
-  it("parses OpenAI-style model rows and caches catalog for 10 minutes", async () => {
+  it("parses OpenAI-style model rows and refreshes a stale catalog in the background", async () => {
     expect(parseOmnirouteModelsPayload(catalogPayload())).toEqual([
       {
         id: "gemini-2.5-flash",
@@ -100,7 +100,15 @@ describe("OmniRoute catalog and health", () => {
     vi.useFakeTimers();
     vi.setSystemTime(Date.now() + 11 * 60_000);
     expect(await catalog.getModels()).toHaveLength(2);
+    await catalog.settleRefresh();
     expect(fetchImpl).toHaveBeenCalledTimes(2);
+    expect(catalog.lastDiff?.added).toEqual([]);
+    const added = catalogPayload();
+    added.data.push({ id: "new-model", owned_by: "test" });
+    fetchImpl.mockResolvedValueOnce(jsonResponse(added));
+    vi.setSystemTime(Date.now() + 11 * 60_000);
+    expect(await catalog.getModels({ forceRefresh: true })).toHaveLength(3);
+    expect(catalog.lastDiff?.added).toEqual(["new-model"]);
   });
 
   it("reports health up and down with a short timeout", async () => {

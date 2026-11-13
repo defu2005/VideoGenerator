@@ -1,0 +1,128 @@
+{
+  "id": "fact-check",
+  "titleVi": "Đối chiếu fact",
+  "taskId": "factCheck",
+  "rubricVi": "Phải chỉ ra lỗi đã gài.",
+  "cases": [
+    {
+      "id": "fact-check-1",
+      "taskId": "factCheck",
+      "input": {
+        "claim": "Mẫu 1 ghi năm sai."
+      },
+      "graders": [
+        {
+          "kind": "plantedErrors",
+          "errors": [
+            "năm sai"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "fact-check-2",
+      "taskId": "factCheck",
+      "input": {
+        "claim": "Mẫu 2 ghi năm sai."
+      },
+      "graders": [
+        {
+          "kind": "plantedErrors",
+          "errors": [
+            "năm sai"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "fact-check-3",
+      "taskId": "factCheck",
+      "input": {
+        "claim": "Mẫu 3 ghi năm sai."
+      },
+      "graders": [
+        {
+          "kind": "plantedErrors",
+          "errors": [
+            "năm sai"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "fact-check-4",
+      "taskId": "factCheck",
+      "input": {
+        "claim": "Mẫu 4 ghi năm sai."
+      },
+      "graders": [
+        {
+          "kind": "plantedErrors",
+          "errors": [
+            "năm sai"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "fact-check-5",
+      "taskId": "factCheck",
+      "input": {
+        "claim": "Mẫu 5 ghi năm sai."
+      },
+      "graders": [
+        {
+          "kind": "plantedErrors",
+          "errors": [
+            "năm sai"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "fact-check-6",
+      "taskId": "factCheck",
+      "input": {
+        "claim": "Mẫu 6 ghi năm sai."
+      },
+      "graders": [
+        {
+          "kind": "plantedErrors",
+          "errors": [
+            "năm sai"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "fact-check-7",
+      "taskId": "factCheck",
+      "input": {
+        "claim": "Mẫu 7 ghi năm sai."
+      },
+      "graders": [
+        {
+          "kind": "plantedErrors",
+          "errors": [
+            "năm sai"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "fact-check-8",
+      "taskId": "factCheck",
+      "input": {
+        "claim": "Mẫu 8 ghi năm sai."
+      },
+      "graders": [
+        {
+          "kind": "plantedErrors",
+          "errors": [
+            "năm sai"
+          ]
+        }
+      ]
+    }
+  ]
+}

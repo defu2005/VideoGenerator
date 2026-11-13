@@ -10,6 +10,70 @@ type ToolReply = {
 
 const projectIdShape = { projectId: z.string().uuid() };
 
+const APP_METHODS = ["GET", "POST", "PUT", "PATCH", "DELETE"] as const;
+
+const SECRET_PATH = /telegram\/token|omniroute\/token|tts\/secret|youtube-key|app-credentials|connections\/(?:platform-apps|secrets)|oauth\/.+\/(?:start|callback)/i;
+
+function forbiddenAppBody(value: unknown): string | null {
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      const found = forbiddenAppBody(item);
+      if (found) return found;
+    }
+    return null;
+  }
+  if (!value || typeof value !== "object") return null;
+  for (const [key, child] of Object.entries(value as Record<string, unknown>)) {
+    if (/^(autonomy|grants|budget.*|killed|ownerChatId|audit.*)$/i.test(key)) {
+      return "Không đổi quyền tự vận hành, ngân sách hoặc nhật ký qua MCP.";
+    }
+    if (/^(api[_-]?key|token|password|secret|credentials|paymentMethod|cardNumber)$/i.test(key) && child) {
+      return "Không gửi khóa, token hoặc thông tin thanh toán qua MCP.";
+    }
+    if (key === "allowCopyrightedStills") return "Chỉ người dùng được đổi cho phép ảnh có bản quyền.";
+    if (key === "quotaPolicy" && child === "paid_fallback") return "Không bật fallback trả phí qua MCP.";
+    if ((key === "paidFallbackDailyUsd" || /spendingLimit|maxSpend|raiseLimit/i.test(key)) && child != null) {
+      return "Không nâng hạn mức chi qua MCP.";
+    }
+    const nested = forbiddenAppBody(child);
+    if (nested) return nested;
+  }
+  return null;
+}
+
+function checkAppCall(method: string, path: string, body: unknown): string | null {
+  if (!path.startsWith("/api/") || path.includes("..") || path.includes("://")) return "Chỉ gọi đường dẫn /api/ của app.";
+  let decoded: string;
+  try {
+    decoded = decodeURIComponent(path);
+  } catch {
+    return "Đường dẫn API không hợp lệ.";
+  }
+  if (decoded.includes("\\") || /(?:^|\/)\.{1,2}(?:[/?#]|$)/.test(decoded)) return "Đường dẫn API không hợp lệ.";
+  if (method !== "GET" && /\/retrieval\//i.test(decoded) && !/\/profiles\/[^/]+\/search$/.test(decoded)) return "Chỉ người dùng sửa chỉ mục tri thức trong giao diện.";
+  if (SECRET_PATH.test(decoded)) return "Đường dẫn này giữ khóa hoặc token. Không gọi qua MCP.";
+  if (method !== "GET" && /^\/api\/autonomy(?:\/|$)/i.test(decoded)) return "Chỉ chủ app mới đổi quyền tự vận hành.";
+  if (method !== "GET" && /^\/api\/projects\/[^/]+\/(?:pipeline\/gates\/[^/]+\/approve|publications)(?:[/?#]|$)/i.test(decoded)) {
+    return "Dùng công cụ registry để duyệt cổng hoặc đăng video.";
+  }
+  if (method === "DELETE" && /^\/api\/(?:projects|profiles|publications|accounts|retrieval)(?:\/|$)/i.test(decoded)
+      && !/^\/api\/profiles\/[^/]+\/topics\/[^/?#]+(?:[?#]|$)/i.test(decoded)) {
+    return "Công cụ không được xoá vĩnh viễn dữ liệu.";
+  }
+  if (method !== "GET" && /\/operator\/profiles\/[^/]+\/memory(?:[/?#]|$)/i.test(decoded)) {
+    return "Chỉ người dùng cập nhật ghi nhớ đã xác nhận trong giao diện.";
+  }
+  if (method !== "GET" && /\/operator\/tool-proposals(?:[/?#]|$)/i.test(decoded)) {
+    return "Chỉ người dùng xử lý đề xuất công cụ trong giao diện.";
+  }
+  if (method !== "GET" && /\/operator\/skills(?:[/?#]|$)/i.test(decoded)) {
+    return "Chỉ người dùng duyệt phiên bản skill trong giao diện.";
+  }
+  if (containsProtectedProject(decoded) || containsProtectedProject(body)) return "Dự án này bị từ chối.";
+  if (method === "GET" && body !== undefined) return "GET không kèm body.";
+  return forbiddenAppBody(body);
+}
+
 function reply(value: unknown, isError = false): ToolReply {
   return {
     content: [{ type: "text", text: typeof value === "string" ? value : JSON.stringify(value) }],
@@ -31,6 +95,7 @@ export type RegistryCatalogTool = {
   description: string;
   risk?: string;
   properties?: Record<string, unknown>;
+  inputSchema?: Record<string, unknown>;
 };
 
 export function registerVideoAgentTools(
@@ -38,6 +103,7 @@ export function registerVideoAgentTools(
   api: VideoAgentApiClient = new VideoAgentApiClient(),
   catalog: RegistryCatalogTool[] = [],
 ): void {
+  const operatorOnly = process.env.VG_TOOL_SOURCE === "operator";
   const registered = new Set<string>();
   const registerTool = server.tool.bind(server) as (
     name: string,
@@ -48,9 +114,44 @@ export function registerVideoAgentTools(
   function define(name: string, description: string, shape: object, handler: (args: any) => Promise<ToolReply>): void {
     registered.add(name);
     registerTool(name, description, shape, async (args) => {
-      if (containsProtectedProject(args)) return reply("Dự án này bị từ chối.", true);
+      if (name !== "research_scene_visuals" && name !== "dedupe_scene_visuals" && name !== "crop_scene_images" && containsProtectedProject(args)) return reply("Dự án này bị từ chối.", true);
       return handler(args);
     });
+  }
+  function registerCatalog(): void {
+    for (const tool of catalog) {
+      if (registered.has(tool.name)) continue;
+      let schema: z.ZodType | undefined;
+      if (tool.inputSchema) {
+        try {
+          schema = z.fromJSONSchema(tool.inputSchema);
+        } catch {
+          // Older catalogs and unsupported keywords still get server-side validation.
+        }
+      }
+      const handler = (args: unknown) => {
+        if (tool.name !== "research_scene_visuals" && tool.name !== "dedupe_scene_visuals" && tool.name !== "crop_scene_images" && containsProtectedProject(args)) return Promise.resolve(reply("Dự án này bị từ chối.", true));
+        return invoke(() => api.invokeRegistry(tool.name, args));
+      };
+      if (schema) {
+        server.registerTool(tool.name, { description: tool.description, inputSchema: schema }, handler);
+        registered.add(tool.name);
+        continue;
+      }
+      const shape: Record<string, z.ZodType> = {};
+      for (const key of Object.keys(tool.properties ?? {})) {
+        const optional = key.endsWith("?");
+        const field = optional ? key.slice(0, -1) : key;
+        if (!field) continue;
+        shape[field] = optional ? z.any().optional() : z.any();
+      }
+      if (Object.keys(shape).length === 0) shape.payload = z.record(z.string(), z.any()).optional();
+      define(tool.name, tool.description, shape, handler);
+    }
+  }
+  if (operatorOnly) {
+    registerCatalog();
+    return;
   }
   const briefFields = {
     title: z.string().optional(),
@@ -148,6 +249,10 @@ export function registerVideoAgentTools(
     },
   ));
 
+  define("compose_plan_preview", "Read the compose shot plan and stats. Does not change the project.", projectIdShape, ({ projectId }) => invoke(
+    () => api.getComposePlan(projectId),
+  ));
+
   define("get_guidelines", "Read the active content-guideline reminders for a project, plus the disclaimer. This does not call an LLM.", projectIdShape, ({ projectId }) => invoke(
     async () => {
       const [project, packs] = await Promise.all([api.getProject(projectId), api.getGuidelinePacks()]);
@@ -162,10 +267,60 @@ export function registerVideoAgentTools(
   define("get_llm_quota_status", "Read free-model quota usage, cool-downs, and the wait-or-paid policy.", {}, () =>
     invoke(() => api.getLlmQuotaStatus()));
 
+  define("get_llm_health", "Read which LLM providers are cooling down after a quota or rate limit (until when) and recent automatic failovers.", {}, () =>
+    invoke(() => api.getLlmHealth()));
+
   define("search_user_guide", "Search the Vietnamese user guide and return the best-matching sections.", {
     query: z.string().trim().min(1).max(200),
   }, ({ query }) => invoke(() => api.searchUserGuide(query)));
 
+  define("list_vision_models", "Đọc provider có sẵn khả năng nhìn ảnh, quy tắc Grok trên OmniRoute, và các model đã đánh dấu vision.", {}, () =>
+    invoke(async () => {
+      const marked = await api.getVisionMarks();
+      return {
+        builtinProviders: ["anthropic", "gemini", "claude-cli", "copilot-cli"],
+        omnirouteVision: "Model OmniRoute Grok 4 trở lên được tính là nhìn ảnh. Ví dụ grok-cli/grok-4.7.",
+        marked: marked.models,
+        appRouting: await api.getAppLlmRouting(),
+      };
+    }));
+
+  define("set_stage_timeout", "Tính lại thời gian tối đa từng bước, hoặc đặt một bước theo giây. timeoutSec null trả bước đó về mức ước lượng.", {
+    ...projectIdShape,
+    recompute: z.boolean().optional(),
+    stage: z.string().min(1).max(40).optional(),
+    timeoutSec: z.number().positive().nullable().optional(),
+  }, ({ projectId, recompute, stage, timeoutSec }) => {
+    if (containsProtectedProject(projectId)) return Promise.resolve(reply("Dự án này bị từ chối.", true));
+    if (recompute) return invoke(() => api.recomputeStageTimeouts(projectId));
+    if (!stage || timeoutSec === undefined) return Promise.resolve(reply("Cần recompute=true hoặc cả stage và timeoutSec.", true));
+    return invoke(() => api.setStageTimeout(projectId, stage, timeoutSec));
+  });
+
+  define("retry_stage", "Chạy lại một bước pipeline đang FAILED. Không tự chạy khi quota gần hết và chính sách là chờ reset.", {
+    ...projectIdShape,
+    stage: PipelineStageSchema,
+  }, ({ projectId, stage }) => {
+    if (containsProtectedProject(projectId)) return Promise.resolve(reply("Dự án này bị từ chối.", true));
+    return invoke(() => api.retryStage(projectId, stage));
+  });
+
+  define("set_llm_models", "Gán provider và model cho một tác vụ, cho mặc định, hoặc cho nhóm vision (visionCheck, visionConsistency, renderVision, thumbnailPick). Model gán cho việc đọc ảnh được đánh dấu vision nếu provider chưa hỗ trợ ảnh. Grok 4 trên OmniRoute, ví dụ grok-cli/grok-4.7, được tính là nhìn ảnh.", {
+    scope: z.enum(["app", "project"]).optional(),
+    projectId: z.string().uuid().optional(),
+    assignments: z.array(z.object({
+      task: z.string().min(1).max(40),
+      provider: z.string().min(1).max(80),
+      model: z.string().min(1).max(200),
+    })).min(1).max(40),
+  }, ({ scope, projectId, assignments }) => {
+    if (containsProtectedProject(projectId)) return Promise.resolve(reply("Dự án này bị từ chối.", true));
+    return invoke(() => api.assignLlmRoutes({
+      ...(scope ? { scope } : {}),
+      ...(projectId ? { projectId } : {}),
+      assignments,
+    }));
+  });
   define("get_llm_routes", "Read the resolved provider and model route for each LLM task in a project.", projectIdShape, ({ projectId }) =>
     invoke(() => api.getLlmRoutes(projectId)));
 
@@ -287,6 +442,18 @@ export function registerVideoAgentTools(
   define("get_auto_report", "Read AUTO-mode decision report entries (grouped by stage) for a project.", projectIdShape, ({ projectId }) =>
     invoke(() => api.getAutoReport(projectId)));
 
+  define("get_events", "Đọc sự kiện agent: bước, duyệt, quota, đăng.", {
+    since: z.string().optional(),
+    types: z.array(z.string()).optional(),
+    projectId: z.string().uuid().optional(),
+    limit: z.number().int().min(1).max(500).optional(),
+  }, (args) => invoke(() => api.getEvents(args)));
+
+  server.registerResource("events", "vg://events", { description: "Sự kiện agent gần đây" }, async (uri) => {
+    const events = await api.getEvents({});
+    return { contents: [{ uri: uri.href, mimeType: "application/json", text: JSON.stringify(events) }] };
+  });
+
   define("list_renders", "List render versions for a project (newest first), including deleted ones.", projectIdShape, ({ projectId }) =>
     invoke(() => api.listRenders(projectId)));
 
@@ -355,23 +522,22 @@ export function registerVideoAgentTools(
   define("get_review_context", "Read the compact pre-render review context document for a project (0 LLM tokens).", projectIdShape, ({ projectId }) =>
     invoke(() => api.getReviewContext(projectId)));
 
+  define("app_api", "Gọi mọi API còn lại của Video Agent: cảnh, ảnh, giọng, nhạc, timeline, đồ họa, thumbnail, render, metadata, review, timeout, nhà cung cấp, hồ sơ, bình luận, tài chính, thống kê, operator. method + path bắt đầu bằng /api/, body JSON tùy chọn. Không gửi token, khóa, fallback trả phí, hoặc dự án bị bảo vệ.", {
+    method: z.enum(APP_METHODS),
+    path: z.string().trim().min(5).max(400),
+    body: z.unknown().optional(),
+  }, ({ method, path, body }) => {
+    const blocked = checkAppCall(method, path, body);
+    if (blocked) return Promise.resolve(reply(blocked, true));
+    return invoke(() => api.callApp(method, path, body));
+  });
+
   define("apply_review_proposal", "Validate and apply one pre-render review proposal without storing a chat message.", {
     ...projectIdShape,
     proposal: ReviewProposalSchema,
   }, ({ projectId, proposal }) => invoke(() => api.applyReviewProposal(projectId, proposal)));
 
-  for (const tool of catalog) {
-    if (registered.has(tool.name)) continue;
-    const shape: Record<string, z.ZodType> = {};
-    for (const key of Object.keys(tool.properties ?? {})) {
-      const optional = key.endsWith("?");
-      const field = optional ? key.slice(0, -1) : key;
-      if (!field) continue;
-      shape[field] = optional ? z.any().optional() : z.any();
-    }
-    if (Object.keys(shape).length === 0) shape.payload = z.record(z.string(), z.any()).optional();
-    define(tool.name, tool.description, shape, (args) => invoke(() => api.invokeRegistry(tool.name, args)));
-  }
+  registerCatalog();
 
   server.prompt("write_research", "Ask Claude to write research notes and save them in Video Agent.", {
     projectId: z.string().uuid(),

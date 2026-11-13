@@ -44,6 +44,14 @@ export function LineChart({
 
   return (
     <svg className="analytics-chart" viewBox={`0 0 ${width} ${height}`} role="img" aria-label={ariaLabel}>
+      <defs>
+        {series.map((s) => (
+          <linearGradient key={`grad-${s.id}`} id={`grad-${s.id}`} x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor={s.color} stopOpacity="0.22" />
+            <stop offset="100%" stopColor={s.color} stopOpacity="0.0" />
+          </linearGradient>
+        ))}
+      </defs>
       {ticks.map((tick) => (
         <g key={tick}>
           <line
@@ -75,18 +83,36 @@ export function LineChart({
           })
           .filter(Boolean);
         if (coords.length === 0) return null;
+        const firstX = coords[0]?.split(",")[0];
+        const lastX = coords[coords.length - 1]?.split(",")[0];
+        const areaPoints = firstX && lastX
+          ? `${firstX},${PAD.top + innerH} ${coords.join(" ")} ${lastX},${PAD.top + innerH}`
+          : "";
         return (
           <g key={s.id}>
+            {areaPoints ? <polygon fill={`url(#grad-${s.id})`} points={areaPoints} /> : null}
             <polyline
               fill="none"
               stroke={s.color}
-              strokeWidth={2}
+              strokeWidth={2.5}
+              strokeLinecap="round"
+              strokeLinejoin="round"
               points={coords.join(" ")}
             />
             {allX.map((x, i) => {
               const y = byX.get(x);
               if (y === undefined) return null;
-              return <circle key={`${s.id}-${x}`} cx={xAt(i)} cy={yAt(y)} r={2.5} fill={s.color} />;
+              return (
+                <circle
+                  key={`${s.id}-${x}`}
+                  cx={xAt(i)}
+                  cy={yAt(y)}
+                  r={3.5}
+                  fill={s.color}
+                  stroke="var(--color-neutral-0)"
+                  strokeWidth={1.5}
+                />
+              );
             })}
           </g>
         );
@@ -153,6 +179,7 @@ export function StackedBarChart({
                   width={Math.max(barW, 1)}
                   height={Math.max(barH, 0)}
                   fill={seg.color}
+                  rx={barH > 6 ? 2 : 0}
                 />
               );
             })}

@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import type Database from "better-sqlite3";
 import {
@@ -8,8 +8,10 @@ import {
   ReviewProposalSchema,
   STAGE_ORDER,
   VideoMetadataDraftSchema,
+  applyTimelineProposal,
   estimateTextTokens,
   normalizeMetadataDraft,
+  proposalEditsTimeline,
   type JobUsage,
   type PipelineStage,
   type Project,
@@ -37,7 +39,8 @@ import type { MusicService } from "../services/musicService.js";
 import type { SceneService } from "../services/sceneService.js";
 import type { TimelineService } from "../services/timelineService.js";
 import type { VisualService } from "../services/visualService.js";
-import { projectDir } from "../storage/paths.js";
+import { projectDir, resolveAssetPath } from "../storage/paths.js";
+import { visionSourceProblem } from "../services/visionSource.js";
 import { buildReviewContext } from "./contextBuilder.js";
 import { HISTORY_WINDOW, buildReviewPrompt } from "./prompt.js";
 import { validateReviewOutput } from "./validate.js";
@@ -141,6 +144,8 @@ export class ReviewService {
         registry: this.registry,
         route,
         task: "reviewChat",
+          knowledgeProject: project,
+        knowledgeQuery: text,
         system,
         prompt,
         schema: ReviewAssistantOutputSchema,
@@ -168,6 +173,7 @@ export class ReviewService {
     const validated = validateReviewOutput(generated.value, {
       sceneIds,
       sceneCount: context.document.scenes.length,
+      graphicIds: new Set(context.document.timeline.graphics.map((graphic) => graphic.id)),
     });
 
     const costUsd = estimateLlmCost(this.config, generated.provider, generated.model, generated.usage);
@@ -247,7 +253,7 @@ export class ReviewService {
     }
 
     const before = this.snapshotStageStates(project.id);
-    const result = await this.dispatch(project, proposal);
+    const result = await this.dispatch(project, proposal, "chat");
     const staleStages = this.diffStaleStages(project.id, before);
 
     this.sqlite.prepare(
@@ -269,6 +275,7 @@ export class ReviewService {
   async applyRawProposal(
     project: Project,
     proposalInput: unknown,
+    source: "assistant" | "mcp" = "mcp",
   ): Promise<{ result: unknown; staleStages: PipelineStage[] }> {
     const proposal = ReviewProposalSchema.parse(proposalInput);
     const context = this.buildContext(project);
@@ -277,6 +284,7 @@ export class ReviewService {
       {
         sceneIds: new Set(context.document.scenes.map((scene) => scene.id)),
         sceneCount: context.document.scenes.length,
+        graphicIds: new Set(context.document.timeline.graphics.map((graphic) => graphic.id)),
       },
     );
     if (validated.proposals.length === 0) {
@@ -286,8 +294,19 @@ export class ReviewService {
       throw new AppError(409, "INVALID_PIPELINE_STATE", "Đang có tiến trình chạy, thử lại sau.");
     }
     const before = this.snapshotStageStates(project.id);
-    const result = await this.dispatch(project, validated.proposals[0]!);
+    const result = await this.dispatch(project, validated.proposals[0]!, source);
     return { result, staleStages: this.diffStaleStages(project.id, before) };
+  }
+
+  async undoTimeline(projectId: string): Promise<{ result: unknown; staleStages: PipelineStage[] }> {
+    if (this.repository.getActiveJob(projectId)) {
+      throw new AppError(409, "INVALID_PIPELINE_STATE", "Đang có tiến trình chạy, thử lại sau.");
+    }
+    const before = this.snapshotStageStates(projectId);
+    const result = this.timelines.undo(projectId);
+    if (!result) throw new AppError(404, "NOTHING_TO_UNDO", "Không còn bản để hoàn tác.");
+    markStaleFrom(this.repository, projectId, "TIMELINE");
+    return { result, staleStages: this.diffStaleStages(projectId, before) };
   }
 
   reset(project: Project): void {
@@ -303,10 +322,89 @@ export class ReviewService {
     })();
   }
 
-  private async dispatch(project: Project, proposal: ReviewProposal): Promise<unknown> {
+  private splitSceneRow(projectId: string, sceneId: string, bornId: string, atWordIndex: number): void {
+    const row = this.sqlite.prepare("SELECT * FROM scenes WHERE id = ? AND project_id = ?").get(sceneId, projectId) as Record<string, unknown> | undefined;
+    if (!row) return;
+    const words = String(row.narration ?? "").split(/\s+/).filter(Boolean);
+    const cut = Math.min(Math.max(1, atWordIndex), Math.max(1, words.length - 1));
+    const left = words.slice(0, cut).join(" ") || String(row.narration ?? "");
+    const right = words.slice(cut).join(" ") || left;
+    const now = new Date().toISOString();
+    const order = Number(row.order);
+    this.sqlite.prepare("UPDATE scenes SET \"order\" = \"order\" + 1, updated_at = ? WHERE project_id = ? AND \"order\" > ?")
+      .run(now, projectId, order);
+    this.sqlite.prepare("UPDATE scenes SET narration = ?, updated_at = ? WHERE id = ?").run(left, now, sceneId);
+    this.sqlite.prepare(
+      `INSERT INTO scenes (
+        id, project_id, "order", kind, section_id, label, narration, visual_notes, visual_description, no_visual,
+        visual_queries, music_mood, energy, est_duration_sec, duration_override_sec, start_sec, transition_note,
+        origin, edited, input_hash, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?)`,
+    ).run(
+      bornId,
+      projectId,
+      order + 1,
+      row.kind,
+      row.section_id,
+      `${row.label} (2)`,
+      right,
+      row.visual_notes,
+      row.visual_description,
+      row.no_visual ? 1 : 0,
+      typeof row.visual_queries === "string" ? row.visual_queries : JSON.stringify(row.visual_queries ?? { primary: "", alternatives: [] }),
+      row.music_mood,
+      row.energy,
+      Number(row.est_duration_sec) / 2,
+      null,
+      Number(row.start_sec) + Number(row.est_duration_sec) / 2,
+      row.transition_note,
+      row.origin,
+      row.input_hash,
+      now,
+      now,
+    );
+  }
+
+  private async dispatch(project: Project, proposal: ReviewProposal, source: "chat" | "assistant" | "mcp"): Promise<unknown> {
+    if (proposalEditsTimeline(proposal)) {
+      const current = this.timelines.get(project.id).timeline;
+      if (!current) throw new AppError(404, "TIMELINE_MISSING", "Chưa có timeline.");
+      const applied = applyTimelineProposal(current, proposal);
+      if ("error" in applied) {
+        throw new AppError(
+          applied.error.startsWith("Timeline đã thay đổi") ? 409 : 400,
+          applied.error.startsWith("Timeline đã thay đổi") ? "TIMELINE_CHANGED" : "INVALID_PROPOSAL",
+          applied.error,
+        );
+      }
+      const saved = this.timelines.writeEdited(project.id, applied.timeline, source, proposal.type);
+      if (proposal.type === "DELETE_SCENE") {
+        this.sqlite.prepare("DELETE FROM scenes WHERE id = ? AND project_id = ?").run(proposal.sceneId, project.id);
+      }
+      if (proposal.type === "REGENERATE_SCENE_VOICE") {
+        this.sqlite.prepare("DELETE FROM voice_tracks WHERE scene_id = ? AND project_id = ?").run(proposal.sceneId, project.id);
+      }
+      if (proposal.type === "SPLIT_SCENE" && applied.bornSceneId) {
+        this.splitSceneRow(project.id, proposal.sceneId, applied.bornSceneId, proposal.atWordIndex);
+      }
+      markStaleFrom(this.repository, project.id, proposal.type === "REGENERATE_SCENE_VOICE" ? "VOICE" : "TIMELINE");
+      return saved;
+    }
     switch (proposal.type) {
-      case "EDIT_NARRATION":
-        return this.scenes.patch(project.id, proposal.sceneId, { narration: proposal.text }, { staleFrom: "VISUAL_REVIEW" });
+      case "EDIT_NARRATION": {
+        const saved = this.scenes.patch(project.id, proposal.sceneId, { narration: proposal.text }, { staleFrom: "VOICE" });
+        const voice = this.repository.getStage(project.id, "VOICE");
+        if (voice.state === "DONE") {
+          this.repository.updateStage(project.id, "VOICE", {
+            state: "STALE",
+            progress: 0,
+            message: null,
+            jobId: null,
+            error: null,
+          });
+        }
+        return saved;
+      }
       case "EDIT_DURATION":
         return this.scenes.patch(
           project.id,
@@ -360,6 +458,17 @@ export class ReviewService {
       }
       case "NOTE":
         throw new AppError(400, "NOTE_NOT_APPLIABLE", "Đề xuất NOTE chỉ là lời khuyên, không áp dụng được.");
+      case "SET_TRANSITION":
+      case "SET_EMPHASIS":
+      case "REMOVE_EMPHASIS":
+      case "ADD_GRAPHIC":
+      case "EDIT_GRAPHIC":
+      case "REMOVE_GRAPHIC":
+      case "SET_SUBTITLE_STYLE":
+      case "DELETE_SCENE":
+      case "SPLIT_SCENE":
+      case "REGENERATE_SCENE_VOICE":
+        throw new AppError(500, "INTERNAL", proposal.type);
       default: {
         const _exhaustive: never = proposal;
         throw new AppError(400, "UNKNOWN_PROPOSAL", `Loại đề xuất không hỗ trợ: ${String((_exhaustive as ReviewProposal).type)}`);
@@ -387,8 +496,14 @@ export class ReviewService {
       if (images.length >= maxImages) break;
       const candidate = scene.selectedCandidate;
       if (!candidate?.localPath) continue;
-      const path = join(projectDir(this.config.DATA_DIR, projectId), "visuals", candidate.localPath);
+      let path: string;
+      try {
+        path = resolveAssetPath(this.config.DATA_DIR, projectId, candidate.localPath);
+      } catch {
+        continue;
+      }
       if (!existsSync(path)) continue;
+      if (visionSourceProblem(readFileSync(path))) continue;
       images.push({ path, label: scene.sceneId });
     }
     return images;

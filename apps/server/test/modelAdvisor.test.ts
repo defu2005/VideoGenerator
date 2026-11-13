@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { randomUUID } from "node:crypto";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { buildApp } from "../src/app.js";
+import { testActor } from "./testActor.js";
 import { parseConfig, type AppConfig } from "../src/lib/config.js";
 import {
   advisorCacheHash,
@@ -44,7 +45,7 @@ beforeEach(() => {
     DATA_DIR: dataDir,
     DATABASE_PATH: join(dataDir, "app.db"),
   };
-  app = buildApp({ config });
+  app = buildApp({ testActor,  config });
 });
 
 afterEach(async () => {
@@ -170,7 +171,7 @@ describe("model advisor catalog and validation", () => {
 });
 
 describe("model advisor API", () => {
-  it("proposes routes for app scope and applies selected task ids", async () => {
+  it("caches a proposal and leaves existing routing untouched when no change qualifies", async () => {
     const propose = await app.inject({
       method: "POST",
       url: "/api/llm/advisor/propose",
@@ -203,21 +204,47 @@ describe("model advisor API", () => {
     });
     expect(apply.statusCode).toBe(200);
     const applied = apply.json<{ applied: string[]; llm: { tasks?: Record<string, { provider: string }> } }>();
-    expect(applied.applied).toEqual(["script", "musicAssist"]);
-    expect(applied.llm.tasks?.script?.provider).toBe("mock");
-    expect(applied.llm.tasks?.musicAssist?.provider).toBe("mock");
-    expect(applied.llm.tasks?.metadata).toBeUndefined();
+    expect(applied.applied).toEqual([]);
 
     const routing = await app.inject({ method: "GET", url: "/api/settings/llm-routing" });
-    expect(routing.json()).toMatchObject({
-      tasks: {
-        script: { provider: "mock" },
-        musicAssist: { provider: "mock" },
-      },
-    });
+    expect(routing.json()).toEqual({});
   });
 
-  it("applies to profile and project scopes", async () => {
+  it("requires matching comparison evidence and rejects a stale baseline", async () => {
+    const setBaseline = (model: string) => app.inject({
+      method: "PUT", url: "/api/settings/llm-routing",
+      payload: { tasks: { script: { provider: "mock", model } } },
+    });
+    const propose = () => app.inject({
+      method: "POST", url: "/api/llm/advisor/propose", payload: { scope: "app" },
+    });
+    expect((await setBaseline("fixture-weaker")).statusCode).toBe(200);
+    const before = (await propose()).json<ModelAdvisorProposal>();
+    expect(before.diff.find((item) => item.taskId === "script")).toMatchObject({ changed: false });
+    const comparison = await app.inject({
+      method: "POST", url: "/api/provider-intel/eval/compare",
+      payload: {
+        suiteId: "script-short", baseline: { provider: "mock", model: "fixture-weaker" },
+        candidate: { provider: "mock", model: "mock-v1" },
+      },
+    });
+    expect(comparison.statusCode).toBe(200);
+    const { runId } = comparison.json<{ runId: string }>();
+    const after = (await propose()).json<ModelAdvisorProposal>();
+    expect(after.diff.find((item) => item.taskId === "script")).toMatchObject({
+      changed: true, proposed: { model: "mock-v1", reason: expect.stringContaining(runId) },
+    });
+    const apply = () => app.inject({
+      method: "POST", url: "/api/llm/advisor/apply",
+      payload: { scope: "app", proposalId: after.proposalId, taskIds: ["script"] },
+    });
+    await setBaseline("different-baseline");
+    expect((await apply()).statusCode).toBe(409);
+    await setBaseline("fixture-weaker");
+    expect((await apply()).json()).toMatchObject({ applied: ["script"], llm: { tasks: { script: { model: "mock-v1" } } } });
+  });
+
+  it("checks profile and project scopes without writing unchanged routes", async () => {
     const profileRes = await app.inject({
       method: "POST",
       url: "/api/profiles",
@@ -248,9 +275,7 @@ describe("model advisor API", () => {
       payload: { scope: "profile", id: profile.id, proposalId: profileProposal.proposalId },
     });
     expect(applyProfile.statusCode).toBe(200);
-    const profileGet = await app.inject({ method: "GET", url: `/api/profiles/${profile.id}` });
-    expect(profileGet.json().llm?.tasks?.script?.provider).toBe("mock");
-    expect(profileGet.json().llm?.autoModel).toBe(true);
+    expect(applyProfile.json()).toMatchObject({ applied: [] });
 
     const proposeProject = await app.inject({
       method: "POST",
@@ -270,7 +295,6 @@ describe("model advisor API", () => {
       },
     });
     expect(applyProject.statusCode).toBe(200);
-    const projectGet = await app.inject({ method: "GET", url: `/api/projects/${project.id}` });
-    expect(projectGet.json().settings.llm?.tasks?.metadata?.provider).toBe("mock");
+    expect(applyProject.json()).toMatchObject({ applied: [] });
   });
 });

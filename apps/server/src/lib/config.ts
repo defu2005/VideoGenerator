@@ -1,8 +1,9 @@
+import os from "node:os";
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { config as loadDotenv } from "dotenv";
 import { delimiter, dirname, isAbsolute, join, resolve } from "node:path";
 import { z } from "zod";
-import { LLM_TASKS, type LlmProviderId, type LlmTaskId, type LlmRoute } from "@vg/shared";
+import { DEFAULT_WEB_IMAGE_DOMAIN_DENYLIST, LLM_TASKS, type LlmProviderId, type LlmTaskId, type LlmRoute } from "@vg/shared";
 import type { LlmProviderLimits } from "../providers/llm/types.js";
 
 function findWorkspaceRoot(startDirectory: string): string | undefined {
@@ -30,8 +31,8 @@ function resolveEdgeTtsPath(env: NodeJS.ProcessEnv = process.env): string {
   for (const entry of pathEntries) candidates.push(join(entry, "edge-tts"), join(entry, "edge-tts.exe"));
   if (process.platform === "win32") {
     for (const [root, versions] of [
-      [env.APPDATA, /^Python3/],
-      [env.LOCALAPPDATA, /^Python/],
+      [env.APPDATA, /^Python3/i],
+      [env.LOCALAPPDATA, /^Python/i],
     ] as const) {
       if (!root) continue;
       const pythonRoot = join(root, "Python");
@@ -49,14 +50,25 @@ const ConfigSchema = z.object({
   PORT: z.coerce.number().int().min(1).max(65535).default(3001),
   HOST: z.string().min(1).default("127.0.0.1"),
   DATA_DIR: z.string().min(1).default("./data"),
+  VG_ENVIRONMENT: z.string().trim().min(1).max(64).default("default"),
   DATABASE_PATH: z.string().min(1).optional(),
   LOG_LEVEL: z.enum(["fatal", "error", "warn", "info", "debug", "trace", "silent"]).default("info"),
   CORS_ORIGIN: z.string().url().default("http://localhost:5173"),
   /** Public web UI base URL for links in notifications (Telegram, etc.). */
   WEB_BASE_URL: z.string().url().default("http://localhost:5180"),
   WORKER_ENABLED: z.stringbool().default(true),
-  WORKER_CONCURRENCY: z.coerce.number().int().positive().max(32).default(1),
+  // TASK-129b: upper bound for the resource governor; default is cpu count x 2, capped at 32.
+  WORKER_CONCURRENCY: z.coerce.number().int().positive().max(32).default(Math.min(32, Math.max(1, os.cpus().length * 2))),
+  RENDER_CONCURRENCY: z.coerce.number().int().positive().max(4).default(1),
   STAGE_TIMEOUT_MS: z.coerce.number().int().positive().default(600_000),
+  NODE_LEASE_SEC: z.coerce.number().int().min(10).max(600).default(60),
+  NODE_MAX_UPLOAD_MB: z.coerce.number().int().positive().default(4096),
+  NODE_SHUTDOWN_GRACE_SEC: z.coerce.number().int().min(0).max(3600).default(120),
+  NODE_CACHE_MAX_GB: z.coerce.number().positive().default(20),
+  VG_CONTROL_URL: z.string().optional(),
+  VG_JOIN_TOKEN: z.string().optional(),
+  VG_NODE_NAME: z.string().optional(),
+  VG_ALLOW_INSECURE_CONTROL: z.stringbool().default(false),
   LLM_TIMEOUT_MS: z.coerce.number().int().positive().default(120_000),
   LLM_CACHE_ENABLED: z.stringbool().default(true),
   LLM_ENABLE_MOCK: z.stringbool().optional(),
@@ -159,12 +171,16 @@ const ConfigSchema = z.object({
   BRAVE_SEARCH_API_KEY: z.string().optional(),
   WEB_IMAGE_GEMINI_MODEL: z.string().min(1).default("gemini-2.5-flash"),
   WEB_IMAGE_SEARCH_PER_MINUTE: z.coerce.number().int().positive().default(30),
-  WEB_IMAGE_DOMAIN_DENYLIST: z.string().default("pinterest.com,pinimg.com,pinterest.co.uk"),
+  WEB_IMAGE_DOMAIN_DENYLIST: z.string().default(DEFAULT_WEB_IMAGE_DOMAIN_DENYLIST.join(",")),
   MUSIC_PROVIDERS: z.string().default("openverse,local"),
   MUSIC_LIBRARY_DIR: z.string().optional(),
   MUSIC_SEARCH_TIMEOUT_MS: z.coerce.number().int().positive().default(30_000),
   /** Base64-encoded 32-byte AES key for the token vault. If unset, a key file is created under DATA_DIR/secrets/. */
   TOKEN_ENCRYPTION_KEY: z.string().optional(),
+  /** Better Auth secret. When unset, a key file is created under DATA_DIR/secrets/. Never log this. */
+  BETTER_AUTH_SECRET: z.string().optional(),
+  /** Extra browser origins, comma-separated. Local web origins are always included. */
+  AUTH_TRUSTED_ORIGINS: z.string().optional(),
   /** OAuth app credentials — fallback when the account vault has none (real publishers in later tasks). */
   YOUTUBE_CLIENT_ID: z.string().optional(),
   YOUTUBE_CLIENT_SECRET: z.string().optional(),
@@ -188,13 +204,23 @@ export type AppConfig = {
   PORT: number;
   HOST: string;
   DATA_DIR: string;
+  VG_ENVIRONMENT: string;
   DATABASE_PATH: string;
   LOG_LEVEL: z.infer<typeof ConfigSchema>["LOG_LEVEL"];
   CORS_ORIGIN: string;
   WEB_BASE_URL: string;
   WORKER_ENABLED: boolean;
   WORKER_CONCURRENCY: number;
+  RENDER_CONCURRENCY: number;
   STAGE_TIMEOUT_MS: number;
+  NODE_LEASE_SEC: number;
+  NODE_MAX_UPLOAD_MB: number;
+  NODE_SHUTDOWN_GRACE_SEC: number;
+  NODE_CACHE_MAX_GB: number;
+  VG_CONTROL_URL?: string;
+  VG_JOIN_TOKEN?: string;
+  VG_NODE_NAME?: string;
+  VG_ALLOW_INSECURE_CONTROL: boolean;
   LLM_TIMEOUT_MS: number;
   LLM_CACHE_ENABLED: boolean;
   LLM_ENABLE_MOCK: boolean;
@@ -288,6 +314,8 @@ export type AppConfig = {
   MUSIC_LIBRARY_DIR: string;
   MUSIC_SEARCH_TIMEOUT_MS: number;
   TOKEN_ENCRYPTION_KEY?: string;
+  BETTER_AUTH_SECRET?: string;
+  AUTH_TRUSTED_ORIGINS?: string;
   YOUTUBE_CLIENT_ID?: string;
   YOUTUBE_CLIENT_SECRET?: string;
   YOUTUBE_DAILY_QUOTA: number;

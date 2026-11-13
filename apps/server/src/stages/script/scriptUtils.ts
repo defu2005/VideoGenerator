@@ -6,6 +6,7 @@ export function scriptInputHash(project: Project, researchInputHash?: string): s
     project.topic,
     project.description,
     project.settings.language,
+    ...(project.settings.market ? [project.settings.market] : []),
     project.settings.targetDurationSec,
     researchInputHash ?? null,
   ])).digest("hex");
@@ -16,6 +17,7 @@ export function researchInputHash(project: Project): string {
     project.topic,
     project.description,
     project.settings.language,
+    ...(project.settings.market ? [project.settings.market] : []),
     project.settings.targetDurationSec,
   ])).digest("hex");
 }

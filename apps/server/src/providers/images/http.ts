@@ -1,4 +1,5 @@
 import type { AppConfig } from "../../lib/config.js";
+import { noteExternalHttp } from "../../knowledge/httpSignal.js";
 import { parseRetryDelay, sleepWithAbort } from "./retry.js";
 import type { FetchJson } from "./types.js";
 
@@ -21,7 +22,23 @@ export async function fetchJsonWithRetry(input: {
         ...input.init,
         signal: controller.signal,
       });
-      if (response.ok) return await response.json() as unknown;
+      noteExternalHttp({
+        provider: input.url.host,
+        endpoint: input.url.pathname,
+        status: response.status,
+        headers: headerNotes(response.headers),
+        category: "D2",
+      });
+      if (response.ok) {
+        try {
+          return await response.json() as unknown;
+        } catch (error) {
+          noteExternalHttp({
+            provider: input.url.host, endpoint: input.url.pathname, status: response.status, schemaOk: false, category: "D2",
+          });
+          throw error;
+        }
+      }
       const providerError = await errorFromFailedResponse(response);
       if (!providerError.retryable || attempt === 1) throw providerError;
       await sleepWithAbort(parseRetryDelay(response.headers.get("retry-after")) || 250, input.signal);
@@ -48,6 +65,15 @@ export async function fetchJsonWithRetry(input: {
     }
   }
   throw lastError instanceof Error ? lastError : new Error("Image provider request failed");
+}
+
+function headerNotes(headers: Headers): Record<string, string> {
+  const notes: Record<string, string> = {};
+  for (const name of ["deprecation", "sunset", "warning", "retry-after"]) {
+    const value = headers.get(name);
+    if (value) notes[name] = value;
+  }
+  return notes;
 }
 
 export class ImageProviderError extends Error {

@@ -47,6 +47,7 @@ export const DEFAULT_NOTIFICATION_SETTINGS: NotificationSettings = NotificationS
 
 export const NotificationSettingsStatusSchema = NotificationSettingsSchema.extend({
   tokenConfigured: z.boolean(),
+  conflict: z.boolean().default(false),
 }).strict();
 export type NotificationSettingsStatus = z.infer<typeof NotificationSettingsStatusSchema>;
 
@@ -139,6 +140,7 @@ export const NotificationEventSchema = z.discriminatedUnion("kind", [
     link: z.string(),
     /** True when an AUTO/automation run unexpectedly stuck at a gate. */
     unexpectedAutoStop: z.boolean().optional(),
+    detail: z.string().optional(),
   }).strict(),
   z.object({
     kind: z.literal("token_expiring"),

@@ -13,8 +13,8 @@ export function scriptReviewPrompt(
   const pace = project.settings.wordsPerMinute ?? wordsPerMinute;
   return {
     system: pass === 1
-      ? "You are a concise script editor. Return only valid JSON with revisedScript and notes."
-      : "You are polishing a reviewed video script. Return only valid JSON with revisedScript and notes.",
+      ? "You are a concise script editor. Return only valid JSON with revisedScript, notes and score from 0 to 10."
+      : "You are polishing a reviewed video script. Return only valid JSON with revisedScript, notes and score from 0 to 10.",
     prompt: appendGuidelineGuidance([
       `${pass === 1 ? "Review and revise" : "Polish"} this ${project.settings.language} narration for a ${project.settings.targetDurationSec}-second video.`,
       `Target duration: ${project.settings.targetDurationSec} seconds`,
@@ -24,7 +24,7 @@ export function scriptReviewPrompt(
       ...(priorNotes.length ? [`Previous review notes: ${JSON.stringify(priorNotes)}`] : []),
       `Research summary: ${research?.summary ?? "No research summary available."}`,
       `Script: ${JSON.stringify(script)}`,
-      'Output: {"revisedScript": <Script>, "notes": ["..."]}',
+      'Output: {"revisedScript": <Script>, "notes": ["..."], "score": 8}',
     ].join("\n"), guidance),
   };
 }

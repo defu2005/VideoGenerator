@@ -1,0 +1,160 @@
+{
+  "id": "metadata",
+  "titleVi": "Tiêu đề và mô tả",
+  "taskId": "metadata",
+  "rubricVi": "Có tiêu đề tiếng Việt trong cửa sổ độ dài.",
+  "cases": [
+    {
+      "id": "metadata-1",
+      "taskId": "metadata",
+      "input": {
+        "script": "Video 1 về ẩm thực."
+      },
+      "graders": [
+        {
+          "kind": "requiredKeys",
+          "keys": [
+            "title"
+          ]
+        },
+        {
+          "kind": "vietnameseDiacritics",
+          "minRatio": 0.01
+        }
+      ]
+    },
+    {
+      "id": "metadata-2",
+      "taskId": "metadata",
+      "input": {
+        "script": "Video 2 về ẩm thực."
+      },
+      "graders": [
+        {
+          "kind": "requiredKeys",
+          "keys": [
+            "title"
+          ]
+        },
+        {
+          "kind": "vietnameseDiacritics",
+          "minRatio": 0.01
+        }
+      ]
+    },
+    {
+      "id": "metadata-3",
+      "taskId": "metadata",
+      "input": {
+        "script": "Video 3 về ẩm thực."
+      },
+      "graders": [
+        {
+          "kind": "requiredKeys",
+          "keys": [
+            "title"
+          ]
+        },
+        {
+          "kind": "vietnameseDiacritics",
+          "minRatio": 0.01
+        }
+      ]
+    },
+    {
+      "id": "metadata-4",
+      "taskId": "metadata",
+      "input": {
+        "script": "Video 4 về ẩm thực."
+      },
+      "graders": [
+        {
+          "kind": "requiredKeys",
+          "keys": [
+            "title"
+          ]
+        },
+        {
+          "kind": "vietnameseDiacritics",
+          "minRatio": 0.01
+        }
+      ]
+    },
+    {
+      "id": "metadata-5",
+      "taskId": "metadata",
+      "input": {
+        "script": "Video 5 về ẩm thực."
+      },
+      "graders": [
+        {
+          "kind": "requiredKeys",
+          "keys": [
+            "title"
+          ]
+        },
+        {
+          "kind": "vietnameseDiacritics",
+          "minRatio": 0.01
+        }
+      ]
+    },
+    {
+      "id": "metadata-6",
+      "taskId": "metadata",
+      "input": {
+        "script": "Video 6 về ẩm thực."
+      },
+      "graders": [
+        {
+          "kind": "requiredKeys",
+          "keys": [
+            "title"
+          ]
+        },
+        {
+          "kind": "vietnameseDiacritics",
+          "minRatio": 0.01
+        }
+      ]
+    },
+    {
+      "id": "metadata-7",
+      "taskId": "metadata",
+      "input": {
+        "script": "Video 7 về ẩm thực."
+      },
+      "graders": [
+        {
+          "kind": "requiredKeys",
+          "keys": [
+            "title"
+          ]
+        },
+        {
+          "kind": "vietnameseDiacritics",
+          "minRatio": 0.01
+        }
+      ]
+    },
+    {
+      "id": "metadata-8",
+      "taskId": "metadata",
+      "input": {
+        "script": "Video 8 về ẩm thực."
+      },
+      "graders": [
+        {
+          "kind": "requiredKeys",
+          "keys": [
+            "title"
+          ]
+        },
+        {
+          "kind": "vietnameseDiacritics",
+          "minRatio": 0.01
+        }
+      ]
+    }
+  ]
+}

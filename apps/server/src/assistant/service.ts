@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { stampWorkspace } from "../auth/requestContext.js";
 import type Database from "better-sqlite3";
 import {
   AssistantConversationSchema,
@@ -13,12 +14,14 @@ import {
   type AssistantPendingAction,
   type AssistantSendResponse,
   type AssistantSettings,
+  type JobUsage,
 } from "@vg/shared";
 import type { FastifyBaseLogger } from "fastify";
 import type { AppDatabase } from "../db/client.js";
 import type { AppConfig } from "../lib/config.js";
 import { AppError } from "../lib/errors.js";
 import type { LlmProviderRegistry } from "../providers/llm/registry.js";
+import { estimateLlmCost } from "../providers/llm/pricing.js";
 import type { AutomationService } from "../services/automationService.js";
 import type { ProfileService } from "../services/profileService.js";
 import type { ProjectService } from "../services/projectService.js";
@@ -34,7 +37,12 @@ import type { ClipService } from "../services/clipService.js";
 import type { CommentInboxService } from "../comments/inboxService.js";
 import { getAssistantSettings, saveAssistantSettings } from "../settings/assistant.js";
 import { runAssistantLoop } from "./loop.js";
-import { getToolRisk, runTool, summarizeTool, type AssistantToolContext } from "./tools.js";
+import type { AuthActor } from "../auth/actor.js";
+import { can, FORBIDDEN_MESSAGE } from "../auth/policy.js";
+import { TOOL_ACTIONS, toolResource } from "../auth/toolActions.js";
+import { currentActor } from "../auth/requestContext.js";
+import { defaultWorkspaceId, systemActorFor } from "../auth/workspaces.js";
+import { getToolRisk, runTool, summarizeTool, type AssistantToolContext, type ConnectionsReader } from "./tools.js";
 
 const PENDING_TTL_MS = 30 * 60 * 1000;
 const busyConversations = new Set<string>();
@@ -65,6 +73,8 @@ type PendingRow = {
   result: string | null;
   created_at: string;
   expires_at: string;
+  workspace_id?: string | null;
+  actor_user_id?: string | null;
 };
 
 export class AssistantService {
@@ -90,6 +100,7 @@ export class AssistantService {
   private finance: FinanceService | undefined;
   private learning: LearningService | undefined;
   private clips: ClipService | undefined;
+  private nodes: import("../node/nodeService.js").NodeService | undefined;
   private comments: CommentInboxService | undefined;
   private trends: import("../trends/trendService.js").TrendService | undefined;
   private translations: import("../translations/translationService.js").TranslationService | undefined;
@@ -106,8 +117,23 @@ export class AssistantService {
     this.learning = service;
   }
 
+  setNodes(service: import("../node/nodeService.js").NodeService): void {
+    this.nodes = service;
+  }
+
   setClips(service: ClipService): void {
     this.clips = service;
+  }
+
+  private connections: ConnectionsReader | undefined;
+
+  setConnections(reader: ConnectionsReader): void {
+    this.connections = reader;
+  }
+
+  /** The user chatting or approving; in-process callers (Telegram, operator, scheduler) act as the workspace system actor. */
+  private actorNow(): AuthActor {
+    return currentActor() ?? systemActorFor(this.sqlite);
   }
 
   setComments(service: CommentInboxService): void {
@@ -151,6 +177,7 @@ export class AssistantService {
     this.sqlite.prepare(
       "INSERT INTO assistant_conversations (id, channel, title, created_at, updated_at) VALUES (?, ?, ?, ?, ?)",
     ).run(id, channel, title, now, now);
+      stampWorkspace(this.sqlite, "assistant_conversations", id);
     return AssistantConversationSchema.parse({
       id,
       channel,
@@ -250,7 +277,8 @@ export class AssistantService {
       profileSummaries,
       signal: options.signal,
       logger: options.logger,
-      createPending: ({ tool, args, summary }) => this.insertPendingAction(conversationId, tool, args, summary),
+      actor: this.actorNow(),
+      createPending: ({ tool, args, summary, actor }) => this.insertPendingAction(conversationId, tool, args, summary, actor),
       runPendingNow: async ({ tool, args }) => {
         try {
           const result = await runTool(tool, args, toolCtx);
@@ -304,6 +332,7 @@ export class AssistantService {
     this.sqlite.prepare(
       "UPDATE assistant_conversations SET updated_at = ? WHERE id = ?",
     ).run(assistantCreated, conversationId);
+    this.recordUsageJobs(loopResult.usageJobs, assistantCreated);
 
     newMessages.push(...toolMessages);
     newMessages.push(this.toMessage({
@@ -372,9 +401,9 @@ export class AssistantService {
     return this.createConversation({ channel: "web", title }).id;
   }
 
-  createCallerPending(title: string, tool: string, args: unknown, summary: string): AssistantPendingAction {
+  createCallerPending(title: string, tool: string, args: unknown, summary: string, actor?: AuthActor): AssistantPendingAction {
     const conversationId = this.ensureCallerConversation(title);
-    return this.insertPendingAction(conversationId, tool, args, summary);
+    return this.insertPendingAction(conversationId, tool, args, summary, actor);
   }
 
   toolContext(): AssistantToolContext {
@@ -387,6 +416,7 @@ export class AssistantService {
   ): Promise<AssistantPendingAction> {
     const row = this.sqlite.prepare("SELECT * FROM assistant_pending_actions WHERE id = ?").get(actionId) as PendingRow | undefined;
     if (!row) throw new AppError(404, "ACTION_NOT_FOUND", "Không tìm thấy thao tác chờ");
+    this.assertMayResolve(row, mode);
 
     const nowIso = this.now().toISOString();
     if (row.expires_at <= nowIso && row.status === "pending") {
@@ -442,20 +472,38 @@ export class AssistantService {
     }
   }
 
+  /** Only a user with the right role in the action's own workspace may approve or reject it. */
+  private assertMayResolve(row: PendingRow, mode: "confirm" | "reject"): void {
+    const approver = this.actorNow();
+    if (row.workspace_id && approver.workspaceId && row.workspace_id !== approver.workspaceId) {
+      throw new AppError(404, "ACTION_NOT_FOUND", "Không tìm thấy thao tác chờ");
+    }
+    const needed = TOOL_ACTIONS[row.tool];
+    if (!needed) throw new AppError(403, "FORBIDDEN", FORBIDDEN_MESSAGE);
+    let args: unknown = {};
+    try { args = JSON.parse(row.args); } catch { /* keep {} */ }
+    const decision = can(approver, mode === "reject" ? "project.read" : needed, toolResource(this.sqlite, args));
+    if (!decision.ok) {
+      throw new AppError(decision.status, decision.status === 404 ? "ACTION_NOT_FOUND" : "FORBIDDEN", decision.reason);
+    }
+  }
+
   private insertPendingAction(
     conversationId: string,
     tool: string,
     args: unknown,
     summary: string,
+    actor: AuthActor = this.actorNow(),
   ): AssistantPendingAction {
     const id = randomUUID();
     const createdAt = this.now().toISOString();
     const expiresAt = new Date(this.now().getTime() + PENDING_TTL_MS).toISOString();
     this.sqlite.prepare(
       `INSERT INTO assistant_pending_actions
-       (id, conversation_id, tool, args, summary, status, result, created_at, expires_at)
-       VALUES (?, ?, ?, ?, ?, 'pending', NULL, ?, ?)`,
-    ).run(id, conversationId, tool, JSON.stringify(args), summary, createdAt, expiresAt);
+       (id, conversation_id, tool, args, summary, status, result, created_at, expires_at, actor_user_id, workspace_id)
+       VALUES (?, ?, ?, ?, ?, 'pending', NULL, ?, ?, ?, ?)`,
+    ).run(id, conversationId, tool, JSON.stringify(args), summary, createdAt, expiresAt,
+      actor.userId || null, actor.workspaceId || defaultWorkspaceId(this.sqlite));
     return AssistantPendingActionSchema.parse({
       id,
       conversationId,
@@ -508,9 +556,11 @@ export class AssistantService {
       finance: this.finance,
       learning: this.learning,
       clips: this.clips,
+      nodes: this.nodes,
       comments: this.comments,
       trends: this.trends,
       translations: this.translations,
+      connections: this.connections,
       signal,
     };
   }
@@ -532,6 +582,36 @@ export class AssistantService {
       createdAt: row.created_at,
       updatedAt: row.updated_at,
     });
+  }
+
+  recordOperatorUsage(runId: string | undefined, jobs: JobUsage[]): void {
+    this.recordUsageJobs(jobs.map((job) => ({
+      ...job,
+      costUsd: estimateLlmCost(this.config, job.provider ?? "", job.model ?? "", job),
+    })), new Date().toISOString(), runId);
+  }
+
+  private recordUsageJobs(jobs: JobUsage[], now: string, operatorRunId?: string): void {
+    if (jobs.length === 0) return;
+    const calls = jobs.flatMap((job) => job.calls ?? []);
+    const usage = {
+      llmCalls: jobs.reduce((sum, job) => sum + job.llmCalls, 0),
+      inputTokens: jobs.reduce((sum, job) => sum + job.inputTokens, 0),
+      outputTokens: jobs.reduce((sum, job) => sum + job.outputTokens, 0),
+      costUsd: jobs.reduce((sum, job) => sum + job.costUsd, 0),
+      provider: jobs.at(-1)?.provider,
+      model: jobs.at(-1)?.model,
+      tokensUnknown: jobs.some((job) => job.tokensUnknown === true),
+      features: { assistantChat: jobs.reduce((sum, job) => sum + job.llmCalls, 0) },
+      ...(calls.length ? { calls } : {}),
+    };
+    this.sqlite.prepare(
+      `INSERT INTO jobs (
+         id, project_id, stage, scope, status, progress, message, attempt, max_attempts,
+         error, usage, created_at, started_at, finished_at, run_after, previous_state
+       ) VALUES (?, NULL, 'ASSISTANT', 'assistantChat', 'SUCCEEDED', 100, ?, 1, 1,
+         NULL, ?, ?, ?, ?, ?, 'PENDING')`,
+    ).run(operatorRunId ?? randomUUID(), operatorRunId ? "Agent operator" : "Trợ lý", JSON.stringify(usage), now, now, now, now);
   }
 
   private toMessage(row: MessageRow): AssistantMessage {

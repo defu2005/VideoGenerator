@@ -83,7 +83,7 @@ describe("user guide coverage", () => {
   it("covers every profile tab and every project tab", () => {
     const profileTabs = tabIds(read(join(webRoot, "src", "features", "profiles", "ProfileDetailPage.tsx")));
     const projectTabs = tabIds(read(join(webRoot, "src", "features", "projects", "ProjectDetailPage.tsx")));
-    expect(profileTabs).toEqual(["direction", "brief", "topics", "automation", "insights", "accounts", "comments", "projects"]);
+    expect(profileTabs).toEqual(["direction", "brief", "style", "topics", "automation", "autonomy", "insights", "knowledge", "memory", "accounts", "comments", "projects"]);
     expect(projectTabs).toContain("overview");
     expect(projectTabs).toContain("render");
     for (const tab of profileTabs) {

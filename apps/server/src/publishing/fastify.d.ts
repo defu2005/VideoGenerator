@@ -16,8 +16,16 @@ import type { TelegramPoller } from "../notifications/telegram.js";
 import type { AssistantService } from "../assistant/service.js";
 import type { OperatorService } from "../operator/service.js";
 import type { ClipService } from "../services/clipService.js";
+import type { ProviderIntelService } from "../providerIntel/service.js";
+import type { AuthActor } from "../auth/actor.js";
+import type { AuthHandle } from "../auth/handle.js";
+import type { Scope } from "../auth/policy.js";
 
 declare module "fastify" {
+  interface FastifyRequest {
+    actor?: AuthActor;
+    scope?: Scope;
+  }
   interface FastifyInstance {
     vgPublish: {
       mock: MockPublisher | null;
@@ -47,6 +55,9 @@ declare module "fastify" {
       service: OperatorService;
     };
     vgClips: ClipService;
+    vgProviderIntel: ProviderIntelService;
+    vgAuth: AuthHandle;
+    vgRoutes: Array<{ method: string; url: string }>;
   }
 }
 

@@ -34,6 +34,7 @@ type PubRow = {
   automation: string | null;
   profile_voice: string | null;
   profile_language: string;
+  render_id: string;
 };
 
 function parseJson<T>(value: string | null | undefined): T | null {
@@ -62,7 +63,8 @@ export function loadFeatureRows(sqlite: Database.Database, profileId: string): F
   const pubs = sqlite.prepare(
     `SELECT pub.id, a.platform, pub.published_at, pub.project_id, pub.account_id,
             pr.topic, pr.title, pr.settings, pr.duration_sec, pub.latest_metrics,
-            pf.automation, pf.voice AS profile_voice, pf.language AS profile_language
+            pf.automation, pf.voice AS profile_voice, pf.language AS profile_language,
+            pub.render_id
      FROM publications pub
      JOIN platform_accounts a ON a.id = pub.account_id
      JOIN projects pr ON pr.id = pub.project_id
@@ -139,12 +141,20 @@ export function loadFeatureRows(sqlite: Database.Database, profileId: string): F
 
   const profits = profitByPublication(sqlite, profileId, pubs);
   const zone = timeZoneOf(pubs[0]?.automation ?? null);
+  const renderIds = [...new Set(pubs.map((row) => row.render_id))];
+  const renderPlaceholders = renderIds.map(() => "?").join(",");
+  const renderRows = renderIds.length === 0 ? [] : sqlite.prepare(
+    `SELECT id, report FROM renders WHERE id IN (${renderPlaceholders})`,
+  ).all(...renderIds) as Array<{ id: string; report: string }>;
+  const reports = new Map(renderRows.map((row) => [row.id, row.report]));
 
   const sources: LearningSource[] = pubs.map((row) => {
     const settings = parseJson<{
       language?: string;
       aspectRatio?: string;
       style?: string;
+      format?: string | null;
+      treatment?: { formatId?: string };
       targetDurationSec?: number;
       voice?: { voice?: string };
     }>(row.settings) ?? {};
@@ -165,13 +175,49 @@ export function loadFeatureRows(sqlite: Database.Database, profileId: string): F
       aspect: settings.aspectRatio ?? null,
       language: settings.language ?? row.profile_language ?? null,
       template: settings.style ?? null,
+      format: settings.treatment?.formatId ?? settings.format ?? null,
       title,
       hashtagCount: meta?.hashtags ?? 0,
       snapshots: byPub.get(row.id) ?? [],
       profit: profits.get(row.id) ?? null,
+      ...composeOf(reports.get(row.render_id)),
     };
   });
   return buildFeatureRows(sources);
+}
+
+const GRAPHIC_KINDS = ["kinetic_text", "chart", "map", "compare", "quote_full", "list_full"];
+
+function composeOf(reportJson: string | undefined): Pick<LearningSource, "engine" | "shotsPerMin" | "stillShare" | "graphicShare" | "beatCutPct" | "hookShotKind" | "kindEntropyBits"> {
+  const empty = {
+    engine: null,
+    shotsPerMin: null,
+    stillShare: null,
+    graphicShare: null,
+    beatCutPct: null,
+    hookShotKind: null,
+    kindEntropyBits: null,
+  };
+  const report = parseJson<{ compose?: { stats?: Record<string, unknown> } }>(reportJson);
+  const stats = report?.compose?.stats;
+  if (!stats || typeof stats !== "object") return empty;
+  const share = stats.kindShare;
+  const kinds = share && typeof share === "object" ? share as Record<string, unknown> : {};
+  const graphic = GRAPHIC_KINDS.reduce((sum, kind) => sum + (typeof kinds[kind] === "number" ? kinds[kind] : 0), 0);
+  const variants = Array.isArray(stats.shotVariants) ? stats.shotVariants : [];
+  const first = variants[0];
+  const hook = first && typeof first === "object" && typeof (first as { kind?: unknown }).kind === "string"
+    ? (first as { kind: string }).kind
+    : null;
+  return {
+    engine: "compose",
+    shotsPerMin: typeof stats.shotsPerMin === "number" ? stats.shotsPerMin : null,
+    stillShare: typeof kinds.still === "number" ? kinds.still : null,
+    graphicShare: graphic,
+    beatCutPct: typeof stats.beatCutPct === "number" ? stats.beatCutPct : null,
+    hookShotKind: hook,
+    kindEntropyBits: typeof stats.kindEntropyBits === "number" ? stats.kindEntropyBits : null,
+  };
 }
 
 function profitByPublication(

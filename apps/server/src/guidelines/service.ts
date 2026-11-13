@@ -1,8 +1,9 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import {
   ScriptSchema,
   TimelineSchema,
   activeGuidelines,
+  builtInGuidelinePack, GuidelinePackSchema,
   checkScriptGuidelines,
   checkTimelineGuidelines,
   guidelinePromptBlock,
@@ -15,8 +16,12 @@ import {
   type Project,
 } from "@vg/shared";
 import type Database from "better-sqlite3";
+import { KnowledgeService } from "../knowledge/service.js";
+import { resolveMarket } from "../knowledge/markets.js";
 import { AppError } from "../lib/errors.js";
 import { getGuidelinePacks } from "./settings.js";
+import { recheckOriginalitySafely } from "../originality/recheckSafely.js";
+import { OriginalityService } from "../originality/service.js";
 
 type FindingRow = {
   id: string;
@@ -36,10 +41,32 @@ type FindingRow = {
 };
 
 export class GuidelineService {
-  constructor(private readonly sqlite: Database.Database) {}
+  constructor(private readonly sqlite: Database.Database, private readonly knowledge = new KnowledgeService(sqlite)) {}
+
+  builtInPacks() {
+    return this.knowledge.list({ kind: "guideline_pack" }).map(({ entry }) => GuidelinePackSchema.parse(entry.value));
+  }
 
   activeFor(project: Project): ActiveGuidelines {
-    return activeGuidelines(project, getGuidelinePacks(this.sqlite));
+    const reads: Record<string, string> = {};
+    const active = activeGuidelines(project, getGuidelinePacks(this.sqlite), (id) => builtInGuidelinePack(id, (key) => {
+      const resolved = this.knowledge.get(key);
+      if (!resolved) return undefined;
+      reads[key] = `${resolved.layer}:${resolved.revision}`;
+      return resolved.entry.value;
+    }), (code) => {
+      const market = resolveMarket(this.sqlite, code);
+      if (!market) return null;
+      reads[market.entry.id] = `${market.layer}:${market.revision}`;
+      return market.pack;
+    });
+    for (const pack of active.packs) {
+      const key = `guideline.${pack.id}`;
+      const hash = createHash("sha256").update(JSON.stringify(pack)).digest("hex").slice(0, 12);
+      reads[key] = `${reads[key] ?? "user"}:${hash}`;
+    }
+    this.knowledge.recordProjectReads(project.id, reads);
+    return active;
   }
 
   guidanceFor(project: Project, targets: readonly GuidelineTarget[]): string {
@@ -72,6 +99,11 @@ export class GuidelineService {
   }
 
   dismiss(projectId: string, findingId: string, reason?: string): GuidelineFinding {
+    const before = this.sqlite.prepare("SELECT rule_id FROM guideline_findings WHERE id = ? AND project_id = ?")
+      .get(findingId, projectId) as { rule_id: string } | undefined;
+    const originality = before?.rule_id.startsWith("ORIG_");
+    if (originality && !reason?.trim()) throw new AppError(400, "REASON_REQUIRED", "Ghi lý do sau khi tự kiểm tra nguồn và đóng góp riêng.");
+    return this.sqlite.transaction(() => {
     const now = new Date().toISOString();
     const updated = this.sqlite.prepare(
       `UPDATE guideline_findings
@@ -80,7 +112,9 @@ export class GuidelineService {
     ).run(reason?.trim() || "user", now, findingId, projectId);
     if (updated.changes === 0) throw new AppError(404, "FINDING_NOT_FOUND", "Guideline finding not found");
     const row = this.sqlite.prepare("SELECT * FROM guideline_findings WHERE id = ?").get(findingId) as FindingRow;
+    if (originality) new OriginalityService(this.sqlite).recordDismissal(projectId);
     return toFinding(row);
+    })();
   }
 
   /** Marks previous OPEN findings for this stage and source as FIXED, then inserts the new drafts. */
@@ -99,7 +133,7 @@ export class GuidelineService {
     this.sqlite.transaction(() => {
       this.sqlite.prepare(
         `UPDATE guideline_findings SET status = 'FIXED', updated_at = ?
-         WHERE project_id = ? AND stage = ? AND source = ? AND status = 'OPEN'`,
+         WHERE project_id = ? AND stage = ? AND source = ? AND status = 'OPEN' AND rule_id NOT GLOB 'ORIG_*'`,
       ).run(now, projectId, stage, source);
       for (const draft of drafts) {
         insert.run(
@@ -137,6 +171,7 @@ export class GuidelineService {
     if (!timeline) return [];
     const drafts = checkTimelineGuidelines(active, timeline, { aspectRatio: project.settings.aspectRatio });
     this.replaceFindings(project.id, "TIMELINE", "CODE", drafts);
+    recheckOriginalitySafely(this.sqlite, project.id);
     return drafts;
   }
 

@@ -5,6 +5,7 @@ import { dirname, join } from "node:path";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { SPEECH_HINT } from "@vg/shared";
 import { buildApp } from "../src/app.js";
+import { testActor } from "./testActor.js";
 import { parseConfig, type AppConfig } from "../src/lib/config.js";
 
 const root = mkdtempSync(join(tmpdir(), "vg-clips-"));
@@ -33,7 +34,7 @@ beforeEach(() => {
   const dataDir = join(root, `data-${randomUUID()}`);
   mkdirSync(dataDir, { recursive: true });
   config = { ...config, DATA_DIR: dataDir, DATABASE_PATH: join(dataDir, "app.db") };
-  app = buildApp({ config });
+  app = buildApp({ testActor,  config });
 });
 
 afterEach(async () => {

@@ -92,17 +92,18 @@ List bình luận, chủ đề, video phân tích, nhật ký thông báo và jo
 
 ## Lệch so với spec
 
-- Nhãn trạng thái dự án và nhiều nút cũ giữ tiếng Anh vì test và `StatusBadge` phụ thuộc chúng. Thanh điều hướng và chữ mới là tiếng Việt.
+- Nhãn trạng thái dự án (`Draft`, `Review`) và một số nút cảnh (`Save changes`, `Split after`) giữ tiếng Anh vì test đang tìm đúng chữ đó. Dòng đang tải, ô tìm dự án và form sửa kịch bản đã là tiếng Việt.
 - “Sắp đăng” là trạng thái trống có link sang lịch, vì stats không có bài sắp đăng.
 - “Tải thêm” là phân trang client. Không thêm query mới.
 - Chi phí LLM trên trang Mức dùng vẫn tối đa 4 số lẻ (`$0.0123`) vì test `usageFormatting` yêu cầu vậy. `formatMoney` dùng cho tài chính đúng 2 số lẻ / VND.
 - Không cập nhật `featureMap` hay `docs/user-guide/`. Guide cấm sửa `packages/shared`, và nhánh này không có `docs/user-guide/`.
 - Chưa chuyển mọi trang sang component mới. Trang cũ giữ markup để hành vi và test không đổi. Token và component mới được dùng ở layout, dashboard, tài chính, mức dùng, quota và gallery.
-- Toast mới gắn vào tạm dừng tự động hoá và gửi trả lời bình luận. Mutation khác vẫn hiện lỗi tại chỗ.
+- Toast gắn vào tạm dừng tự động hoá, gửi trả lời bình luận, pipeline, hình, nhạc, timeline, giọng, phụ đề, chat góp ý, thông tin đăng tải, lịch đăng, cài đặt render, cài đặt AI, thông báo Telegram và ảnh bìa. Các mutation khác vẫn hiện lỗi tại chỗ.
 
 ## Chưa làm
 
-- Chưa restyle hết CSS scene/voice/music/timeline.
-- Chưa gắn toast cho mọi mutation.
+- Xóa tài khoản, ngắt kết nối, xóa thông tin ứng dụng, xóa file bản render, xóa cảnh và xóa lệnh thường trực hỏi bằng hộp xác nhận. Các câu bỏ thay đổi chưa lưu vẫn dùng window.confirm.
+- CSS cảnh, giọng, nhạc và timeline đã chuyển sang token. Khung xem trước phụ đề giữ màu của video. Các trang khác vẫn còn mã màu riêng.
+- Mọi mutation còn lại nhận dòng chung **Đã lưu** hoặc nội dung lỗi, trừ khi trang vừa hiện một dòng riêng trong cùng nửa giây.
 - Chưa có ảnh chụp màn hình.
 - Shell JS vẫn khoảng 512 kB.

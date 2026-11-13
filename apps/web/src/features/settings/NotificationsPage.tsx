@@ -2,6 +2,7 @@ import { useEffect, useState, type FormEvent } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { NotificationSettings, PairingCodeResponse } from "@vg/shared";
 import { ErrorState } from "../../components/ErrorState";
+import { useToast } from "../../components/ui/Toast";
 import { Spinner } from "../../components/Spinner";
 import { LoadMore } from "../../components/ui/LoadMore";
 import {
@@ -16,6 +17,7 @@ import {
 
 export function NotificationsPage() {
   const queryClient = useQueryClient();
+  const toast = useToast();
   const settings = useQuery({ queryKey: ["settings", "notifications"], queryFn: getNotificationSettings });
   const log = useQuery({ queryKey: ["settings", "notifications", "log"], queryFn: getNotificationLog });
   const [form, setForm] = useState<NotificationSettings | null>(null);
@@ -57,10 +59,13 @@ export function NotificationsPage() {
     },
     onSuccess: async () => {
       setMessage("Đã lưu.");
+      toast.success("Đã lưu thông báo");
       await queryClient.invalidateQueries({ queryKey: ["settings", "notifications"] });
     },
     onError: (reason) => {
-      setMessage(reason instanceof Error ? reason.message : "Không lưu được");
+      const text = reason instanceof Error ? reason.message : "Không lưu được";
+      setMessage(text);
+      toast.error(text);
     },
   });
 
@@ -69,10 +74,13 @@ export function NotificationsPage() {
     onSuccess: async () => {
       setToken("");
       setMessage("Đã lưu token bot.");
+      toast.success("Đã lưu token bot");
       await queryClient.invalidateQueries({ queryKey: ["settings", "notifications"] });
     },
     onError: (reason) => {
-      setMessage(reason instanceof Error ? reason.message : "Token không hợp lệ");
+      const text = reason instanceof Error ? reason.message : "Token không hợp lệ";
+      setMessage(text);
+      toast.error(text);
     },
   });
 
@@ -80,8 +88,10 @@ export function NotificationsPage() {
     mutationFn: () => deleteTelegramToken(),
     onSuccess: async () => {
       setMessage("Đã xoá token.");
+      toast.success("Đã xoá token");
       await queryClient.invalidateQueries({ queryKey: ["settings", "notifications"] });
     },
+    onError: (reason) => toast.error(reason instanceof Error ? reason.message : "Không xoá được token"),
   });
 
   const pair = useMutation({
@@ -89,20 +99,28 @@ export function NotificationsPage() {
     onSuccess: (value) => {
       setPairing(value);
       setMessage("Mã ghép nối đã tạo (hết hạn sau 10 phút).");
+      toast.success("Đã tạo mã ghép nối");
     },
     onError: (reason) => {
-      setMessage(reason instanceof Error ? reason.message : "Không tạo được mã");
+      const text = reason instanceof Error ? reason.message : "Không tạo được mã";
+      setMessage(text);
+      toast.error(text);
     },
   });
 
   const test = useMutation({
     mutationFn: () => sendTestNotification(),
     onSuccess: async (result) => {
-      setMessage(result.ok ? "Đã gửi thông báo thử." : (result.error ?? "Gửi thử thất bại"));
+      const text = result.ok ? "Đã gửi thông báo thử." : (result.error ?? "Gửi thử thất bại");
+      setMessage(text);
+      if (result.ok) toast.success(text);
+      else toast.error(text);
       await queryClient.invalidateQueries({ queryKey: ["settings", "notifications", "log"] });
     },
     onError: (reason) => {
-      setMessage(reason instanceof Error ? reason.message : "Gửi thử thất bại");
+      const text = reason instanceof Error ? reason.message : "Gửi thử thất bại";
+      setMessage(text);
+      toast.error(text);
     },
   });
 
@@ -179,6 +197,12 @@ export function NotificationsPage() {
             </button>
           )}
         </div>
+
+        {status.conflict && (
+          <div className="pairing-box" role="alert" style={{ borderColor: "var(--color-danger, #ef4444)" }}>
+            <p><strong>⚠️ Xung đột Telegram (HTTP 409):</strong> Có tiến trình khác đang cùng đọc bot Telegram này. Bot tạm thời lùi thời gian đọc.</p>
+          </div>
+        )}
 
         <dl className="status-list">
           <div>
@@ -392,6 +416,79 @@ export function NotificationsPage() {
           </div>
         )}
       </section>
+      <WebhookCard />
+    </section>
+  );
+}
+
+function WebhookCard() {
+  const toast = useToast();
+  const [url, setUrl] = useState("");
+  const [secret, setSecret] = useState("");
+  const [endpointId, setEndpointId] = useState("");
+  const [allowPrivate, setAllowPrivate] = useState(false);
+  const [log, setLog] = useState<Array<{ id: string; status: string; last_error: string | null }>>([]);
+  async function create(event: FormEvent) {
+    event.preventDefault();
+    const response = await fetch("/api/webhooks", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ name: "Agent bên ngoài", url, allowPrivate, eventTypes: [] }),
+    });
+    if (!response.ok) {
+      toast.error("Không tạo được webhook.");
+      return;
+    }
+    const body = await response.json() as { secret?: string; endpoint?: { id: string } };
+    setSecret(body.secret ?? "");
+    setEndpointId(body.endpoint?.id ?? "");
+    toast.success("Đã tạo webhook. Bí mật chỉ hiện một lần.");
+  }
+  async function testHook() {
+    if (!endpointId) return;
+    const response = await fetch(`/api/webhooks/${endpointId}/test`, { method: "POST" });
+    if (!response.ok) toast.error("Không gửi được sự kiện thử.");
+    else toast.success("Đã gửi sự kiện ping.");
+  }
+  async function rotate() {
+    if (!endpointId) return;
+    const response = await fetch(`/api/webhooks/${endpointId}/rotate-secret`, { method: "POST" });
+    if (!response.ok) {
+      toast.error("Không đổi được bí mật.");
+      return;
+    }
+    const body = await response.json() as { secret?: string };
+    setSecret(body.secret ?? "");
+    toast.success("Bí mật mới chỉ hiện một lần.");
+  }
+  async function loadLog() {
+    if (!endpointId) return;
+    const response = await fetch(`/api/webhooks/${endpointId}/deliveries`);
+    if (!response.ok) return;
+    const body = await response.json() as { deliveries: Array<{ id: string; status: string; last_error: string | null }> };
+    setLog(body.deliveries);
+  }
+  return (
+    <section className="panel">
+      <h2>Kết nối agent bên ngoài</h2>
+      <p>Webhook nhận sự kiện pipeline. Bí mật không được lưu lại trên trang này sau khi rời đi.</p>
+      <form onSubmit={create}>
+        <input aria-label="Địa chỉ webhook" value={url} onChange={(event) => setUrl(event.target.value)} placeholder="https://example.com/hooks" />
+        <label>
+          <input type="checkbox" checked={allowPrivate} onChange={(event) => setAllowPrivate(event.target.checked)} />
+          Cho phép mạng nội bộ
+        </label>
+        <button type="submit">Tạo webhook</button>
+      </form>
+      {endpointId ? (
+        <p>
+          <button type="button" onClick={() => void testHook()}>Gửi thử</button>
+          <button type="button" onClick={() => void rotate()}>Đổi bí mật</button>
+          <button type="button" onClick={() => void loadLog()}>Nhật ký gửi</button>
+        </p>
+      ) : null}
+      {secret ? <p>Bí mật: {secret}</p> : null}
+      {log.length ? <ul aria-label="Nhật ký webhook">{log.map((row) => <li key={row.id}>{row.status}{row.last_error ? ` · ${row.last_error}` : ""}</li>)}</ul> : null}
     </section>
   );
 }

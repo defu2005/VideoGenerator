@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { BudgetEstimateSchema } from "@vg/shared";
+import { BudgetEstimateSchema, type Project } from "@vg/shared";
 import { ErrorState } from "../../components/ErrorState";
 import { Spinner } from "../../components/Spinner";
 import { useProjectUsage } from "../../hooks/useUsage";
@@ -13,7 +13,46 @@ function formatTime(value: string | null): string {
   return value ? new Intl.DateTimeFormat("vi-VN", { dateStyle: "short", timeStyle: "short" }).format(new Date(value)) : "Đang chạy";
 }
 
-export function ProjectUsagePanel({ projectId }: { projectId: string }) {
+function countText(value: number): string {
+  return value.toLocaleString("vi-VN");
+}
+
+function TreatmentCostCard({
+  estimate,
+  actual,
+}: {
+  estimate: { inputTokens: number; outputTokens: number; ttsCharacters: number };
+  actual: string;
+}) {
+  return (
+    <section className="panel" aria-label="Ước tính vs thực tế">
+      <h2>Ước tính vs thực tế</h2>
+      <p>Ước tính: {countText(estimate.inputTokens)} token vào, {countText(estimate.outputTokens)} token ra, {countText(estimate.ttsCharacters)} ký tự đọc.</p>
+      <p>Thực tế: {actual}</p>
+    </section>
+  );
+}
+
+function TreatmentCostLive({ project }: { project: Project }) {
+  const usage = useProjectUsage(project.id);
+  const treatment = project.settings.treatment;
+  if (!treatment) return null;
+  const totals = usage.data?.totals;
+  const spoken = usage.data?.runs.reduce((sum, run) => sum + run.calls.reduce((inner, call) => inner + (call.characters ?? 0), 0), 0) ?? 0;
+  const actual = usage.isPending
+    ? "Đang tải thực tế."
+    : usage.isError
+      ? "Chưa tải được số thực tế."
+      : `${countText(totals?.inputTokens ?? 0)} token vào, ${countText(totals?.outputTokens ?? 0)} token ra, ${countText(spoken)} ký tự đọc.`;
+  return <TreatmentCostCard estimate={treatment.cost} actual={actual} />;
+}
+
+export function TreatmentCostCompare({ project }: { project: Project }) {
+  if (!project.settings.treatment) return null;
+  return <TreatmentCostLive project={project} />;
+}
+
+export function ProjectUsagePanel({ projectId, project }: { projectId: string; project?: Project }) {
   const [expandedStage, setExpandedStage] = useState<string | null>(null);
   const usage = useProjectUsage(projectId);
   const estimate = useQuery({
@@ -49,6 +88,12 @@ export function ProjectUsagePanel({ projectId }: { projectId: string }) {
         </article>
       </section>
       <p className={`usage-estimate${estimate.isError ? " is-error" : ""}`} role={estimate.isError ? "alert" : undefined}>{estimateText}</p>
+      {project?.settings.treatment && (
+        <TreatmentCostCard
+          estimate={project.settings.treatment.cost}
+          actual={`${countText(totals.inputTokens)} token vào, ${countText(totals.outputTokens)} token ra, ${countText(data.runs.reduce((sum, run) => sum + run.calls.reduce((inner, call) => inner + (call.characters ?? 0), 0), 0))} ký tự đọc.`}
+        />
+      )}
       <section className="panel usage-section">
         <div className="section-heading"><div><p className="eyebrow">QUÁ TRÌNH</p><h2>Mức dùng theo quá trình</h2></div></div>
         {data.byStage.length === 0 ? <p className="usage-empty">Video này chưa có dữ liệu gọi LLM.</p> : (

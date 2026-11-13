@@ -132,7 +132,7 @@ describe("PipelinePanel", () => {
 
     renderWithProviders(<PipelinePanel projectId={projectId} project={project} />);
 
-    expect(await screen.findByText(/Ước tính: ~8–14 lượt gọi AI/)).toBeInTheDocument();
+    expect(await screen.findByText(/Ước tính: ~11–17 lượt gọi AI/)).toBeInTheDocument();
     expect(screen.getByText("research: mock · research-model · 1–2 calls")).toBeInTheDocument();
     expect(screen.getByText("scriptReview: mock · review-model · 1–2 calls")).toBeInTheDocument();
     expect(screen.getByText("sceneQueries: mock · scene-model · 1 calls")).toBeInTheDocument();
@@ -208,6 +208,7 @@ describe("PipelinePanel", () => {
       expect.objectContaining({ method: "POST" }),
     ));
     expect(screen.getAllByText("Review gate")).toHaveLength(3);
+    expect(await screen.findByText("Đã duyệt cổng")).toBeInTheDocument();
   });
 
   it("reduces a burst of job updates without leaving a stale active job", async () => {
@@ -325,7 +326,7 @@ describe("PipelinePanel", () => {
     await waitFor(() => expect(screen.getByRole("button", { name: "Generate All" })).toBeInTheDocument());
     const source = MockEventSource.instances[0];
     fireEvent.click(screen.getByRole("button", { name: "Generate All" }));
-    await waitFor(() => expect(screen.getByRole("alert")).toHaveTextContent("Complete RESEARCH first"));
+    await waitFor(() => expect(screen.getAllByRole("alert").some((item) => item.textContent?.includes("Complete RESEARCH first"))).toBe(true));
 
     const updated = { ...pipeline.stages[0], state: "DONE" as const, progress: 100, message: "Finished" };
     pipeline.stages[0] = updated;
@@ -358,5 +359,34 @@ describe("PipelinePanel", () => {
       unmount();
       expect(source.closed).toBe(true);
     }
+  });
+
+  it("shows a waiting visual gate beside a running voice lane", async () => {
+    const pipeline = makePipeline();
+    pipeline.status = "REVIEW";
+    pipeline.currentStage = "VISUAL_REVIEW";
+    pipeline.stages = pipeline.stages.map((stage) => {
+      if (stage.stage === "VISUAL_REVIEW") return { ...stage, state: "WAITING_USER", message: "Waiting for your approval" };
+      if (stage.stage === "VOICE") return { ...stage, state: "RUNNING", progress: 40, message: "Reading" };
+      if (["RESEARCH", "SCRIPT", "SCENE_PLAN", "VISUAL_SEARCH"].includes(stage.stage)) return { ...stage, state: "DONE", progress: 100 };
+      return stage;
+    });
+    const voiceJob = { ...makeJob("RUNNING", "VOICE", 40), id: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb" };
+    pipeline.activeJob = voiceJob;
+    pipeline.activeJobs = [voiceJob];
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
+      if (String(input).includes("/health")) {
+        return jsonResponse({ status: "ok", version: "0.1.0", db: "ok", render: "render: 1/1 đang chạy", renderRunning: 1, renderConcurrency: 1 });
+      }
+      return jsonResponse(pipeline);
+    }));
+    vi.stubGlobal("EventSource", MockEventSource);
+    renderWithProviders(<PipelinePanel projectId={projectId} />);
+    expect(await screen.findByText("WAITING USER")).toBeInTheDocument();
+    expect(screen.getByText("RUNNING")).toBeInTheDocument();
+    expect(screen.getByText("Giọng, phụ đề và nhạc vẫn chạy khi ảnh đang chờ bạn.")).toBeInTheDocument();
+    expect(screen.getByText("render: 1/1 đang chạy")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Hủy làn" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Approve" })).toBeEnabled();
   });
 });

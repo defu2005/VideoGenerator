@@ -1,0 +1,33 @@
+{
+  "id": "list_item",
+  "version": 1,
+  "nameVi": "Mục danh sách",
+  "descriptionVi": "Huy hiệu số và tiêu đề mục.",
+  "kinds": [
+    "overlay"
+  ],
+  "minDurationSec": 1.5,
+  "maxDurationSec": 6,
+  "defaultDurationSec": 3,
+  "safeArea": "lower",
+  "origin": "written for this app",
+  "variables": [
+    {
+      "name": "badge",
+      "type": "string",
+      "maxLength": 8,
+      "default": "#1"
+    },
+    {
+      "name": "title",
+      "type": "string",
+      "maxLength": 40,
+      "default": ""
+    },
+    {
+      "name": "color",
+      "type": "color",
+      "default": "#F8FAFC"
+    }
+  ]
+}

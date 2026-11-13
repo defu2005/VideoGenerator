@@ -2,11 +2,19 @@ import { randomUUID } from "node:crypto";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { scriptPrompt } from "../src/stages/script/prompt.js";
 import { buildApp } from "../src/app.js";
+import { testActor } from "./testActor.js";
 import { parseConfig, type AppConfig } from "../src/lib/config.js";
-import type { PlatformAccount, ProfileDetail, Project } from "@vg/shared";
+import { DEFAULT_NOTIFICATION_SETTINGS, marketPack, snapshotKnowledge, type PlatformAccount, type ProfileDetail, type Project } from "@vg/shared";
+import { buildTopicSuggestPrompt } from "../src/services/topicService.js";
+import { defaultVoiceFor } from "../src/lib/defaultVoice.js";
+import { buildSystemPrompt } from "../src/assistant/loop.js";
+import { ASSISTANT_TOOLS, periodToRange, type AssistantToolContext } from "../src/assistant/tools.js";
+import { openDatabase } from "../src/db/client.js";
+import { getNotificationTimezone, saveNotificationSettings } from "../src/settings/notifications.js";
+import { KnowledgeService } from "../src/knowledge/service.js";
 
 const root = mkdtempSync(join(tmpdir(), "vg-profiles-test-"));
 let config: AppConfig;
@@ -30,7 +38,7 @@ beforeEach(() => {
     DATA_DIR: dataDir,
     DATABASE_PATH: join(dataDir, "app.db"),
   };
-  app = buildApp({ config });
+  app = buildApp({ testActor,  config });
 });
 
 afterEach(async () => {
@@ -52,6 +60,120 @@ async function createProfile(payload: Record<string, unknown> = { name: `Hồ s�
 }
 
 describe("profile API", () => {
+  it("previews and selectively applies market defaults while preserving manual edits and older projects", async () => {
+    const profile = await createProfile({ name: "Market preview", automation: { videosPerDay: 2 } });
+    const path = `/api/profiles/${profile.id}`;
+    const createProject = async () => {
+      const result = await app.inject({ method: "POST", url: "/api/projects", payload: { topic: "Market fixture", profileId: profile.id } });
+      expect(result.statusCode).toBe(201);
+      return result.json<Project>();
+    };
+    const old = await createProject();
+    expect(old.settings.market).toBeUndefined();
+    const account = await app.inject({ method: "POST", url: `${path}/accounts`, payload: { platform: "tiktok", displayName: "Test TikTok" } });
+    expect(account.statusCode).toBe(201);
+    const manual = await app.inject({ method: "PATCH", url: path, payload: { language: "fr" } });
+    expect(manual.statusCode).toBe(200);
+    const changedMarket = await app.inject({ method: "PATCH", url: path, payload: { market: "GB" } });
+    expect(changedMarket.json<ProfileDetail>()).toMatchObject({ market: "GB", language: "fr",
+      automation: { timezone: "Asia/Ho_Chi_Minh", publishTimes: ["19:00"] }, trendSettings: { region: "VN" } });
+    const preview = await app.inject({ method: "GET", url: `${path}/market-defaults?code=GB` });
+    expect(preview.statusCode).toBe(200);
+    expect(preview.json().changes).toEqual(expect.arrayContaining([
+      { field: "language", from: "fr", to: "en", recentlyEdited: true },
+      { field: "publishTimes", from: ["19:00"], to: ["15:00", "23:00"], recentlyEdited: false },
+    ]));
+    const stale = await app.inject({ method: "POST", url: `${path}/apply-market-defaults`,
+      payload: { code: "GB", fields: ["language"], previewToken: "0".repeat(64) } });
+    expect(stale.statusCode).toBe(409);
+    const applied = await app.inject({ method: "POST", url: `${path}/apply-market-defaults`,
+      payload: { code: "GB", fields: ["timezone", "publishTimes", "trendSettings.region"], previewToken: preview.json().previewToken } });
+    expect(applied.statusCode).toBe(200);
+    expect(applied.json<ProfileDetail>()).toMatchObject({ market: "GB", language: "fr",
+      automation: { timezone: "Europe/London", publishTimes: ["15:00", "23:00"] }, trendSettings: { region: "GB", language: "vi" } });
+    const invalid = await app.inject({ method: "PATCH", url: path, payload: { market: "ZZ" } });
+    expect(invalid.statusCode).toBe(400);
+    const fresh = await createProject();
+    expect(fresh.settings.market).toBe("GB");
+    expect((await app.inject({ method: "GET", url: `/api/projects/${old.id}` })).json<Project>().settings.market).toBeUndefined();
+  });
+
+  it("seeds new profiles and warns about unavailable platforms without blocking the account", async () => {
+    const gb = await createProfile({ name: "GB defaults", market: "GB", defaultBrief: { platform: "tiktok" } });
+    expect(gb).toMatchObject({ market: "GB", language: "en", automation: { timezone: "Europe/London", publishTimes: ["15:00"] },
+      trendSettings: { region: "GB", language: "en" } });
+    const india = await createProfile({ name: "India warning", market: "IN" });
+    const path = `/api/profiles/${india.id}/accounts`;
+    const created = await app.inject({ method: "POST", url: path, payload: { platform: "tiktok", displayName: "Test TikTok" } });
+    expect(created.statusCode).toBe(201);
+    const account = created.json<PlatformAccount>();
+    expect(account.marketWarning).toContain("chưa khả dụng");
+    const detail = await app.inject({ method: "GET", url: `${path}/${account.id}/connection` });
+    expect(detail.statusCode).toBe(200);
+    expect(detail.json().marketWarning).toEqual(account.marketWarning);
+    const market = await app.inject({ method: "GET", url: "/api/markets/GB" });
+    expect(market.json()).toMatchObject({ pack: { code: "GB" }, defaults: { voiceLocale: "en-GB" } });
+  });
+
+  it("lists and uses a new market once its knowledge entry is accepted", async () => {
+    await app.ready();
+    const { sqlite } = openDatabase(config.DATABASE_PATH);
+    try {
+      const knowledge = new KnowledgeService(sqlite);
+      const template = snapshotKnowledge("market.GB")!;
+      const pack = { ...marketPack("GB")!, code: "NZ", name: { en: "New Zealand" },
+        timezones: ["Pacific/Auckland"], defaultTimezone: "Pacific/Auckland" };
+      const proposed = knowledge.propose({ ...template, id: "market.NZ", scope: { platforms: ["*"], markets: ["NZ"] }, value: pack }, "Test entry");
+      expect((await app.inject({ method: "GET", url: "/api/markets" })).json().markets).toHaveLength(17);
+      knowledge.decide(proposed.id, "accepted");
+      expect((await app.inject({ method: "GET", url: "/api/markets" })).json().markets).toEqual(expect.arrayContaining([
+        expect.objectContaining({ code: "NZ" }),
+      ]));
+      expect((await createProfile({ name: "Newly accepted fixture", market: "NZ" })).automation.timezone).toBe("Pacific/Auckland");
+    } finally {
+      sqlite.close();
+    }
+  });
+
+  it("uses notification timezone in the assistant prompt and reporting tools", async () => {
+    await app.ready();
+    const { sqlite } = openDatabase(config.DATABASE_PATH);
+    const now = new Date("2026-11-11T02:00:00Z");
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(now);
+    try {
+      saveNotificationSettings(sqlite, { ...DEFAULT_NOTIFICATION_SETTINGS, timezone: "America/Los_Angeles" });
+      const timezone = getNotificationTimezone(sqlite);
+      expect(buildSystemPrompt({ now, timezone, profiles: [] })).toContain("11/10/2026");
+      expect(periodToRange(1, now, "Pacific/Kiritimati")).toEqual({ from: "2026-11-11", to: "2026-11-11" });
+      const getSummary = vi.fn();
+      await ASSISTANT_TOOLS.finance_summary!.execute({ period: "7d" }, { sqlite, finance: { getSummary } } as unknown as AssistantToolContext);
+      expect(getSummary).toHaveBeenCalledWith(expect.objectContaining({ from: "2026-11-04", to: "2026-11-10" }));
+      const info = await ASSISTANT_TOOLS.get_market_pack!.execute({ code: "GB" }, { sqlite } as AssistantToolContext);
+      expect(info).toMatchObject({ pack: { code: "GB" }, defaults: { language: "en" } });
+      expect(ASSISTANT_TOOLS.update_profile_direction!.risk).toBe("confirm");
+    } finally {
+      vi.useRealTimers();
+      sqlite.close();
+    }
+  });
+
+  it("uses market in script, topic and voice defaults only when present", () => {
+    const project = { topic: "Market prompt", settings: { language: "en", aspectRatio: "16:9",
+      targetDurationSec: 120, style: "documentary", tone: "neutral", audience: "general", platform: "youtube" } } as Project;
+    expect(scriptPrompt(project).prompt).not.toContain("Audience country:");
+    expect(scriptPrompt({ ...project, settings: { ...project.settings, market: "US" } }).prompt)
+      .toContain("United States (US). Use local units, currency, examples and date format.");
+    const input = { direction: "", language: "en", hint: "", count: 3, pastTopics: [], topicAngles: [], avoid: [] };
+    expect(buildTopicSuggestPrompt(input).prompt).not.toContain("upcomingEvents");
+    expect(buildTopicSuggestPrompt({ ...input, market: { pack: marketPack("GB")!, from: new Date("2026-11-11") } }).prompt)
+      .toContain("St Andrew’s Day");
+    const voices = [{ name: "US", language: "en-US" }, { name: "GB", language: "en-GB" }];
+    expect(defaultVoiceFor("en-GB", voices, config, undefined, true)).toBe("GB");
+    expect(defaultVoiceFor("en-GB", [voices[0]!], config, undefined, true)).toBe("US");
+    expect(defaultVoiceFor("en", voices, config)).toBe(config.TTS_VOICE_EN);
+  });
+
   it("supports profile CRUD, archive, and account lifecycle", async () => {
     const created = await createProfile({
       name: "Lịch sử 5 phút",
@@ -118,7 +240,7 @@ describe("profile API", () => {
     });
     expect(removed.statusCode).toBe(204);
 
-    // Simulate connected account → delete must 409
+    // Wizard cleanup keeps a connected account. Explicit removal can delete it.
     const Database = (await import("better-sqlite3")).default;
     const sqlite = new Database(config.DATABASE_PATH);
     sqlite.prepare("UPDATE platform_accounts SET connection = ? WHERE id = ?").run("CONNECTED", youtubeAccount.id);
@@ -126,9 +248,15 @@ describe("profile API", () => {
 
     const blocked = await app.inject({
       method: "DELETE",
-      url: `/api/profiles/${created.id}/accounts/${youtubeAccount.id}`,
+      url: `/api/profiles/${created.id}/accounts/${youtubeAccount.id}?unfinished=true`,
     });
-    expect(blocked.statusCode).toBe(409);
+    expect(blocked.statusCode).toBe(204);
+    const kept = await app.inject({ method: "GET", url: `/api/profiles/${created.id}` });
+    expect(kept.json().accounts).toContainEqual(expect.objectContaining({ id: youtubeAccount.id, connection: "CONNECTED" }));
+    const explicitlyRemoved = await app.inject({
+      method: "DELETE", url: `/api/profiles/${created.id}/accounts/${youtubeAccount.id}`,
+    });
+    expect(explicitlyRemoved.statusCode).toBe(204);
 
     const archived = await app.inject({
       method: "POST",

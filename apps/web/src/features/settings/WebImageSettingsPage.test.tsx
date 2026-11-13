@@ -31,7 +31,7 @@ describe("WebImageSettingsPage", () => {
 
     renderWithProviders(<WebImageSettingsPage />);
     expect(await screen.findByRole("heading", { name: "Nguồn ảnh web" })).toBeInTheDocument();
-    expect(screen.getByText(/thiếu key \(BRAVE_SEARCH_API_KEY\)/)).toBeInTheDocument();
+    expect(screen.getByText(/thiếu key \(nhập bên dưới\)/)).toBeInTheDocument();
     expect(screen.getByText(/đã cấu hình/)).toBeInTheDocument();
     expect(screen.getByText(/Lượt tháng này: 2/)).toBeInTheDocument();
 

@@ -8,15 +8,19 @@ import {
 } from "@vg/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
+import { ApiRequestError } from "../../services/apiClient";
 import { ErrorState } from "../../components/ErrorState";
+import { useToast } from "../../components/ui/Toast";
 import { Spinner } from "../../components/Spinner";
 import { pipelineKeys } from "../../hooks/usePipeline";
+import { previewEditWindow } from "../../services/timelineApi";
 import { runPipeline } from "../../services/pipelineApi";
 import {
   applyReviewProposal,
   getProjectReview,
   resetProjectReview,
   sendReviewMessage,
+  undoReviewTimeline,
 } from "../../services/reviewApi";
 
 const reviewKeys = { project: (projectId: string) => ["review", projectId] as const };
@@ -32,8 +36,56 @@ function proposalLabel(proposal: ReviewProposal): string {
     case "REORDER_SCENES": return "Đổi thứ tự cảnh";
     case "EDIT_METADATA": return "Sửa metadata đăng tải";
     case "NOTE": return "Ghi chú";
+    case "SET_TRANSITION": return `Chuyển cảnh · ${proposal.transitionType}`;
+    case "SET_EMPHASIS": return "Nhấn mạnh từ";
+    case "REMOVE_EMPHASIS": return "Bỏ nhấn mạnh";
+    case "ADD_GRAPHIC": return `Thêm đồ họa · ${proposal.templateId}`;
+    case "EDIT_GRAPHIC": return "Sửa đồ họa";
+    case "REMOVE_GRAPHIC": return "Xóa đồ họa";
+    case "SET_SUBTITLE_STYLE": return `Kiểu phụ đề · ${proposal.style}`;
+    case "DELETE_SCENE": return "Xóa cảnh";
+    case "SPLIT_SCENE": return "Tách cảnh";
+    case "REGENERATE_SCENE_VOICE": return "Đọc lại giọng";
     default: return "Đề xuất";
   }
+}
+
+function proposalSceneId(proposal: ReviewProposal): string | null {
+  switch (proposal.type) {
+    case "EDIT_NARRATION":
+    case "EDIT_DURATION":
+    case "EDIT_VISUAL_QUERY":
+    case "SET_MOTION":
+    case "SET_EMPHASIS":
+    case "REMOVE_EMPHASIS":
+    case "DELETE_SCENE":
+    case "SPLIT_SCENE":
+    case "REGENERATE_SCENE_VOICE":
+      return proposal.sceneId;
+    case "SET_TRANSITION":
+      return proposal.afterSceneId;
+    case "ADD_GRAPHIC":
+      return proposal.sceneId;
+    default:
+      return null;
+  }
+}
+
+function proposalDiff(proposal: ReviewProposal) {
+  if (proposal.type === "EDIT_NARRATION") return <p>Sau khi sửa: {proposal.text}</p>;
+  if (proposal.type === "SET_TRANSITION") return <span className="review-chip">{proposal.transitionType} · {proposal.durationSec}s</span>;
+  if (proposal.type === "REORDER_SCENES") return <p>Thứ tự mới: {proposal.sceneIds.join(" → ")}</p>;
+  if (proposal.type === "ADD_GRAPHIC") {
+    const variables = encodeURIComponent(JSON.stringify(proposal.variables));
+    return (
+      <iframe
+        title="Xem trước đồ họa"
+        sandbox="allow-scripts"
+        src={`/api/motion/preview?template=${proposal.templateId}&variables=${variables}`}
+      />
+    );
+  }
+  return null;
 }
 
 function proposalDetail(proposal: ReviewProposal): string {
@@ -52,15 +104,22 @@ function proposalDetail(proposal: ReviewProposal): string {
     case "REORDER_SCENES": return `${proposal.sceneIds.length} cảnh`;
     case "EDIT_METADATA": return [proposal.title, proposal.description, proposal.tags?.join(", ")].filter(Boolean).join(" · ");
     case "NOTE": return proposal.text;
+    case "SET_TRANSITION": return `${proposal.transitionType} · ${proposal.durationSec}s`;
+    case "ADD_GRAPHIC": return proposal.templateId;
+    case "SET_SUBTITLE_STYLE": return proposal.style;
+    case "SET_EMPHASIS": return proposal.effects.join(", ");
     default: return "";
   }
 }
 
 export function ReviewChatPanel({ project }: { project: Project }) {
   const queryClient = useQueryClient();
+  const toast = useToast();
   const [open, setOpen] = useState(false);
   const [draft, setDraft] = useState("");
   const [error, setError] = useState("");
+  const [timelineChanged, setTimelineChanged] = useState(false);
+  const [quickPreview, setQuickPreview] = useState("");
   const [staleStages, setStaleStages] = useState<PipelineStage[]>([]);
   const [applyingKey, setApplyingKey] = useState<string | null>(null);
   const [attachImages, setAttachImages] = useState(project.settings.budget?.mode === "MAX");
@@ -80,12 +139,18 @@ export function ReviewChatPanel({ project }: { project: Project }) {
   }, [draft, open, project.id, queryClient]);
 
   const onError = (reason: unknown) => {
+    if (reason instanceof ApiRequestError && reason.code === "TIMELINE_CHANGED") {
+      setError("");
+      setTimelineChanged(true);
+      return;
+    }
     const message = reason instanceof Error ? reason.message : "Không thực hiện được yêu cầu";
     if (/tiến trình chạy|INVALID_PIPELINE_STATE|job is already active/i.test(message)) {
       setError("Đang có tiến trình chạy, thử lại sau");
       return;
     }
     setError(message);
+    toast.error(message);
   };
 
   const send = useMutation({
@@ -93,6 +158,7 @@ export function ReviewChatPanel({ project }: { project: Project }) {
     onSuccess: async () => {
       setDraft("");
       await queryClient.invalidateQueries({ queryKey: reviewKeys.project(project.id) });
+      toast.success("Đã gửi góp ý");
     },
     onError,
   });
@@ -104,6 +170,7 @@ export function ReviewChatPanel({ project }: { project: Project }) {
       setStaleStages((current) => [...new Set([...current, ...result.staleStages])]);
       await queryClient.invalidateQueries({ queryKey: reviewKeys.project(project.id) });
       await queryClient.invalidateQueries({ queryKey: pipelineKeys.detail(project.id) });
+      toast.success("Đã áp dụng");
     },
     onError,
     onSettled: () => setApplyingKey(null),
@@ -114,6 +181,7 @@ export function ReviewChatPanel({ project }: { project: Project }) {
     onSuccess: async () => {
       setStaleStages([]);
       await queryClient.invalidateQueries({ queryKey: reviewKeys.project(project.id) });
+      toast.success("Đã xóa cuộc góp ý");
     },
     onError,
   });
@@ -131,6 +199,7 @@ export function ReviewChatPanel({ project }: { project: Project }) {
     onSuccess: async () => {
       setStaleStages([]);
       await queryClient.invalidateQueries({ queryKey: pipelineKeys.detail(project.id) });
+      toast.success("Đã xếp bước chạy");
     },
     onError,
   });
@@ -179,6 +248,14 @@ export function ReviewChatPanel({ project }: { project: Project }) {
 
       {open && (
         <div className="review-chat-body">
+          {timelineChanged && (
+            <p className="request-error" role="status">
+              Timeline đã thay đổi, tạo lại đề xuất?
+              <button type="button" onClick={() => { setTimelineChanged(false); void send.mutate(draft || REVIEW_FULL_CRITIQUE_PROMPT); }}>Tạo lại</button>
+            </p>
+          )}
+          <button type="button" className="button button-secondary" onClick={() => void undoReviewTimeline(project.id).then(() => queryClient.invalidateQueries({ queryKey: pipelineKeys.detail(project.id) })).catch(onError)}>Hoàn tác</button>
+          {quickPreview && <p role="status">{quickPreview}</p>}
           {error && <p className="request-error" role="alert">{error}</p>}
           {review.isPending && <Spinner label="Đang tải góp ý" />}
           {review.isError && <ErrorState message={review.error.message} onRetry={() => void review.refetch()} />}
@@ -224,6 +301,7 @@ export function ReviewChatPanel({ project }: { project: Project }) {
                             <li key={key} className="review-proposal-card">
                               <strong>{proposalLabel(proposal)}</strong>
                               <p>{proposalDetail(proposal)}</p>
+                              {proposalDiff(proposal)}
                               {proposal.type !== "NOTE" && (
                                 <button
                                   type="button"
@@ -232,7 +310,16 @@ export function ReviewChatPanel({ project }: { project: Project }) {
                                   onClick={() => {
                                     setError("");
                                     setApplyingKey(key);
-                                    applyOne.mutate({ messageId: message.id, index });
+                                    applyOne.mutate({ messageId: message.id, index }, {
+                                      onSuccess: () => {
+                                        const sceneId = proposalSceneId(proposal);
+                                        if (!sceneId) return;
+                                        void previewEditWindow(project.id, sceneId).then((window) => {
+                                          const graphics = window.graphics?.map((graphic) => graphic.templateId).join(", ");
+                                          setQuickPreview(`Xem nhanh 10 giây: ${window.startSec}–${window.endSec}s${graphics ? `. Đồ họa: ${graphics}` : ""}`);
+                                        }).catch(() => undefined);
+                                      },
+                                    });
                                   }}
                                 >
                                   {applied ? "Đã áp dụng" : "Áp dụng"}

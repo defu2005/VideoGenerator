@@ -7,6 +7,7 @@ import Fastify from "fastify";
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Project } from "@vg/shared";
 import { buildApp } from "../src/app.js";
+import { testActor } from "./testActor.js";
 import { PipelineEventBus } from "../src/jobs/eventBus.js";
 import { JobRepository } from "../src/jobs/jobRepository.js";
 import { parseConfig, type AppConfig } from "../src/lib/config.js";
@@ -40,7 +41,7 @@ beforeEach(() => {
     LLM_ENABLE_MOCK: "true",
     LLM_CACHE_ENABLED: "true",
   });
-  app = buildApp({ config });
+  app = buildApp({ testActor,  config });
   sqlite = new Database(config.DATABASE_PATH);
   repository = new JobRepository(sqlite, new PipelineEventBus());
 });

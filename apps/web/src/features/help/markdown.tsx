@@ -194,7 +194,7 @@ function renderInline(nodes: InlineNode[], keyPrefix: string): ReactNode[] {
     if (node.type === "bold") return <strong key={key}>{renderInline(node.children, key)}</strong>;
     if (node.type === "italic") return <em key={key}>{renderInline(node.children, key)}</em>;
     if (node.type === "code") return <code key={key}>{node.text}</code>;
-    if (node.type === "image") return <img key={key} alt={node.alt} src={node.src} />;
+    if (node.type === "image") return <img key={key} alt={node.alt} src={node.src} loading="lazy" />;
     return <a key={key} href={node.href}>{renderInline(node.children, key)}</a>;
   });
 }

@@ -32,10 +32,18 @@ export type LearningSource = {
   aspect: string | null;
   language: string | null;
   template: string | null;
+  format: string | null;
   title: string;
   hashtagCount: number;
   snapshots: MetricSnapshot[];
   profit: number | null;
+  engine?: "compose" | "legacy" | null;
+  shotsPerMin?: number | null;
+  stillShare?: number | null;
+  graphicShare?: number | null;
+  beatCutPct?: number | null;
+  hookShotKind?: string | null;
+  kindEntropyBits?: number | null;
 };
 
 export type FeatureRow = {
@@ -50,6 +58,7 @@ export type FeatureRow = {
   aspect: string | null;
   language: string | null;
   template: string | null;
+  format: string | null;
   title: string;
   titleLength: number;
   hashtagCount: number;
@@ -63,6 +72,13 @@ export type FeatureRow = {
   followersGained: number | null;
   profit: number | null;
   score: number | null;
+  engine: string | null;
+  shotsPerMin: number | null;
+  stillShare: number | null;
+  graphicShare: number | null;
+  beatCutPct: number | null;
+  hookShotKind: string | null;
+  kindEntropyBits: number | null;
 };
 
 export type HourStat = { hour: number; count: number; medianScore: number };
@@ -76,6 +92,7 @@ export type InsightStats = {
   observedDuration: { min: number; max: number } | null;
   topicClusters: TopicStat[];
   overallMedian: number | null;
+  composeNotes: string[];
 };
 
 export function firstSentence(text: string): string {
@@ -184,6 +201,7 @@ export function buildFeatureRows(sources: LearningSource[]): FeatureRow[] {
       aspect: source.aspect,
       language: source.language,
       template: source.template,
+      format: source.format,
       title: source.title,
       titleLength: source.title.length,
       hashtagCount: source.hashtagCount,
@@ -197,6 +215,13 @@ export function buildFeatureRows(sources: LearningSource[]): FeatureRow[] {
       followersGained: at7?.subscribersGained ?? null,
       profit: source.profit,
       score: null,
+      engine: source.engine === "compose" ? "compose" : null,
+      shotsPerMin: source.engine === "compose" ? source.shotsPerMin ?? null : null,
+      stillShare: source.engine === "compose" ? source.stillShare ?? null : null,
+      graphicShare: source.engine === "compose" ? source.graphicShare ?? null : null,
+      beatCutPct: source.engine === "compose" ? source.beatCutPct ?? null : null,
+      hookShotKind: source.engine === "compose" ? source.hookShotKind ?? null : null,
+      kindEntropyBits: source.engine === "compose" ? source.kindEntropyBits ?? null : null,
     });
   }
 
@@ -265,6 +290,19 @@ function jaccard(a: Set<string>, b: Set<string>): number {
   for (const word of a) if (b.has(word)) inter += 1;
   const union = a.size + b.size - inter;
   return union === 0 ? 0 : inter / union;
+}
+
+function composeNotes(rows: FeatureRow[]): string[] {
+  const compose = rows.filter((row) => row.shotsPerMin != null && row.avgViewPct != null);
+  if (compose.length < 4) return [];
+  const ordered = [...compose].sort((a, b) => (a.avgViewPct ?? 0) - (b.avgViewPct ?? 0));
+  const quarter = Math.max(1, Math.floor(ordered.length / 4));
+  const bottom = ordered.slice(0, quarter);
+  const top = ordered.slice(-quarter);
+  const topShots = median(top.flatMap((row) => row.shotsPerMin == null ? [] : [row.shotsPerMin]));
+  const bottomShots = median(bottom.flatMap((row) => row.shotsPerMin == null ? [] : [row.shotsPerMin]));
+  if (topShots == null || bottomShots == null || !(topShots >= 20) || !(topShots > bottomShots)) return [];
+  return ["video có ≥ 20 cảnh/phút giữ người xem tốt hơn"];
 }
 
 export function computeInsightStats(rows: FeatureRow[]): InsightStats {
@@ -342,6 +380,7 @@ export function computeInsightStats(rows: FeatureRow[]): InsightStats {
       medianScore: median(cluster.scores) ?? 0,
     })),
     overallMedian,
+    composeNotes: composeNotes(scored),
   };
 }
 

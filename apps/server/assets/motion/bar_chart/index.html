@@ -1,0 +1,24 @@
+<!DOCTYPE html><html><head><meta charset="utf-8"><style>@font-face{font-family:"Be Vietnam Pro";src:url("font.woff2") format("woff2");font-weight:400}@font-face{font-family:"Be Vietnam Pro";src:url("font-bold.woff2") format("woff2");font-weight:700}html,body{margin:0;background:transparent;color:#fff;font-family:"Be Vietnam Pro",sans-serif}
+#root{width:100%;height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:8%}
+h1,h2,p,blockquote{margin:0;max-width:90%}
+#bar{height:8px;width:40%}
+#fill{height:10px;width:100%}
+#chart{display:flex;align-items:flex-end;gap:12px;height:220px}
+.col{width:48px}</style><script src="gsap.min.js"></script></head><body><div id="root" data-composition-id="main" data-start="0" data-duration="3" data-width="1080" data-height="1920" data-fps="30" data-composition-variables='{"labels":{"type":"string","default":"","maxLength":80},"values":{"type":"string","default":"","maxLength":40},"color":{"type":"color","default":"#38BDF8"}}'><div id="chart"></div><script>const v = (window.__hyperframes && window.__hyperframes.getVariables && window.__hyperframes.getVariables()) || {};
+const labels = String(v.labels || "").split("|");
+const values = String(v.values || "").split(",").map(Number);
+const chart = document.getElementById("chart");
+values.forEach((value, index) => {
+  const col = document.createElement("div");
+  col.className = "col";
+  col.style.height = "8px";
+  col.dataset.h = String(Math.max(8, (value || 0) * 180));
+  col.style.background = v.color || "#38BDF8";
+  const cap = document.createElement("span");
+  cap.textContent = labels[index] || "";
+  col.appendChild(cap);
+  chart.appendChild(col);
+});
+const tl = gsap.timeline({ paused: true });
+tl.to(".col", { height: (i, el) => el.dataset.h, duration: 0.8, stagger: 0.08 }, 0);
+window.__timelines = { main: tl };</script></div></body></html>

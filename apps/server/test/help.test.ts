@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, afterEach, describe, expect, it } from "vitest";
 import { buildApp } from "../src/app.js";
+import { testActor } from "./testActor.js";
 import { assertGuidePage, readGuideMarkdown, searchGuide } from "../src/help/loadGuide.js";
 import { parseConfig } from "../src/lib/config.js";
 
@@ -24,7 +25,7 @@ function createApp() {
     WORKER_ENABLED: "false",
     LOG_LEVEL: "silent",
   });
-  const app = buildApp({ config });
+  const app = buildApp({ testActor,  config });
   apps.push(app);
   return app;
 }

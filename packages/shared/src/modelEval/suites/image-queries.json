@@ -1,0 +1,128 @@
+{
+  "id": "image-queries",
+  "titleVi": "Từ khóa ảnh",
+  "taskId": "visualAltQueries",
+  "rubricVi": "Có mảng truy vấn, không rỗng.",
+  "cases": [
+    {
+      "id": "image-queries-1",
+      "taskId": "visualAltQueries",
+      "input": {
+        "scene": "Ảnh tư liệu 1"
+      },
+      "graders": [
+        {
+          "kind": "requiredKeys",
+          "keys": [
+            "queries"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "image-queries-2",
+      "taskId": "visualAltQueries",
+      "input": {
+        "scene": "Ảnh tư liệu 2"
+      },
+      "graders": [
+        {
+          "kind": "requiredKeys",
+          "keys": [
+            "queries"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "image-queries-3",
+      "taskId": "visualAltQueries",
+      "input": {
+        "scene": "Ảnh tư liệu 3"
+      },
+      "graders": [
+        {
+          "kind": "requiredKeys",
+          "keys": [
+            "queries"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "image-queries-4",
+      "taskId": "visualAltQueries",
+      "input": {
+        "scene": "Ảnh tư liệu 4"
+      },
+      "graders": [
+        {
+          "kind": "requiredKeys",
+          "keys": [
+            "queries"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "image-queries-5",
+      "taskId": "visualAltQueries",
+      "input": {
+        "scene": "Ảnh tư liệu 5"
+      },
+      "graders": [
+        {
+          "kind": "requiredKeys",
+          "keys": [
+            "queries"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "image-queries-6",
+      "taskId": "visualAltQueries",
+      "input": {
+        "scene": "Ảnh tư liệu 6"
+      },
+      "graders": [
+        {
+          "kind": "requiredKeys",
+          "keys": [
+            "queries"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "image-queries-7",
+      "taskId": "visualAltQueries",
+      "input": {
+        "scene": "Ảnh tư liệu 7"
+      },
+      "graders": [
+        {
+          "kind": "requiredKeys",
+          "keys": [
+            "queries"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "image-queries-8",
+      "taskId": "visualAltQueries",
+      "input": {
+        "scene": "Ảnh tư liệu 8"
+      },
+      "graders": [
+        {
+          "kind": "requiredKeys",
+          "keys": [
+            "queries"
+          ]
+        }
+      ]
+    }
+  ]
+}

@@ -83,7 +83,7 @@ describe("ProjectListPage", () => {
     renderWithProviders(<ProjectListPage />, ["/projects"]);
 
     expect(await screen.findByRole("heading", { name: "Ocean documentary" })).toBeInTheDocument();
-    fireEvent.change(screen.getByRole("textbox", { name: "Search projects" }), { target: { value: "ocean" } });
+    fireEvent.change(screen.getByRole("textbox", { name: "Tìm dự án" }), { target: { value: "ocean" } });
     await waitFor(() => expect(screen.getByTestId("current-location")).toHaveTextContent("/projects?q=ocean"), { timeout: 1500 });
     await waitFor(() => expect(fetchMock).toHaveBeenCalledWith(expect.stringContaining("q=ocean"), expect.anything()));
   });
@@ -339,19 +339,19 @@ describe("CreateProjectDialog", () => {
     fireEvent.click(screen.getByRole("button", { name: /Customize/ }));
     const mode = screen.getByLabelText("Chế độ AI / Budget mode");
     expect(mode).toHaveValue("BALANCED");
-    expect(screen.getByText("Ước tính: ~8–14 lượt gọi AI (BALANCED)")).toBeInTheDocument();
+    expect(screen.getByText("Ước tính: ~11–17 lượt gọi AI (BALANCED)")).toBeInTheDocument();
 
     fireEvent.change(mode, { target: { value: "ECO" } });
-    expect(screen.getByText("Ước tính: ~1 lượt gọi AI (ECO)")).toBeInTheDocument();
+    expect(screen.getByText("Ước tính: ~2 lượt gọi AI (ECO)")).toBeInTheDocument();
     fireEvent.change(mode, { target: { value: "CUSTOM" } });
     const reviewPasses = screen.getByLabelText("scriptReviewPasses");
     expect(reviewPasses).toHaveValue("1");
     fireEvent.change(reviewPasses, { target: { value: "0" } });
     expect(reviewPasses).toHaveValue("0");
-    expect(screen.getByText("Ước tính: ~7–12 lượt gọi AI (CUSTOM)")).toBeInTheDocument();
+    expect(screen.getByText("Ước tính: ~10–15 lượt gọi AI (CUSTOM)")).toBeInTheDocument();
     fireEvent.change(reviewPasses, { target: { value: "2" } });
     expect(reviewPasses).toHaveValue("2");
-    expect(screen.getByText("Ước tính: ~9–16 lượt gọi AI (CUSTOM)")).toBeInTheDocument();
+    expect(screen.getByText("Ước tính: ~12–19 lượt gọi AI (CUSTOM)")).toBeInTheDocument();
     expect(screen.getByText(/Kiểm tra ảnh bằng AI nhìn \(MAX\/CUSTOM\)/)).toBeInTheDocument();
     expect(screen.getByLabelText("metadata")).toBeInTheDocument();
     expect(screen.getByLabelText("musicAssist")).toBeInTheDocument();

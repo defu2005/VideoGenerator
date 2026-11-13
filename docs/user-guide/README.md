@@ -7,13 +7,19 @@ Video Agent chạy trên máy bạn. Menu bên trái mở từng khu vực. Dấ
 | Khu vực | Trang |
 | --- | --- |
 | Bắt đầu | [Bắt đầu nhanh](#bat-dau-nhanh) |
+| Tài khoản | [Đăng nhập và tài khoản](dang-nhap.md) |
+| Tài khoản | [Không gian làm việc và quyền](khong-gian-va-quyen.md) |
 | Cài đặt | [Cài đặt](cai-dat.md) |
+| Cài đặt | [Máy worker](may-worker.md) |
+| Kết nối | [Kết nối](ket-noi.md) |
 | Hồ sơ | [Hồ sơ](ho-so.md) |
 | Dự án và quy trình | [Dự án và quy trình](du-an-va-quy-trinh.md) |
 | Ảnh và giọng | [Hình ảnh và giọng đọc](hinh-anh-va-giong-doc.md) |
 | Render | [Render và thumbnail](render-va-thumbnail.md) |
 | Đăng bài | [Đăng bài](dang-bai.md) |
 | Tự động | [Tự động hoá](tu-dong-hoa.md) |
+| Tự vận hành | [Mức tự chủ và quyền](tu-van-hanh.md) |
+| Agent bên ngoài | [Kết nối agent bên ngoài](ket-noi-agent.md) |
 | Số liệu | [Phân tích và tài chính](phan-tich-va-tai-chinh.md) |
 | Bình luận | [Bình luận](binh-luan.md) |
 | Mô hình AI | [Mô hình AI](mo-hinh-ai.md) |
@@ -35,4 +41,6 @@ Dùng để ra một video nháp rồi đăng khi bạn đã kết nối nền t
 
 Mặc định dự án mới dùng chế độ chạy **ASSISTED** và ngân sách **BALANCED** nếu bạn không đổi. **Generate All** không tự đăng video lên mạng. Việc đăng cần nút **Đăng** hoặc lời xác nhận của trợ lý.
 
-Nếu chưa có khoá mô hình, làm [Cài đặt](cai-dat.md#khoi-dong) trước. Ứng dụng không điền khoá hộ bạn.
+Nếu chưa có khoá mô hình, mở **Cài đặt** → **Kết nối** và nhập khoá ngay trong app, xem [Kết nối](ket-noi.md#trang-ket-noi). Thẻ **Thiết lập ban đầu** trên Bảng điều khiển chỉ ra việc còn thiếu. Xem thêm [Cài đặt](cai-dat.md#khoi-dong).
+
+- [Tri thức và thay đổi bên ngoài](tri-thuc-va-thay-doi.md)

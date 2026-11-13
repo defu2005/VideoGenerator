@@ -65,6 +65,8 @@ export function createPipelineHarness(options: HarnessOptions = {}) {
       language: "en",
       targetDurationSec: 120,
       aspectRatio: "16:9",
+      // The app default is compose. These fixtures pin the classic path.
+      edit: { engine: "legacy" },
       stageExecutors: {},
       autoRender: options.autoRender ?? false,
     }),

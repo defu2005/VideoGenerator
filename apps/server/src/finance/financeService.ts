@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { currentWorkspaceId, scopeSql } from "../auth/requestContext.js";
 import type Database from "better-sqlite3";
 import type { FastifyBaseLogger } from "fastify";
 import {
@@ -146,6 +147,9 @@ export class FinanceService {
       clauses.push("account_id = ?");
       bindings.push(query.accountId);
     }
+    const scoped = scopeSql("workspace_id", "profile_id");
+    clauses.push(scoped.sql);
+    bindings.push(...scoped.args);
     const rows = this.deps.sqlite.prepare(
       `SELECT id, account_id AS accountId, publication_id AS publicationId, profile_id AS profileId,
         source, kind, period_start AS periodStart, period_end AS periodEnd,
@@ -163,8 +167,8 @@ export class FinanceService {
     this.deps.sqlite.prepare(
       `INSERT INTO revenue_entries (
         id, account_id, publication_id, profile_id, source, kind,
-        period_start, period_end, amount, currency, note, external_key, created_at
-      ) VALUES (?, ?, ?, ?, 'manual', ?, ?, ?, ?, ?, ?, NULL, ?)`,
+        period_start, period_end, amount, currency, note, external_key, created_at, workspace_id
+      ) VALUES (?, ?, ?, ?, 'manual', ?, ?, ?, ?, ?, ?, NULL, ?, ?)`,
     ).run(
       id,
       parsed.accountId ?? null,
@@ -177,17 +181,19 @@ export class FinanceService {
       parsed.currency,
       parsed.note ?? null,
       createdAt,
+      currentWorkspaceId(this.deps.sqlite),
     );
     return this.getRevenue(id);
   }
 
   getRevenue(id: string): RevenueEntry {
+    const scoped = scopeSql("workspace_id", "profile_id");
     const row = this.deps.sqlite.prepare(
       `SELECT id, account_id AS accountId, publication_id AS publicationId, profile_id AS profileId,
         source, kind, period_start AS periodStart, period_end AS periodEnd,
         amount, currency, note, external_key AS externalKey, created_at AS createdAt
-       FROM revenue_entries WHERE id = ?`,
-    ).get(id) as Record<string, unknown> | undefined;
+       FROM revenue_entries WHERE id = ? AND ${scoped.sql}`,
+    ).get(id, ...scoped.args) as Record<string, unknown> | undefined;
     if (!row) throw new AppError(404, "REVENUE_NOT_FOUND", "Không tìm thấy mục doanh thu");
     return RevenueEntrySchema.parse(row);
   }
@@ -247,6 +253,9 @@ export class FinanceService {
       clauses.push("project_id = ?");
       bindings.push(query.projectId);
     }
+    const scoped = scopeSql("workspace_id", "profile_id");
+    clauses.push(scoped.sql);
+    bindings.push(...scoped.args);
     const rows = this.deps.sqlite.prepare(
       `SELECT id, profile_id AS profileId, project_id AS projectId, kind, date, amount, currency,
         source, note, created_at AS createdAt
@@ -262,8 +271,8 @@ export class FinanceService {
     const createdAt = this.now().toISOString();
     this.deps.sqlite.prepare(
       `INSERT INTO cost_entries (
-        id, profile_id, project_id, kind, date, amount, currency, source, note, created_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, 'manual', ?, ?)`,
+        id, profile_id, project_id, kind, date, amount, currency, source, note, created_at, workspace_id
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, 'manual', ?, ?, ?)`,
     ).run(
       id,
       parsed.profileId ?? null,
@@ -274,16 +283,18 @@ export class FinanceService {
       parsed.currency,
       parsed.note ?? null,
       createdAt,
+      currentWorkspaceId(this.deps.sqlite),
     );
     return this.getCost(id);
   }
 
   getCost(id: string): CostEntry {
+    const scoped = scopeSql("workspace_id", "profile_id");
     const row = this.deps.sqlite.prepare(
       `SELECT id, profile_id AS profileId, project_id AS projectId, kind, date, amount, currency,
         source, note, created_at AS createdAt
-       FROM cost_entries WHERE id = ?`,
-    ).get(id) as Record<string, unknown> | undefined;
+       FROM cost_entries WHERE id = ? AND ${scoped.sql}`,
+    ).get(id, ...scoped.args) as Record<string, unknown> | undefined;
     if (!row) throw new AppError(404, "COST_NOT_FOUND", "Không tìm thấy mục chi phí");
     return CostEntrySchema.parse(row);
   }
@@ -333,9 +344,10 @@ export class FinanceService {
     const insert = this.deps.sqlite.prepare(
       `INSERT INTO revenue_entries (
         id, account_id, publication_id, profile_id, source, kind,
-        period_start, period_end, amount, currency, note, external_key, created_at
-      ) VALUES (?, ?, ?, ?, 'import_csv', ?, ?, ?, ?, ?, ?, NULL, ?)`,
+        period_start, period_end, amount, currency, note, external_key, created_at, workspace_id
+      ) VALUES (?, ?, ?, ?, 'import_csv', ?, ?, ?, ?, ?, ?, NULL, ?, ?)`,
     );
+    const workspaceId = currentWorkspaceId(this.deps.sqlite);
     const tx = this.deps.sqlite.transaction(() => {
       for (const row of preview.rows) {
         insert.run(
@@ -350,6 +362,7 @@ export class FinanceService {
           row.currency,
           row.note,
           createdAt,
+          workspaceId,
         );
       }
     });
@@ -366,8 +379,9 @@ export class FinanceService {
         a.display_name AS displayName, a.platform AS platform
        FROM payout_thresholds t
        JOIN platform_accounts a ON a.id = t.account_id
+       WHERE ${scopeSql("t.workspace_id", "a.profile_id").sql}
        ORDER BY a.display_name`,
-    ).all() as Array<Record<string, unknown>>;
+    ).all(...scopeSql("t.workspace_id", "a.profile_id").args) as Array<Record<string, unknown>>;
     return rows.map((r) => PayoutThresholdSchema.parse(r));
   }
 
@@ -378,13 +392,13 @@ export class FinanceService {
     if (!account) throw new AppError(404, "ACCOUNT_NOT_FOUND", "Không tìm thấy tài khoản");
     const parsed = UpsertPayoutThresholdBodySchema.parse(body);
     this.deps.sqlite.prepare(
-      `INSERT INTO payout_thresholds (account_id, threshold_amount, currency, current_balance, last_notified_at)
-       VALUES (?, ?, ?, ?, NULL)
+      `INSERT INTO payout_thresholds (account_id, threshold_amount, currency, current_balance, last_notified_at, workspace_id)
+       VALUES (?, ?, ?, ?, NULL, ?)
        ON CONFLICT(account_id) DO UPDATE SET
          threshold_amount = excluded.threshold_amount,
          currency = excluded.currency,
          current_balance = excluded.current_balance`,
-    ).run(accountId, parsed.thresholdAmount, parsed.currency, parsed.currentBalance ?? null);
+    ).run(accountId, parsed.thresholdAmount, parsed.currency, parsed.currentBalance ?? null, currentWorkspaceId(this.deps.sqlite));
     return this.listPayoutThresholds().find((t) => t.accountId === accountId)!;
   }
 
@@ -482,7 +496,7 @@ export class FinanceService {
     }
 
     const profileNames = new Map<string, string>();
-    for (const row of this.deps.sqlite.prepare("SELECT id, name FROM profiles").all() as Array<{ id: string; name: string }>) {
+    for (const row of this.deps.sqlite.prepare(`SELECT id, name FROM profiles WHERE ${scopeSql("workspace_id", "id").sql}`).all(...scopeSql("workspace_id", "id").args) as Array<{ id: string; name: string }>) {
       profileNames.set(row.id, row.name);
     }
 
@@ -574,8 +588,8 @@ export class FinanceService {
 
   listReports() {
     const rows = this.deps.sqlite.prepare(
-      `SELECT month, created_at AS createdAt, json FROM monthly_reports ORDER BY month DESC`,
-    ).all() as Array<{ month: string; createdAt: string; json: string | Record<string, unknown> }>;
+      `SELECT month, created_at AS createdAt, json FROM monthly_reports WHERE ${scopeSql("workspace_id").sql} ORDER BY month DESC`,
+    ).all(...scopeSql("workspace_id").args) as Array<{ month: string; createdAt: string; json: string | Record<string, unknown> }>;
     return MonthlyReportListSchema.parse({
       items: rows.map((r) => {
         const json = typeof r.json === "string" ? JSON.parse(r.json) as MonthlyReportJson : r.json as MonthlyReportJson;
@@ -590,8 +604,8 @@ export class FinanceService {
 
   getReport(month: string): MonthlyReportDetail {
     const row = this.deps.sqlite.prepare(
-      `SELECT month, created_at AS createdAt, json FROM monthly_reports WHERE month = ?`,
-    ).get(month) as { month: string; createdAt: string; json: string | Record<string, unknown> } | undefined;
+      `SELECT month, created_at AS createdAt, json FROM monthly_reports WHERE month = ? AND ${scopeSql("workspace_id").sql}`,
+    ).get(month, ...scopeSql("workspace_id").args) as { month: string; createdAt: string; json: string | Record<string, unknown> } | undefined;
     if (!row) throw new AppError(404, "REPORT_NOT_FOUND", `Chưa có báo cáo tháng ${month}`);
     const json = typeof row.json === "string" ? JSON.parse(row.json) : row.json;
     return MonthlyReportDetailSchema.parse({
@@ -604,8 +618,8 @@ export class FinanceService {
   async generateMonthlyReport(month: string, opts: { force?: boolean } = {}): Promise<MonthlyReportDetail> {
     if (!opts.force) {
       const existing = this.deps.sqlite.prepare(
-        "SELECT 1 AS ok FROM monthly_reports WHERE month = ?",
-      ).get(month) as { ok: number } | undefined;
+        `SELECT 1 AS ok FROM monthly_reports WHERE month = ? AND ${scopeSql("workspace_id").sql}`,
+      ).get(month, ...scopeSql("workspace_id").args) as { ok: number } | undefined;
       if (existing) return this.getReport(month);
     }
 
@@ -677,9 +691,9 @@ export class FinanceService {
 
     const createdAt = this.now().toISOString();
     this.deps.sqlite.prepare(
-      `INSERT INTO monthly_reports (month, json, created_at) VALUES (?, ?, ?)
-       ON CONFLICT(month) DO UPDATE SET json = excluded.json, created_at = excluded.created_at`,
-    ).run(month, JSON.stringify(report), createdAt);
+      `INSERT INTO monthly_reports (month, json, created_at, workspace_id) VALUES (?, ?, ?, ?)
+       ON CONFLICT(workspace_id, month) DO UPDATE SET json = excluded.json, created_at = excluded.created_at`,
+    ).run(month, JSON.stringify(report), createdAt, currentWorkspaceId(this.deps.sqlite));
 
     return MonthlyReportDetailSchema.parse({ month, createdAt, report });
   }
@@ -964,6 +978,9 @@ export class FinanceService {
       clauses.push("(pub.published_at IS NULL OR substr(pub.published_at, 1, 10) <= ?)");
       bindings.push(query.to);
     }
+    const scopedViews = scopeSql("scope_p.workspace_id", "a.profile_id");
+    clauses.push(scopedViews.sql);
+    bindings.push(...scopedViews.args);
     const rows = this.deps.sqlite.prepare(
       `SELECT pub.id AS publicationId, pub.account_id AS accountId, pub.project_id AS projectId,
         a.profile_id AS profileId, a.platform AS platform,
@@ -971,6 +988,7 @@ export class FinanceService {
         CAST(json_extract(pub.latest_metrics, '$.views') AS INTEGER) AS views
        FROM publications pub
        JOIN platform_accounts a ON a.id = pub.account_id
+       JOIN profiles scope_p ON scope_p.id = a.profile_id
        LEFT JOIN projects proj ON proj.id = pub.project_id
        WHERE ${clauses.join(" AND ")}`,
     ).all(...bindings) as Array<{
@@ -1036,8 +1054,9 @@ export class FinanceService {
        JOIN projects p ON p.id = j.project_id
        WHERE j.usage IS NOT NULL
          AND substr(COALESCE(j.started_at, j.created_at), 1, 10) >= ?
-         AND substr(COALESCE(j.started_at, j.created_at), 1, 10) <= ?`,
-    ).all(query.from, query.to) as Array<{
+         AND substr(COALESCE(j.started_at, j.created_at), 1, 10) <= ?
+         AND ${scopeSql("p.workspace_id", "p.profile_id").sql}`,
+    ).all(query.from, query.to, ...scopeSql("p.workspace_id", "p.profile_id").args) as Array<{
       projectId: string;
       profileId: string | null;
       day: string;

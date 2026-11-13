@@ -282,7 +282,7 @@ export function CreateProjectDialog({ open, onClose }: { open: boolean; onClose:
       <form onSubmit={submit} noValidate>
         <div className="dialog-heading">
           <div><p className="eyebrow">PROJECT LIBRARY</p><h2 id="create-project-title">Create project</h2></div>
-          <button className="icon-button" type="button" aria-label="Close dialog" onClick={onClose}>×</button>
+          <button className="icon-button" type="button" aria-label="Đóng" onClick={onClose}>×</button>
         </div>
         <div className="dialog-form-body">
           {requestError && <p className="request-error" role="alert">{requestError}</p>}

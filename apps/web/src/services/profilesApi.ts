@@ -58,9 +58,9 @@ export function updatePlatformAccount(
   );
 }
 
-export function deletePlatformAccount(profileId: string, accountId: string): Promise<void> {
+export function deletePlatformAccount(profileId: string, accountId: string, unfinishedOnly = false): Promise<void> {
   return apiRequest<void>(
-    `/profiles/${encodeURIComponent(profileId)}/accounts/${encodeURIComponent(accountId)}`,
+    `/profiles/${encodeURIComponent(profileId)}/accounts/${encodeURIComponent(accountId)}${unfinishedOnly ? "?unfinished=true" : ""}`,
     { method: "DELETE" },
   );
 }

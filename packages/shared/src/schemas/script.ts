@@ -65,6 +65,7 @@ const ScriptSectionObjectSchema = z.object({
   musicMood: z.string().default(""),
   energy: ScriptEnergySchema.default("medium"),
   estDurationSec: z.number().nonnegative().default(0),
+  sectionKey: z.string().min(1).optional(),
 }).strict();
 
 export const ScriptSectionSchema = z.preprocess((value) => {

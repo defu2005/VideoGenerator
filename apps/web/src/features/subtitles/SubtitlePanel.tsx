@@ -2,8 +2,10 @@ import { wrapLines, type Project } from "@vg/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { ErrorState } from "../../components/ErrorState";
+import { useToast } from "../../components/ui/Toast";
 import { Spinner } from "../../components/Spinner";
 import { usePipeline, pipelineKeys } from "../../hooks/usePipeline";
+import { stageBlocked } from "../pipeline/activeJobs";
 import { useScenes } from "../../hooks/useScenes";
 import { runPipeline } from "../../services/pipelineApi";
 import { downloadProjectSubtitle, getProjectSubtitles, patchProjectSubtitleCue } from "../../services/subtitlesApi";
@@ -23,6 +25,7 @@ function formatTime(totalSeconds: number): string {
 
 export function SubtitlePanel({ project }: { project: Project }) {
   const queryClient = useQueryClient();
+  const toast = useToast();
   const scenes = useScenes(project.id);
   const pipeline = usePipeline(project.id);
   const subtitles = useQuery({ queryKey: subtitleKeys.project(project.id), queryFn: () => getProjectSubtitles(project.id) });
@@ -30,17 +33,22 @@ export function SubtitlePanel({ project }: { project: Project }) {
   const [error, setError] = useState("");
   const sceneMap = new Map((scenes.data?.scenes ?? []).map((scene) => [scene.id, scene]));
   const stage = pipeline.data?.stages.find((record) => record.stage === "SUBTITLE");
-  const canRun = stage?.state !== undefined && !pipeline.data?.activeJob && !pipeline.isMutating;
+  const canRun = stage?.state !== undefined && !stageBlocked("SUBTITLE", pipeline.data) && !pipeline.isMutating;
   const updateCue = useMutation({
     mutationFn: ({ index, text }: { index: number; text: string }) => patchProjectSubtitleCue(project.id, index, text),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: subtitleKeys.project(project.id) });
       void queryClient.invalidateQueries({ queryKey: pipelineKeys.detail(project.id) });
+      toast.success("Đã lưu phụ đề");
     },
-    onError: (reason) => setError(reason instanceof Error ? reason.message : "Unable to save subtitle"),
+    onError: (reason) => {
+      const message = reason instanceof Error ? reason.message : "Unable to save subtitle";
+      setError(message);
+      toast.error(message);
+    },
   });
 
-  if (scenes.isPending || subtitles.isPending || pipeline.isPending || voice.isPending) return <Spinner label="Loading subtitles" />;
+  if (scenes.isPending || subtitles.isPending || pipeline.isPending || voice.isPending) return <Spinner label="Đang tải phụ đề" />;
   if (scenes.isError) return <ErrorState message={scenes.error.message} onRetry={() => void scenes.refetch()} />;
   if (subtitles.isError) return <ErrorState message={subtitles.error.message} onRetry={() => void subtitles.refetch()} />;
   if (pipeline.isError) return <ErrorState message={pipeline.error.message} onRetry={() => void pipeline.refetch()} />;
@@ -51,8 +59,11 @@ export function SubtitlePanel({ project }: { project: Project }) {
       await runPipeline(project.id, "SUBTITLE");
       await queryClient.invalidateQueries({ queryKey: subtitleKeys.project(project.id) });
       await queryClient.invalidateQueries({ queryKey: pipelineKeys.detail(project.id) });
+      toast.success("Đã xếp bước chạy");
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "Unable to run subtitle stage");
+      const message = reason instanceof Error ? reason.message : "Unable to run subtitle stage";
+      setError(message);
+      toast.error(message);
     }
   }
 

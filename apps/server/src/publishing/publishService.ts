@@ -1,12 +1,20 @@
+import { notePublicationClaim } from "../operator/qualityGates.js";
+import { scopeSql } from "../auth/requestContext.js";
+import { enqueueIndex } from "../retrieval/service.js";
 import { randomUUID } from "node:crypto";
+import { marketAccountWarning } from "../knowledge/markets.js";
+import { assertPublishAllowed } from "../knowledge/changeInbox.js";
 import { isAbsolute, join } from "node:path";
 import type Database from "better-sqlite3";
 import {
   AspectRatioSchema,
   PublicationSchema,
+  PROTECTED_PROJECT_ID,
   ThumbnailMetaSchema,
   VideoMetadataDraftSchema,
   aspectFromAccountFormat,
+  resolveStageTimeoutMs,
+  timeoutBriefFromSettings,
   type AccountConnectionDetail,
   type AccountFormat,
   type CreatePublicationsBody,
@@ -130,6 +138,9 @@ export class PublishService {
       clauses.push("a.profile_id = ?");
       params.push(query.profileId);
     }
+    const scoped = scopeSql("pr.workspace_id", "a.profile_id");
+    clauses.push(scoped.sql);
+    params.push(...scoped.args);
     const where = clauses.length ? `WHERE ${clauses.join(" AND ")}` : "";
     const rows = this.sqlite.prepare(
       `SELECT p.*, a.platform, a.display_name AS account_display_name, a.profile_id, pr.title AS project_title
@@ -177,6 +188,7 @@ export class PublishService {
       if (account.connection !== "CONNECTED") {
         throw new AppError(409, "ACCOUNT_NOT_CONNECTED", `Tài khoản ${account.display_name} chưa kết nối`);
       }
+      assertPublishAllowed(this.sqlite, { id: accountId, platform: account.platform });
       if (!this.registry.has(account.platform)) {
         throw new AppError(400, "PUBLISHER_UNAVAILABLE", `Chưa hỗ trợ đăng lên ${account.platform}`);
       }
@@ -223,11 +235,12 @@ export class PublishService {
         visibilityUsed,
         guardrail.reason,
         scheduledFor,
-        "[]",
+        JSON.stringify((await import("../services/visualPolicy.js")).copyrightChecklist(this.sqlite, projectId)),
         nowIso,
         nowIso,
       );
 
+      enqueueIndex(this.sqlite,{scope:"source",kind:"result",sourceId:id});
       const publication = this.require(id);
       if (status === "QUEUED") {
         this.enqueuePublishJob(projectId, id);
@@ -252,6 +265,7 @@ export class PublishService {
       `UPDATE jobs SET status = 'CANCELLED', finished_at = ?, message = ?
        WHERE project_id = ? AND stage = 'PUBLISH' AND scope = ? AND status IN ('QUEUED')`,
     ).run(nowIso, "Publication cancelled", publication.projectId, id);
+    this.resolveMissedSchedule(id, nowIso, "Lượt đăng đã được hủy.");
     return this.require(id);
   }
 
@@ -266,24 +280,38 @@ export class PublishService {
        attempts = 0, updated_at = ?, published_at = NULL, external_id = NULL, external_url = NULL
        WHERE id = ?`,
     ).run(nowIso, id);
+    enqueueIndex(this.sqlite,{scope:"source",kind:"result",sourceId:id});
     this.enqueuePublishJob(publication.projectId, id);
+    this.resolveMissedSchedule(id, nowIso, "Lượt đăng đã được đưa lại vào hàng đợi.");
     return this.require(id);
   }
 
+  recordPlatformClaim(publicationId: string, reason: string): void {
+    notePublicationClaim(this.sqlite, { publicationId, reason });
+  }
+
+  private resolveMissedSchedule(id: string, at: string, resolution: string): void {
+    this.sqlite.prepare(`UPDATE supervisor_findings SET status = 'resolved', resolution = ?, last_seen_at = ?
+      WHERE kind = 'missed_publish' AND status = 'open' AND json_extract(detail, '$.publicationId') = ?`)
+      .run(resolution, at, id);
+  }
+
   /** Tick due SCHEDULED jobs whose scheduled_for has passed. */
-  promoteDueScheduled(): number {
-    const nowIso = this.now().toISOString();
-    const due = this.sqlite.prepare(
-      `SELECT id, project_id FROM publications
-       WHERE status = 'SCHEDULED' AND scheduled_for IS NOT NULL AND scheduled_for <= ?`,
-    ).all(nowIso) as Array<{ id: string; project_id: string }>;
-    for (const row of due) {
-      this.sqlite.prepare(
-        "UPDATE publications SET status = 'QUEUED', updated_at = ? WHERE id = ?",
-      ).run(nowIso, row.id);
-      this.enqueuePublishJob(row.project_id, row.id);
-    }
-    return due.length;
+  promoteDueScheduled(now = this.now()): number {
+    const nowIso = now.toISOString();
+    return this.jobs.atomic(() => {
+      const due = this.sqlite.prepare(
+        `SELECT id, project_id FROM publications WHERE status = 'SCHEDULED' AND scheduled_for <= ?
+          AND external_id IS NULL AND published_at IS NULL AND project_id <> ?`,
+      ).all(nowIso, PROTECTED_PROJECT_ID) as Array<{ id: string; project_id: string }>;
+      const promote = this.sqlite.prepare("UPDATE publications SET status = 'QUEUED', updated_at = ? WHERE id = ?");
+      const existing = this.sqlite.prepare("SELECT 1 FROM jobs WHERE project_id = ? AND stage = 'PUBLISH' AND scope = ? AND status IN ('QUEUED','RUNNING')");
+      for (const row of due) {
+        promote.run(nowIso, row.id);
+        if (!existing.get(row.project_id, row.id)) this.enqueuePublishJob(row.project_id, row.id);
+      }
+      return due.length;
+    }, "immediate");
   }
 
   /**
@@ -386,6 +414,7 @@ export class PublishService {
       accountExtras?.analytics_status === "ok" || accountExtras?.analytics_status === "needs_reconnect"
         ? accountExtras.analytics_status
         : null;
+    const profile = this.sqlite.prepare("SELECT market FROM profiles WHERE id=?").get(account.profile_id) as { market: string | null } | undefined;
     const detail: AccountConnectionDetail = {
       connection: account.connection as AccountConnectionDetail["connection"],
       connectionError: account.connection_error,
@@ -399,6 +428,7 @@ export class PublishService {
       redirectUri: this.oauthRedirectUri(account.platform),
       canConnect,
       connectBlockedReason,
+      marketWarning: marketAccountWarning(this.sqlite, profile?.market, account.platform),
       analyticsStatus,
       analyticsLastError: accountExtras?.analytics_last_error ?? null,
       analyticsSyncedAt: accountExtras?.analytics_synced_at ?? null,
@@ -506,7 +536,7 @@ export class PublishService {
     return {
       canConnect: false,
       connectBlockedReason:
-        "Chưa có thông tin ứng dụng (nhập ở mục Thông tin ứng dụng hoặc đặt trong .env)",
+        "Chưa có thông tin ứng dụng. Nhập trong Kết nối hoặc khi Thêm tài khoản.",
     };
   }
 
@@ -630,11 +660,25 @@ export class PublishService {
     return { publication, input, tokens, publisher };
   }
 
-  markUploading(publicationId: string): void {
+  markUploading(publicationId: string): boolean {
     const nowIso = this.now().toISOString();
+    return this.sqlite.prepare(
+      `UPDATE publications SET status = 'UPLOADING', progress = 1, updated_at = ?, attempts = attempts + 1
+       WHERE id = ? AND external_id IS NULL AND published_at IS NULL
+         AND (status = 'QUEUED' OR (status = 'SCHEDULED' AND scheduled_for <= ?))`,
+    ).run(nowIso, publicationId, nowIso).changes === 1;
+  }
+
+  reconcilePublishedCheckpoint(publicationId: string): boolean {
+    return this.sqlite.prepare(`UPDATE publications SET status = 'PUBLISHED', progress = 100, last_error = NULL, updated_at = ?
+      WHERE id = ? AND status = 'QUEUED' AND external_id IS NOT NULL AND published_at IS NOT NULL`)
+      .run(this.now().toISOString(), publicationId).changes === 1;
+  }
+
+  markWaitingForRetry(publicationId: string, message: string): void {
     this.sqlite.prepare(
-      "UPDATE publications SET status = 'UPLOADING', progress = 1, updated_at = ?, attempts = attempts + 1 WHERE id = ?",
-    ).run(nowIso, publicationId);
+      "UPDATE publications SET status = 'QUEUED', progress = 0, last_error = ?, updated_at = ? WHERE id = ? AND status = 'UPLOADING'",
+    ).run(message, this.now().toISOString(), publicationId);
   }
 
   updateProgress(publicationId: string, progress: number): void {
@@ -793,7 +837,11 @@ export class PublishService {
     // Render the missing aspect variant synchronously (TASK-023 pattern).
     const { render } = await this.renders.render(
       fullProject,
-      AbortSignal.timeout(this.config.STAGE_TIMEOUT_MS),
+      AbortSignal.timeout(resolveStageTimeoutMs(
+        { ...timeoutBriefFromSettings(fullProject.settings, fullProject.topic), stageTimeouts: fullProject.settings.stageTimeouts },
+        "RENDER",
+        this.config.STAGE_TIMEOUT_MS,
+      )),
       () => {},
       { aspectRatio: needed },
     );

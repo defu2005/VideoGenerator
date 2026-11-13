@@ -1,0 +1,136 @@
+{
+  "id": "trend-match",
+  "titleVi": "Ghép xu hướng",
+  "taskId": "trendMatch",
+  "rubricVi": "Có ý tưởng khớp kênh.",
+  "cases": [
+    {
+      "id": "trend-match-1",
+      "taskId": "trendMatch",
+      "input": {
+        "trend": "Xu hướng 1",
+        "direction": "khoa học"
+      },
+      "graders": [
+        {
+          "kind": "requiredKeys",
+          "keys": [
+            "topic"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "trend-match-2",
+      "taskId": "trendMatch",
+      "input": {
+        "trend": "Xu hướng 2",
+        "direction": "khoa học"
+      },
+      "graders": [
+        {
+          "kind": "requiredKeys",
+          "keys": [
+            "topic"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "trend-match-3",
+      "taskId": "trendMatch",
+      "input": {
+        "trend": "Xu hướng 3",
+        "direction": "khoa học"
+      },
+      "graders": [
+        {
+          "kind": "requiredKeys",
+          "keys": [
+            "topic"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "trend-match-4",
+      "taskId": "trendMatch",
+      "input": {
+        "trend": "Xu hướng 4",
+        "direction": "khoa học"
+      },
+      "graders": [
+        {
+          "kind": "requiredKeys",
+          "keys": [
+            "topic"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "trend-match-5",
+      "taskId": "trendMatch",
+      "input": {
+        "trend": "Xu hướng 5",
+        "direction": "khoa học"
+      },
+      "graders": [
+        {
+          "kind": "requiredKeys",
+          "keys": [
+            "topic"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "trend-match-6",
+      "taskId": "trendMatch",
+      "input": {
+        "trend": "Xu hướng 6",
+        "direction": "khoa học"
+      },
+      "graders": [
+        {
+          "kind": "requiredKeys",
+          "keys": [
+            "topic"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "trend-match-7",
+      "taskId": "trendMatch",
+      "input": {
+        "trend": "Xu hướng 7",
+        "direction": "khoa học"
+      },
+      "graders": [
+        {
+          "kind": "requiredKeys",
+          "keys": [
+            "topic"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "trend-match-8",
+      "taskId": "trendMatch",
+      "input": {
+        "trend": "Xu hướng 8",
+        "direction": "khoa học"
+      },
+      "graders": [
+        {
+          "kind": "requiredKeys",
+          "keys": [
+            "topic"
+          ]
+        }
+      ]
+    }
+  ]
+}

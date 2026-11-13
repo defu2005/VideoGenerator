@@ -20,7 +20,7 @@ function sectionDuration(narration: string): number {
 function newSection(order: number): ScriptSection {
   return {
     id: `section-${Date.now()}-${order}`,
-    heading: `Section ${order + 1}`,
+    heading: `Phần ${order + 1}`,
     narration: "",
     visualQueries: { primary: "", alternatives: [] },
     visualNotes: "",
@@ -70,59 +70,59 @@ export function ScriptEditor({
         })),
       });
     } catch (error) {
-      setSaveError(error instanceof Error ? error.message : "Unable to save script");
+      setSaveError(error instanceof Error ? error.message : "Không lưu được kịch bản");
     }
   }
 
   return (
-    <section className="panel script-editor" aria-label="Script editor">
+    <section className="panel script-editor" aria-label="Trình sửa kịch bản">
       <div className="script-editor-heading">
-        <div><p className="eyebrow">SCRIPT EDITOR</p><h2>Edit your narration</h2></div>
-        <div className="script-metrics"><strong>{metrics.words} words</strong><span>{metrics.durationSec}s / {targetDurationSec}s target</span></div>
+        <div><p className="eyebrow">KỊCH BẢN</p><h2>Sửa lời thoại</h2></div>
+        <div className="script-metrics"><strong>{metrics.words} từ</strong><span>{metrics.durationSec}s / {targetDurationSec}s mục tiêu</span></div>
       </div>
       {saveError && <p className="request-error" role="alert">{saveError}</p>}
-      <label className="form-field"><span>Title</span>
+      <label className="form-field"><span>Tiêu đề</span>
         <input value={script.title} onChange={(event) => updateScript({ ...script, title: event.target.value })} />
       </label>
-      <label className="form-field"><span>Hook</span>
+      <label className="form-field"><span>Mở đầu</span>
         <textarea rows={3} value={script.hook} onChange={(event) => updateScript({ ...script, hook: event.target.value })} />
       </label>
       <fieldset className="script-section">
-        <legend>Music direction</legend>
-        <label className="form-field"><span>Mood</span>
+        <legend>Hướng nhạc</legend>
+        <label className="form-field"><span>Không khí</span>
           <input value={script.music.mood} onChange={(event) => updateScript({ ...script, music: { ...script.music, mood: event.target.value } })} />
         </label>
-        <label className="form-field"><span>Energy</span>
+        <label className="form-field"><span>Năng lượng</span>
           <select value={script.music.energy} onChange={(event) => updateScript({ ...script, music: { ...script.music, energy: event.target.value as Script["music"]["energy"] } })}>
-            <option value="low">Low</option><option value="medium">Medium</option><option value="high">High</option>
+            <option value="low">Thấp</option><option value="medium">Vừa</option><option value="high">Cao</option>
           </select>
         </label>
-        <label className="form-field"><span>Keywords (comma-separated)</span>
+        <label className="form-field"><span>Từ khóa (cách nhau bằng dấu phẩy)</span>
           <input
             value={script.music.keywords.join(", ")}
             onChange={(event) => updateScript({ ...script, music: { ...script.music, keywords: event.target.value.split(",").map((word) => word.trim()).filter(Boolean) } })}
           />
         </label>
       </fieldset>
-      <div className="script-sections-heading"><h3>Sections</h3>
-        <button className="button button-secondary" type="button" onClick={() => updateScript({ ...script, sections: [...script.sections, newSection(script.sections.length)] })}>Add section</button>
+      <div className="script-sections-heading"><h3>Các phần</h3>
+        <button className="button button-secondary" type="button" onClick={() => updateScript({ ...script, sections: [...script.sections, newSection(script.sections.length)] })}>Thêm phần</button>
       </div>
       {script.sections.map((section, index) => (
         <fieldset className="script-section" key={section.id}>
-          <legend>{section.heading || `Section ${index + 1}`}</legend>
-          <label className="form-field"><span>Heading</span>
+          <legend>{section.heading || `Phần ${index + 1}`}</legend>
+          <label className="form-field"><span>Tiêu đề phần</span>
             <input value={section.heading} onChange={(event) => updateSection(index, { heading: event.target.value })} />
           </label>
-          <label className="form-field"><span>Narration</span>
+          <label className="form-field"><span>Lời thoại</span>
             <textarea rows={6} value={section.narration} onChange={(event) => updateSection(index, { narration: event.target.value })} />
           </label>
-          <label className="form-field"><span>Primary visual search query (English)</span>
+          <label className="form-field"><span>Câu tìm hình chính (tiếng Anh)</span>
             <input
               value={section.visualQueries.primary}
               onChange={(event) => updateSection(index, { visualQueries: { ...section.visualQueries, primary: event.target.value } })}
             />
           </label>
-          <label className="form-field"><span>Alternative visual queries (comma-separated)</span>
+          <label className="form-field"><span>Câu tìm hình khác (cách nhau bằng dấu phẩy)</span>
             <input
               value={section.visualQueries.alternatives.join(", ")}
               onChange={(event) => updateSection(index, {
@@ -133,43 +133,43 @@ export function ScriptEditor({
               })}
             />
           </label>
-          <label className="form-field"><span>Visual notes</span>
+          <label className="form-field"><span>Ghi chú hình</span>
             <textarea rows={2} value={section.visualNotes} onChange={(event) => updateSection(index, { visualNotes: event.target.value })} />
           </label>
           <div className="form-grid">
-            <label className="form-field"><span>Music mood</span>
+            <label className="form-field"><span>Không khí nhạc</span>
               <input value={section.musicMood} onChange={(event) => updateSection(index, { musicMood: event.target.value })} />
             </label>
-            <label className="form-field"><span>Energy</span>
+            <label className="form-field"><span>Năng lượng</span>
               <select value={section.energy} onChange={(event) => updateSection(index, { energy: event.target.value as ScriptSection["energy"] })}>
-                <option value="low">Low</option><option value="medium">Medium</option><option value="high">High</option>
+                <option value="low">Thấp</option><option value="medium">Vừa</option><option value="high">Cao</option>
               </select>
             </label>
           </div>
           <div className="script-section-actions">
-            <small>Estimated narration: {sectionDuration(section.narration)} sec</small>
+            <small>Ước tính lời: {sectionDuration(section.narration)} giây</small>
             <button type="button" className="text-button" disabled={index === 0} onClick={() => {
               const sections = [...script.sections];
               [sections[index - 1], sections[index]] = [sections[index], sections[index - 1]];
               updateScript({ ...script, sections });
-            }}>Move up</button>
+            }}>Lên</button>
             <button type="button" className="text-button" disabled={index === script.sections.length - 1} onClick={() => {
               const sections = [...script.sections];
               [sections[index + 1], sections[index]] = [sections[index], sections[index + 1]];
               updateScript({ ...script, sections });
-            }}>Move down</button>
+            }}>Xuống</button>
             <button type="button" className="text-button script-remove" disabled={script.sections.length <= 1} onClick={() => {
               updateScript({ ...script, sections: script.sections.filter((_, current) => current !== index) });
-            }}>Remove</button>
+            }}>Xóa phần</button>
           </div>
         </fieldset>
       ))}
-      <label className="form-field"><span>Outro</span>
+      <label className="form-field"><span>Kết</span>
         <textarea rows={3} value={script.outro} onChange={(event) => updateScript({ ...script, outro: event.target.value })} />
       </label>
       <div className="script-save-actions">
-        <small>Estimated total: {metrics.durationSec} sec · Target range: {Math.round(targetDurationSec * 0.8)}–{Math.round(targetDurationSec * 1.2)} sec</small>
-        <button className="button button-primary" type="button" disabled={disabled} onClick={() => void save()}>Save</button>
+        <small>Ước tính: {metrics.durationSec} giây · Khoảng mục tiêu: {Math.round(targetDurationSec * 0.8)}–{Math.round(targetDurationSec * 1.2)} giây</small>
+        <button className="button button-primary" type="button" disabled={disabled} onClick={() => void save()}>Lưu</button>
       </div>
     </section>
   );

@@ -1,3 +1,4 @@
+import { alternateMotions, fallbackEditPlan, type EditPresetId } from "../edit/plan.js";
 import type { AspectRatio, LicenseKind } from "../enums.js";
 import type {
   RenderTarget,
@@ -17,10 +18,10 @@ export const VOICE_LEAD_SEC = 0.1;
 /** Silence after the voice ends, before the next scene. */
 export const VOICE_TAIL_SEC = 0.3;
 export const MIN_SCENE_SEC = 1;
-const SCENE_FADE_SEC = 0.25;
 const VIDEO_FADE_IN_SEC = 0.5;
 const VIDEO_FADE_OUT_SEC = 0.8;
 const KENBURNS_ZOOM = 1.12;
+export const COMMENTARY_STILL_MAX_SEC = 4;
 
 const NON_COMMERCIAL = new Set<LicenseKind>(["CC_BY_NC", "CC_BY_NC_SA", "CC_BY_NC_ND"]);
 
@@ -45,6 +46,8 @@ export type TimelineSceneInput = {
     ready: boolean;
     licenseKind: LicenseKind | null;
     motion: TimelineVisual["motion"] | null;
+    /** Copyrighted stills stay on screen for at most four seconds. */
+    commentary?: boolean;
   }[];
 };
 
@@ -56,6 +59,8 @@ export type TimelineBuildInput = {
   musicEnabled: boolean;
   /** Approved track with a local file, or null. */
   music: TimelineMusicInput | null;
+  /** Recipe edit preset. Omitted timelines keep the story rhythm. */
+  editPreset?: EditPresetId;
 };
 
 export type TimelineBuildResult = Omit<Timeline, "subtitles"> & {
@@ -128,12 +133,15 @@ export function buildTimeline(input: TimelineBuildInput): TimelineBuildResult {
     const visuals: TimelineVisual[] = ready.length
       ? ready.map((visual, slot) => {
         countLicense(visual.licenseKind);
+        const naturalEnd = slot === ready.length - 1 ? startSec + durationSec : startSec + (slot + 1) * slice;
+        const start = startSec + slot * slice;
+        const end = visual.commentary ? Math.min(naturalEnd, start + COMMENTARY_STILL_MAX_SEC) : naturalEnd;
         return {
           kind: "IMAGE",
           candidateId: visual.candidateId,
           path: visual.path,
-          startSec: round3(startSec + slot * slice),
-          endSec: round3(slot === ready.length - 1 ? startSec + durationSec : startSec + (slot + 1) * slice),
+          startSec: round3(start),
+          endSec: round3(end),
           motion: visual.motion ?? defaultMotion(visualIndex++),
           licenseKind: visual.licenseKind,
         };
@@ -168,10 +176,30 @@ export function buildTimeline(input: TimelineBuildInput): TimelineBuildResult {
         }
         : null,
       visuals,
-      fadeInSec: round3(Math.min(index === 0 ? VIDEO_FADE_IN_SEC : SCENE_FADE_SEC, maxFade)),
-      fadeOutSec: round3(Math.min(index === ordered.length - 1 ? VIDEO_FADE_OUT_SEC : SCENE_FADE_SEC, maxFade)),
+      fadeInSec: index === 0 ? round3(Math.min(VIDEO_FADE_IN_SEC, maxFade)) : 0,
+      fadeOutSec: index === ordered.length - 1 ? round3(Math.min(VIDEO_FADE_OUT_SEC, maxFade)) : 0,
     };
   });
+
+  const editPlan = fallbackEditPlan({
+    title: "",
+    preset: input.editPreset ?? "story",
+    aspect: input.aspectRatio,
+    scenes: scenes.map((scene, index) => ({
+      sceneId: scene.sceneId,
+      startSec: scene.startSec,
+      durationSec: scene.durationSec,
+      hook: index === 0,
+    })),
+  });
+  const motionByScene = new Map(alternateMotions(scenes.map((scene) => scene.sceneId)).map((item) => [item.sceneId, item.preset]));
+  const transitionByScene = new Map(editPlan.transitions.map((item) => [item.afterSceneId, item]));
+  for (const scene of scenes) {
+    const preset = motionByScene.get(scene.sceneId);
+    if (preset) scene.visuals = scene.visuals.map((visual, index) => index === 0 ? { ...visual, motionPreset: preset } : visual);
+    const transition = transitionByScene.get(scene.sceneId);
+    if (transition) scene.transitionOut = { type: transition.type, durationSec: transition.durationSec };
+  }
 
   const totalDurationSec = round3(startFrame / target.fps);
   let music: TimelineMusic | null = null;
@@ -210,6 +238,7 @@ export function buildTimeline(input: TimelineBuildInput): TimelineBuildResult {
     music,
     warnings,
     licenseSummary,
+    editPlan,
     voiceOffsets,
   };
 }

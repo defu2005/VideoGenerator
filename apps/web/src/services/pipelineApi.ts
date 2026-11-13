@@ -16,8 +16,11 @@ export function approvePipelineGate(projectId: string, gate: PipelineStage): Pro
   return apiRequest<PipelineState>(`/projects/${projectId}/pipeline/gates/${gate}/approve`, { method: "POST" });
 }
 
-export function cancelPipeline(projectId: string): Promise<PipelineState> {
-  return apiRequest<PipelineState>(`/projects/${projectId}/pipeline/cancel`, { method: "POST" });
+export function cancelPipeline(projectId: string, stage?: PipelineStage): Promise<PipelineState> {
+  const path = stage
+    ? `/projects/${projectId}/pipeline/stages/${stage}/cancel`
+    : `/projects/${projectId}/pipeline/cancel`;
+  return apiRequest<PipelineState>(path, { method: "POST" });
 }
 
 export function retryPipelineStage(projectId: string, stage: PipelineStage): Promise<PipelineState> {

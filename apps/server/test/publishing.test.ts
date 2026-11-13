@@ -2,10 +2,15 @@ import { randomUUID } from "node:crypto";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
-import { type PlatformAccount, type ProfileDetail, type Project, type Publication } from "@vg/shared";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { AUTONOMY_PRESETS, type PlatformAccount, type ProfileDetail, type Project, type Publication } from "@vg/shared";
 import { buildApp } from "../src/app.js";
+import { testActor } from "./testActor.js";
 import { parseConfig, type AppConfig } from "../src/lib/config.js";
+import Database from "better-sqlite3";
+import { saveAutonomyBudget } from "../src/operator/autonomyBudget.js";
+import { saveAutonomySettings } from "../src/operator/autonomy.js";
+import { recoverMissedPublications } from "../src/publishing/recoverSchedule.js";
 
 const root = mkdtempSync(join(tmpdir(), "vg-publish-test-"));
 let config: AppConfig;
@@ -36,7 +41,7 @@ beforeEach(() => {
     DATA_DIR: dataDir,
     DATABASE_PATH: join(dataDir, "app.db"),
   };
-  app = buildApp({ config });
+  app = buildApp({ testActor,  config });
 });
 
 afterEach(async () => {
@@ -161,6 +166,52 @@ function assertNoSecrets(payload: unknown, secrets: string[]): void {
 }
 
 describe("OAuth mock publisher", () => {
+  it("shows a Vietnamese HTML denial and sets the account from a valid state to ERROR", async () => {
+    const profile = await createProfile();
+    const account = await addMockAccount(profile.id);
+    const { state } = app.vgPublish.oauthState.create({ accountId: account.id, platform: "mock", redirectUri: "http://127.0.0.1/callback" });
+    const result = await app.inject({ method: "GET",
+      url: `/api/oauth/mock/callback?state=${state}&error=access_denied&error_description=%3Cscript%3Efixture-secret%3C%2Fscript%3E` });
+    expect(result.statusCode).toBe(200);
+    expect(result.headers).toMatchObject({ "cache-control": "no-store", "referrer-policy": "no-referrer" });
+    expect(result.body).toContain("Bạn đã từ chối quyền truy cập");
+    expect(result.body).not.toContain("fixture-secret");
+    expect(app.vgPublish.service.requireAccount(account.id)).toMatchObject({ connection: "ERROR" });
+  });
+
+  it("keeps failed exchange details private and shows the invalid grant recovery", async () => {
+    const profile = await createProfile();
+    const account = await addMockAccount(profile.id);
+    vi.spyOn(app.vgPublish.registry.require("mock").oauth, "exchangeCode").mockRejectedValueOnce(
+      Object.assign(new Error("fixture-secret-raw"), { code: "invalid_grant" }));
+    const { state } = app.vgPublish.oauthState.create({ accountId: account.id, platform: "mock", redirectUri: "http://127.0.0.1/callback" });
+    const result = await app.inject({ method: "GET", url: `/api/oauth/mock/callback?state=${state}&code=fixture` });
+    expect(result.statusCode).toBe(200);
+    expect(result.body).toContain("Mã đăng nhập đã dùng hoặc hết hạn");
+    expect(result.body).not.toContain("fixture-secret-raw");
+    expect(app.vgPublish.service.requireAccount(account.id)).toMatchObject({ connection: "ERROR" });
+  });
+
+  it.each(["youtube", "tiktok", "facebook_reels"] as const)("keeps the appropriate success flow for %s", async (platform) => {
+    const profile = await createProfile();
+    const account = (await app.inject({ method: "POST", url: `/api/profiles/${profile.id}/accounts`,
+      payload: { platform, displayName: "Fixture" } })).json<PlatformAccount>();
+    const oauth = app.vgPublish.registry.require(platform).oauth;
+    vi.spyOn(oauth, "exchangeCode").mockResolvedValueOnce({ accessToken: "fixture-secret-token", scopes: [] });
+    vi.spyOn(oauth, "fetchIdentity").mockResolvedValueOnce({ externalId: "fixture-channel", displayName: "<script>Fixture</script>", handle: "@fixture" });
+    const { state } = app.vgPublish.oauthState.create({ accountId: account.id, platform, redirectUri: "http://127.0.0.1/callback" });
+    const result = await app.inject({ method: "GET", url: `/api/oauth/${platform}/callback?state=${state}&code=fixture` });
+    expect(result.body).not.toContain("fixture-secret-token");
+    if (platform === "facebook_reels") {
+      expect(result.statusCode).toBe(302);
+      expect(result.headers.location).toContain(`metaPick=${account.id}`);
+    } else {
+      expect(result.statusCode).toBe(200);
+      expect(result.body).toContain("&lt;script&gt;Fixture&lt;/script&gt;");
+      expect(result.body).not.toContain("<script>");
+    }
+  });
+
   it("connects with PKCE, stores identity, rejects bad state", async () => {
     const profile = await createProfile();
     const account = await addMockAccount(profile.id);
@@ -169,7 +220,9 @@ describe("OAuth mock publisher", () => {
       method: "GET",
       url: "/api/oauth/mock/callback?code=x&state=not-a-real-state",
     });
-    expect(bad.statusCode).toBe(400);
+    expect(bad.statusCode).toBe(200);
+    expect(bad.headers["content-type"]).toContain("text/html");
+    expect(bad.body).toContain("Phiên đăng nhập đã hết hạn");
 
     await connectMockAccount(account.id);
 
@@ -287,10 +340,10 @@ describe("canConnect / connectBlockedReason", () => {
     const saved = await app.inject({
       method: "PUT",
       url: `/api/profiles/${profile.id}/accounts/${account.id}/app-credentials`,
-      payload: { clientId: "yt-client-abcd", clientSecret: "super-secret-value" },
+      payload: { clientId: "1234-fixture.apps.googleusercontent.com", clientSecret: "super-secret-value" },
     });
     expect(saved.statusCode).toBe(200);
-    expect(saved.json()).toEqual({ configured: true, idHint: "abcd" });
+    expect(saved.json()).toEqual({ configured: true, idHint: ".com" });
     assertNoSecrets(saved.json(), ["super-secret-value", "clientSecret"]);
 
     const after = await app.inject({
@@ -299,13 +352,13 @@ describe("canConnect / connectBlockedReason", () => {
     });
     expect(after.json().canConnect).toBe(true);
     expect(after.json().connectBlockedReason).toBeNull();
-    expect(after.json().appCredentials).toEqual({ configured: true, idHint: "abcd" });
-    assertNoSecrets(after.json(), ["super-secret-value", "yt-client-abcd"]);
+    expect(after.json().appCredentials).toEqual({ configured: true, idHint: ".com" });
+    assertNoSecrets(after.json(), ["super-secret-value", "1234-fixture.apps.googleusercontent.com"]);
   });
 
   it("treats .env fallback as enough to connect once a publisher exists", async () => {
     const dataDir = join(root, `data-env-${randomUUID()}`);
-    const envApp = buildApp({
+    const envApp = buildApp({ testActor, 
       config: parseConfig({
         DATA_DIR: dataDir,
         DATABASE_PATH: join(dataDir, "app.db"),
@@ -365,6 +418,67 @@ describe("canConnect / connectBlockedReason", () => {
 });
 
 describe("Publish jobs", () => {
+  it.each([
+    { lateHours: 1, level: "autonomous", expected: "QUEUED" },
+    { lateHours: 3, level: "autonomous", expected: "SCHEDULED" },
+    { lateHours: 3, level: "supervised", expected: "FAILED" },
+  ] as const)("recovers an automatic slot late by $lateHours hours with $level grants", async ({ lateHours, level, expected }) => {
+    const profile = await createProfile();
+    const account = await addMockAccount(profile.id);
+    const project = await createProject(profile.id);
+    const renderId = seedRender(project.id);
+    const { sqlite } = app.vgAssistant.service.toolContext();
+    const now = new Date(Date.now() + 24 * 60 * 60_000);
+    const slot = new Date(now.getTime() - lateHours * 60 * 60_000).toISOString();
+    const heartbeat = new Date(now.getTime() - 9 * 60 * 60_000).toISOString();
+    const id = randomUUID();
+    saveAutonomySettings(sqlite, { level: "autonomous", grants: AUTONOMY_PRESETS.autonomous });
+    saveAutonomySettings(sqlite, { level, grants: AUTONOMY_PRESETS[level] }, profile.id);
+    sqlite.prepare("UPDATE profiles SET automation = ? WHERE id = ?")
+      .run(JSON.stringify({ enabled: true, publishTimes: ["19:00"] }), profile.id);
+    sqlite.prepare(`INSERT INTO profile_topics (id, profile_id, topic, source, status, project_id, scheduled_for, created_at, updated_at)
+      VALUES (?, ?, 'Fixture', 'USER', 'IN_PRODUCTION', ?, ?, ?, ?)`)
+      .run(randomUUID(), profile.id, project.id, slot, heartbeat, heartbeat);
+    sqlite.prepare(`INSERT INTO publications (id, project_id, render_id, account_id, status, visibility_requested, visibility_used,
+      scheduled_for, created_at, updated_at) VALUES (?, ?, ?, ?, 'SCHEDULED', 'private', 'private', ?, ?, ?)`)
+      .run(id, project.id, renderId, account.id, slot, heartbeat, heartbeat);
+    const recovered = recoverMissedPublications(sqlite, heartbeat, now);
+    expect(recovered).toEqual({ rescheduled: expected === "SCHEDULED" ? 1 : 0, needsReview: expected === "FAILED" ? 1 : 0 });
+    expect(recoverMissedPublications(sqlite, heartbeat, now)).toEqual({ rescheduled: 0, needsReview: 0 });
+    expect(app.vgPublish.service.promoteDueScheduled(now)).toBe(expected === "QUEUED" ? 1 : 0);
+    expect(app.vgPublish.service.promoteDueScheduled(now)).toBe(0);
+    const publication = app.vgPublish.service.require(id);
+    expect(publication.status).toBe(expected);
+    if (expected === "SCHEDULED") expect(Date.parse(publication.scheduledFor!)).toBeGreaterThan(now.getTime());
+    if (expected === "FAILED") expect(publication.lastError).toContain("bị lỡ hơn hai giờ");
+    expect(sqlite.prepare("SELECT COUNT(*) AS count FROM jobs WHERE stage = 'PUBLISH' AND scope = ?").get(id))
+      .toEqual({ count: expected === "QUEUED" ? 1 : 0 });
+  });
+  it("leaves uploads over the account limit queued without blocking a different account", async () => {
+    const profile = await createProfile();
+    const capped = await addMockAccount(profile.id);
+    const other = await addMockAccount(profile.id);
+    await connectMockAccount(capped.id);
+    await connectMockAccount(other.id);
+    const { sqlite } = app.vgAssistant.service.toolContext();
+    saveAutonomyBudget(sqlite, { maxPublishesPerDayPerAccount: 1 }, profile.id);
+    const create = async (accountId: string) => {
+      const project = await createProject(profile.id);
+      seedRender(project.id);
+      const res = await app.inject({
+        method: "POST", url: `/api/projects/${project.id}/publications`, payload: { accountIds: [accountId] },
+      });
+      expect(res.statusCode).toBe(201);
+      return res.json<{ items: Publication[] }>().items[0]!;
+    };
+    const first = await create(capped.id);
+    await waitForPublication(first.id, (item) => item.status === "PUBLISHED");
+    const blocked = await create(capped.id);
+    const allowed = await create(other.id);
+    await waitForPublication(allowed.id, (item) => item.status === "PUBLISHED");
+    expect(sqlite.prepare("SELECT status FROM publications WHERE id = ?").get(blocked.id)).toEqual({ status: "QUEUED" });
+    expect(sqlite.prepare("SELECT COUNT(*) AS count FROM autonomy_job_claims WHERE account_id = ?").get(capped.id)).toEqual({ count: 1 });
+  });
   it("happy path uploads and never leaks tokens in API output", async () => {
     const profile = await createProfile();
     const account = await addMockAccount(profile.id);
@@ -418,6 +532,47 @@ describe("Publish jobs", () => {
     const published = await waitForPublication(publication.id, (item) => item.status === "PUBLISHED");
     expect(published.visibilityUsed).toBe("private");
   });
+
+  it.each(["QUEUED", "QUEUED_WITH_MARKERS", "UPLOADING", "PUBLISHED"] as const)(
+    "reconciles the %s publication checkpoint after restart",
+    async (checkpoint) => {
+      const profile = await createProfile();
+      const account = await addMockAccount(profile.id);
+      await connectMockAccount(account.id);
+      const project = await createProject(profile.id);
+      seedRender(project.id);
+      const created = await app.inject({
+        method: "POST", url: `/api/projects/${project.id}/publications`,
+        payload: { accountIds: [account.id] },
+      });
+      const { id } = created.json<{ items: Publication[] }>().items[0]!;
+      await waitForPublication(id, (item) => item.status === "PUBLISHED");
+      await app.close();
+
+      const db = new Database(config.DATABASE_PATH);
+      try {
+        if (checkpoint === "QUEUED") {
+          db.prepare(`UPDATE publications SET status = 'QUEUED', published_at = NULL, external_id = NULL, external_url = NULL
+            WHERE id = ?`).run(id);
+        } else {
+          db.prepare("UPDATE publications SET status = ? WHERE id = ?")
+            .run(checkpoint === "QUEUED_WITH_MARKERS" ? "QUEUED" : checkpoint, id);
+        }
+        db.prepare("UPDATE jobs SET status = 'RUNNING' WHERE scope = ? AND stage = 'PUBLISH'").run(id);
+      } finally {
+        db.close();
+      }
+      app = buildApp({ testActor,  config });
+      await app.ready();
+      const expectedStatus = checkpoint === "UPLOADING" ? "FAILED" : "PUBLISHED";
+      const publication = await waitForPublication(id, (item) => item.status === expectedStatus);
+      const sqlite = (app.vgPublish.service as unknown as { sqlite: Database.Database }).sqlite;
+      expect(sqlite.prepare("SELECT status FROM jobs WHERE scope = ? AND stage = 'PUBLISH'").get(id))
+        .toEqual({ status: expectedStatus === "FAILED" ? "FAILED" : "SUCCEEDED" });
+      expect(app.vgPublish.mock!.uploadCallCount).toBe(checkpoint === "QUEUED" ? 1 : 0);
+      if (checkpoint === "UPLOADING") expect(publication.lastError).toContain("Kiểm tra trên nền tảng");
+    },
+  );
 
   it("retries after 429 then succeeds", async () => {
     const profile = await createProfile();

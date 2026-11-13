@@ -97,6 +97,17 @@ describe("buildSceneClipPlan", () => {
     expect(plan.filter).toContain("[v0][v1]concat=n=2:v=1:a=0[cat]");
     expect(plan.filter).not.toContain("fade=");
   });
+
+  it("scales a file that was already cropped and leaves other files on the cover crop", () => {
+    const path = scene().visuals[0]?.path ?? "";
+    const cropped = buildSceneClipPlan(scene(), { width: 160, height: 90, fps: 30 }, (item) => `/p/${item}`, {
+      croppedPaths: new Set([path]),
+    });
+    expect(cropped.filter).toContain("scale=160:90:flags=lanczos");
+    expect(cropped.filter).not.toContain("force_original_aspect_ratio=increase");
+    const plain = buildSceneClipPlan(scene(), { width: 160, height: 90, fps: 30 }, (item) => `/p/${item}`);
+    expect(plain.filter).toContain("force_original_aspect_ratio=increase");
+  });
 });
 
 describe("ducking", () => {
@@ -180,6 +191,29 @@ describe("buildFinalPlan", () => {
     expect(plan.reencodeVideo).toBe(false);
     expect(plan.filter).toContain("anullsrc=r=48000:cl=stereo,atrim=0:2[voice]");
     expect(plan.filter).not.toContain("amix");
+  });
+
+  it("joins non-cut transitions with xfade and overlays graphics before subtitles", () => {
+    const plan = buildFinalPlan({
+      totalDurationSec: 8,
+      scenes,
+      music: null,
+      concatListPath: "/r/clips.txt",
+      resolvePath: (path) => path,
+      assFileName: "subtitles.ass",
+      xfadeAvailable: true,
+      sceneClips: [
+        { path: "/c/a.mp4", sceneId: "s1", startSec: 0, durationSec: 4, transitionOut: { type: "fade", durationSec: 0.4 } },
+        { path: "/c/b.mp4", sceneId: "s2", startSec: 4, durationSec: 4, transitionOut: null },
+      ],
+      graphics: [{ path: "/g/title.webm", startSec: 0.5, endSec: 3 }],
+    });
+    expect(plan.inputArgs.slice(0, 4)).toEqual(["-i", "/c/a.mp4", "-i", "/c/b.mp4"]);
+    expect(plan.inputArgs).toContain("/g/title.webm");
+    expect(plan.filter).toContain("xfade=transition=fade:duration=0.4:offset=4");
+    expect(plan.filter.indexOf("overlay=")).toBeLessThan(plan.filter.indexOf("ass="));
+    expect(plan.reencodeVideo).toBe(true);
+    expect(plan.warning).toBeNull();
   });
 });
 

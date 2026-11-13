@@ -6,6 +6,7 @@ import Database from "better-sqlite3";
 import { afterAll, afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { Project } from "@vg/shared";
 import { buildApp } from "../src/app.js";
+import { testActor } from "./testActor.js";
 import { parseConfig, type AppConfig } from "../src/lib/config.js";
 import { MockTtsProvider } from "../src/providers/tts/mockTts.js";
 
@@ -26,7 +27,7 @@ beforeEach(async () => {
     LOG_LEVEL: "silent",
     TTS_PROVIDER: "mock",
   });
-  app = buildApp({ config });
+  app = buildApp({ testActor,  config });
   const created = await app.inject({
     method: "POST",
     url: "/api/projects",

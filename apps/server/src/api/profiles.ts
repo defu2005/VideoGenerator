@@ -1,5 +1,7 @@
 import {
   ApiErrorSchema,
+  ApplyMarketDefaultsSchema,
+  MarketCodeSchema,
   PlatformAccountInputSchema,
   PlatformAccountSchema,
   PlatformAccountUpdateSchema,
@@ -11,8 +13,11 @@ import {
 } from "@vg/shared";
 import { z } from "zod";
 import type { FastifyInstance } from "fastify";
+import type Database from "better-sqlite3";
 import type { ProfileService } from "../services/profileService.js";
 import { AppError } from "../lib/errors.js";
+import { touchFromOwner } from "../operator/autopilot.js";
+import { getMarketInfo, listResolvedMarkets } from "../knowledge/markets.js";
 
 const ProfileParamsSchema = z.object({ id: z.string().uuid() }).strict();
 const AccountParamsSchema = z.object({
@@ -27,7 +32,24 @@ const ErrorResponses = {
   500: ApiErrorSchema,
 };
 
-export function registerProfileRoutes(app: FastifyInstance, service: ProfileService): void {
+export function registerProfileRoutes(app: FastifyInstance, service: ProfileService, sqlite?: Database.Database): void {
+  if (sqlite) {
+    app.get("/api/markets", async () => ({ markets: listResolvedMarkets(sqlite) }));
+    app.get("/api/markets/:code", async (request) =>
+      getMarketInfo(sqlite, z.object({ code: MarketCodeSchema }).parse(request.params).code));
+  }
+  app.get("/api/profiles/:id/market-defaults", {
+    schema: { params: ProfileParamsSchema, querystring: z.object({ code: MarketCodeSchema }).strict() },
+  }, async (request) => service.previewMarketDefaults(
+    ProfileParamsSchema.parse(request.params).id, z.object({ code: MarketCodeSchema }).parse(request.query).code,
+  ));
+  app.post("/api/profiles/:id/apply-market-defaults", {
+    schema: { params: ProfileParamsSchema, body: ApplyMarketDefaultsSchema, response: { 200: ProfileDetailSchema, ...ErrorResponses } },
+  }, async (request) => {
+    if (request.headers["x-vg-tool-source"] !== undefined) throw new AppError(403, "OWNER_UI_REQUIRED", "Bạn cần xác nhận các trường mặc định.");
+    const { code, fields, previewToken } = ApplyMarketDefaultsSchema.parse(request.body);
+    return service.applyMarketDefaults(ProfileParamsSchema.parse(request.params).id, code, fields, previewToken);
+  });
   app.get("/api/profiles", {
     schema: {
       querystring: ProfileListQuerySchema,
@@ -63,7 +85,12 @@ export function registerProfileRoutes(app: FastifyInstance, service: ProfileServ
     },
   }, async (request) => {
     const { id } = ProfileParamsSchema.parse(request.params);
-    return service.updateProfile(id, ProfileUpdateSchema.parse(request.body));
+    const body = ProfileUpdateSchema.parse(request.body);
+    if (sqlite) {
+      if (body.automation) touchFromOwner(request.headers, sqlite, `profile:${id}:automation`);
+      if (body.guidelines) touchFromOwner(request.headers, sqlite, `profile:${id}:guidelines`);
+    }
+    return service.updateProfile(id, body, request.headers["x-vg-tool-source"] === undefined);
   });
 
   app.post("/api/profiles/:id/archive", {
@@ -116,7 +143,8 @@ export function registerProfileRoutes(app: FastifyInstance, service: ProfileServ
     },
   }, async (request, reply) => {
     const { id, accountId } = AccountParamsSchema.parse(request.params);
-    await service.deleteAccount(id, accountId);
+    const { unfinished } = z.object({ unfinished: z.literal("true").optional() }).parse(request.query);
+    await service.deleteAccount(id, accountId, unfinished === "true");
     return reply.code(204).send(null);
   });
 }

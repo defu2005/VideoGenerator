@@ -6,6 +6,7 @@ import {
   type NotificationSettingsStatus,
 } from "@vg/shared";
 import type { TokenVault } from "../publishing/tokenVault.js";
+import { telegramConflict } from "../supervision/snapshot.js";
 
 export const TELEGRAM_BOT_TOKEN_KEY = "telegram.botToken";
 const SETTINGS_KEY = "notifications";
@@ -21,6 +22,16 @@ export function getNotificationSettings(sqlite: Database.Database): Notification
   if (!row) return { ...DEFAULT_NOTIFICATION_SETTINGS };
   const value = typeof row.value === "string" ? JSON.parse(row.value) as unknown : row.value;
   return NotificationSettingsSchema.parse(value);
+}
+
+export function getNotificationTimezone(sqlite: Database.Database): string {
+  const { timezone } = getNotificationSettings(sqlite);
+  try {
+    new Intl.DateTimeFormat("vi", { timeZone: timezone });
+    return timezone;
+  } catch {
+    return DEFAULT_NOTIFICATION_SETTINGS.timezone;
+  }
 }
 
 export function saveNotificationSettings(
@@ -42,6 +53,7 @@ export function getNotificationSettingsStatus(
   return {
     ...settings,
     tokenConfigured: vault.hasSecret(TELEGRAM_BOT_TOKEN_KEY),
+    conflict: telegramConflict(sqlite),
   };
 }
 

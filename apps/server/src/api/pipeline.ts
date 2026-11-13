@@ -5,6 +5,7 @@ import type { PipelineEventBus } from "../jobs/eventBus.js";
 import type { JobRepository } from "../jobs/jobRepository.js";
 import type { PipelineOrchestrator } from "../pipeline/orchestrator.js";
 import { AppError } from "../lib/errors.js";
+import { resetScriptReviseRound } from "../operator/qualityGates.js";
 import { requireProject } from "../services/projectService.js";
 import type { ProjectService } from "../services/projectService.js";
 import type { SceneService } from "../services/sceneService.js";
@@ -57,6 +58,7 @@ export function registerPipelineRoutes(
         "This scene plan contains user edits. Confirm overwrite before regenerating it.",
       );
     }
+    if (stage === "SCRIPT") resetScriptReviseRound(repository.sqlite, id);
     const pipeline = stage === undefined ? orchestrator.runAll(id) : orchestrator.runStage(id, stage);
     return reply.code(202).send(pipeline);
   });
@@ -79,6 +81,16 @@ export function registerPipelineRoutes(
   }, async (request) => {
     const { id } = ParamsSchema.parse(request.params);
     return orchestrator.cancel(id);
+  });
+
+  app.post("/api/projects/:id/pipeline/stages/:stage/cancel", {
+    schema: {
+      params: StageParamsSchema,
+      response: { 200: PipelineStateSchema, 404: ApiErrorSchema, 409: ApiErrorSchema },
+    },
+  }, async (request) => {
+    const { id, stage } = StageParamsSchema.parse(request.params);
+    return orchestrator.cancel(id, stage);
   });
 
   app.post("/api/projects/:id/pipeline/stages/:stage/retry", {

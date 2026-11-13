@@ -1,4 +1,4 @@
-import { parseRenderJobScope } from "@vg/shared";
+import { parseRenderJobScope, type AspectRatio, type Project, type Render } from "@vg/shared";
 import type { StageContext, StageExecutor } from "../../pipeline/stageExecutor.js";
 import type { RenderService } from "../../services/renderService.js";
 import type { ThumbnailService } from "../../services/thumbnailService.js";
@@ -17,7 +17,7 @@ export class RenderExecutor implements StageExecutor {
   async run(context: StageContext) {
     context.reportProgress(1, "Chuẩn bị render");
     const aspectRatio = parseRenderJobScope(context.job.scope) ?? undefined;
-    const { render, reused } = await this.renders.render(
+    const { render, reused, usage } = await this.renders.render(
       context.project,
       context.signal,
       (pct, message) => {
@@ -25,22 +25,32 @@ export class RenderExecutor implements StageExecutor {
       },
       aspectRatio ? { aspectRatio } : undefined,
     );
+    if (usage && usage.llmCalls > 0) context.recordUsage(usage);
+    return this.afterRender(context.project, context.signal, aspectRatio, render, reused);
+  }
+
+  /** Thumbnails, auto shorts and the result message. Shared by a local render and one finished by a worker node. */
+  async afterRender(
+    project: Project,
+    signal: AbortSignal,
+    aspectRatio: AspectRatio | undefined,
+    render: Render,
+    reused: boolean,
+  ): Promise<{ outputHash: string; message: string }> {
     let thumbNote = "";
     if (this.thumbnails) {
       try {
-        await this.thumbnails.ensureAuto(context.project, context.signal, {
-          variant: Boolean(aspectRatio),
-        });
+        await this.thumbnails.ensureAuto(project, signal, { variant: Boolean(aspectRatio) });
       } catch (error) {
-        if (context.signal.aborted) throw error;
+        if (signal.aborted) throw error;
         thumbNote = " · thumbnail lỗi";
       }
     }
     if (this.clips && !aspectRatio) {
       try {
-        await this.clips.maybeAutoShorts(context.project, context.signal);
+        await this.clips.maybeAutoShorts(project, signal);
       } catch (error) {
-        if (context.signal.aborted) throw error;
+        if (signal.aborted) throw error;
       }
     }
     const minutes = Math.floor(render.durationSec / 60);

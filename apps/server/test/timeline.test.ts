@@ -179,6 +179,24 @@ describe("TimelineExecutor", () => {
     expect(new TimelineService(empty.sqlite, empty.config).canApproveFinal(empty.projectId).allowed).toBe(false);
   });
 
+  it("still builds when originality recheck throws", () => {
+    const harness = makeHarness({ subtitles: { enabled: false, maxCharsPerLine: 42 }, music: { enabled: false, volume: 0.1 } });
+    const scene = addScene(harness, 0, "Only scene.");
+    addVoice(harness, scene, 2);
+    harness.sqlite.exec("DROP TABLE source_manifests");
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      const built = new TimelineService(harness.sqlite, harness.config).build(harness.repository.getProject(harness.projectId)!);
+      expect(built.reused).toBe(false);
+      expect(built.timeline.scenes).toHaveLength(1);
+      const logged = warn.mock.calls.map((call) => String(call[0])).join("\n");
+      expect(logged).toContain(harness.projectId);
+      expect(logged).toContain("source_manifests");
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
   it("serves the timeline over the API", async () => {
     const harness = makeHarness({ subtitles: { enabled: false, maxCharsPerLine: 42 }, music: { enabled: false, volume: 0.1 } });
     const scene = addScene(harness, 0, "Api scene.");

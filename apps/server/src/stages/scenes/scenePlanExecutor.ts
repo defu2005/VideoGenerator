@@ -6,6 +6,7 @@ import {
   SceneQueryAssistSchema,
   ScriptSchema,
   planScenes,
+  resolveFormat,
   type SceneDraft,
   type Script,
 } from "@vg/shared";
@@ -27,8 +28,8 @@ import { getProfileDirection } from "../../services/profileService.js";
 type ScriptRow = { data: string };
 const SYSTEM_PROMPT = "You are an image-search query editor. Return only JSON matching the requested schema.";
 
-function sceneInputHash(script: Script, sceneDurationSec: number, wordsPerMinute: number): string {
-  return createHash("sha256").update(JSON.stringify([script, sceneDurationSec, wordsPerMinute])).digest("hex");
+function sceneInputHash(script: Script, sceneDurationSec: number, wordsPerMinute: number, formatKey: string): string {
+  return createHash("sha256").update(JSON.stringify([script, sceneDurationSec, wordsPerMinute, formatKey])).digest("hex");
 }
 
 function errorCode(error: unknown): string {
@@ -61,15 +62,27 @@ export class ScenePlanExecutor implements StageExecutor {
 
     const script = ScriptSchema.parse(JSON.parse(scriptRow.data) as unknown) as Script;
     const settings = context.project.settings;
+    const recipe = settings.format
+      ? resolveFormat({
+        topic: context.project.topic,
+        aspectRatio: settings.aspectRatio,
+        targetDurationSec: settings.targetDurationSec,
+        format: settings.format,
+      }).recipe
+      : null;
     const scenes = planScenes(script, {
       sceneDurationSec: settings.sceneDurationSec,
       wordsPerMinute: settings.wordsPerMinute,
       language: settings.language,
+      ...(recipe ? { targetSceneSec: recipe.scenes.targetSceneSec, visualMix: recipe.scenes.visualMix } : {}),
     });
-    const inputHash = sceneInputHash(script, settings.sceneDurationSec, settings.wordsPerMinute);
+    const inputHash = sceneInputHash(script, settings.sceneDurationSec, settings.wordsPerMinute, recipe?.id ?? "");
     const splitScenes = scenes.map((scene) => ({ index: scene.order, scene }));
     const totalSec = Math.round(scenes.reduce((sum, scene) => sum + scene.estDurationSec, 0));
-    let message = `${scenes.length} scenes · total ~${totalSec}s (target ${settings.targetDurationSec}s) · ~${settings.sceneDurationSec}s/scene`;
+    const sceneTargetSec = recipe
+      ? (recipe.scenes.targetSceneSec[0] + recipe.scenes.targetSceneSec[1]) / 2
+      : settings.sceneDurationSec;
+    let message = `${scenes.length} scenes · total ~${totalSec}s (target ${settings.targetDurationSec}s) · ~${sceneTargetSec}s/scene`;
 
     context.reportProgress(20, "Planning scenes deterministically");
     const budget = resolveBudget(context.project);

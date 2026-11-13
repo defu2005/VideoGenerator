@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { MarketCodeSchema } from "../markets/schema.js";
 import {
   AspectRatioSchema,
   AutonomyModeSchema,
@@ -12,6 +13,10 @@ import {
   BudgetSettingsSchema,
 } from "../budget/modes.js";
 import { GuidelineSettingsInputSchema, GuidelineSettingsSchema } from "../guidelines/schema.js";
+import { EditSettingsSchema } from "../edit/plan.js";
+import { MotionGraphicsSettingsSchema } from "../motion/templates.js";
+import { StageTimeoutPlanSchema } from "../pipeline/stageTimeouts.js";
+import { OnOverdueSchema } from "../pipeline/overdue.js";
 import { ThumbnailMetaSchema } from "../thumbnails/index.js";
 
 export const VideoBriefSettingsSchema = z.object({
@@ -35,6 +40,33 @@ export const VideoBriefSettingsSchema = z.object({
     volume: z.number().min(0).max(1).default(0.15),
   }).default({ enabled: true, volume: 0.15 }),
   userSet: z.array(z.string()).default([]),
+  edit: EditSettingsSchema.optional(),
+  motionGraphics: MotionGraphicsSettingsSchema.optional(),
+  /** Format recipe id. Null or omitted means the app picks one. */
+  format: z.string().nullable().optional(),
+  /** Why the recipe was chosen. Set by the format picker. */
+  formatReason: z.string().max(240).optional(),
+  stageTimeouts: StageTimeoutPlanSchema.optional(),
+  /** TASK-125: what happens when a stage passes its limit. Default "check". */
+  onOverdue: OnOverdueSchema.optional(),
+  visuals: z.object({ quality: z.enum(["budget", "best"]) }).strict().optional(),
+  treatment: z.object({
+    title: z.string(),
+    formatId: z.string(),
+    formatNameVi: z.string(),
+    angle: z.string(),
+    sections: z.array(z.object({ key: z.string(), nameVi: z.string(), estSec: z.number() }).strict()),
+    estimatedSceneCount: z.number(),
+    estimatedDurationSec: z.number(),
+    cost: z.object({
+      inputTokens: z.number(),
+      outputTokens: z.number(),
+      ttsCharacters: z.number(),
+      usd: z.number().nullable(),
+    }).strict(),
+    estimatedRenderSec: z.number().nullable(),
+    renderNoteVi: z.string(),
+  }).strict().optional(),
 });
 
 export const VideoBriefSettingsInputSchema = z.object({
@@ -55,6 +87,12 @@ export const VideoBriefSettingsInputSchema = z.object({
     volume: z.number().min(0).max(1).optional(),
   }).strict().optional(),
   userSet: z.array(z.string()).optional(),
+  edit: EditSettingsSchema.optional(),
+  motionGraphics: MotionGraphicsSettingsSchema.optional(),
+  format: z.string().nullable().optional(),
+  formatReason: z.string().max(240).optional(),
+  visuals: z.object({ quality: z.enum(["budget", "best"]) }).strict().optional(),
+  onOverdue: OnOverdueSchema.optional(),
 }).strict();
 
 const DirectBriefInputFields = {
@@ -65,6 +103,8 @@ const DirectBriefInputFields = {
 };
 
 export const ProjectSettingsSchema = z.object({
+  market: MarketCodeSchema.optional(),
+  knowledgeRev: z.string().regex(/^[a-f0-9]{12}$/).optional(),
   language: z.string().default("vi"),
   targetDurationSec: z.number().int().min(30).max(1800).default(120),
   researchMode: z.enum(["merged", "separate", "off"]).optional(),
@@ -103,10 +143,19 @@ export const ProjectSettingsSchema = z.object({
   subtitles: VideoBriefSettingsSchema.shape.subtitles,
   music: VideoBriefSettingsSchema.shape.music,
   userSet: VideoBriefSettingsSchema.shape.userSet,
+  edit: VideoBriefSettingsSchema.shape.edit,
+  motionGraphics: VideoBriefSettingsSchema.shape.motionGraphics,
+  format: VideoBriefSettingsSchema.shape.format,
+  formatReason: VideoBriefSettingsSchema.shape.formatReason,
+  stageTimeouts: VideoBriefSettingsSchema.shape.stageTimeouts,
+  onOverdue: VideoBriefSettingsSchema.shape.onOverdue,
+  treatment: VideoBriefSettingsSchema.shape.treatment,
+  visuals: VideoBriefSettingsSchema.shape.visuals,
 });
 export type ProjectSettings = z.infer<typeof ProjectSettingsSchema>;
 
 export const ProjectSettingsInputSchema = z.object({
+  market: MarketCodeSchema.optional(),
   language: z.string().optional(),
   targetDurationSec: z.number().int().min(30).max(1800).optional(),
   researchMode: z.enum(["merged", "separate", "off"]).optional(),

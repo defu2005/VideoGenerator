@@ -1,0 +1,168 @@
+{
+  "id": "research-summary",
+  "titleVi": "Tóm tắt nghiên cứu",
+  "taskId": "research",
+  "rubricVi": "Tóm tắt tiếng Việt có đủ ý và không bịa nguồn.",
+  "cases": [
+    {
+      "id": "research-summary-1",
+      "taskId": "research",
+      "input": {
+        "topic": "Chủ đề 1",
+        "notes": "Ghi chú có dấu tiếng Việt."
+      },
+      "graders": [
+        {
+          "kind": "requiredKeys",
+          "keys": [
+            "summary"
+          ]
+        },
+        {
+          "kind": "vietnameseDiacritics",
+          "minRatio": 0.02
+        }
+      ]
+    },
+    {
+      "id": "research-summary-2",
+      "taskId": "research",
+      "input": {
+        "topic": "Chủ đề 2",
+        "notes": "Ghi chú có dấu tiếng Việt."
+      },
+      "graders": [
+        {
+          "kind": "requiredKeys",
+          "keys": [
+            "summary"
+          ]
+        },
+        {
+          "kind": "vietnameseDiacritics",
+          "minRatio": 0.02
+        }
+      ]
+    },
+    {
+      "id": "research-summary-3",
+      "taskId": "research",
+      "input": {
+        "topic": "Chủ đề 3",
+        "notes": "Ghi chú có dấu tiếng Việt."
+      },
+      "graders": [
+        {
+          "kind": "requiredKeys",
+          "keys": [
+            "summary"
+          ]
+        },
+        {
+          "kind": "vietnameseDiacritics",
+          "minRatio": 0.02
+        }
+      ]
+    },
+    {
+      "id": "research-summary-4",
+      "taskId": "research",
+      "input": {
+        "topic": "Chủ đề 4",
+        "notes": "Ghi chú có dấu tiếng Việt."
+      },
+      "graders": [
+        {
+          "kind": "requiredKeys",
+          "keys": [
+            "summary"
+          ]
+        },
+        {
+          "kind": "vietnameseDiacritics",
+          "minRatio": 0.02
+        }
+      ]
+    },
+    {
+      "id": "research-summary-5",
+      "taskId": "research",
+      "input": {
+        "topic": "Chủ đề 5",
+        "notes": "Ghi chú có dấu tiếng Việt."
+      },
+      "graders": [
+        {
+          "kind": "requiredKeys",
+          "keys": [
+            "summary"
+          ]
+        },
+        {
+          "kind": "vietnameseDiacritics",
+          "minRatio": 0.02
+        }
+      ]
+    },
+    {
+      "id": "research-summary-6",
+      "taskId": "research",
+      "input": {
+        "topic": "Chủ đề 6",
+        "notes": "Ghi chú có dấu tiếng Việt."
+      },
+      "graders": [
+        {
+          "kind": "requiredKeys",
+          "keys": [
+            "summary"
+          ]
+        },
+        {
+          "kind": "vietnameseDiacritics",
+          "minRatio": 0.02
+        }
+      ]
+    },
+    {
+      "id": "research-summary-7",
+      "taskId": "research",
+      "input": {
+        "topic": "Chủ đề 7",
+        "notes": "Ghi chú có dấu tiếng Việt."
+      },
+      "graders": [
+        {
+          "kind": "requiredKeys",
+          "keys": [
+            "summary"
+          ]
+        },
+        {
+          "kind": "vietnameseDiacritics",
+          "minRatio": 0.02
+        }
+      ]
+    },
+    {
+      "id": "research-summary-8",
+      "taskId": "research",
+      "input": {
+        "topic": "Chủ đề 8",
+        "notes": "Ghi chú có dấu tiếng Việt."
+      },
+      "graders": [
+        {
+          "kind": "requiredKeys",
+          "keys": [
+            "summary"
+          ]
+        },
+        {
+          "kind": "vietnameseDiacritics",
+          "minRatio": 0.02
+        }
+      ]
+    }
+  ]
+}

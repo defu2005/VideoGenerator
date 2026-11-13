@@ -181,7 +181,7 @@ describe("AssistantPage", () => {
     expect(await screen.findByText("Đã chọn hồ sơ.")).toBeInTheDocument();
   });
 
-  it("switches to the Cursor operator chat without loading it first", async () => {
+  it("switches to the Agent operator chat without loading it first", async () => {
     vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
       const url = String(input);
       if (url.endsWith("/assistant/settings")) return jsonResponse({ confirmMode: "risky" });
@@ -208,9 +208,9 @@ describe("AssistantPage", () => {
       return jsonResponse({});
     }));
     renderWithProviders(<AssistantPage />);
-    expect(await screen.findByRole("button", { name: "Cursor operator" })).toBeInTheDocument();
-    expect(screen.queryByLabelText("Nhắn Cursor operator")).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Cursor operator" }));
-    expect(await screen.findByLabelText("Nhắn Cursor operator")).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: "Agent operator" })).toBeInTheDocument();
+    expect(screen.queryByLabelText("Nhắn Agent operator")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Agent operator" }));
+    expect(await screen.findByLabelText("Nhắn Agent operator")).toBeInTheDocument();
   });
 });

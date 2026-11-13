@@ -1,3 +1,4 @@
+import { mockVector } from "../../retrieval/embeddings.js";
 import { createHash } from "node:crypto";
 import type { LlmProvider, LlmRequest } from "./types.js";
 
@@ -33,13 +34,18 @@ export class MockLlmProvider implements LlmProvider {
   readonly id = "mock";
   readonly label = "Mock (development)";
   readonly defaultModel = "mock-v1";
-  readonly capabilities = { vision: true, maxImagesPerCall: 10 } as const;
+  readonly capabilities = { embeddings: true, vision: true, maxImagesPerCall: 10 } as const;
 
+  async embed(req: { model: string; texts: string[] }, signal: AbortSignal) {
+    if (signal.aborted) throw new DOMException("Aborted", "AbortError");
+    return { vectors: req.texts.map(mockVector), usage: { inputTokens: Math.ceil(req.texts.join("").length / 4) } };
+  }
   async generate(req: LlmRequest, signal: AbortSignal) {
     if (signal.aborted) throw new DOMException("Aborted", "AbortError");
     const prompt = req.messages[0]?.content ?? "";
     const topic = prompt.match(/^Topic:\s*(.+)$/mi)?.[1]?.trim() ?? "the supplied topic";
     const payload = parsePromptObject(prompt);
+    if (req.schemaName === "KnowledgeWatch") return response({ effect: "none" }, req.model);
     if (req.schemaName === "VisionCheck") {
       const labels = req.images?.map((image) => image.label)
         ?? (Array.isArray(payload.images) ? payload.images.map((item) => String((item as { label?: string }).label ?? "img")) : ["img-0"]);
@@ -120,7 +126,7 @@ export class MockLlmProvider implements LlmProvider {
     if (req.schemaName === "FactCheck") {
       return response({
         softenedClaims: [],
-        notes: ["Claims match the research notes."],
+        notes: [{ text: "Claims match the research notes.", severity: "minor" }],
       }, req.model);
     }
     if (req.schemaName === "visual-rerank") {
@@ -219,22 +225,29 @@ export class MockLlmProvider implements LlmProvider {
     }
     const targetSeconds = Number(prompt.match(/Target duration:\s*(\d+)/i)?.[1] ?? 180);
     const wordsPerMinute = Number(prompt.match(/Speaking pace:\s*(\d+)/i)?.[1] ?? 150);
-    const fixedNarrationWords = 18;
+    const fixedNarrationWords = 36;
     const targetWordCount = Math.max(20, Math.round(targetSeconds * wordsPerMinute / 60) - fixedNarrationWords);
     const narration = Array.from({ length: targetWordCount }, (_, index) => `sample${index + 1}`).join(" ");
     const scriptFixture = {
       title: `${topic.slice(0, 80)}: A Carefully Told Story`,
       hook: `What do we know about ${topic}, and what remains uncertain?`,
-      sections: [{
-        id: "opening",
-        heading: "Opening",
-        narration,
-        visualQueries: { primary: `${topic} documentary opening`, alternatives: ["documentary archive"] },
-        visualNotes: "A thoughtful opening image",
-        musicMood: "reflective",
-        energy: "medium",
-        estDurationSec: 0,
-      }],
+      sections: [
+        { id: "hook", sectionKey: "hook", heading: "Câu hỏi", narration: "Một câu hỏi mở.", visualQueries: { primary: `${topic} question`, alternatives: [] }, visualNotes: "", musicMood: "reflective", energy: "medium" as const, estDurationSec: 0 },
+        { id: "context", sectionKey: "context", heading: "Bối cảnh", narration: "Bối cảnh ngắn.", visualQueries: { primary: `${topic} context`, alternatives: [] }, visualNotes: "", musicMood: "reflective", energy: "medium" as const, estDurationSec: 0 },
+        {
+          id: "opening",
+          sectionKey: "point",
+          heading: "Opening",
+          narration,
+          visualQueries: { primary: `${topic} documentary opening`, alternatives: ["documentary archive"] },
+          visualNotes: "A thoughtful opening image",
+          musicMood: "reflective",
+          energy: "medium" as const,
+          estDurationSec: 0,
+        },
+        { id: "takeaway", sectionKey: "takeaway", heading: "Đúc kết", narration: "Một câu đúc kết.", visualQueries: { primary: `${topic} takeaway`, alternatives: [] }, visualNotes: "", musicMood: "reflective", energy: "medium" as const, estDurationSec: 0 },
+        { id: "cta", sectionKey: "cta", heading: "Kêu gọi", narration: "Theo dõi tiếp.", visualQueries: { primary: `${topic} follow`, alternatives: [] }, visualNotes: "", musicMood: "reflective", energy: "medium" as const, estDurationSec: 0 },
+      ],
       outro: `Check reliable sources about ${topic}, and keep asking good questions.`,
       music: { mood: "reflective", energy: "medium", keywords: ["documentary", "piano"] },
     };
@@ -247,11 +260,22 @@ export class MockLlmProvider implements LlmProvider {
     };
     if (req.schemaName === "ResearchNotes") return response(research, req.model);
     if (req.schemaName === "MergedStory") return response({ research, script: scriptFixture }, req.model);
-    if (req.schemaName === "Script") return response(scriptFixture, req.model);
+    if (req.schemaName === "Script") {
+      if (/Bản trước chưa đạt/.test(prompt)) scriptFixture.title = `${scriptFixture.title} (sửa)`;
+      return response(scriptFixture, req.model);
+    }
     if (req.schemaName === "TrendMatch") {
       const items = Array.isArray(payload.items)
         ? payload.items as Array<{ title?: string }>
         : [];
+      if (items.some((item) => /publish_project/i.test(String(item.title ?? "")) && /add_topic/i.test(String(item.title ?? "")))) {
+        return response({
+          tool_calls: [
+            { name: "publish_project", arguments: {} },
+            { name: "add_topic", arguments: { title: "X" } },
+          ],
+        }, req.model);
+      }
       return response({
         ideas: items.slice(0, 8).map((item) => {
           const title = String(item.title ?? "Xu hướng").slice(0, 180);
@@ -336,7 +360,18 @@ export class MockLlmProvider implements LlmProvider {
         notes: "Đề xuất mock dựa trên catalog hiện có.",
       }, req.model);
     }
-    if (req.schemaName === "AssistantChat") {
+    if (req.schemaName === "RouteComparison") {
+      return response({ output: req.model === "fixture-weaker" ? "Ngắn" :
+        "Đây là lời dẫn mẫu tiếng Việt, đủ độ dài cho bộ kiểm tra kịch bản ngắn." }, req.model);
+    }
+    if (req.schemaName === "ProviderIntelExtract") {
+      const page = typeof payload.pageText === "string" ? payload.pageText : "";
+      const quote = "Free tier includes 1 million tokens.";
+      return response({
+        fields: page.includes(quote) ? [{ path: "legalEntity", value: "Quoted entity", quote }] : [],
+      }, req.model);
+    }
+    if (req.schemaName === "AssistantChat" || req.schemaName === "AgentOperatorStep") {
       if (assistantChatScriptQueue.length > 0) {
         const step = assistantChatScriptQueue.shift();
         return response(step, req.model);
@@ -365,6 +400,14 @@ export class MockLlmProvider implements LlmProvider {
       const comments = Array.isArray(payload.comments)
         ? payload.comments as Array<{ externalId?: string; text?: string }>
         : [];
+      if (comments.some((comment) => /publish_project/i.test(String(comment.text ?? "")) && /add_topic/i.test(String(comment.text ?? "")))) {
+        return response({
+          tool_calls: [
+            { name: "publish_project", arguments: {} },
+            { name: "add_topic", arguments: { title: "X" } },
+          ],
+        }, req.model);
+      }
       return response({
         items: comments.map((comment) => mockCommentAssist(comment)),
       }, req.model);
@@ -378,6 +421,71 @@ export class MockLlmProvider implements LlmProvider {
         ],
       }, req.model);
     }
+    if (req.schemaName === "ScriptSectionRepair") {
+      const section = (key: string) => ({
+        id: key,
+        sectionKey: key,
+        heading: key,
+        narration: "Một câu đủ cho mục này.",
+        visualQueries: { primary: key, alternatives: [] },
+        visualNotes: "",
+        musicMood: "calm",
+        energy: "medium" as const,
+        estDurationSec: 8,
+      });
+      return response({
+        title: "Đã đủ mục",
+        hook: "Câu hỏi mở.",
+        sections: ["hook", "context", "point", "takeaway", "cta"].map(section),
+        outro: "Theo dõi tiếp.",
+        music: { mood: "calm", energy: "medium", keywords: [] },
+      }, req.model);
+    }
+    if (req.schemaName === "FormatPick") {
+      return response({ id: "explainer", reason: "Mặc định mẫu giải thích." }, req.model);
+    }
+    if (req.schemaName === "DigestLine") {
+      return response({ summary: "Bản tin: việc trong ngày vẫn trong hạn mức." }, req.model);
+    }
+    if (req.schemaName === "GoalPlan") {
+      const videos = Number(String(prompt).match(/(\d+)\s*video/i)?.[1] ?? 1);
+      return response({
+        videosPerDay: videos, platforms: ["youtube"], formats: ["long"], minQualityScore: 7,
+        topicFocus: [topic], avoid: [], publishTime: "20:00",
+      }, req.model);
+    }
+    if (req.schemaName === "OwnerMessage") {
+      const kind = /video|làm/i.test(prompt) ? "request" : /giọng|nhạc|đừng/i.test(prompt) ? "feedback" : "question";
+      return response({ kind, rule: prompt.slice(0, 180), scope: ["tts", "script"], conflicts: [] }, req.model);
+    }
+    if (req.schemaName === "RepairChoice") {
+      // Empty choices: the default ladder decides. Tests that need an agent pick inject a chooser.
+      return response({ choices: [] }, req.model);
+    }
+    if (req.schemaName === "OverdueCheck") {
+      return response(payload.trend === "up"
+        ? { action: "wait", reason: "Tiến độ vẫn đang tăng, chờ thêm." }
+        : { action: "escalate", reason: "Không thấy tiến độ, cần Hermes xem." }, req.model);
+    }
+    if (req.schemaName === "StageTimeouts") {
+      const baseline = (payload.baselineSec ?? {}) as Record<string, number>;
+      return response({
+        summary: "Theo ước lượng.",
+        stages: Object.entries(baseline).map(([stage, timeoutSec]) => ({
+          stage,
+          timeoutSec,
+          reason: "Theo brief.",
+        })),
+      }, req.model);
+    }
+    if (req.schemaName === "EditPlan") {
+      return response({
+        transitions: [],
+        motions: [],
+        emphasis: [],
+        subtitleStyle: "karaoke",
+      }, req.model);
+    }
     if (req.schemaName === "GuidelineCheck") {
       return response({ findings: [] }, req.model);
     }
@@ -386,7 +494,7 @@ export class MockLlmProvider implements LlmProvider {
       const revisedScript = sourceScript ? JSON.parse(sourceScript) as { title?: string } : scriptFixture;
       const titleTopic = revisedScript.title?.replace(/: A Carefully (?:Told|Reviewed) Story$/, "") ?? topic;
       revisedScript.title = `${titleTopic}: A Carefully Reviewed Story`;
-      return response({ revisedScript, notes: ["Tightened the opening for clarity."] }, req.model);
+      return response({ revisedScript, notes: ["Tightened the opening for clarity."], score: /\(sửa\)/.test(prompt) ? 9 : 8 }, req.model);
     }
     const result = /script editor|polishing a reviewed video script/i.test(req.system)
       ? { revisedScript: scriptFixture, notes: [`Clarified the narrative about ${topic}.`] }

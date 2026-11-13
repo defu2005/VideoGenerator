@@ -176,4 +176,17 @@ describe("planScenes", () => {
       }
     }
   });
+
+  it("uses the recipe scene length and visual mix", () => {
+    const narration = "One two three four five. Six seven eight nine ten. Eleven twelve thirteen fourteen fifteen.";
+    const wide = planScenes(script({ sections: [section("s1", narration)] }), { ...settings, sceneDurationSec: 20 });
+    const packed = planScenes(script({ sections: [section("s1", narration)] }), {
+      ...settings,
+      sceneDurationSec: 20,
+      targetSceneSec: [2, 4],
+      visualMix: ["chart"],
+    });
+    expect(packed.length).toBeGreaterThan(wide.length);
+    expect(packed[0]?.visualQueries.primary).toContain("chart");
+  });
 });

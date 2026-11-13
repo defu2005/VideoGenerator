@@ -117,4 +117,48 @@ describe("ReviewChatPanel", () => {
     fireEvent.click(screen.getByRole("button", { name: "Chạy lại" }));
     await waitFor(() => expect(calls.some((call) => call.url.includes("/pipeline/run"))).toBe(true));
   });
+
+  it("shows the stale-timeline banner and an undo button", async () => {
+    const sceneId = "11111111-1111-4111-8111-111111111111";
+    const transitionMessage: ReviewMessage = {
+      ...assistant,
+      content: "Đổi chuyển cảnh.",
+      proposals: [{
+        type: "SET_TRANSITION",
+        afterSceneId: sceneId,
+        transitionType: "zoomin",
+        durationSec: 0.4,
+      }],
+    };
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.includes("/proposals/") && init?.method === "POST") {
+        return jsonResponse({
+          error: { code: "TIMELINE_CHANGED", message: "Timeline đã thay đổi, tạo lại đề xuất?" },
+        }, 409);
+      }
+      if (url.includes("/review/undo")) return jsonResponse({ result: { ok: true }, staleStages: ["TIMELINE"] });
+      if (url.includes("/review")) {
+        return jsonResponse({
+          thread: {
+            id: assistant.threadId,
+            projectId,
+            contextHash: "abc",
+            createdAt: project.updatedAt,
+            messages: [transitionMessage],
+          },
+          estimate: { inputTokens: 1, outputTokens: 1 },
+          contextHash: "abc",
+        });
+      }
+      return jsonResponse({});
+    }));
+    renderWithProviders(<ReviewChatPanel project={project} />);
+    fireEvent.click(screen.getByRole("button", { name: /Mở/ }));
+    expect(await screen.findByRole("button", { name: "Hoàn tác" })).toBeInTheDocument();
+    expect((await screen.findAllByText(/zoomin/)).length).toBeGreaterThan(0);
+    fireEvent.click(screen.getByRole("button", { name: "Áp dụng" }));
+    expect(await screen.findByText(/Timeline đã thay đổi, tạo lại đề xuất/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Tạo lại" })).toBeInTheDocument();
+  });
 });

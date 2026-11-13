@@ -29,6 +29,8 @@ export type NormalizedImageResult = {
   downloadLocation?: string;
   /** Present when reusing a stored candidate that previously failed to download. */
   downloadError?: string | null;
+  phash?: string;
+  phashCenter?: string;
 };
 
 export type ImageSearchInput = {

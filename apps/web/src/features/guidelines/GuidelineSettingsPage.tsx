@@ -10,6 +10,7 @@ import {
 } from "@vg/shared";
 import { ErrorState } from "../../components/ErrorState";
 import { Spinner } from "../../components/Spinner";
+import { OriginalitySettings } from "./OriginalitySettings";
 import { getGuidelinePacks, getGuidelineProfiles, saveGuidelinePacks, saveGuidelineProfiles } from "../../services/guidelinesApi";
 
 const TARGETS: GuidelineTarget[] = ["script", "visuals", "music", "subtitles", "metadata"];
@@ -82,6 +83,7 @@ export function GuidelineSettingsPage() {
       </header>
       {message && <p role="status">{message}</p>}
       {error && <p className="request-error" role="alert">{error}</p>}
+      <OriginalitySettings />
       <div className="panel guideline-pack-list">
         <h2>Gói có sẵn</h2>
         <ul>

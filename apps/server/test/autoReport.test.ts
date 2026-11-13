@@ -5,8 +5,9 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import Database from "better-sqlite3";
 import { afterAll, afterEach, beforeEach, describe, expect, it } from "vitest";
-import type { Project } from "@vg/shared";
+import { STAGE_ORDER, type NotificationEvent, type Project } from "@vg/shared";
 import { buildApp } from "../src/app.js";
+import { testActor } from "./testActor.js";
 import { parseConfig, type AppConfig } from "../src/lib/config.js";
 import { JobRepository } from "../src/jobs/jobRepository.js";
 import { PipelineEventBus } from "../src/jobs/eventBus.js";
@@ -22,6 +23,7 @@ import { projectDir } from "../src/storage/paths.js";
 import { GuidelineService } from "../src/guidelines/service.js";
 import { createPipelineHarness, drainUntilGate } from "./pipelineFixtures.js";
 import { AppError } from "../src/lib/errors.js";
+import { PipelineOrchestrator } from "../src/pipeline/orchestrator.js";
 
 const pngFixture = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "fixtures", "images", "tiny.png"));
 
@@ -44,7 +46,7 @@ beforeEach(async () => {
     LLM_DEFAULT_PROVIDER: "mock",
     LLM_ENABLE_MOCK: "true",
   });
-  app = buildApp({ config });
+  app = buildApp({ testActor,  config });
   const created = await app.inject({
     method: "POST",
     url: "/api/projects",
@@ -216,24 +218,25 @@ describe("AUTO report and autoResolve", () => {
 
     expect(visuals.canApproveVisualReview(project.id).allowed).toBe(false);
     await visuals.autoResolve(project.id);
-    expect(visuals.canApproveVisualReview(project.id).allowed).toBe(true);
+    expect(visuals.canApproveVisualReview(project.id).allowed).toBe(false);
 
     const projectVisuals = visuals.getProjectVisuals(project.id);
     const byId = Object.fromEntries(projectVisuals.scenes.map((scene) => [scene.sceneId, scene]));
-    expect(byId[needsAttention].status).toBe("READY_FOR_RENDER");
-    expect(byId[needsAttention].selectedCandidate?.id).toBe(lowFit);
-    expect(byId[unverifiedOnly].status).toBe("READY_FOR_RENDER");
-    expect(byId[unverifiedOnly].selectedCandidate?.id).toBe(web);
+    expect(byId[needsAttention].status).toBe("NEEDS_ATTENTION");
+    expect(byId[needsAttention].attentionReason).toBe("vision_reject");
+    expect(byId[unverifiedOnly].status).not.toBe("READY_FOR_RENDER");
+    expect(byId[mixed].status).toBe("READY_FOR_RENDER");
     expect(byId[mixed].selectedCandidate?.id).toBe(verified);
-    expect(byId[empty].status).toBe("READY_FOR_RENDER"); // reused from neighbour
-    expect(byId[empty].selectedCandidate?.scoreBreakdown.reusedNeighbour).toBe(true);
+    expect(byId[empty].status).toBe("NEEDS_ATTENTION");
+    expect(byId[empty].attentionReason).toBe("no_candidate");
 
     const report = autoReport.responseFor(project.id);
     const codes = report.groups.flatMap((group) => group.entries.map((entry) => entry.code));
-    expect(codes).toContain("VISUAL_LOW_FIT");
-    expect(codes).toContain("VISUAL_UNVERIFIED_LICENSE");
-    expect(codes).toContain("VISUAL_REUSED_NEIGHBOUR");
-    expect(codes).not.toContain("VISUAL_SKIPPED");
+    expect(codes).toContain("VISUAL_NEEDS_USER");
+    expect(codes.filter((code) => code === "VISUAL_NEEDS_USER")).toHaveLength(1);
+    expect(codes).not.toContain("VISUAL_LOW_FIT");
+    expect(codes).not.toContain("VISUAL_TITLE_CARD");
+    expect(codes).not.toContain("VISUAL_REUSED_NEIGHBOUR");
 
     const api = await app.inject({ method: "GET", url: `/api/projects/${project.id}/auto-report` });
     expect(api.statusCode).toBe(200);
@@ -251,8 +254,10 @@ describe("AUTO report and autoResolve", () => {
     const autoReport = new AutoReportService(sqlite);
     const visuals = new VisualService(sqlite, repository, config, undefined, { autoReport });
     await visuals.autoResolve(project.id);
-    expect(visuals.getProjectVisuals(project.id).scenes[0].status).toBe("SKIPPED");
-    expect(autoReport.list(project.id).some((entry) => entry.code === "VISUAL_SKIPPED" && entry.sceneId === alone)).toBe(true);
+    expect(visuals.getProjectVisuals(project.id).scenes[0].status).toBe("NEEDS_ATTENTION");
+    expect(visuals.getProjectVisuals(project.id).scenes[0].attentionReason).toBe("no_candidate");
+    expect(autoReport.list(project.id).some((entry) => entry.code === "VISUAL_NEEDS_USER")).toBe(true);
+    expect(autoReport.list(project.id).some((entry) => entry.code === "VISUAL_TITLE_CARD" && entry.sceneId === alone)).toBe(false);
   });
 
   it("autoResolve skips a 403 download and approves the next candidate", async () => {
@@ -325,10 +330,56 @@ describe("AUTO report and autoResolve", () => {
     const byLabel = Object.fromEntries(
       visuals.getProjectVisuals(project.id).scenes.map((scene) => [scene.sceneId, scene]),
     );
-    expect(byLabel[target].status).toBe("READY_FOR_RENDER");
-    expect(byLabel[target].selectedCandidate?.scoreBreakdown.reusedNeighbour).toBe(true);
+    expect(byLabel[target].status).toBe("NEEDS_ATTENTION");
+    expect(byLabel[neighbour].status).toBe("READY_FOR_RENDER");
     expect(autoReport.list(project.id).some((entry) => entry.code === "VISUAL_DOWNLOAD_FAILED")).toBe(true);
-    expect(autoReport.list(project.id).some((entry) => entry.code === "VISUAL_REUSED_NEIGHBOUR")).toBe(true);
+    expect(autoReport.list(project.id).some((entry) => entry.code === "VISUAL_NEEDS_USER")).toBe(true);
+    expect(autoReport.list(project.id).some((entry) => entry.code === "VISUAL_TITLE_CARD")).toBe(false);
+    expect(autoReport.list(project.id).some((entry) => entry.code === "VISUAL_REUSED_NEIGHBOUR")).toBe(false);
+  });
+
+  it("AUTO waits once for images, then continues after the user uploads", async () => {
+    const sceneId = insertScene(0, "ask-user");
+    const repository = new JobRepository(sqlite, new PipelineEventBus());
+    repository.updateStage(project.id, "VISUAL_SEARCH", {
+      state: "DONE", progress: 100, message: null, jobId: null, error: null,
+    });
+    const autoReport = new AutoReportService(sqlite);
+    const visuals = new VisualService(sqlite, repository, config, undefined, { autoReport });
+    await visuals.autoResolve(project.id);
+    expect(visuals.getProjectVisuals(project.id).scenes[0].status).toBe("NEEDS_ATTENTION");
+    expect(autoReport.list(project.id).filter((entry) => entry.code === "VISUAL_NEEDS_USER")).toHaveLength(1);
+
+    repository.ensureStages(project.id);
+    for (const stage of STAGE_ORDER) {
+      if (stage === "VISUAL_REVIEW") break;
+      repository.updateStage(project.id, stage, {
+        state: "DONE", progress: 100, message: null, jobId: null, error: null,
+      });
+    }
+    const notes: NotificationEvent[] = [];
+    const orchestrator = new PipelineOrchestrator(
+      repository,
+      config,
+      app.log,
+      () => new Date("2026-11-11T00:00:00.000Z"),
+      (current, gate) => gate === "VISUAL_REVIEW"
+        ? visuals.canApproveVisualReview(current.id)
+        : { allowed: true },
+    );
+    orchestrator.setNotificationService({
+      notify: async (event: NotificationEvent) => { notes.push(event); },
+    } as never);
+    orchestrator.runAll(project.id);
+    const waiting = orchestrator.getPipeline(project.id).stages.find((stage) => stage.stage === "VISUAL_REVIEW");
+    expect(waiting?.state).toBe("WAITING_USER");
+    expect(notes.filter((event) => event.kind === "waiting_approval")).toHaveLength(1);
+    expect(notes[0]).toMatchObject({ kind: "waiting_approval", gate: "VISUAL_REVIEW" });
+
+    visuals.addUpload(project.id, sceneId, pngFixture, "scene.png", "image/png");
+    expect(visuals.canApproveVisualReview(project.id).allowed).toBe(true);
+    orchestrator.approveGate(project.id, "VISUAL_REVIEW");
+    expect(orchestrator.getPipeline(project.id).stages.find((stage) => stage.stage === "VOICE")?.state).toBe("QUEUED");
   });
 
   it("ASSISTED manual approve still returns 422 when download fails", async () => {

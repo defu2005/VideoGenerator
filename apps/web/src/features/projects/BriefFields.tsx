@@ -1,4 +1,4 @@
-import { estimateBudget, recommendBrief, resolveBudget, type BriefSettings, type BudgetFeatures } from "@vg/shared";
+import { estimateBudget, FORMAT_RECIPES, FORMAT_RECIPE_IDS, recommendBrief, resolveBudget, type BriefSettings, type BudgetFeatures } from "@vg/shared";
 import type { ReactNode } from "react";
 
 type BriefField = keyof Omit<BriefSettings, "subtitles" | "music" | "userSet">;
@@ -23,10 +23,11 @@ export function BriefFields({
       source: "user" as const,
       reason: "Custom budget feature",
     };
+    const isFull = path === "format";
     return (
-      <label className="form-field brief-field" key={path}>
+      <div className={`form-field brief-field${isFull ? " brief-field-full" : ""}`} key={path}>
         <span>
-          {label}
+          <span>{label}</span>
           {recommendation.source === "recommended" ? (
             <span className="recommendation-badge" title={recommendation.reason} aria-hidden="true">Gợi ý</span>
           ) : (
@@ -35,7 +36,7 @@ export function BriefFields({
         </span>
         {control}
         <small className="field-hint" title={recommendation.reason}>{recommendation.reason}</small>
-      </label>
+      </div>
     );
   }
 
@@ -56,6 +57,8 @@ export function BriefFields({
   const customFeature = <K extends keyof BudgetFeatures>(key: K, value: BudgetFeatures[K]) => {
     const path = `budget.features.${key}`;
     const labels: Partial<Record<keyof BudgetFeatures, string>> = {
+      knowledgeContext: "Tri thức kênh (token mỗi lần; 0 = tắt)",
+      knowledgeEmbeddings: "Tìm tri thức theo nghĩa (cần nhà cung cấp)",
       altQueryAssist: "Alternative visual query assistance (BALANCED/QUALITY/CUSTOM)",
       sceneQueryAssist: "Scene query assist (BALANCED/QUALITY/CUSTOM)",
       semanticImageRerank: "Semantic image rerank (QUALITY/CUSTOM)",
@@ -80,6 +83,14 @@ export function BriefFields({
       commentAssist: "Phân loại và gợi ý trả lời bình luận (BALANCED+)",
       trendMatch: "Ghép xu hướng với kênh (mọi chế độ)",
       translateScript: "Dịch kịch bản sang ngôn ngữ khác (BALANCED+)",
+      providerIntelExtract: "Trích trang nhà cung cấp bằng AI (BALANCED+)",
+      editPlan: "Kế hoạch dựng bằng AI (BALANCED+)",
+      formatPick: "Chọn mẫu video bằng AI (BALANCED+)",
+      stageTimeouts: "Tính thời gian tối đa mỗi bước (mọi chế độ)",
+      composeGraphics: "Đồ hoạ cảnh: tắt, một khung, hoặc chuyển động",
+      graphicGrain: "Hạt nhiễu trên đồ hoạ chuyển động",
+      operatorPlan: "Đọc mục tiêu tự vận hành (mọi chế độ)",
+      operatorClassify: "Phân loại lời chủ kênh (mọi chế độ)",
     };
     const label = labels[key] ?? key;
     if (typeof value === "boolean") {
@@ -95,16 +106,17 @@ export function BriefFields({
     return field(path, label, (
       <select aria-label={key} value={String(value)} onChange={(event) => onChange(
         path,
-        key === "repairAttempts" || key === "scriptReviewPasses" || key === "visionRetryRounds" || key === "visionThreshold" || key === "visualSearchBreadth" || key === "webImageSearch"
+        key === "knowledgeContext" || key === "repairAttempts" || key === "scriptReviewPasses" || key === "visionRetryRounds" || key === "visionThreshold" || key === "visualSearchBreadth" || key === "webImageSearch"
           ? Number(event.target.value)
           : event.target.value,
       )}>
         {(
-          key === "storyMode" ? ["merged", "separate"]
+          key === "knowledgeContext" ? ["0", "600", "1500", "3000"] : key === "storyMode" ? ["merged", "separate"]
             : key === "guidelineCheck" ? ["off", "check", "checkAndFix"]
-              : key === "visualSearchBreadth" ? ["8", "16"]
+              : key === "visualSearchBreadth" ? ["8", "16", "32"]
                 : key === "webImageSearch" ? ["0", "3", "8", "999"]
                 : key === "visionThreshold" ? ["5", "6", "7", "8", "9"]
+                  : key === "composeGraphics" ? ["off", "static", "animated"]
                   : ["0", "1", "2"]
         ).map((choice) => (
           <option key={choice} value={choice}>{choice}</option>
@@ -114,41 +126,49 @@ export function BriefFields({
   };
   return (
     <div className="brief-fields">
-      {field("budget.mode", "Chế độ AI / Budget mode", (
-        <select
-          aria-label="Chế độ AI / Budget mode"
-          value={resolved.budget.mode}
-          onChange={(event) => onChange("budget.mode", event.target.value)}
-        >
-          <option value="ECO">ECO — Rẻ nhất (~1 lượt gọi AI/video)</option>
-          <option value="BALANCED">BALANCED — Cân bằng chất lượng/chi phí (~8–14 lượt)</option>
-          <option value="QUALITY">QUALITY — Chất lượng cao: AI tự review &amp; sửa script (~9–26 lượt)</option>
-          <option value="MAX">MAX — Không tiết kiệm token — kiểm tra ảnh bằng AI nhìn</option>
-          <option value="CUSTOM">CUSTOM</option>
-        </select>
-      ))}
-      <small className="field-hint">
-        Ước tính: ~{budgetEstimate.total.min === budgetEstimate.total.max
-          ? budgetEstimate.total.min
-          : `${budgetEstimate.total.min}–${budgetEstimate.total.max}`} lượt gọi AI ({budgetEstimate.mode})
-        {budgetEstimate.tokens
-          ? ` · ~${budgetEstimate.tokens.input + budgetEstimate.tokens.output} token`
-          : ""}
-      </small>
-      <small className="field-hint">
-        Visual Search: {budgetEstimate.perStage.find((item) => item.stage === "VISUAL_SEARCH")?.calls.max
-          ? `up to ${budgetEstimate.perStage.find((item) => item.stage === "VISUAL_SEARCH")?.calls.max} LLM calls`
-          : "0 LLM calls"}
-        {budgetFeatures.webImageSearch > 0
-          ? ` · Web ảnh: tối đa ${budgetFeatures.webImageSearch >= 999 ? "mọi" : budgetFeatures.webImageSearch} scene yếu (Brave + grounding)`
-          : ""}
-        {budgetEstimate.perStage.find((item) => item.stage === "RENDER")?.calls.max
-          ? ` · Render vision up to ${budgetEstimate.perStage.find((item) => item.stage === "RENDER")?.calls.max}`
-          : ""}
-      </small>
+      <div className="brief-budget-card brief-field-full">
+        {field("budget.mode", "Chế độ AI / Budget mode", (
+          <select
+            aria-label="Chế độ AI / Budget mode"
+            value={resolved.budget.mode}
+            onChange={(event) => onChange("budget.mode", event.target.value)}
+          >
+            <option value="ECO">ECO — Rẻ nhất (~2 lượt gọi AI/video)</option>
+            <option value="BALANCED">BALANCED — Cân bằng chất lượng/chi phí (~11–17 lượt)</option>
+            <option value="QUALITY">QUALITY — Chất lượng cao: AI tự review &amp; sửa script (~9–26 lượt)</option>
+            <option value="MAX">MAX — Không tiết kiệm token — kiểm tra ảnh bằng AI nhìn</option>
+            <option value="CUSTOM">CUSTOM</option>
+          </select>
+        ))}
+        <div className="brief-budget-meta">
+          <small className="field-hint">
+            Ước tính: ~{budgetEstimate.total.min === budgetEstimate.total.max
+              ? budgetEstimate.total.min
+              : `${budgetEstimate.total.min}–${budgetEstimate.total.max}`} lượt gọi AI ({budgetEstimate.mode})
+            {budgetEstimate.tokens
+              ? ` · ~${budgetEstimate.tokens.input + budgetEstimate.tokens.output} token`
+              : ""}
+          </small>
+          <small className="field-hint">
+            Visual Search: {budgetEstimate.perStage.find((item) => item.stage === "VISUAL_SEARCH")?.calls.max
+              ? `up to ${budgetEstimate.perStage.find((item) => item.stage === "VISUAL_SEARCH")?.calls.max} LLM calls`
+              : "0 LLM calls"}
+            {budgetFeatures.webImageSearch > 0
+              ? ` · Web ảnh: tối đa ${budgetFeatures.webImageSearch >= 999 ? "mọi" : budgetFeatures.webImageSearch} scene yếu (Brave + grounding)`
+              : ""}
+            {budgetEstimate.perStage.find((item) => item.stage === "RENDER")?.calls.max
+              ? ` · Render vision up to ${budgetEstimate.perStage.find((item) => item.stage === "RENDER")?.calls.max}`
+              : ""}
+            {" · "}Đồ hoạ: {budgetFeatures.composeGraphics === "off" ? "tắt" : budgetFeatures.composeGraphics === "static" ? "một khung" : "chuyển động"}
+            {budgetFeatures.graphicGrain ? " · có hạt" : ""}
+          </small>
+        </div>
+      </div>
       {resolved.budget.mode === "CUSTOM" && (
         <fieldset className="budget-custom-fields">
           <legend>Custom AI features</legend>
+          {customFeature("knowledgeContext", budgetFeatures.knowledgeContext)}
+          {customFeature("knowledgeEmbeddings", budgetFeatures.knowledgeEmbeddings)}
           {customFeature("storyMode", budgetFeatures.storyMode)}
           {customFeature("repairAttempts", budgetFeatures.repairAttempts)}
           {customFeature("scriptReviewPasses", budgetFeatures.scriptReviewPasses)}
@@ -175,8 +195,29 @@ export function BriefFields({
           {customFeature("commentAssist", budgetFeatures.commentAssist)}
           {customFeature("trendMatch", budgetFeatures.trendMatch)}
           {customFeature("translateScript", budgetFeatures.translateScript)}
+          {customFeature("providerIntelExtract", budgetFeatures.providerIntelExtract)}
+          {customFeature("editPlan", budgetFeatures.editPlan)}
+          {customFeature("formatPick", budgetFeatures.formatPick)}
+          {customFeature("stageTimeouts", budgetFeatures.stageTimeouts)}
+          {customFeature("composeGraphics", budgetFeatures.composeGraphics)}
+          {customFeature("graphicGrain", budgetFeatures.graphicGrain)}
         </fieldset>
       )}
+      {field("format", "Mẫu video", (
+        <div role="radiogroup" aria-label="Mẫu video" className="format-cards">
+          <label>
+            <input type="radio" name="format" checked={!settings.format} onChange={() => onChange("format", "")} />
+            Tự chọn
+          </label>
+          {FORMAT_RECIPE_IDS.map((id) => (
+            <label key={id}>
+              <input type="radio" name="format" value={id} checked={settings.format === id} onChange={() => onChange("format", id)} />
+              <strong>{FORMAT_RECIPES[id].nameVi}</strong>
+              <span>{FORMAT_RECIPES[id].descriptionVi}</span>
+            </label>
+          ))}
+        </div>
+      ))}
       {select("platform", "Platform", ["youtube", "youtube_shorts", "tiktok", "facebook_reels", "custom"])}
       {select("style", "Style", ["storytelling", "documentary", "explainer", "news", "listicle"])}
       {select("tone", "Tone", ["neutral", "dramatic", "inspiring", "humorous", "serious"])}

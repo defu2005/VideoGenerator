@@ -1,4 +1,5 @@
 import type Database from "better-sqlite3";
+import { OriginalityService } from "../originality/service.js";
 
 export type GuardrailResult = {
   forcePrivate: boolean;
@@ -15,6 +16,13 @@ export function evaluatePublishGuardrail(
   renderId: string,
 ): GuardrailResult {
   const reasons: string[] = [];
+  // Refresh deterministic evidence even for old projects, changed profiles and delayed publish jobs.
+  const originality = new OriginalityService(sqlite).recheck(projectId);
+  // No timeline means there is nothing to match yet. A stored manifest must belong to this render.
+  if (originality.manifest && (originality.renderId !== renderId || !originality.manifest.renderTimelineHash
+    || originality.manifest.renderTimelineHash !== originality.manifest.timelineHash)) {
+    reasons.push("Bản render này chưa có bản kê nguồn khớp timeline; cần dựng lại và kiểm tra");
+  }
 
   const mustOpen = sqlite.prepare(
     `SELECT COUNT(*) AS count FROM guideline_findings

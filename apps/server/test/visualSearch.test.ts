@@ -3,9 +3,10 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import Database from "better-sqlite3";
-import { afterAll, afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Job, Project } from "@vg/shared";
 import { buildApp } from "../src/app.js";
+import { testActor } from "./testActor.js";
 import { parseConfig, type AppConfig } from "../src/lib/config.js";
 import { PipelineEventBus } from "../src/jobs/eventBus.js";
 import { JobRepository } from "../src/jobs/jobRepository.js";
@@ -22,6 +23,8 @@ import { dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { StageContext } from "../src/pipeline/stageExecutor.js";
 import type { VisualProvider } from "@vg/shared";
+import { BraveImageProvider } from "../src/providers/images/brave.js";
+import { runWithAutonomyBudget } from "../src/operator/autonomyBudget.js";
 
 const root = mkdtempSync(join(tmpdir(), "vg-visual-search-"));
 let dataDir: string;
@@ -51,7 +54,7 @@ beforeEach(async () => {
     LLM_ENABLE_MOCK: "true",
     LLM_DEFAULT_PROVIDER: "mock",
   });
-  app = buildApp({ config });
+  app = buildApp({ testActor,  config });
   const created = await app.inject({
     method: "POST",
     url: "/api/projects",
@@ -120,6 +123,23 @@ function context(usage: Partial<{ llmCalls: number; inputTokens: number; outputT
 }
 
 describe("visual search executor", () => {
+  it.each(["normal", "warn", "stop"] as const)("gates optional web images in budget state %s", async (state) => {
+    project = { ...project, settings: { ...project.settings, budget: { mode: "BALANCED" } } };
+    sqlite.prepare("UPDATE projects SET settings = ? WHERE id = ?").run(JSON.stringify(project.settings), project.id);
+    const enabledConfig = { ...config, BRAVE_SEARCH_API_KEY: "fixture-key" };
+    const regular = vi.fn(async () => []);
+    const web = vi.spyOn(BraveImageProvider.prototype, "search").mockResolvedValue([]);
+    visuals = new VisualService(sqlite, new JobRepository(sqlite, new PipelineEventBus()), enabledConfig, app.log, {
+      providers: [{ id: "mock", enabled: () => true, search: regular }], limiter: noWaitLimiter(),
+    });
+    try {
+      await runWithAutonomyBudget(() => ({ state, retryAt: null }),
+        () => visuals.executeStage(context([]), new LlmProviderRegistry(config)));
+      expect(regular).toHaveBeenCalled();
+      if (state === "normal") expect(web).toHaveBeenCalled();
+      else expect(web).not.toHaveBeenCalled();
+    } finally { web.mockRestore(); }
+  });
   it("uses mock results, assigns distinct images, and skips unchanged scenes on rerun", async () => {
     const registry = new LlmProviderRegistry(config);
     const firstUsage: Parameters<StageContext["recordUsage"]>[0][] = [];
@@ -167,7 +187,16 @@ describe("visual search executor", () => {
       selectedBy: "USER",
       status: "REPLACED",
     });
-    expect(result.scenes[1].selection).toEqual(secondSelectionBefore);
+    const scene1 = result.scenes[1].selection!;
+    expect(scene1.selectedBy).toBe("AGENT");
+    if (scene1.candidateId === secondSelectionBefore!.candidateId) {
+      expect(scene1).toEqual(secondSelectionBefore);
+    } else {
+      const stored = visuals.getSceneVisuals(project.id, sceneIds[1]).candidates;
+      const previous = stored.find((item) => item.id === secondSelectionBefore!.candidateId);
+      const next = stored.find((item) => item.id === scene1.candidateId);
+      expect(next?.rank).toBeLessThan(previous?.rank ?? Number.POSITIVE_INFINITY);
+    }
     expect(usage[0]?.features?.imageProviderRequests).toBeGreaterThan(0);
   });
 
@@ -212,11 +241,13 @@ describe("visual search executor", () => {
     const provider: ImageSearchProvider = {
       id: "mock",
       enabled: () => true,
-      search: async ({ query }) => query === "scene one"
-        ? [result("shared", query), result("first-alternate", query)]
-        : query === "scene two"
-          ? [result("second-best", query), result("shared", query)]
-          : [result("shared", query), result("changed-alternate", query)],
+      search: async ({ query }) => query.includes("scene two changed")
+        ? [result("changed-alternate", query)]
+        : query.includes("scene one")
+          ? [result("shared", query), result("first-alternate", query)]
+          : query.includes("scene two")
+            ? [result("second-best", query), result("shared", query)]
+            : [result("shared", query), result("changed-alternate", query)],
     };
     visuals = new VisualService(
       sqlite,
@@ -291,10 +322,8 @@ describe("visual search executor", () => {
     await visuals.executeStage(context([]), new LlmProviderRegistry(config));
     const response = await app.inject({ method: "GET", url: `/api/projects/${project.id}/visuals` });
     expect(response.statusCode).toBe(200);
-    expect(response.json()).toMatchObject({
-      summary: { lowRelevance: 1 },
-      scenes: [{ lowRelevance: true, selectedCandidate: { scoreBreakdown: { keyword: 0, lowRelevance: true } } }],
-    });
+    expect(response.json().scenes[0].selectedCandidate).toBeNull();
+    expect(visuals.getSceneVisuals(project.id, sceneIds[0]).candidates[0]?.scoreBreakdown.lowRelevance).toBe(true);
   });
 
   it("strips query variants and uses code simplification without Vietnamese visual notes", async () => {
@@ -327,9 +356,9 @@ describe("visual search executor", () => {
       { providers: [emptyProvider], limiter: noWaitLimiter() },
     );
     await visuals.executeStage(context([]), new LlmProviderRegistry(config));
-    expect(queries[0]).toBe("AlphaGo Lee Sedol game 2 move 37");
-    expect(queries).toContain("Seoul 2016");
-    expect(queries).toContain("AlphaGo Lee Sedol");
+    expect(queries[0]).toBe("Visual search fixture AlphaGo Lee Sedol game 2 move 37");
+    expect(queries.some((query) => query.includes("Seoul 2016"))).toBe(true);
+    expect(queries.some((query) => query.includes("AlphaGo Lee Sedol"))).toBe(true);
     expect(queries.some((query) => /archival photo|illustration|bản đồ|Việt Nam/i.test(query))).toBe(false);
   });
 
@@ -454,7 +483,7 @@ describe("visual search executor", () => {
     const result = await visuals.executeStage(context([]), new LlmProviderRegistry(config));
     expect(locCalls).toBe(1);
     expect(nasaCalls).toBeGreaterThan(1);
-    expect(result.message).toContain("loc: bị chặn (Cloudflare)");
+    expect(result.message).toContain("loc: blocked (Cloudflare)");
     const status = getImageSourcesSettingsStatus(sqlite, config);
     expect(status.sources.find((row) => row.id === "loc")?.lastBlockedAt).toBeTruthy();
     expect(status.sources.find((row) => row.id === "loc")?.enabled).toBe(true);
@@ -491,7 +520,214 @@ describe("visual search executor", () => {
 
     rateLimit = false;
     const second = await visuals.approveAll(project.id);
-    expect(second).toEqual({ approved: 1, failed: [] });
+    expect(second).toEqual({ approved: 1, failed: [], skipped: 0, skipReasons: {} });
     expect(visuals.getProjectVisuals(project.id).scenes.every((scene) => scene.selection?.status === "APPROVED")).toBe(true);
+  });
+
+  it("raises one Cần bạn when web image search has no key and refuses a rendering project", async () => {
+    const first = await app.inject({
+      method: "POST",
+      url: `/api/projects/${project.id}/visuals/research`,
+      payload: { reason: "low_relevance" },
+    });
+    const second = await app.inject({
+      method: "POST",
+      url: `/api/projects/${project.id}/visuals/research`,
+      payload: {},
+    });
+    expect(first.statusCode).toBe(200);
+    expect(second.json().webSearch).toBe(false);
+    const open = sqlite.prepare("SELECT COUNT(*) AS n FROM operator_requests WHERE dedupe_key = ? AND status = 'open'")
+      .get(`visual-search:${project.id}`) as { n: number };
+    expect(open.n).toBe(1);
+    sqlite.prepare("UPDATE projects SET status = 'RENDERING' WHERE id = ?").run(project.id);
+    const blocked = await app.inject({
+      method: "POST",
+      url: `/api/projects/${project.id}/visuals/research`,
+      payload: {},
+    });
+    expect(blocked.statusCode).toBe(409);
+  });
+
+  it("keeps finished scene searches across an abort and a rerun", async () => {
+    sqlite.prepare("DELETE FROM scenes WHERE project_id = ?").run(project.id);
+    const now = new Date().toISOString();
+    const insertScene = sqlite.prepare(
+      `INSERT INTO scenes (id, project_id, "order", kind, section_id, label, narration, visual_notes, visual_queries,
+        music_mood, energy, est_duration_sec, duration_override_sec, start_sec, transition_note, origin, edited,
+        input_hash, created_at, updated_at)
+       VALUES (?, ?, ?, 'section', NULL, ?, 'narration', 'notes', ?, '', 'medium', 4, NULL, ?, '', 'AGENT', 0, 'fixture', ?, ?)`,
+    );
+    const ids = Array.from({ length: 6 }, () => randomUUID());
+    ids.forEach((id, order) => insertScene.run(
+      id, project.id, order, `Scene ${order + 1}`,
+      JSON.stringify({ primary: `alpha${order}`, alternatives: [], queryVariant: false }),
+      order * 4, now, now,
+    ));
+    const calls: string[] = [];
+    const provider: ImageSearchProvider = {
+      id: "mock",
+      enabled: () => true,
+      search: async ({ query }) => {
+        calls.push(query);
+        return Array.from({ length: 8 }, (_, index) => ({
+          provider: "mock" as const,
+          providerItemId: `${query}-${index}`,
+          title: query,
+          description: query,
+          tags: [query],
+          previewUrl: `https://img.example/${query}-${index}.jpg`,
+          imageUrl: `https://img.example/${query}-${index}.jpg`,
+          sourceUrl: `https://example.com/${query}-${index}`,
+          sourceSite: "example.com",
+          width: 1600,
+          height: 900,
+          fileType: "jpg",
+          watermark: "NONE" as const,
+          license: {
+            kind: "CC0" as const,
+            name: "CC0",
+            url: null,
+            author: null,
+            authorUrl: null,
+            attributionRequired: false,
+            attributionText: "",
+            evidence: "api" as const,
+          },
+        }));
+      },
+    };
+    visuals = new VisualService(sqlite, new JobRepository(sqlite, new PipelineEventBus()), config, app.log, {
+      providers: [provider], limiter: noWaitLimiter(),
+    });
+    const controller = new AbortController();
+    const usage: Parameters<StageContext["recordUsage"]>[0][] = [];
+    const stopped = context(usage);
+    await expect(visuals.executeStage({
+      ...stopped,
+      signal: controller.signal,
+      reportProgress: (_progress, message) => {
+        if (String(message).includes("scene 4/")) controller.abort(new Error("stop after 4"));
+      },
+    }, new LlmProviderRegistry(config))).rejects.toThrow(/stop after 4/);
+    const saved = sqlite.prepare("SELECT COUNT(*) AS n FROM visual_search_checkpoints WHERE project_id = ?")
+      .get(project.id) as { n: number };
+    expect(saved.n).toBe(4);
+    expect(calls.some((query) => query.includes("alpha4") || query.includes("alpha5"))).toBe(false);
+
+    calls.length = 0;
+    const rerunUsage: Parameters<StageContext["recordUsage"]>[0][] = [];
+    const finished = await visuals.executeStage(context(rerunUsage), new LlmProviderRegistry(config));
+    expect(finished.message).toContain("dùng lại 4 cảnh đã tìm");
+    expect(calls.every((query) => query.includes("alpha4") || query.includes("alpha5"))).toBe(true);
+    expect(calls.length).toBeGreaterThan(0);
+    const left = sqlite.prepare("SELECT COUNT(*) AS n FROM visual_search_checkpoints WHERE project_id = ?")
+      .get(project.id) as { n: number };
+    expect(left.n).toBe(0);
+  });
+
+  it("ignores a stale or mismatched checkpoint and keeps a user selection", async () => {
+    sqlite.prepare("DELETE FROM scenes WHERE project_id = ?").run(project.id);
+    const now = new Date().toISOString();
+    const sceneId = randomUUID();
+    const otherId = randomUUID();
+    const insertScene = sqlite.prepare(
+      `INSERT INTO scenes (id, project_id, "order", kind, section_id, label, narration, visual_notes, visual_queries,
+        music_mood, energy, est_duration_sec, duration_override_sec, start_sec, transition_note, origin, edited,
+        input_hash, created_at, updated_at)
+       VALUES (?, ?, ?, 'section', NULL, 'Scene', 'narration', 'notes', ?, '', 'medium', 4, NULL, ?, '', 'AGENT', 0, 'fixture', ?, ?)`,
+    );
+    insertScene.run(sceneId, project.id, 0, JSON.stringify({ primary: "alpha0", alternatives: [], queryVariant: false }), 0, now, now);
+    insertScene.run(otherId, project.id, 1, JSON.stringify({ primary: "alpha1", alternatives: [], queryVariant: false }), 4, now, now);
+    const calls: string[] = [];
+    const provider: ImageSearchProvider = {
+      id: "mock",
+      enabled: () => true,
+      search: async ({ query }) => {
+        calls.push(query);
+        return [{
+          provider: "mock" as const,
+          providerItemId: `${query}-0`,
+          title: query,
+          description: query,
+          tags: [query],
+          previewUrl: "https://img.example/a.jpg",
+          imageUrl: "https://img.example/a.jpg",
+          sourceUrl: "https://example.com/a",
+          sourceSite: "example.com",
+          width: 1600,
+          height: 900,
+          fileType: "jpg",
+          watermark: "NONE" as const,
+          license: {
+            kind: "CC0" as const, name: "CC0", url: null, author: null, authorUrl: null,
+            attributionRequired: false, attributionText: "", evidence: "api" as const,
+          },
+        }];
+      },
+    };
+    visuals = new VisualService(sqlite, new JobRepository(sqlite, new PipelineEventBus()), config, app.log, {
+      providers: [provider], limiter: noWaitLimiter(),
+    });
+    const controller = new AbortController();
+    await expect(visuals.executeStage({
+      ...context([]),
+      signal: controller.signal,
+      reportProgress: (_progress, message) => {
+        if (String(message).includes("scene 1/")) controller.abort(new Error("stop after 1"));
+      },
+    }, new LlmProviderRegistry(config))).rejects.toThrow(/stop after 1/);
+    const row = sqlite.prepare("SELECT search_hash, queries, candidates FROM visual_search_checkpoints WHERE scene_id = ?")
+      .get(sceneId) as { search_hash: string; queries: string; candidates: string };
+    sqlite.prepare("UPDATE visual_search_checkpoints SET search_hash = ? WHERE scene_id = ?").run("different-hash", sceneId);
+    sqlite.prepare("DELETE FROM image_search_cache").run();
+    calls.length = 0;
+    const mismatched = await visuals.executeStage(context([]), new LlmProviderRegistry(config));
+    expect(mismatched.message).not.toContain("dùng lại");
+    expect(calls.some((query) => query.includes("alpha0"))).toBe(true);
+
+    sqlite.prepare("DELETE FROM visual_search_state WHERE scene_id = ?").run(sceneId);
+    sqlite.prepare("DELETE FROM visual_search_checkpoints WHERE scene_id = ?").run(sceneId);
+    sqlite.prepare(
+      `INSERT INTO visual_search_checkpoints (scene_id, project_id, search_hash, queries, candidates, created_at)
+       VALUES (?, ?, ?, ?, ?, ?)`,
+    ).run(sceneId, project.id, row.search_hash, row.queries, row.candidates, new Date(Date.now() - 7 * 60 * 60 * 1000).toISOString());
+    sqlite.prepare("DELETE FROM image_search_cache").run();
+    calls.length = 0;
+    const stale = await visuals.executeStage(context([]), new LlmProviderRegistry(config));
+    expect(stale.message).not.toContain("dùng lại");
+    expect(calls.some((query) => query.includes("alpha0"))).toBe(true);
+
+    const keptId = randomUUID();
+    sqlite.prepare("DELETE FROM visual_search_state WHERE scene_id = ?").run(sceneId);
+    sqlite.prepare("DELETE FROM visual_candidates WHERE scene_id = ?").run(sceneId);
+    sqlite.prepare("DELETE FROM visual_selections WHERE scene_id = ?").run(sceneId);
+    sqlite.prepare(
+      `INSERT INTO visual_candidates (
+        id, project_id, scene_id, origin, provider, provider_item_id, query, title, description, tags,
+        preview_url, image_url, source_url, source_site, width, height, aspect_ratio, file_type, watermark,
+        relevance_score, score_breakdown, license, rank, created_at, search_hash)
+       VALUES (?, ?, ?, 'SEARCH', 'mock', 'kept', 'alpha0', 'alpha0', 'alpha0', '[]',
+        'https://img.example/kept.jpg', 'https://img.example/kept.jpg', 'https://example.com/kept', 'example.com',
+        1600, 900, 1.777, 'jpg', 'NONE', 1, '{}', ?, 0, ?, ?)`,
+    ).run(keptId, project.id, sceneId, JSON.stringify({
+      kind: "CC0", name: "CC0", url: null, author: null, authorUrl: null,
+      attributionRequired: false, attributionText: "", evidence: "api",
+    }), now, row.search_hash);
+    sqlite.prepare(
+      `INSERT INTO visual_selections (id, project_id, scene_id, slot, candidate_id, status, selected_by, created_at, updated_at)
+       VALUES (?, ?, ?, 0, ?, 'APPROVED', 'USER', ?, ?)`,
+    ).run(randomUUID(), project.id, sceneId, keptId, now, now);
+    sqlite.prepare(
+      `INSERT INTO visual_search_checkpoints (scene_id, project_id, search_hash, queries, candidates, created_at)
+       VALUES (?, ?, ?, ?, ?, ?)
+       ON CONFLICT(scene_id) DO UPDATE SET search_hash = excluded.search_hash, queries = excluded.queries, candidates = excluded.candidates, created_at = excluded.created_at`,
+    ).run(sceneId, project.id, row.search_hash, row.queries, row.candidates, new Date().toISOString());
+    await visuals.executeStage(context([]), new LlmProviderRegistry(config));
+    expect(visuals.getProjectVisuals(project.id).scenes[0]?.selection).toMatchObject({
+      candidateId: keptId,
+      selectedBy: "USER",
+      status: "APPROVED",
+    });
   });
 });

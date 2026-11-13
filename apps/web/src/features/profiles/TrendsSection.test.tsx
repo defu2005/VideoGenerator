@@ -10,6 +10,7 @@ const profile = {
   description: "",
   direction: "Lịch sử",
   language: "vi",
+  market: null,
   defaultBrief: {
     budget: { mode: "BALANCED" },
     platform: "youtube",

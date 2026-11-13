@@ -14,6 +14,7 @@ import { parseConfig } from "../src/lib/config.js";
 import { AppError } from "../src/lib/errors.js";
 import {
   buildFeatureRows,
+  computeInsightStats,
   isWeeklyInsightDue,
   MIN_SCORED_VIDEOS,
   shouldSwitchTitle,
@@ -94,6 +95,7 @@ function source(partial: Partial<LearningSource> & Pick<LearningSource, "publica
     aspect: "16:9",
     language: "vi",
     template: "documentary",
+    format: partial.format ?? null,
     title: partial.title ?? "Tiêu đề video",
     hashtagCount: 2,
     profit: partial.profit ?? null,
@@ -148,6 +150,63 @@ describe("feature rows", () => {
     expect(scored.length).toBeGreaterThanOrEqual(MIN_SCORED_VIDEOS);
   });
 
+  it("keeps compose pacing on feature rows and leaves legacy rows empty", () => {
+    const published = "2026-01-01T00:00:00.000Z";
+    const rows = buildFeatureRows([
+      source({
+        publicationId: "33333333-3333-4333-8333-333333333333",
+        platform: "youtube",
+        publishedAt: published,
+        snapshots: [{ ...snap(published, 80, 100), avgViewPct: 55 }],
+        engine: "compose",
+        shotsPerMin: 22,
+        stillShare: 0.2,
+        graphicShare: 0.1,
+        beatCutPct: 0.4,
+        hookShotKind: "map",
+        kindEntropyBits: 1.5,
+      }),
+      source({
+        publicationId: "44444444-4444-4444-8444-444444444444",
+        platform: "youtube",
+        publishedAt: published,
+        snapshots: [{ ...snap(published, 80, 80), avgViewPct: 20 }],
+        engine: "legacy",
+        shotsPerMin: 22,
+        stillShare: 0.9,
+      }),
+    ]);
+    const compose = rows.find((row) => row.publicationId.startsWith("3333"))!;
+    const legacy = rows.find((row) => row.publicationId.startsWith("4444"))!;
+    expect(compose).toMatchObject({ engine: "compose", shotsPerMin: 22, stillShare: 0.2, graphicShare: 0.1, beatCutPct: 0.4, hookShotKind: "map", kindEntropyBits: 1.5 });
+    expect(legacy.engine).toBeNull();
+    expect(legacy.shotsPerMin).toBeNull();
+    expect(legacy.stillShare).toBeNull();
+    expect(legacy.hookShotKind).toBeNull();
+  });
+
+  it("says denser shot plans hold viewers when the top quarter is ahead", () => {
+    const published = "2026-01-01T00:00:00.000Z";
+    const rows = buildFeatureRows([0, 1, 2, 3, 4, 5, 6, 7].map((index) => source({
+      publicationId: `5555555${index}-5555-4555-8555-555555555555`,
+      platform: "youtube",
+      publishedAt: published,
+      snapshots: [{ ...snap(published, 80, 100 + index), avgViewPct: 10 + index * 10 }],
+      engine: "compose",
+      shotsPerMin: index < 4 ? 8 : 24,
+      stillShare: 0.3,
+      graphicShare: 0,
+      beatCutPct: null,
+      hookShotKind: "footage",
+      kindEntropyBits: 1,
+    })));
+    expect(computeInsightStats(rows).composeNotes).toEqual(["video có ≥ 20 cảnh/phút giữ người xem tốt hơn"]);
+    const flat = rows.map((row) => ({ ...row, shotsPerMin: 12 }));
+    expect(computeInsightStats(flat).composeNotes).toEqual([]);
+    const mixed = computeInsightStats([...rows, ...rows.map((row) => ({ ...row, publicationId: `${row.publicationId}-legacy`, engine: null, shotsPerMin: null, stillShare: null, graphicShare: null, beatCutPct: null, hookShotKind: null, kindEntropyBits: null }))]);
+    expect(mixed.composeNotes).toEqual(["video có ≥ 20 cảnh/phút giữ người xem tốt hơn"]);
+  });
+
   it("drops unsupported publish times and clamps duration onto the observed range", () => {
     const stats = {
       hourBuckets: [
@@ -159,6 +218,7 @@ describe("feature rows", () => {
       observedDuration: { min: 120, max: 120 },
       topicClusters: [],
       overallMedian: 50,
+      composeNotes: [],
     };
     const validated = validateRecommendations({
       directionAddendum: "x".repeat(800),

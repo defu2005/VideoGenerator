@@ -1,0 +1,34 @@
+{
+  "id": "end_card",
+  "version": 1,
+  "nameVi": "Thẻ kết",
+  "descriptionVi": "Lời kêu gọi theo dõi và tên kênh, 3 giây cuối.",
+  "kinds": [
+    "overlay",
+    "fullscreen"
+  ],
+  "minDurationSec": 2,
+  "maxDurationSec": 4,
+  "defaultDurationSec": 3,
+  "safeArea": "full",
+  "origin": "written for this app",
+  "variables": [
+    {
+      "name": "line",
+      "type": "string",
+      "maxLength": 40,
+      "default": "Theo dõi để xem thêm"
+    },
+    {
+      "name": "channel",
+      "type": "string",
+      "maxLength": 32,
+      "default": ""
+    },
+    {
+      "name": "color",
+      "type": "color",
+      "default": "#F8FAFC"
+    }
+  ]
+}

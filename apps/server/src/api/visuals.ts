@@ -129,6 +129,60 @@ export function registerVisualRoutes(
     return service.webSearch(id, sceneId);
   });
 
+  app.put("/api/projects/:id/scenes/:sceneId/crop", async (request) => {
+    const { id, sceneId } = SceneParams.parse(request.params);
+    const body = z.object({
+      aspect: z.enum(["16:9", "9:16", "1:1"]),
+      box: z.object({
+        x: z.number().int().nonnegative(),
+        y: z.number().int().nonnegative(),
+        width: z.number().int().positive(),
+        height: z.number().int().positive(),
+      }).strict(),
+    }).strict().parse(request.body);
+    ensureSceneMutationAllowed(id, sceneId);
+    return service.saveManualCrop(id, sceneId, body.aspect, body.box);
+  });
+
+  app.delete("/api/projects/:id/scenes/:sceneId/crop", async (request) => {
+    const { id, sceneId } = SceneParams.parse(request.params);
+    const aspect = z.enum(["16:9", "9:16", "1:1"]).parse((request.query as { aspect?: string }).aspect);
+    ensureSceneMutationAllowed(id, sceneId);
+    service.removeCrop(id, sceneId, aspect);
+    return { removed: true };
+  });
+
+  app.post("/api/projects/:id/visuals/crop", async (request) => {
+    const { id } = ProjectParams.parse(request.params);
+    const body = z.object({
+      sceneIds: z.array(z.string().uuid()).optional(),
+      aspects: z.array(z.enum(["16:9", "9:16", "1:1"])).min(1),
+    }).strict().parse(request.body ?? {});
+    ensureNoActiveJob(id);
+    return { crops: await service.cropScenes(id, body.sceneIds, body.aspects) };
+  });
+
+  app.post("/api/projects/:id/scenes/:sceneId/crop", async (request) => {
+    const { id, sceneId } = SceneParams.parse(request.params);
+    const body = z.object({ aspect: z.enum(["16:9", "9:16", "1:1"]).optional() }).parse(request.body ?? {});
+    ensureSceneMutationAllowed(id, sceneId);
+    return service.cropScene(id, sceneId, body.aspect);
+  });
+
+  app.post("/api/projects/:id/visuals/dedupe", async (request) => {
+    const { id } = ProjectParams.parse(request.params);
+    return service.dedupeSceneVisuals(id);
+  });
+
+  app.post("/api/projects/:id/visuals/research", async (request) => {
+    const { id } = ProjectParams.parse(request.params);
+    const body = z.object({
+      sceneIds: z.array(z.string().uuid()).optional(),
+      reason: z.string().max(80).optional(),
+    }).strict().parse(request.body ?? {});
+    return service.researchOffTopic(id, body);
+  });
+
   app.post("/api/projects/:id/scenes/:sceneId/visuals/select", {
     schema: {
       params: SceneParams,
@@ -209,6 +263,8 @@ export function registerVisualRoutes(
       response: { 200: z.object({
         approved: z.number().int().nonnegative(),
         failed: z.array(z.object({ sceneId: z.string().uuid(), reason: z.string(), retryable: z.boolean() }).strict()),
+        skipped: z.number().int().nonnegative(),
+        skipReasons: z.record(z.string(), z.number().int().nonnegative()),
       }).strict(), ...Errors },
     },
   }, async (request) => {

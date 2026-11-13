@@ -292,7 +292,10 @@ function limitingReset(rule: LlmQuotaRule, rows: UsageRow[], model: string, now:
 }
 
 function ruleCoveredByLive(rule: LlmQuotaRule, snapshots: readonly QuotaSnapshot[], now: Date): boolean {
-  const fresh = freshSnapshots(snapshots, now).filter((row) => appProviderForOmniroute(row.omnirouteProvider) === rule.provider);
+  const fresh = freshSnapshots(snapshots, now).filter((row) => {
+    const mapped = appProviderForOmniroute(row.omnirouteProvider);
+    return mapped !== null && mapped === rule.provider;
+  });
   if (fresh.length === 0) return false;
   if (rule.model === "*" || rule.model.includes("*")) return true;
   return matchLiveQuota(fresh.map((row) => row.quotaKey), rule.model) != null;

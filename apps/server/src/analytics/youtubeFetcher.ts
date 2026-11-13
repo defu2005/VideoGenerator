@@ -1,5 +1,6 @@
+import type { KnowledgeService } from "../knowledge/service.js";
 import type { TokenSet } from "@vg/shared";
-import { ANALYTICS_REQUIRED_SCOPES } from "./scopes.js";
+import { analyticsScopes } from "./scopes.js";
 import type { YoutubeQuotaTracker } from "../publishing/youtubeQuota.js";
 import {
   AnalyticsHttpError,
@@ -25,6 +26,7 @@ export function chunkIds<T>(items: T[], size: number): T[][] {
 }
 
 export type YoutubeFetcherOptions = {
+  knowledge?: KnowledgeService;
   fetchImpl?: typeof fetch;
   youtubeQuota?: YoutubeQuotaTracker;
   logger?: AnalyticsLogger;
@@ -44,7 +46,7 @@ type AnalyticsRow = (string | number)[];
 
 export class YoutubeMetricsFetcher implements MetricsFetcher {
   readonly platform = "youtube" as const;
-  readonly requiredScopes = [...ANALYTICS_REQUIRED_SCOPES.youtube];
+  get requiredScopes() { return analyticsScopes(this.platform, this.options.knowledge); }
 
   private readonly fetchImpl: typeof fetch;
   private readonly quota?: YoutubeQuotaTracker;
@@ -52,7 +54,7 @@ export class YoutubeMetricsFetcher implements MetricsFetcher {
   private readonly now: () => Date;
   private loggedRejected = false;
 
-  constructor(options: YoutubeFetcherOptions = {}) {
+  constructor(private readonly options: YoutubeFetcherOptions = {}) {
     this.fetchImpl = options.fetchImpl ?? fetch;
     this.quota = options.youtubeQuota;
     this.logger = options.logger;
@@ -166,7 +168,7 @@ export class YoutubeMetricsFetcher implements MetricsFetcher {
 
     // Absolute follower count for "today" via Data API (1 unit).
     try {
-      if (this.quota?.wouldExceed(1)) {
+      if (this.quota && !this.quota.charge("videos.list")) {
         throw new AnalyticsHttpError("Hết hạn mức YouTube Data API trong ngày", 429, true);
       }
       const chUrl = new URL(`${DATA_API}/channels`);
@@ -176,7 +178,6 @@ export class YoutubeMetricsFetcher implements MetricsFetcher {
         signal,
         headers: { Authorization: `Bearer ${tokens.accessToken}` },
       });
-      this.quota?.record(1);
       if (chRes.ok) {
         const chBody = (await chRes.json()) as {
           items?: Array<{ statistics?: { subscriberCount?: string } }>;
@@ -203,7 +204,7 @@ export class YoutubeMetricsFetcher implements MetricsFetcher {
     accessToken: string,
     signal: AbortSignal,
   ): Promise<StatsItem[]> {
-    if (this.quota?.wouldExceed(1)) {
+    if (this.quota && !this.quota.charge("channels.list")) {
       throw new AnalyticsHttpError("Hết hạn mức YouTube Data API trong ngày", 429, true);
     }
     const url = new URL(`${DATA_API}/videos`);
@@ -213,7 +214,6 @@ export class YoutubeMetricsFetcher implements MetricsFetcher {
       signal,
       headers: { Authorization: `Bearer ${accessToken}` },
     });
-    this.quota?.record(1);
     await throwIfBad(response, "YouTube videos.list");
     const body = (await response.json()) as { items?: StatsItem[] };
     return body.items ?? [];

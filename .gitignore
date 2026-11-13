@@ -3,6 +3,7 @@ dist/
 coverage/
 data/
 .env
+reports/skill-runs/
 *.db
 *.db-shm
 *.db-wal
@@ -11,4 +12,9 @@ data/
 .ollama/
 .secrets/
 *.log
+
+# Generated provider monitoring and reports. Research files stay tracked.
+provider-intelligence/monitoring/
+provider-intelligence/reports/
+.playwright-mcp/
 

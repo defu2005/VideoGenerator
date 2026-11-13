@@ -7,6 +7,7 @@ const STATUS_LABELS: Record<ProjectStatus, string> = {
   RENDERING: "Rendering",
   COMPLETED: "Completed",
   FAILED: "Failed",
+  SHELVED: "Shelved",
 };
 
 export function StatusBadge({ status }: { status: ProjectStatus }) {

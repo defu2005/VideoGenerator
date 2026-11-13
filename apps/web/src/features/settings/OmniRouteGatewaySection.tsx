@@ -1,6 +1,8 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
+  LITELLM_CAPABILITIES,
+  resolveCapability,
   type LlmGatewayMapping,
   type LlmGatewayMode,
   type LlmGatewaySettings,
@@ -31,6 +33,7 @@ export function OmniRouteGatewaySection() {
   const catalog = useQuery({ queryKey: ["omniroute-catalog"], queryFn: getOmnirouteCatalog });
   const [draft, setDraft] = useState<LlmGatewaySettings>({ mode: "off", mappings: [] });
   const [message, setMessage] = useState("");
+  const [probeNote, setProbeNote] = useState("");
 
   useEffect(() => {
     if (gateway.data) setDraft(gateway.data);
@@ -193,6 +196,21 @@ export function OmniRouteGatewaySection() {
               </button>
             </div>
           ))}
+          <ul aria-label="Nguồn khả năng model">
+            {(catalog.data?.models ?? []).slice(0, 12).map((model) => {
+              const capability = resolveCapability({
+                modelId: model.id,
+                omniroute: model.vision === undefined ? undefined : { vision: model.vision },
+                litellm: LITELLM_CAPABILITIES[model.id.split("/").pop() ?? model.id],
+              });
+              const source = capability.source === "omniroute" ? "từ OmniRoute"
+                : capability.source === "litellm" ? "từ bảng LiteLLM"
+                  : capability.source === "probe" ? "đã thử"
+                    : capability.source === "override" ? "tự đặt"
+                      : "theo tên";
+              return <li key={model.id}>{model.id} · {source}{capability.vision ? " · nhìn ảnh" : ""}</li>;
+            })}
+          </ul>
           <datalist id="omniroute-model-options">
             {(catalog.data?.models ?? []).map((model) => (
               <option key={model.id} value={model.id}>{model.ownedBy}</option>
@@ -201,6 +219,31 @@ export function OmniRouteGatewaySection() {
         </div>
 
         <div className="button-row">
+          <button
+            className="button"
+            type="button"
+            onClick={() => {
+              const modelId = draft.mappings[0]?.omnirouteModel || catalog.data?.models[0]?.id;
+              if (!modelId) {
+                setProbeNote("Chưa có model để kiểm tra.");
+                return;
+              }
+              void fetch("/api/llm/capabilities/probe", {
+                method: "POST",
+                headers: { "content-type": "application/json" },
+                body: JSON.stringify({ modelId }),
+              }).then(async (response) => {
+                if (!response.ok) {
+                  setProbeNote("Không kiểm tra được. Thử lại khi OmniRoute đang chạy.");
+                  return;
+                }
+                const body = await response.json() as { vision?: boolean };
+                setProbeNote(body.vision ? `${modelId}: đã thử, nhìn được ảnh.` : `${modelId}: đã thử, không nhìn được ảnh.`);
+              }).catch(() => setProbeNote("Không kiểm tra được."));
+            }}
+          >
+            Kiểm tra khả năng
+          </button>
           <button className="button button-primary" type="submit" disabled={save.isPending}>
             {save.isPending ? "Đang lưu…" : "Lưu gateway"}
           </button>
@@ -217,6 +260,7 @@ export function OmniRouteGatewaySection() {
           </button>
         </div>
         {message && <p role="status" className="success-message">{message}</p>}
+        {probeNote ? <p>{probeNote}</p> : null}
       </form>
     </section>
   );

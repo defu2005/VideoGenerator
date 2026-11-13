@@ -2,7 +2,7 @@ import {
   ApiErrorSchema,
   LLM_TASKS,
   LlmGatewaySettingsSchema,
-  LlmProviderIdSchema,
+  LlmProviderRefIdSchema,
   LlmProviderInfoSchema,
   LlmQuotaModelRefSchema,
   LlmQuotaPolicyBodySchema,
@@ -10,6 +10,9 @@ import {
   LlmQuotaStatusSchema,
   OmniRouteTokenBodySchema,
   LlmSettingsSchema,
+  LlmRouteAssignBodySchema,
+  LlmRouteAssignResultSchema,
+  LlmVisionMarksSchema,
   ModelAdvisorApplyBodySchema,
   ModelAdvisorApplyResultSchema,
   ModelAdvisorProposeBodySchema,
@@ -24,7 +27,8 @@ import type Database from "better-sqlite3";
 import type { LlmProviderRegistry } from "../providers/llm/registry.js";
 import type { ProjectService } from "../services/projectService.js";
 import type { ProfileService } from "../services/profileService.js";
-import { getAppLlmSettings, saveAppLlmSettings } from "../providers/llm/settings.js";
+import { getAppLlmSettings, getLlmVisionMarks, saveAppLlmSettings } from "../providers/llm/settings.js";
+import { assignLlmRoutes } from "../providers/llm/routeAssign.js";
 import {
   clearLlmCooldown,
   readQuotaStatus,
@@ -51,7 +55,7 @@ const TaskCatalogSchema = z.array(z.object({
   budgetFeature: z.string().optional(),
 }).strict());
 const ModelSuggestionsSchema = z.object({
-  provider: LlmProviderIdSchema,
+  provider: LlmProviderRefIdSchema,
   models: z.array(z.string()),
 }).strict();
 const ProjectRoutesSchema = z.object({
@@ -124,12 +128,29 @@ export function registerLlmRoutes(
     return settings;
   });
 
+  app.get("/api/settings/llm-vision-models", {
+    schema: { response: { 200: LlmVisionMarksSchema } },
+  }, async () => getLlmVisionMarks(sqlite));
+
+  app.post("/api/settings/llm-routing/assign", {
+    schema: {
+      body: LlmRouteAssignBodySchema,
+      response: { 200: LlmRouteAssignResultSchema, 400: ApiErrorSchema, 404: ApiErrorSchema },
+    },
+  }, async (request) => {
+    const body = LlmRouteAssignBodySchema.parse(request.body);
+    return assignLlmRoutes({ sqlite, registry, projects, body });
+  });
+
   app.get("/api/llm/quota", {
     schema: { response: { 200: LlmQuotaStatusSchema } },
   }, async () => {
     if (quotaSync && !process.env.VITEST) await quotaSync.refreshIfDue();
     return presentQuota(sqlite, quotaSync);
   });
+
+  // TASK-127: providers resting after a quota / rate limit, and recent failovers (in memory; a restart clears it).
+  app.get("/api/llm/health", async () => registry.failover.snapshot());
 
   app.post("/api/llm/quota/omniroute/refresh", {
     schema: { response: { 200: LlmQuotaStatusSchema, 503: ApiErrorSchema } },
@@ -258,11 +279,11 @@ export function registerLlmRoutes(
 
   app.get("/api/llm/providers/:id/models", {
     schema: {
-      params: z.object({ id: LlmProviderIdSchema }).strict(),
+      params: z.object({ id: LlmProviderRefIdSchema }).strict(),
       response: { 200: ModelSuggestionsSchema, 404: ApiErrorSchema },
     },
   }, async (request) => {
-    const { id } = z.object({ id: LlmProviderIdSchema }).strict().parse(request.params);
+    const { id } = z.object({ id: LlmProviderRefIdSchema }).strict().parse(request.params);
     if (!registry.isSupportedProvider(id)) throw new AppError(404, "LLM_PROVIDER_NOT_FOUND", "LLM provider not found");
     const used = getProviderUsedModels(sqlite, id);
     const suggested = await registry.suggestModels(id, fetchImpl);

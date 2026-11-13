@@ -217,7 +217,8 @@ export function latestSnapshotFetchedAt(sqlite: Database.Database, provider: str
       const slash = model.indexOf("/");
       return slash > 0 && row.omnirouteProvider.toLowerCase() === model.slice(0, slash).toLowerCase();
     }
-    return appProviderForOmniroute(row.omnirouteProvider) === provider;
+    const mapped = appProviderForOmniroute(row.omnirouteProvider);
+    return mapped !== null && mapped === provider;
   });
   const pool = relevant.length > 0 ? relevant : [];
   let latest: string | null = null;

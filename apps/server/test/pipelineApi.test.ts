@@ -7,6 +7,7 @@ import Database from "better-sqlite3";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import type { Project } from "@vg/shared";
 import { buildApp } from "../src/app.js";
+import { testActor } from "./testActor.js";
 import { parseConfig, type AppConfig } from "../src/lib/config.js";
 
 const root = mkdtempSync(join(tmpdir(), "vg-pipeline-api-test-"));
@@ -26,7 +27,7 @@ beforeAll(() => {
 beforeEach(() => {
   const dataDir = join(root, `run-${randomUUID()}`);
   config = { ...config, DATA_DIR: dataDir, DATABASE_PATH: join(dataDir, "app.db") };
-  app = buildApp({ config });
+  app = buildApp({ testActor,  config });
 });
 
 afterEach(async () => {

@@ -6,6 +6,7 @@ import Database from "better-sqlite3";
 import { afterAll, afterEach, describe, expect, it } from "vitest";
 import type { Project } from "@vg/shared";
 import { buildApp } from "../src/app.js";
+import { testActor } from "./testActor.js";
 import { parseConfig } from "../src/lib/config.js";
 
 const root = mkdtempSync(join(tmpdir(), "vg-budget-test-"));
@@ -28,7 +29,7 @@ describe("budget estimate API", () => {
       LOG_LEVEL: "silent",
       LLM_DEFAULT_PROVIDER: "mock",
     });
-    const app = buildApp({ config });
+    const app = buildApp({ testActor,  config });
     apps.push(app);
     const createdResponse = await app.inject({
       method: "POST",
@@ -44,14 +45,14 @@ describe("budget estimate API", () => {
     expect(estimateResponse.statusCode).toBe(200);
     expect(estimateResponse.json()).toMatchObject({
       mode: "QUALITY",
-      total: { min: 9, max: 28 },
+      total: { min: 12, max: 31 },
       perStage: [
-        { stage: "RESEARCH", calls: { min: 1, max: 3 } },
+        { stage: "RESEARCH", calls: { min: 2, max: 4 } },
         { stage: "VISUAL_SEARCH", calls: { min: 1, max: 4 } },
-        { stage: "SCRIPT", calls: { min: 4, max: 18 } },
+        { stage: "SCRIPT", calls: { min: 5, max: 19 } },
         { stage: "SCENE_PLAN", calls: { min: 1, max: 1 } },
         { stage: "MUSIC_SEARCH", calls: { min: 1, max: 1 } },
-        { stage: "TIMELINE", calls: { min: 1, max: 1 } },
+        { stage: "TIMELINE", calls: { min: 2, max: 2 } },
       ],
       tokens: { input: expect.any(Number), output: expect.any(Number) },
     });
@@ -76,7 +77,7 @@ describe("budget estimate API", () => {
       LOG_LEVEL: "silent",
       LLM_DEFAULT_PROVIDER: "copilot-cli",
     });
-    const app = buildApp({ config });
+    const app = buildApp({ testActor,  config });
     apps.push(app);
     const created = await app.inject({ method: "POST", url: "/api/projects", payload: { topic: "CLI estimate" } });
     const project = created.json<Project>();

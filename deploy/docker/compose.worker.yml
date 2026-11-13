@@ -1,0 +1,27 @@
+name: vg-worker
+
+services:
+  vg:
+    image: ${VG_IMAGE:-vg:dev}
+    # Use "always" when VG_IMAGE points at a registry image, so a restart after exit 75 pulls the new tag.
+    pull_policy: ${VG_PULL_POLICY:-missing}
+    env_file:
+      - .env
+    environment:
+      VG_ROLE: worker
+      VG_CONTROL_URL: ${VG_CONTROL_URL:-}
+      VG_JOIN_TOKEN: ${VG_JOIN_TOKEN:-}
+      # Set to 1 so the worker exits 75 after its jobs finish when the control plane runs another version.
+      VG_EXIT_FOR_UPDATE: ${VG_EXIT_FOR_UPDATE:-}
+      DATA_DIR: /data
+      HOST: "0.0.0.0"
+    volumes:
+      - ${VG_CACHE_DIR:-vg-cache}:/data
+    shm_size: "1gb"
+    init: true
+    # on-failure: restart only on a non-zero exit. A revoked node exits 0 and stays stopped; exit 75 (update) restarts.
+    restart: on-failure
+    stop_grace_period: 130s
+
+volumes:
+  vg-cache:

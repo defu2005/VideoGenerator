@@ -111,7 +111,7 @@ export function TrendsSection({ profile }: { profile: ProfileDetail }) {
               <li key={idea.title}>
                 <strong>{idea.title}</strong>
                 <p>{idea.angle}</p>
-                <p>{idea.whyNow}</p>
+                <p>{idea.whyNow}</p>{idea.earlierProjectId && <a href={"/projects/"+idea.earlierProjectId+"/script"}>Mở video đã làm</a>}
                 <button
                   className="button"
                   type="button"

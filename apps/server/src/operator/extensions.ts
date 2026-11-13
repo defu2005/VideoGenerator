@@ -13,7 +13,7 @@ export type SeededStandingOrder = {
   title: string;
   prompt: string;
   cron: string;
-  enabled: false;
+  enabled: boolean;
   moduleId: string;
 };
 
@@ -33,7 +33,6 @@ export function registerOperatorDuty(duty: OperatorDuty): void {
 }
 
 export function registerSeededStandingOrder(order: SeededStandingOrder): void {
-  if (order.enabled !== false) return;
   if (seededStandingOrders.some((item) => item.id === order.id)) return;
   seededStandingOrders.push(order);
 }

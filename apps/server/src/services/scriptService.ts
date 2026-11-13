@@ -1,3 +1,4 @@
+import { enqueueIndex } from "../retrieval/service.js";
 import {
   ResearchNotesSchema,
   ScriptDataSchema,
@@ -10,6 +11,7 @@ import {
 } from "@vg/shared";
 import type Database from "better-sqlite3";
 import type { AppConfig } from "../lib/config.js";
+import { rememberTreatment } from "../formats/treatmentStore.js";
 import { AppError } from "../lib/errors.js";
 import type { JobRepository } from "../jobs/jobRepository.js";
 import { markStaleFrom } from "../pipeline/invalidation.js";
@@ -111,7 +113,7 @@ export class ScriptService {
       const inputHash = scriptInputHash(project, currentResearchHash);
       const updatedAt = new Date().toISOString();
       this.sqlite.prepare(
-        "INSERT INTO scripts (project_id, data, origin, edited, input_hash, version, provider, model, updated_at, merged_call, review_notes) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, false, NULL) ON CONFLICT(project_id) DO UPDATE SET data = excluded.data, origin = excluded.origin, edited = excluded.edited, input_hash = excluded.input_hash, version = excluded.version, provider = excluded.provider, model = excluded.model, updated_at = excluded.updated_at, merged_call = false, review_notes = NULL",
+        "INSERT INTO scripts (project_id, data, origin, edited, input_hash, version, provider, model, updated_at, merged_call, review_notes, quality_score, blocking_facts, revise_round) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, false, NULL, NULL, 0, 0) ON CONFLICT(project_id) DO UPDATE SET data = excluded.data, origin = excluded.origin, edited = excluded.edited, input_hash = excluded.input_hash, version = excluded.version, provider = excluded.provider, model = excluded.model, updated_at = excluded.updated_at, merged_call = false, review_notes = NULL, quality_score = NULL, blocking_facts = 0, revise_round = 0",
       ).run(
         projectId,
         JSON.stringify(normalized),
@@ -123,6 +125,8 @@ export class ScriptService {
         existing?.model ?? null,
         updatedAt,
       );
+      enqueueIndex(this.sqlite,{scope:"source",kind:"script",sourceId:projectId});
+      rememberTreatment(this.sqlite, project, normalized);
 
       const scriptStage = this.repository.getStage(projectId, "SCRIPT");
       if (scriptStage.state !== "DONE") {
@@ -154,6 +158,7 @@ export class ScriptService {
         new Date().toISOString(),
         JSON.stringify(research),
       );
+      enqueueIndex(this.sqlite,{scope:"source",kind:"research",sourceId:projectId});
       this.orchestrator.completeByUser(projectId, "RESEARCH", { invalidate: changed });
       return this.get(projectId);
     });

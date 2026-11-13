@@ -1,0 +1,33 @@
+{
+  "id": "bar_chart",
+  "version": 1,
+  "nameVi": "Biểu đồ cột",
+  "descriptionVi": "Hai tới năm cột, giá trị đã chuẩn hoá.",
+  "kinds": [
+    "overlay"
+  ],
+  "minDurationSec": 2,
+  "maxDurationSec": 8,
+  "defaultDurationSec": 4,
+  "safeArea": "center",
+  "origin": "written for this app",
+  "variables": [
+    {
+      "name": "labels",
+      "type": "string",
+      "maxLength": 80,
+      "default": ""
+    },
+    {
+      "name": "values",
+      "type": "string",
+      "maxLength": 40,
+      "default": ""
+    },
+    {
+      "name": "color",
+      "type": "color",
+      "default": "#38BDF8"
+    }
+  ]
+}

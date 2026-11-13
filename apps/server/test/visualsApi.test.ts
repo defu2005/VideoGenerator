@@ -7,6 +7,7 @@ import Database from "better-sqlite3";
 import { afterAll, afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { Project } from "@vg/shared";
 import { buildApp } from "../src/app.js";
+import { testActor } from "./testActor.js";
 import { parseConfig, type AppConfig } from "../src/lib/config.js";
 
 const root = mkdtempSync(join(tmpdir(), "vg-visuals-api-"));
@@ -27,7 +28,7 @@ beforeEach(async () => {
     LOG_LEVEL: "silent",
     IMAGE_PROVIDERS: "mock",
   });
-  app = buildApp({ config });
+  app = buildApp({ testActor,  config });
   const created = await app.inject({
     method: "POST",
     url: "/api/projects",
@@ -167,7 +168,7 @@ describe("visual API", () => {
 
     const result = await app.inject({ method: "POST", url: `/api/projects/${project.id}/visuals/approve-all` });
     expect(result.statusCode).toBe(200);
-    expect(result.json()).toEqual({ approved: 1, failed: [] });
+    expect(result.json()).toEqual({ approved: 1, failed: [], skipped: 0, skipReasons: {} });
     expect(sqlite.prepare(
       "SELECT status FROM visual_selections WHERE project_id = ? AND scene_id = ?",
     ).get(project.id, sceneId)).toEqual({ status: "APPROVED" });
@@ -262,7 +263,7 @@ describe("visual API", () => {
       url: `/api/projects/${project.id}/pipeline/gates/VISUAL_REVIEW/approve`,
     });
     expect(rejected.statusCode).toBe(409);
-    expect(rejected.json().error.message).toContain("1 scene");
+    expect(rejected.json().error.message).toContain("1 cảnh");
     await app.inject({
       method: "POST",
       url: `/api/projects/${project.id}/scenes/${sceneId}/visuals/remove`,

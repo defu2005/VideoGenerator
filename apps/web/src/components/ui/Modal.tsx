@@ -6,15 +6,19 @@ export function Modal({
   open,
   title,
   onClose,
+  closeOnBackdrop = false,
   children,
 }: {
   open: boolean;
   title: string;
   onClose: () => void;
+  closeOnBackdrop?: boolean;
   children: ReactNode;
 }) {
   const ref = useRef<HTMLDivElement>(null);
+  const closeRef = useRef(onClose);
   const titleId = useId();
+  useEffect(() => { closeRef.current = onClose; }, [onClose]);
 
   useEffect(() => {
     if (!open) return undefined;
@@ -27,7 +31,7 @@ export function Modal({
     const onKey = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
         event.preventDefault();
-        onClose();
+        closeRef.current();
         return;
       }
       if (event.key !== "Tab") return;
@@ -52,11 +56,13 @@ export function Modal({
       document.removeEventListener("keydown", onKey);
       previous?.focus();
     };
-  }, [open, onClose]);
+  }, [open]);
 
   if (!open) return null;
   return (
-    <div className="ui-modal-backdrop">
+    <div className="ui-modal-backdrop" onClick={(event) => {
+      if (closeOnBackdrop && event.target === event.currentTarget) onClose();
+    }}>
       <div
         ref={ref}
         role="dialog"

@@ -4,6 +4,7 @@ import type { WebImageSettings } from "@vg/shared";
 import { ErrorState } from "../../components/ErrorState";
 import { Spinner } from "../../components/Spinner";
 import { getWebImageSettings, saveWebImageSettings } from "../../services/webImageApi";
+import { SecretKeyRows } from "./KeyRow";
 
 export function WebImageSettingsPage() {
   const queryClient = useQueryClient();
@@ -74,7 +75,7 @@ export function WebImageSettingsPage() {
             onChange={(event) => setForm({ ...form, braveEnabled: event.target.checked })}
           />
           <small>
-            Key: {status.keyConfigured.brave ? "đã cấu hình" : "thiếu key (BRAVE_SEARCH_API_KEY)"}
+            Key: {status.keyConfigured.brave ? "đã cấu hình" : "thiếu key (nhập bên dưới)"}
             {" · "}
             Lượt tháng này: {status.braveRequestsThisMonth}
           </small>
@@ -87,7 +88,7 @@ export function WebImageSettingsPage() {
             aria-label="Bật Gemini grounding"
             onChange={(event) => setForm({ ...form, geminiGroundingEnabled: event.target.checked })}
           />
-          <small>Key: {status.keyConfigured.gemini ? "đã cấu hình" : "thiếu key (GEMINI_API_KEY)"}</small>
+          <small>Key: {status.keyConfigured.gemini ? "đã cấu hình" : "thiếu key (nhập trong Kết nối)"}</small>
         </label>
         <label className="form-field">
           <span>Model Gemini grounding</span>
@@ -109,13 +110,14 @@ export function WebImageSettingsPage() {
           <small>Pinterest luôn bị chặn. Thêm domain spoiler/repost nếu cần.</small>
         </label>
         {!status.keyConfigured.brave && !status.keyConfigured.gemini && (
-          <p role="status">Tính năng tắt vì thiếu key — cấu hình BRAVE_SEARCH_API_KEY hoặc GEMINI_API_KEY trong môi trường.</p>
+          <p role="status">Tính năng tắt vì thiếu key. Nhập key Brave bên dưới, hoặc key Gemini trong trang Kết nối.</p>
         )}
         <div className="render-actions">
           <button className="button button-primary" type="submit" disabled={save.isPending}>Lưu</button>
           {message && <p role="status">{message}</p>}
         </div>
       </form>
+      <SecretKeyRows kind="web" title="Key Brave Search" />
     </div>
   );
 }

@@ -15,7 +15,19 @@ export class OpenAiCompatibleProvider implements LlmProvider {
     private readonly supportsJsonMode = true,
     capabilities: LlmProviderCapabilities = { vision: false, maxImagesPerCall: 0 },
   ) {
-    this.capabilities = capabilities;
+    this.capabilities = { ...capabilities, embeddings: capabilities.embeddings ?? ["openai", "ollama", "omniroute"].includes(id), ...(id === "openai" ? { nativeFunctions: true } : {}) };
+  }
+
+  async embed(req: { model: string; texts: string[] }, signal: AbortSignal) {
+    if (!this.capabilities.embeddings) throw new LlmError("Embedding unavailable", "LLM_BAD_REQUEST", false);
+    const result = asRecord(await fetchLlmJson(this.baseUrl.replace(/\/+$/, "") + "/embeddings", {
+      method: "POST", headers: { "content-type": "application/json", ...(this.apiKey ? { authorization: "Bearer " + this.apiKey } : {}) },
+      body: JSON.stringify({ model: req.model, input: req.texts, encoding_format: "float" }),
+    }, signal, this.timeoutMs));
+    const rows = (Array.isArray(result.data) ? result.data : []).map(asRecord).sort((a,b) => numeric(a.index)-numeric(b.index));
+    const vectors = rows.map(row => row.embedding as number[]);
+    if (vectors.length !== req.texts.length || vectors.some(v => !Array.isArray(v) || !v.length || v.some(n => !Number.isFinite(n)))) throw new LlmError("Invalid embedding response", "LLM_INVALID_OUTPUT", false);
+    return { vectors, usage: { inputTokens: numeric(asRecord(result.usage).prompt_tokens) } };
   }
 
   async generate(req: LlmRequest, signal: AbortSignal) {
@@ -28,9 +40,13 @@ export class OpenAiCompatibleProvider implements LlmProvider {
       body: JSON.stringify({
         model: req.model,
         messages: buildOpenAiMessages(req),
-        max_tokens: req.maxOutputTokens,
+        ...(req.functions?.length ? { max_completion_tokens: req.maxOutputTokens } : { max_tokens: req.maxOutputTokens }),
         ...(req.temperature === undefined ? {} : { temperature: req.temperature }),
         ...(req.json && this.supportsJsonMode ? { response_format: { type: "json_object" } } : {}),
+        ...(req.functions?.length ? {
+          tools: req.functions.map((fn) => ({ type: "function", function: fn })),
+          parallel_tool_calls: false,
+        } : {}),
       }),
     }, signal, this.timeoutMs);
     const body = asRecord(result);
@@ -38,7 +54,7 @@ export class OpenAiCompatibleProvider implements LlmProvider {
     const choice = asRecord(choices[0]);
     const message = asRecord(choice.message);
     const content = message.content;
-    const text = typeof content === "string"
+    const contentText = typeof content === "string"
       ? content
       : Array.isArray(content)
         ? content.map((part) => asRecord(part).text).filter((part): part is string => typeof part === "string").join("")
@@ -48,6 +64,9 @@ export class OpenAiCompatibleProvider implements LlmProvider {
     const finishReason: LlmResponse["finishReason"] = choice.finish_reason === "length"
       ? "length"
       : choice.finish_reason === "stop" ? "stop" : "other";
+    const text = req.functions?.length && finishReason !== "length"
+      ? serializeFunctionStep(contentText, message.tool_calls)
+      : contentText;
     if (!text && finishReason !== "length") {
       throw new LlmError(`${this.label} returned no text content`, "LLM_UNAVAILABLE", true, undefined, {
         llmCalls: 1,
@@ -61,6 +80,24 @@ export class OpenAiCompatibleProvider implements LlmProvider {
       provider: this.id,
       finishReason,
     };
+  }
+}
+
+function serializeFunctionStep(reply: string, rawCalls: unknown): string {
+  if (!Array.isArray(rawCalls) || rawCalls.length === 0) return JSON.stringify({ reply, done: true });
+  try {
+    const calls = rawCalls.map((entry) => {
+      const call = asRecord(entry);
+      const fn = asRecord(call.function);
+      if (call.type !== "function" || typeof fn.name !== "string" || typeof fn.arguments !== "string") {
+        throw new Error("Malformed function call");
+      }
+      return { tool: fn.name, args: JSON.parse(fn.arguments) };
+    });
+    return JSON.stringify({ reply, calls, done: false });
+  } catch {
+    // Trigger the existing bounded structured-output repair without forwarding malformed arguments.
+    return JSON.stringify({ invalidFunctionCall: true });
   }
 }
 

@@ -4,6 +4,7 @@ import type { ImageSourcesSettings, StockImageProvider } from "@vg/shared";
 import { ErrorState } from "../../components/ErrorState";
 import { Spinner } from "../../components/Spinner";
 import { getImageSourcesSettings, saveImageSourcesSettings } from "../../services/imageSourcesApi";
+import { SecretKeyRows } from "./KeyRow";
 
 export function ImageSourcesSettingsPage() {
   const queryClient = useQueryClient();
@@ -57,7 +58,7 @@ export function ImageSourcesSettingsPage() {
       <header className="page-header">
         <p className="eyebrow">CÀI ĐẶT</p>
         <h1>Nguồn ảnh</h1>
-        <p>Bật/tắt từng kho ảnh. Trạng thái key chỉ hiện “đã cấu hình” hoặc “thiếu key” — không hiện giá trị key.</p>
+        <p>Bật/tắt từng kho ảnh. Nhập key ngay bên dưới; app chỉ hiện vài ký tự cuối, không hiện cả key.</p>
       </header>
       <form className="panel" onSubmit={onSubmit}>
         <ul className="settings-list" style={{ listStyle: "none", padding: 0, margin: 0 }}>
@@ -96,6 +97,7 @@ export function ImageSourcesSettingsPage() {
           {message && <p role="status">{message}</p>}
         </div>
       </form>
+      <SecretKeyRows kind="image" title="Key của kho ảnh" />
     </div>
   );
 }

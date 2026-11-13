@@ -1,0 +1,215 @@
+{
+  "entries": [
+    {
+      "id": "dependency.hyperframes",
+      "kind": "dependency",
+      "scope": {
+        "platforms": [
+          "*"
+        ],
+        "markets": [
+          "*"
+        ]
+      },
+      "value": {
+        "name": "HyperFrames",
+        "version": "0.9.14",
+        "availability": true,
+        "licence": "Apache-2.0",
+        "sourceUrl": "https://registry.npmjs.org/hyperframes/0.9.14",
+        "checkedAt": "2026-11-11"
+      },
+      "evidence": [
+        {
+          "url": "https://registry.npmjs.org/hyperframes/0.9.14",
+          "checkedAt": "2026-11-11",
+          "type": "official"
+        },
+        {
+          "url": "https://raw.githubusercontent.com/heygen-com/hyperframes/main/LICENSE",
+          "checkedAt": "2026-11-11",
+          "type": "official"
+        }
+      ],
+      "confidence": "high",
+      "volatility": "monthly",
+      "watch": [
+        {
+          "url": "https://github.com/heygen-com/hyperframes/releases",
+          "kind": "changelog"
+        }
+      ],
+      "status": "active",
+      "notes": "Giữ engine hiện có; registry latest 0.9.32 khác bản đo. API producer/browser pool nội bộ cần pin phiên bản; chưa nâng dependency."
+    },
+    {
+      "id": "dependency.ffmpeg",
+      "kind": "dependency",
+      "scope": {
+        "platforms": [
+          "*"
+        ],
+        "markets": [
+          "*"
+        ]
+      },
+      "value": {
+        "name": "FFmpeg",
+        "version": "6.1.1-essentials_build-www.gyan.dev",
+        "availability": true,
+        "licence": "GPL-3.0-or-later (binary đo: --enable-gpl --enable-version3); FFmpeg base LGPL-2.1-or-later",
+        "sourceUrl": "https://github.com/FFmpeg/FFmpeg/tree/n6.1.1",
+        "checkedAt": "2026-11-11"
+      },
+      "evidence": [
+        {
+          "url": "https://github.com/FFmpeg/FFmpeg/tree/n6.1.1",
+          "checkedAt": "2026-11-11",
+          "type": "official"
+        },
+        {
+          "url": "https://raw.githubusercontent.com/FFmpeg/FFmpeg/n6.1.1/LICENSE.md",
+          "checkedAt": "2026-11-11",
+          "type": "official"
+        }
+      ],
+      "confidence": "high",
+      "volatility": "monthly",
+      "watch": [
+        {
+          "url": "https://github.com/FFmpeg/FFmpeg/releases",
+          "kind": "changelog"
+        }
+      ],
+      "status": "active",
+      "notes": "Dùng executable đã có cho static/encode/ASS; không sao chép mã GPL. Kiểm lại giấy phép build khi phân phối."
+    },
+    {
+      "id": "dependency.napi_canvas",
+      "kind": "dependency",
+      "scope": {
+        "platforms": [
+          "*"
+        ],
+        "markets": [
+          "*"
+        ]
+      },
+      "value": {
+        "name": "@napi-rs/canvas",
+        "version": "1.1.0",
+        "availability": true,
+        "licence": "MIT",
+        "sourceUrl": "https://registry.npmjs.org/%40napi-rs%2Fcanvas",
+        "checkedAt": "2026-11-11"
+      },
+      "evidence": [
+        {
+          "url": "https://registry.npmjs.org/%40napi-rs%2Fcanvas",
+          "checkedAt": "2026-11-11",
+          "type": "official"
+        },
+        {
+          "url": "https://raw.githubusercontent.com/Brooooooklyn/canvas/main/LICENSE",
+          "checkedAt": "2026-11-11",
+          "type": "official"
+        }
+      ],
+      "confidence": "high",
+      "volatility": "monthly",
+      "watch": [
+        {
+          "url": "https://github.com/Brooooooklyn/canvas/releases",
+          "kind": "changelog"
+        }
+      ],
+      "status": "active",
+      "notes": "Chỉ đề xuất fast path thử nghiệm riêng cho hai template; cài/đo trong OS temp, không thêm vào app. Giữ thông báo bản quyền và giấy phép dependency/font."
+    },
+    {
+      "id": "dependency.puppeteer",
+      "kind": "dependency",
+      "scope": {
+        "platforms": [
+          "*"
+        ],
+        "markets": [
+          "*"
+        ]
+      },
+      "value": {
+        "name": "puppeteer-core",
+        "version": "25.16.0",
+        "availability": true,
+        "licence": "Apache-2.0",
+        "sourceUrl": "https://registry.npmjs.org/puppeteer-core/25.16.0",
+        "checkedAt": "2026-11-11"
+      },
+      "evidence": [
+        {
+          "url": "https://registry.npmjs.org/puppeteer-core/25.16.0",
+          "checkedAt": "2026-11-11",
+          "type": "official"
+        },
+        {
+          "url": "https://raw.githubusercontent.com/puppeteer/puppeteer/main/LICENSE",
+          "checkedAt": "2026-11-11",
+          "type": "official"
+        }
+      ],
+      "confidence": "high",
+      "volatility": "monthly",
+      "watch": [
+        {
+          "url": "https://github.com/puppeteer/puppeteer/releases",
+          "kind": "changelog"
+        }
+      ],
+      "status": "active",
+      "notes": "Dependency sẵn qua HyperFrames; prototype final-frame dùng Chromium đã cài."
+    },
+    {
+      "id": "dependency.libass",
+      "kind": "dependency",
+      "scope": {
+        "platforms": [
+          "*"
+        ],
+        "markets": [
+          "*"
+        ]
+      },
+      "value": {
+        "name": "libass",
+        "version": null,
+        "availability": true,
+        "licence": "ISC",
+        "sourceUrl": "https://github.com/libass/libass",
+        "checkedAt": "2026-11-11"
+      },
+      "evidence": [
+        {
+          "url": "https://github.com/libass/libass",
+          "checkedAt": "2026-11-11",
+          "type": "official"
+        },
+        {
+          "url": "https://raw.githubusercontent.com/libass/libass/master/COPYING",
+          "checkedAt": "2026-11-11",
+          "type": "official"
+        }
+      ],
+      "confidence": "medium",
+      "volatility": "monthly",
+      "watch": [
+        {
+          "url": "https://github.com/libass/libass/releases",
+          "kind": "changelog"
+        }
+      ],
+      "status": "active",
+      "notes": "Bản libass trong FFmpeg chưa xác định version: null. ASS prototype chạy bằng binary hiện có; không phải benchmark drawtext."
+    }
+  ],
+  "label": "RESEARCH-075: render dependencies, checked 2026-11-11"
+}

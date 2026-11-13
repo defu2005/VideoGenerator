@@ -258,4 +258,32 @@ describe("ScriptTab", () => {
       `Viết script cho project "Test project" (id ${projectId}) bằng Video Agent`,
     ));
   });
+
+  it("shows the treatment card stored on the project", async () => {
+    const withTreatment = {
+      ...project,
+      settings: {
+        ...project.settings,
+        treatment: {
+          title: "Hố đen",
+          formatId: "explainer",
+          formatNameVi: "Giải thích",
+          angle: "Vì sao ánh sáng không thoát?",
+          sections: [{ key: "hook", nameVi: "Mở đầu", estSec: 12 }],
+          estimatedSceneCount: 6,
+          estimatedDurationSec: 90,
+          cost: { inputTokens: 100, outputTokens: 200, ttsCharacters: 300, usd: null },
+          estimatedRenderSec: null,
+          renderNoteVi: "chưa có dữ liệu",
+        },
+      },
+    } as Project;
+    installFetch({ script: null, research: null, origin: null, version: 0, stale: false });
+    renderWithProviders(<ScriptTab project={withTreatment} />);
+    expect(await screen.findByRole("region", { name: "Bản đề xuất" })).toBeTruthy();
+    expect(screen.getByText("Hố đen")).toBeTruthy();
+    expect(screen.getByText(/Giải thích/)).toBeTruthy();
+    expect(screen.getByText(/100 token vào/)).toBeTruthy();
+    expect(screen.getByText(/Mở đầu · 12 giây/)).toBeTruthy();
+  });
 });

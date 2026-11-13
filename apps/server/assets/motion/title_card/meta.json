@@ -1,0 +1,34 @@
+{
+  "id": "title_card",
+  "version": 1,
+  "nameVi": "Thẻ tiêu đề",
+  "descriptionVi": "Tiêu đề mở đầu, tối đa hai dòng.",
+  "kinds": [
+    "overlay",
+    "fullscreen"
+  ],
+  "minDurationSec": 2,
+  "maxDurationSec": 6,
+  "defaultDurationSec": 3,
+  "safeArea": "center",
+  "origin": "written for this app",
+  "variables": [
+    {
+      "name": "title",
+      "type": "string",
+      "maxLength": 48,
+      "default": ""
+    },
+    {
+      "name": "subtitle",
+      "type": "string",
+      "maxLength": 48,
+      "default": ""
+    },
+    {
+      "name": "color",
+      "type": "color",
+      "default": "#F8FAFC"
+    }
+  ]
+}

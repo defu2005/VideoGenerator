@@ -14,6 +14,19 @@ Không có nút cài đặt nào cho bước này. Máy cần FFmpeg đã đi k�
 
 Giới hạn: đây là công cụ local. Tắt terminal là ứng dụng dừng. Đừng chạy lệnh này trên máy người khác.
 
+## Docker {#docker}
+
+Dùng khi bạn muốn chạy app trên một máy Linux hoặc VPS, không mở terminal `npm run dev`.
+
+1. Cài Docker Engine và Compose v2 theo hướng dẫn của Docker. Script không tự cài.
+2. Trong thư mục mã nguồn, chạy `bash deploy/install.sh`.
+3. Chọn control. Nhập tên miền, hoặc Enter nếu chỉ dùng trong mạng nội bộ.
+4. Mở địa chỉ script in ra.
+
+Dữ liệu nằm trong `/opt/vg/data` (đổi thư mục bằng biến `VG_HOME`). Chạy lại script không ghi đè file `.env` và thư mục dữ liệu đã có.
+
+Giới hạn: image không chứa đăng nhập Claude CLI, agy, cursor-agent hay OmniRoute. Cách gắn các thứ đó ghi trong file `deploy/README.md` của repo. `bash deploy/install.sh worker` hiện thoát ngay và chưa làm việc. Đăng nhập người dùng chưa có, nên đừng mở cổng ra Internet.
+
 ## Mô hình AI {#cai-dat-mo-hinh}
 
 Dùng để các bước viết, chọn ảnh và trợ lý có model. Menu: **Mô hình AI**.

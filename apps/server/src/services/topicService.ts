@@ -1,3 +1,5 @@
+import { earlierTopic } from "../retrieval/topics.js";
+import { enqueueIndex } from "../retrieval/service.js";
 import { createHash, randomUUID } from "node:crypto";
 import type Database from "better-sqlite3";
 import {
@@ -7,6 +9,10 @@ import {
   TopicSuggestOutputSchema,
   appendChannelDirection,
   dedupeTopicSuggestions,
+  localDateString,
+  marketName,
+  upcomingEvents,
+  type MarketPack,
   type ApproveTopicsBody,
   type ProfileTopic,
   type ProfileTopicInput,
@@ -28,6 +34,7 @@ import { getAppLlmSettings } from "../providers/llm/settings.js";
 import { getProfilePromptContext } from "./profileService.js";
 import { generateRoutedStructured } from "../providers/llm/structured.js";
 import { LlmCache } from "../providers/llm/cache.js";
+import { resolveMarket } from "../knowledge/markets.js";
 
 function toTopic(row: ProfileTopicRow): ProfileTopic {
   return ProfileTopicSchema.parse({
@@ -55,6 +62,7 @@ export function buildTopicSuggestPrompt(input: {
   pastTopics: string[];
   topicAngles: string[];
   avoid: string[];
+  market?: { pack: MarketPack; from: Date };
 }): { system: string; prompt: string } {
   return {
     system: [
@@ -73,6 +81,10 @@ export function buildTopicSuggestPrompt(input: {
       pastTopics: input.pastTopics,
       topicAngles: input.topicAngles,
       avoid: input.avoid,
+      ...(input.market ? { market: {
+        country: marketName(input.market.pack),
+        upcomingEvents: upcomingEvents(input.market.pack, input.market.from).slice(0, 8),
+      } } : {}),
     }), input.direction, input.learnedNotes),
   };
 }
@@ -130,6 +142,7 @@ export function createTopicService(
     }).run();
     const row = await db.select().from(profileTopics).where(eq(profileTopics.id, id)).get();
     if (!row) throw new AppError(500, "INTERNAL_ERROR", "Failed to create topic");
+    enqueueIndex(sqlite,{scope:"source",kind:"topic",sourceId:row.id});
     return toTopic(row);
   }
 
@@ -215,8 +228,9 @@ export function createTopicService(
     const past = await pastTopicTexts(profileId, 50);
     const count = body.count ?? 5;
     const promptContext = getProfilePromptContext(sqlite, profileId);
+    const market = resolveMarket(sqlite, profile.market);
     const routeProject = {
-      id: profileId,
+      id: profileId, profileId, topic: body.hint ?? profile.direction, description: profile.direction,
       mode: "AUTO" as const,
       settings: {
         language: profile.language,
@@ -239,12 +253,17 @@ export function createTopicService(
     const built = buildTopicSuggestPrompt({
       ...payload,
       learnedNotes: promptContext.learnedNotes,
+      ...(market ? { market: {
+        pack: market.pack,
+        from: new Date(localDateString(new Date(), profile.automation.timezone)),
+      } } : {}),
     });
     const hash = createHash("sha256").update(built.prompt).digest("hex");
     const generated = await generateRoutedStructured({
       registry: llm,
       route,
       task: "topicSuggest",
+      knowledgeProject: routeProject as never,
       system: built.system,
       prompt: built.prompt,
       schema: TopicSuggestOutputSchema,
@@ -256,10 +275,12 @@ export function createTopicService(
       cacheKeyExtra: hash,
     });
 
-    const { kept, rejected } = dedupeTopicSuggestions(generated.value.topics, past);
+    const { kept, rejected } = dedupeTopicSuggestions(generated.value.topics, []);
     const status: TopicStatus = profile.automation.autoApproveTopics ? "APPROVED" : "PENDING";
     const created: ProfileTopic[] = [];
     for (const item of kept.slice(0, count)) {
+      const duplicate=await earlierTopic(sqlite,profileId,item.topic);
+      const queued=dedupeTopicSuggestions([item],past).rejected>0;
       const now = new Date().toISOString();
       const id = randomUUID();
       const priority = await nextPriority(profileId);
@@ -267,9 +288,9 @@ export function createTopicService(
         id,
         profileId,
         topic: item.topic,
-        notes: item.angle,
+        notes: item.angle+(duplicate?" · đã làm: "+duplicate.title+" [project:"+duplicate.projectId+"]":queued?" · đã xếp hàng":""),
         source: "LLM",
-        status,
+        status: duplicate || queued ? "PENDING" : status,
         priority,
         projectId: null,
         scheduledFor: null,
@@ -278,6 +299,7 @@ export function createTopicService(
         updatedAt: now,
       }).run();
       const row = await db.select().from(profileTopics).where(eq(profileTopics.id, id)).get();
+      enqueueIndex(sqlite,{scope:"source",kind:"topic",sourceId:id});
       if (row) created.push(toTopic(row));
     }
     return SuggestTopicsResponseSchema.parse({

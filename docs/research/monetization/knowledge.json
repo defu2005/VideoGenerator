@@ -1,0 +1,6534 @@
+[
+  {
+    "id": "youtube.ypp.ads",
+    "kind": "monetization_program",
+    "scope": {
+      "platforms": [
+        "youtube"
+      ],
+      "markets": [
+        "VN"
+      ]
+    },
+    "value": {
+      "platform": "youtube",
+      "name": "Watch Page Ads",
+      "pays": "Quảng cáo",
+      "eligibility": {
+        "text": "YPP đầy đủ: 1.000 sub và 4.000 giờ công khai hợp lệ/12 tháng hoặc 10 triệu lượt Shorts hợp lệ/90 ngày; 18+ hoặc người giám hộ quản lý AdSense",
+        "followers": 1000,
+        "minAge": 18,
+        "ageException": "Người giám hộ có thể quản lý AdSense.",
+        "anyOf": [
+          {
+            "watchHours": 4000,
+            "windowDays": 365
+          },
+          {
+            "views": 10000000,
+            "windowDays": 90
+          }
+        ]
+      },
+      "share": "55% doanh thu ròng quảng cáo watch page",
+      "countries": [
+        "VN"
+      ],
+      "countryNotes": "Có — thị trường YPP",
+      "contentRules": "Nội dung nguyên bản, phù hợp quảng cáo",
+      "automatedUse": "yes",
+      "reason": "kênh faceless có thể đạt điều kiện và qua review",
+      "countriesListType": "verified_subset"
+    },
+    "evidence": [
+      {
+        "url": "https://support.google.com/youtube/answer/72851",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://support.google.com/youtube/answer/72902",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://support.google.com/youtube/answer/7101720",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://support.google.com/youtube/answer/1311392",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://support.google.com/youtube/answer/72851",
+        "checkedAt": "2026-11-10",
+        "type": "inference"
+      }
+    ],
+    "confidence": "medium",
+    "volatility": "quarterly",
+    "watch": [
+      {
+        "url": "https://support.google.com/youtube/answer/72851",
+        "kind": "policy_page"
+      },
+      {
+        "url": "https://blog.youtube/rss/",
+        "kind": "rss"
+      }
+    ],
+    "status": "active",
+    "notes": "Ngưỡng và cách tính lượt xem đủ điều kiện có thể đổi khi YPP cập nhật. Mảng countries ghi các nước xác nhận trong nguồn đã đối chiếu, có thể chưa đầy đủ. Đánh giá tự động hóa là suy luận có điều kiện."
+  },
+  {
+    "id": "youtube.shorts.ads",
+    "kind": "monetization_program",
+    "scope": {
+      "platforms": [
+        "youtube"
+      ],
+      "markets": [
+        "VN"
+      ]
+    },
+    "value": {
+      "platform": "youtube",
+      "name": "Shorts Feed Ads",
+      "pays": "Quảng cáo trong feed",
+      "eligibility": {
+        "text": "YPP đầy đủ như Y1; chấp nhận Shorts Module",
+        "followers": 1000,
+        "anyOf": [
+          {
+            "watchHours": 4000,
+            "windowDays": 365
+          },
+          {
+            "views": 10000000,
+            "windowDays": 90
+          }
+        ]
+      },
+      "share": "45% phần phân bổ từ Creator Pool",
+      "countries": [
+        "VN"
+      ],
+      "countryNotes": "Có — thị trường YPP",
+      "contentRules": "View đủ điều kiện, clip không nguyên bản bị loại; Short hơn 1 phút có claim bị chặn",
+      "automatedUse": "yes",
+      "reason": "phải làm Shorts nguyên bản",
+      "countriesListType": "verified_subset"
+    },
+    "evidence": [
+      {
+        "url": "https://support.google.com/youtube/answer/12504220",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://support.google.com/youtube/answer/72851",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://support.google.com/youtube/answer/12504220",
+        "checkedAt": "2026-11-10",
+        "type": "inference"
+      }
+    ],
+    "confidence": "medium",
+    "volatility": "monthly",
+    "watch": [
+      {
+        "url": "https://support.google.com/youtube/answer/12504220",
+        "kind": "policy_page"
+      },
+      {
+        "url": "https://blog.youtube/rss/",
+        "kind": "rss"
+      }
+    ],
+    "status": "active",
+    "notes": "Có mốc thay đổi điều kiện chia tiền Shorts, nên rà điều khoản theo tháng. Mảng countries ghi các nước xác nhận trong nguồn đã đối chiếu, có thể chưa đầy đủ. Đánh giá tự động hóa là suy luận có điều kiện."
+  },
+  {
+    "id": "youtube.memberships",
+    "kind": "monetization_program",
+    "scope": {
+      "platforms": [
+        "youtube"
+      ],
+      "markets": [
+        "VN"
+      ]
+    },
+    "value": {
+      "platform": "youtube",
+      "name": "Channel Memberships",
+      "pays": "Phí hội viên tháng",
+      "eligibility": {
+        "text": "18+, expanded YPP: 500 sub, 3 upload công khai/90 ngày và 3.000 giờ/12 tháng hoặc 3 triệu view Shorts/90 ngày; điều kiện nội dung trẻ em",
+        "followers": 500,
+        "minAge": 18,
+        "uploads": 3,
+        "uploadsWindowDays": 90,
+        "anyOf": [
+          {
+            "watchHours": 3000,
+            "windowDays": 365
+          },
+          {
+            "views": 3000000,
+            "windowDays": 90
+          }
+        ]
+      },
+      "share": "70% doanh thu ròng Commerce",
+      "countries": [
+        "VN"
+      ],
+      "countryNotes": "Có — VN trong danh sách expanded YPP và khu vực tính năng",
+      "contentRules": "Quyền lợi hội viên tuân chính sách",
+      "automatedUse": "partly",
+      "reason": "video tự động được, cần phục vụ hội viên",
+      "countriesListType": "verified_subset"
+    },
+    "evidence": [
+      {
+        "url": "https://support.google.com/youtube/answer/13429240",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://support.google.com/youtube/answer/7636690",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://support.google.com/youtube/answer/72902",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://support.google.com/youtube/answer/13429240",
+        "checkedAt": "2026-11-10",
+        "type": "inference"
+      }
+    ],
+    "confidence": "medium",
+    "volatility": "quarterly",
+    "watch": [
+      {
+        "url": "https://support.google.com/youtube/answer/13429240",
+        "kind": "policy_page"
+      },
+      {
+        "url": "https://blog.youtube/rss/",
+        "kind": "rss"
+      }
+    ],
+    "status": "active",
+    "notes": "Phạm vi quốc gia, quyền lợi và điều kiện expanded YPP có thể đổi. Mảng countries ghi các nước xác nhận trong nguồn đã đối chiếu, có thể chưa đầy đủ. Đánh giá tự động hóa là suy luận có điều kiện."
+  },
+  {
+    "id": "youtube.super_thanks",
+    "kind": "monetization_program",
+    "scope": {
+      "platforms": [
+        "youtube"
+      ],
+      "markets": [
+        "VN"
+      ]
+    },
+    "value": {
+      "platform": "youtube",
+      "name": "Super Thanks",
+      "pays": "Người xem mua Thanks",
+      "eligibility": {
+        "text": "Expanded YPP, 18+, video/kênh đủ điều kiện",
+        "minAge": 18
+      },
+      "share": "70% doanh thu ròng Commerce",
+      "countries": [
+        "VN"
+      ],
+      "countryNotes": "Có — xem danh sách tính năng",
+      "contentRules": "Hạn chế theo video, gồm nội dung dành cho trẻ em",
+      "automatedUse": "yes",
+      "reason": "có thể nhận trên video nguyên bản đủ điều kiện",
+      "countriesListType": "verified_subset"
+    },
+    "evidence": [
+      {
+        "url": "https://support.google.com/youtube/answer/10879035",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://support.google.com/youtube/answer/13429240",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://support.google.com/youtube/answer/72902",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://support.google.com/youtube/answer/10879035",
+        "checkedAt": "2026-11-10",
+        "type": "inference"
+      }
+    ],
+    "confidence": "medium",
+    "volatility": "quarterly",
+    "watch": [
+      {
+        "url": "https://support.google.com/youtube/answer/10879035",
+        "kind": "policy_page"
+      },
+      {
+        "url": "https://blog.youtube/rss/",
+        "kind": "rss"
+      }
+    ],
+    "status": "active",
+    "notes": "Danh sách vùng và nội dung đủ điều kiện thay đổi theo Help. Mảng countries ghi các nước xác nhận trong nguồn đã đối chiếu, có thể chưa đầy đủ. Đánh giá tự động hóa là suy luận có điều kiện."
+  },
+  {
+    "id": "youtube.live.supers",
+    "kind": "monetization_program",
+    "scope": {
+      "platforms": [
+        "youtube"
+      ],
+      "markets": [
+        "VN"
+      ]
+    },
+    "value": {
+      "platform": "youtube",
+      "name": "Super Chat và Super Stickers",
+      "pays": "Người xem mua tương tác live",
+      "eligibility": {
+        "text": "Expanded YPP, 18+, livestream hoặc Premiere có live chat đủ điều kiện",
+        "minAge": 18
+      },
+      "share": "70% doanh thu ròng Commerce",
+      "countries": [
+        "VN"
+      ],
+      "countryNotes": "Có — xem danh sách tính năng",
+      "contentRules": "Live chat bật, áp dụng quy tắc live và nội dung",
+      "automatedUse": "partly",
+      "reason": "cần vận hành và kiểm duyệt chat",
+      "countriesListType": "verified_subset"
+    },
+    "evidence": [
+      {
+        "url": "https://support.google.com/youtube/answer/9277801",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://support.google.com/youtube/answer/13429240",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://support.google.com/youtube/answer/72902",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://support.google.com/youtube/answer/9277801",
+        "checkedAt": "2026-11-10",
+        "type": "inference"
+      }
+    ],
+    "confidence": "medium",
+    "volatility": "quarterly",
+    "watch": [
+      {
+        "url": "https://support.google.com/youtube/answer/9277801",
+        "kind": "policy_page"
+      },
+      {
+        "url": "https://blog.youtube/rss/",
+        "kind": "rss"
+      }
+    ],
+    "status": "active",
+    "notes": "Phạm vi vùng và điều kiện live chat có thể đổi. Mảng countries ghi các nước xác nhận trong nguồn đã đối chiếu, có thể chưa đầy đủ. Đánh giá tự động hóa là suy luận có điều kiện."
+  },
+  {
+    "id": "youtube.shopping.own",
+    "kind": "monetization_program",
+    "scope": {
+      "platforms": [
+        "youtube"
+      ],
+      "markets": [
+        "VN"
+      ]
+    },
+    "value": {
+      "platform": "youtube",
+      "name": "Shopping — cửa hàng riêng",
+      "pays": "Đơn hàng do cửa hàng xử lý",
+      "eligibility": {
+        "text": "YPP và ngưỡng sub theo YPP hoặc Official Artist Channel, cửa hàng hỗ trợ, hạn chế Made for Kids"
+      },
+      "share": "Biên lãi theo cửa hàng",
+      "countries": [
+        "VN"
+      ],
+      "countryNotes": "Có điều kiện — cần kiểm tra cửa hàng và thị trường mua",
+      "contentRules": "Sản phẩm và nội dung theo chính sách",
+      "automatedUse": "partly",
+      "reason": "video được, fulfillment và hỗ trợ cần vận hành",
+      "countriesListType": "verified_subset"
+    },
+    "evidence": [
+      {
+        "url": "https://support.google.com/youtube/answer/12257682",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://support.google.com/youtube/answer/94522",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://support.google.com/youtube/answer/12257682",
+        "checkedAt": "2026-11-10",
+        "type": "inference"
+      }
+    ],
+    "confidence": "medium",
+    "volatility": "monthly",
+    "watch": [
+      {
+        "url": "https://support.google.com/youtube/answer/12257682",
+        "kind": "policy_page"
+      },
+      {
+        "url": "https://blog.youtube/rss/",
+        "kind": "rss"
+      }
+    ],
+    "status": "active",
+    "notes": "Danh sách cửa hàng và đường tích hợp phụ thuộc rollout. Mảng countries ghi các nước xác nhận trong nguồn đã đối chiếu, có thể chưa đầy đủ. Đánh giá tự động hóa là suy luận có điều kiện."
+  },
+  {
+    "id": "youtube.shopping.affiliate",
+    "kind": "monetization_program",
+    "scope": {
+      "platforms": [
+        "youtube"
+      ],
+      "markets": [
+        "AR",
+        "BR",
+        "DE",
+        "IN",
+        "ID",
+        "JP",
+        "KR",
+        "MY",
+        "MX",
+        "NL",
+        "PH",
+        "PL",
+        "SG",
+        "TW",
+        "TH",
+        "GB",
+        "US",
+        "VN"
+      ]
+    },
+    "value": {
+      "platform": "youtube",
+      "name": "Shopping — affiliate",
+      "pays": "Hoa hồng nhà bán",
+      "eligibility": {
+        "text": "YPP, khu vực được hỗ trợ và điều kiện kênh trong chương trình"
+      },
+      "share": "Từng sản phẩm/nhà bán",
+      "countries": [
+        "AR",
+        "BR",
+        "DE",
+        "IN",
+        "ID",
+        "JP",
+        "KR",
+        "MY",
+        "MX",
+        "NL",
+        "PH",
+        "PL",
+        "SG",
+        "TW",
+        "TH",
+        "GB",
+        "US",
+        "VN"
+      ],
+      "countryNotes": "Có — gồm VN, Mỹ, Anh, Đức, Thái Lan và các nước trong danh sách nguồn",
+      "contentRules": "Gắn đúng sản phẩm, khai báo quan hệ thương mại",
+      "automatedUse": "partly",
+      "reason": "kiểm chứng sản phẩm, link và disclosure",
+      "countriesListType": "verified_subset"
+    },
+    "evidence": [
+      {
+        "url": "https://support.google.com/youtube/answer/13376398",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://support.google.com/youtube/answer/17263096",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://support.google.com/youtube/answer/13376398",
+        "checkedAt": "2026-11-10",
+        "type": "inference"
+      }
+    ],
+    "confidence": "medium",
+    "volatility": "monthly",
+    "watch": [
+      {
+        "url": "https://support.google.com/youtube/answer/13376398",
+        "kind": "policy_page"
+      },
+      {
+        "url": "https://blog.youtube/rss/",
+        "kind": "rss"
+      }
+    ],
+    "status": "active",
+    "notes": "Thị trường được mở theo đợt và commission theo đối tác. Mảng countries ghi các nước xác nhận trong nguồn đã đối chiếu, có thể chưa đầy đủ. Đánh giá tự động hóa là suy luận có điều kiện."
+  },
+  {
+    "id": "youtube.premium.revenue",
+    "kind": "monetization_program",
+    "scope": {
+      "platforms": [
+        "youtube"
+      ],
+      "markets": [
+        "VN"
+      ]
+    },
+    "value": {
+      "platform": "youtube",
+      "name": "YouTube Premium",
+      "pays": "Phí thành viên Premium",
+      "eligibility": {
+        "text": "YPP đầy đủ, bật module liên quan"
+      },
+      "share": "Theo lượng xem Premium hoặc phân bổ Shorts; null mức cố định",
+      "countries": [
+        "VN"
+      ],
+      "countryNotes": "Có — thị trường YPP và người xem Premium",
+      "contentRules": "Nội dung đủ điều kiện theo module",
+      "automatedUse": "yes",
+      "reason": "hưởng theo lượt xem nếu đủ điều kiện",
+      "countriesListType": "verified_subset"
+    },
+    "evidence": [
+      {
+        "url": "https://support.google.com/youtube/answer/72902",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://support.google.com/youtube/answer/12504220",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://support.google.com/youtube/answer/72851",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://support.google.com/youtube/answer/72902",
+        "checkedAt": "2026-11-10",
+        "type": "inference"
+      }
+    ],
+    "confidence": "medium",
+    "volatility": "quarterly",
+    "watch": [
+      {
+        "url": "https://support.google.com/youtube/answer/72902",
+        "kind": "policy_page"
+      },
+      {
+        "url": "https://blog.youtube/rss/",
+        "kind": "rss"
+      }
+    ],
+    "status": "active",
+    "notes": "Cách phân bổ theo định dạng và module có thể thay đổi. Mảng countries ghi các nước xác nhận trong nguồn đã đối chiếu, có thể chưa đầy đủ. Đánh giá tự động hóa là suy luận có điều kiện."
+  },
+  {
+    "id": "youtube.creator_partnerships",
+    "kind": "monetization_program",
+    "scope": {
+      "platforms": [
+        "youtube"
+      ],
+      "markets": [
+        "AU",
+        "BR",
+        "CA",
+        "FR",
+        "DE",
+        "IN",
+        "ID",
+        "JP",
+        "MX",
+        "PH",
+        "KR",
+        "ES",
+        "GB",
+        "US"
+      ]
+    },
+    "value": {
+      "platform": "youtube",
+      "name": "Creator Partnerships (BrandConnect)",
+      "pays": "Nhãn hàng",
+      "eligibility": {
+        "text": "18+, trong YPP, cư trú ở nước có trong danh sách và không có Community Guidelines strike đang hoạt động; không tự thêm ngưỡng ads-sharing ngoài Help.",
+        "minAge": 18
+      },
+      "share": "Thỏa thuận",
+      "countries": [
+        "AU",
+        "BR",
+        "CA",
+        "FR",
+        "DE",
+        "HK",
+        "IN",
+        "ID",
+        "IL",
+        "IT",
+        "JP",
+        "MX",
+        "NL",
+        "NZ",
+        "PH",
+        "SA",
+        "SG",
+        "KR",
+        "ES",
+        "CH",
+        "TR",
+        "AE",
+        "GB",
+        "US"
+      ],
+      "countryNotes": "Help kiểm 2026-11-11 liệt kê 24 nước, chưa có VN; không cấm tài trợ trực tiếp.",
+      "contentRules": "Khai báo paid promotion, điều khoản chiến dịch",
+      "automatedUse": "partly",
+      "reason": "hợp đồng, creative và duyệt quyền sử dụng",
+      "countriesListType": "explicit_program_list"
+    },
+    "evidence": [
+      {
+        "url": "https://support.google.com/youtube/answer/9385307",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://support.google.com/youtube/answer/154235",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://support.google.com/youtube/answer/9385307",
+        "checkedAt": "2026-11-10",
+        "type": "inference"
+      },
+      {
+        "url": "https://support.google.com/youtube/answer/9385307?hl=en",
+        "checkedAt": "2026-11-11",
+        "type": "official"
+      }
+    ],
+    "confidence": "low",
+    "volatility": "monthly",
+    "watch": [
+      {
+        "url": "https://support.google.com/youtube/answer/9385307",
+        "kind": "policy_page"
+      },
+      {
+        "url": "https://blog.youtube/rss/",
+        "kind": "rss"
+      }
+    ],
+    "status": "active",
+    "notes": "Tên sản phẩm, eligibility và quốc gia triển khai thay đổi theo đợt. Đánh giá tự động hóa là suy luận có điều kiện. Bổ sung xác minh quốc gia và cách mô tả điều kiện YPP theo Help 2026-11-11; giữ evidence cũ cho các trường khác."
+  },
+  {
+    "id": "tiktok.creator_rewards",
+    "kind": "monetization_program",
+    "scope": {
+      "platforms": [
+        "tiktok"
+      ],
+      "markets": [
+        "BR",
+        "FR",
+        "DE",
+        "JP",
+        "KR",
+        "GB",
+        "US",
+        "MX"
+      ]
+    },
+    "value": {
+      "platform": "tiktok",
+      "name": "Creator Rewards",
+      "pays": "Thưởng theo view đủ điều kiện",
+      "eligibility": {
+        "text": "Cá nhân, 18+ (19 ở Hàn), 10.000 follow, 100.000 view/30 ngày, video nguyên bản từ 1 phút; bắt đầu tính khi 1.000 view For You hợp lệ",
+        "followers": 10000,
+        "views": 100000,
+        "windowDays": 30,
+        "minLengthSec": 60,
+        "minAge": 18,
+        "minAgeByMarket": {
+          "KR": 19
+        },
+        "qualifiedViewsPerVideo": 1000
+      },
+      "share": "RPM biến động; null mức cố định",
+      "countries": [
+        "BR",
+        "FR",
+        "DE",
+        "JP",
+        "KR",
+        "GB",
+        "US",
+        "MX"
+      ],
+      "countryNotes": "Không có VN trong danh sách điều khoản khu vực đã đối chiếu; Mỹ, Anh, Pháp, Đức, Brazil, Nhật, Hàn có điều khoản",
+      "contentRules": "Loại copy, vòng lặp/ảnh/chữ đơn thuần và nội dung quảng cáo không đủ điều kiện",
+      "automatedUse": "partly",
+      "reason": "video riêng, xét từng clip và vùng",
+      "countriesListType": "verified_subset"
+    },
+    "evidence": [
+      {
+        "url": "https://support.tiktok.com/en/business-and-creator/creator-rewards-program/creator-rewards-program",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://support.tiktok.com/en/business-and-creator/creator-rewards-program/how-rewards-work",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://newsroom.tiktok.com/programa-recompensas-creadores-tiktok-mexico?lang=es-419",
+        "checkedAt": "2026-11-10",
+        "sourceUpdatedAt": "2025-10-01",
+        "type": "official"
+      },
+      {
+        "url": "https://support.tiktok.com/en/business-and-creator/creator-rewards-program/creator-rewards-program",
+        "checkedAt": "2026-11-10",
+        "type": "inference"
+      }
+    ],
+    "confidence": "medium",
+    "volatility": "monthly",
+    "watch": [
+      {
+        "url": "https://support.tiktok.com/en/business-and-creator/creator-rewards-program/creator-rewards-program",
+        "kind": "policy_page"
+      }
+    ],
+    "status": "active",
+    "notes": "Đã đổi chương trình và mở Mexico theo từng đợt. Mexico có công bố bổ sung chính thức 01/10/2025. Mảng countries ghi các nước xác nhận trong nguồn đã đối chiếu, có thể chưa đầy đủ. Đánh giá tự động hóa là suy luận có điều kiện."
+  },
+  {
+    "id": "tiktok.subscription",
+    "kind": "monetization_program",
+    "scope": {
+      "platforms": [
+        "tiktok"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "platform": "tiktok",
+      "name": "Subscription",
+      "pays": "Người xem trả phí",
+      "eligibility": {
+        "text": "18+, theo thông báo mở rộng: 10.000 follow và 100.000 view trong tháng lịch trước hoặc đủ LIVE; điều kiện hiện tại từng tài khoản null"
+      },
+      "share": null,
+      "countries": null,
+      "countryNotes": "null — mở theo vùng, kiểm tra trong app",
+      "contentRules": "Quyền lợi và tương tác riêng với hội viên",
+      "automatedUse": "partly",
+      "reason": "cần duy trì quyền lợi",
+      "countriesListType": "unknown"
+    },
+    "evidence": [
+      {
+        "url": "https://newsroom.tiktok.com/empowering-creators-and-fostering-communities-with-the-expanded-subscription-feature?lang=en",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://newsroom.tiktok.com/empowering-creators-and-fostering-communities-with-the-expanded-subscription-feature?lang=en",
+        "checkedAt": "2026-11-10",
+        "type": "inference"
+      }
+    ],
+    "confidence": "low",
+    "volatility": "monthly",
+    "watch": [
+      {
+        "url": "https://newsroom.tiktok.com/empowering-creators-and-fostering-communities-with-the-expanded-subscription-feature?lang=en",
+        "kind": "changelog"
+      }
+    ],
+    "status": "active",
+    "notes": "Ngưỡng và vùng phụ thuộc rollout và điều kiện từng tài khoản. Đánh giá tự động hóa là suy luận có điều kiện."
+  },
+  {
+    "id": "tiktok.live.gifts",
+    "kind": "monetization_program",
+    "scope": {
+      "platforms": [
+        "tiktok"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "platform": "tiktok",
+      "name": "LIVE Gifts",
+      "pays": "Người xem gửi Gifts, creator nhận Diamonds theo quy định",
+      "eligibility": {
+        "text": "18+ (19 ở Hàn), đủ LIVE, tài khoản tốt, khu vực được hỗ trợ",
+        "minAge": 18,
+        "minAgeByMarket": {
+          "KR": 19
+        }
+      },
+      "share": "null tỷ lệ chuyển cố định",
+      "countries": null,
+      "countryNotes": "null — danh sách công khai không xác nhận VN trong nguồn dùng",
+      "contentRules": "LIVE thật, tuân quy tắc Gifts",
+      "automatedUse": "partly",
+      "reason": "cần vận hành livestream và chat",
+      "countriesListType": "unknown"
+    },
+    "evidence": [
+      {
+        "url": "https://support.tiktok.com/en/live-gifts-wallet/tiktok-live/live-gifts-on-tiktok",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://support.tiktok.com/en/live-gifts-wallet/tiktok-live/live-gifts-on-tiktok",
+        "checkedAt": "2026-11-10",
+        "type": "inference"
+      }
+    ],
+    "confidence": "low",
+    "volatility": "quarterly",
+    "watch": [
+      {
+        "url": "https://support.tiktok.com/en/live-gifts-wallet/tiktok-live/live-gifts-on-tiktok",
+        "kind": "policy_page"
+      }
+    ],
+    "status": "active",
+    "notes": "Vùng mở, điều kiện LIVE và quy định Gifts cần rà riêng. Đánh giá tự động hóa là suy luận có điều kiện."
+  },
+  {
+    "id": "tiktok.shop.affiliate",
+    "kind": "monetization_program",
+    "scope": {
+      "platforms": [
+        "tiktok"
+      ],
+      "markets": [
+        "VN"
+      ]
+    },
+    "value": {
+      "platform": "tiktok",
+      "name": "Shop Affiliate",
+      "pays": "Hoa hồng nhà bán",
+      "eligibility": {
+        "text": "Tài khoản creator, định danh và điều kiện theo loại creator của Shop VN"
+      },
+      "share": "Theo sản phẩm, shop và chiến dịch",
+      "countries": [
+        "VN"
+      ],
+      "countryNotes": "Có — TikTok Shop VN có onboarding creator",
+      "contentRules": "Disclosure, tính chính xác của mô tả sản phẩm",
+      "automatedUse": "partly",
+      "reason": "cần kiểm chứng claim và đơn",
+      "countriesListType": "verified_subset"
+    },
+    "evidence": [
+      {
+        "url": "https://seller-vn.tiktok.com/university/essay?knowledge_id=104015979497218&lang=en",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://seller-vn.tiktok.com/university/essay?knowledge_id=7904880287155985&lang=en",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://seller-vn.tiktok.com/university/essay?knowledge_id=104015979497218&lang=en",
+        "checkedAt": "2026-11-10",
+        "type": "inference"
+      }
+    ],
+    "confidence": "medium",
+    "volatility": "monthly",
+    "watch": [
+      {
+        "url": "https://seller-vn.tiktok.com/university/essay?knowledge_id=104015979497218&lang=en",
+        "kind": "policy_page"
+      }
+    ],
+    "status": "active",
+    "notes": "Seller Center và chiến dịch cập nhật điều kiện theo thị trường. Mảng countries ghi các nước xác nhận trong nguồn đã đối chiếu, có thể chưa đầy đủ. Đánh giá tự động hóa là suy luận có điều kiện."
+  },
+  {
+    "id": "tiktok.one",
+    "kind": "monetization_program",
+    "scope": {
+      "platforms": [
+        "tiktok"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "platform": "tiktok",
+      "name": "TikTok One (Creator Marketplace)",
+      "pays": "Nhãn hàng",
+      "eligibility": {
+        "text": "18+, thường 10.000 follow, 1.000 view bài và 3 bài/30 ngày; có thể khác theo vùng",
+        "minAge": 18,
+        "followers": 10000,
+        "views": 1000,
+        "uploads": 3,
+        "windowDays": 30,
+        "conditional": true
+      },
+      "share": "Thỏa thuận",
+      "countries": null,
+      "countryNotes": "null — điều kiện theo vùng và trong tài khoản",
+      "contentRules": "Branded content, điều khoản chiến dịch",
+      "automatedUse": "partly",
+      "reason": "thương lượng và duyệt nội dung",
+      "countriesListType": "unknown"
+    },
+    "evidence": [
+      {
+        "url": "https://support.tiktok.com/en/business-and-creator/tiktok-one/tiktok-one",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://support.tiktok.com/en/business-and-creator/tiktok-one/tiktok-one",
+        "checkedAt": "2026-11-10",
+        "type": "inference"
+      }
+    ],
+    "confidence": "low",
+    "volatility": "monthly",
+    "watch": [
+      {
+        "url": "https://support.tiktok.com/en/business-and-creator/tiktok-one/tiktok-one",
+        "kind": "policy_page"
+      }
+    ],
+    "status": "active",
+    "notes": "Creator Marketplace chuyển sang TikTok One, điều kiện có thể tùy vùng. Đánh giá tự động hóa là suy luận có điều kiện."
+  },
+  {
+    "id": "tiktok.series",
+    "kind": "monetization_program",
+    "scope": {
+      "platforms": [
+        "tiktok"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "platform": "tiktok",
+      "name": "Series",
+      "pays": "Người xem trả phí mở bộ video",
+      "eligibility": {
+        "text": "18+, tài khoản từ 30 ngày, 3 bài công khai/30 ngày, 1.000 view/30 ngày, thường 10.000 follow; trường hợp dưới ngưỡng có thể nộp minh chứng",
+        "minAge": 18,
+        "followers": 10000,
+        "views": 1000,
+        "windowDays": 30,
+        "minAccountDays": 30,
+        "uploads": 3,
+        "conditional": true
+      },
+      "share": "null thu ròng sau phí theo vùng",
+      "countries": null,
+      "countryNotes": "null — đối chiếu trong TikTok Studio",
+      "contentRules": "Nội dung gốc, account public và tốt",
+      "automatedUse": "partly",
+      "reason": "video tự động được nếu đáp ứng giá trị trả phí",
+      "countriesListType": "unknown"
+    },
+    "evidence": [
+      {
+        "url": "https://support.tiktok.com/en/business-and-creator/tiktok-series/about-tiktok-series",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://support.tiktok.com/en/business-and-creator/tiktok-series/about-tiktok-series",
+        "checkedAt": "2026-11-10",
+        "type": "inference"
+      }
+    ],
+    "confidence": "low",
+    "volatility": "quarterly",
+    "watch": [
+      {
+        "url": "https://support.tiktok.com/en/business-and-creator/tiktok-series/about-tiktok-series",
+        "kind": "policy_page"
+      }
+    ],
+    "status": "active",
+    "notes": "Điều kiện tài khoản, phí và vùng có thể đổi. Đánh giá tự động hóa là suy luận có điều kiện."
+  },
+  {
+    "id": "tiktok.effect_rewards",
+    "kind": "monetization_program",
+    "scope": {
+      "platforms": [
+        "tiktok"
+      ],
+      "markets": [
+        "VN"
+      ]
+    },
+    "value": {
+      "platform": "tiktok",
+      "name": "Effect Creator Rewards",
+      "pays": "Thưởng hiệu ứng đủ lượt sử dụng hợp lệ",
+      "eligibility": {
+        "text": "Đủ tuổi, vùng, tài khoản Effect House và milestone của chương trình"
+      },
+      "share": "Theo điều khoản và mốc lượt dùng, null mức cố định",
+      "countries": [
+        "VN"
+      ],
+      "countryNotes": "Có — có điều khoản VN",
+      "contentRules": "Phải tạo và xuất bản hiệu ứng đủ điều kiện",
+      "automatedUse": "no",
+      "reason": "chỉ tạo video thì không đủ",
+      "countriesListType": "verified_subset"
+    },
+    "evidence": [
+      {
+        "url": "https://effecthouse.tiktok.com/learn/guides/support/faq-effect-creator-rewards",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://sf16-va.tiktokcdn.com/obj/eden-va2/nuvzeh7ullssvj/effect_creator_rewards/VN_Effect_Creator_Rewards_Terms.pdf",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://effecthouse.tiktok.com/learn/guides/support/faq-effect-creator-rewards",
+        "checkedAt": "2026-11-10",
+        "type": "inference"
+      }
+    ],
+    "confidence": "medium",
+    "volatility": "monthly",
+    "watch": [
+      {
+        "url": "https://effecthouse.tiktok.com/learn/guides/support/faq-effect-creator-rewards",
+        "kind": "policy_page"
+      }
+    ],
+    "status": "active",
+    "notes": "Đợt thưởng, mốc sử dụng và điều khoản địa phương có thể đổi. Mảng countries ghi các nước xác nhận trong nguồn đã đối chiếu, có thể chưa đầy đủ. Đánh giá tự động hóa là suy luận có điều kiện."
+  },
+  {
+    "id": "tiktok.video_gifts",
+    "kind": "monetization_program",
+    "scope": {
+      "platforms": [
+        "tiktok"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "platform": "tiktok",
+      "name": "Video Gifts",
+      "pays": "Gifts trên video",
+      "eligibility": {
+        "text": "18+ (19 ở Hàn), 10.000 follow, tài khoản ≥30 ngày, có bài công khai/30 ngày, personal account và vùng hỗ trợ",
+        "minAge": 18,
+        "minAgeByMarket": {
+          "KR": 19
+        },
+        "followers": 10000,
+        "minAccountDays": 30,
+        "uploads": 1,
+        "windowDays": 30
+      },
+      "share": null,
+      "countries": null,
+      "countryNotes": "null",
+      "contentRules": "Duet, Stitch, quảng cáo/bài tài trợ không đủ điều kiện",
+      "automatedUse": "partly",
+      "reason": "clip gốc, không tài trợ",
+      "countriesListType": "unknown"
+    },
+    "evidence": [
+      {
+        "url": "https://support.tiktok.com/en/business-and-creator/video-gifts-on-tiktok/video-gifts-on-tiktok",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://support.tiktok.com/en/business-and-creator/video-gifts-on-tiktok/video-gifts-on-tiktok",
+        "checkedAt": "2026-11-10",
+        "type": "inference"
+      }
+    ],
+    "confidence": "low",
+    "volatility": "quarterly",
+    "watch": [
+      {
+        "url": "https://support.tiktok.com/en/business-and-creator/video-gifts-on-tiktok/video-gifts-on-tiktok",
+        "kind": "policy_page"
+      }
+    ],
+    "status": "active",
+    "notes": "Điều kiện người nhận và phạm vi theo từng thị trường. Đánh giá tự động hóa là suy luận có điều kiện."
+  },
+  {
+    "id": "facebook.content_monetization",
+    "kind": "monetization_program",
+    "scope": {
+      "platforms": [
+        "facebook"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "platform": "facebook",
+      "name": "Content Monetization",
+      "pays": "Hiệu suất nội dung đủ điều kiện: Reels, dài, ảnh, chữ và định dạng hỗ trợ",
+      "eligibility": {
+        "text": "Invite-only theo cập nhật công khai; đăng ký quan tâm trong Professional Dashboard"
+      },
+      "share": "null RPM chung; hệ thống tính theo qualified views và hiệu suất",
+      "countries": null,
+      "countryNotes": "null — lời mời là theo tài khoản; chưa xác nhận danh sách vùng hiện hành",
+      "contentRules": "Ưu tiên nội dung gốc, tránh spam và sao chép",
+      "automatedUse": "partly",
+      "reason": "review nội dung và có invite",
+      "countriesListType": "unknown"
+    },
+    "evidence": [
+      {
+        "url": "https://about.fb.com/news/2026/03/creator-fast-track-grow-your-audience-earn-money-on-facebook/amp/",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://about.fb.com/news/2024/10/monetize-content-facebooks-new-streamlined-program/amp/",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://about.fb.com/news/2026/03/rewarding-original-creators-on-facebook/amp/",
+        "checkedAt": "2026-11-10",
+        "sourceUpdatedAt": "2026-03-13",
+        "type": "official"
+      },
+      {
+        "url": "https://about.fb.com/news/2026/03/creator-fast-track-grow-your-audience-earn-money-on-facebook/amp/",
+        "checkedAt": "2026-11-10",
+        "type": "inference"
+      }
+    ],
+    "confidence": "low",
+    "volatility": "monthly",
+    "watch": [
+      {
+        "url": "https://creators.facebook.com/tools/facebook-content-monetization",
+        "kind": "policy_page"
+      },
+      {
+        "url": "https://about.fb.com/news/2026/03/creator-fast-track-grow-your-audience-earn-money-on-facebook/amp/",
+        "kind": "changelog"
+      },
+      {
+        "url": "https://about.fb.com/feed/",
+        "kind": "rss"
+      }
+    ],
+    "status": "active",
+    "notes": "Các chương trình được gộp và điều kiện lời mời thay đổi theo đợt. Đánh giá tự động hóa là suy luận có điều kiện."
+  },
+  {
+    "id": "facebook.stars",
+    "kind": "monetization_program",
+    "scope": {
+      "platforms": [
+        "facebook"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "platform": "facebook",
+      "name": "Stars",
+      "pays": "Người xem mua Stars",
+      "eligibility": {
+        "text": "Điều kiện tài khoản và vùng; thông báo 2023 nói 500 follow trong 30 ngày, hiện hành null"
+      },
+      "share": null,
+      "countries": null,
+      "countryNotes": "null — kiểm tra dashboard",
+      "contentRules": "Tuân chính sách đối tác và kiếm tiền",
+      "automatedUse": "partly",
+      "reason": "video đủ điều kiện có thể nhận Stars",
+      "countriesListType": "unknown"
+    },
+    "evidence": [
+      {
+        "url": "https://about.fb.com/news/2023/11/giving-creators-more-ways-to-earn-money-on-facebook-and-instagram/",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://about.fb.com/news/2023/11/giving-creators-more-ways-to-earn-money-on-facebook-and-instagram/",
+        "checkedAt": "2026-11-10",
+        "type": "inference"
+      }
+    ],
+    "confidence": "low",
+    "volatility": "quarterly",
+    "watch": [
+      {
+        "url": "https://about.fb.com/news/2023/11/giving-creators-more-ways-to-earn-money-on-facebook-and-instagram/",
+        "kind": "changelog"
+      },
+      {
+        "url": "https://about.fb.com/feed/",
+        "kind": "rss"
+      }
+    ],
+    "status": "active",
+    "notes": "Ngưỡng công khai có tiền lệ thay đổi, tài khoản cần xác minh riêng. Đánh giá tự động hóa là suy luận có điều kiện."
+  },
+  {
+    "id": "facebook.subscriptions",
+    "kind": "monetization_program",
+    "scope": {
+      "platforms": [
+        "facebook"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "platform": "facebook",
+      "name": "Subscriptions",
+      "pays": "Phí hội viên",
+      "eligibility": {
+        "text": "Dashboard theo dõi eligibility; null ngưỡng hiện hành"
+      },
+      "share": null,
+      "countries": null,
+      "countryNotes": "null",
+      "contentRules": "Phải cung cấp quyền lợi, tuân điều khoản thanh toán",
+      "automatedUse": "partly",
+      "reason": "duy trì quyền lợi",
+      "countriesListType": "unknown"
+    },
+    "evidence": [
+      {
+        "url": "https://about.fb.com/news/2023/11/giving-creators-more-ways-to-earn-money-on-facebook-and-instagram/",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://about.fb.com/news/2023/11/giving-creators-more-ways-to-earn-money-on-facebook-and-instagram/",
+        "checkedAt": "2026-11-10",
+        "type": "inference"
+      }
+    ],
+    "confidence": "low",
+    "volatility": "quarterly",
+    "watch": [
+      {
+        "url": "https://about.fb.com/news/2023/11/giving-creators-more-ways-to-earn-money-on-facebook-and-instagram/",
+        "kind": "changelog"
+      },
+      {
+        "url": "https://about.fb.com/feed/",
+        "kind": "rss"
+      }
+    ],
+    "status": "active",
+    "notes": "Quyền truy cập và điều khoản thanh toán thay đổi theo tài khoản/vùng. Đánh giá tự động hóa là suy luận có điều kiện."
+  },
+  {
+    "id": "facebook.brand_collabs",
+    "kind": "monetization_program",
+    "scope": {
+      "platforms": [
+        "facebook"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "platform": "facebook",
+      "name": "Brand Collabs Manager / partnership ads",
+      "pays": "Nhãn hàng",
+      "eligibility": {
+        "text": "Cần công cụ hợp tác phù hợp với tài khoản; tình trạng onboarding Brand Collabs Manager theo từng nước null"
+      },
+      "share": "Thỏa thuận",
+      "countries": null,
+      "countryNotes": "null",
+      "contentRules": "Khai báo paid partnership và quyền dùng creative",
+      "automatedUse": "partly",
+      "reason": "cần giao kết và duyệt claim",
+      "countriesListType": "unknown"
+    },
+    "evidence": [
+      {
+        "url": "https://www.facebook.com/business/ads/partnership-ads",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://about.fb.com/news/2024/02/creator-marketplace-for-brands-and-creators-to-collaborate-on-instagram/",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://www.facebook.com/business/ads/partnership-ads",
+        "checkedAt": "2026-11-10",
+        "type": "inference"
+      }
+    ],
+    "confidence": "low",
+    "volatility": "monthly",
+    "watch": [
+      {
+        "url": "https://www.facebook.com/business/ads/partnership-ads",
+        "kind": "policy_page"
+      },
+      {
+        "url": "https://about.fb.com/feed/",
+        "kind": "rss"
+      }
+    ],
+    "status": "active",
+    "notes": "Công cụ thương hiệu và onboarding có thể chuyển sang sản phẩm khác. Đánh giá tự động hóa là suy luận có điều kiện."
+  },
+  {
+    "id": "facebook.bonuses",
+    "kind": "monetization_program",
+    "scope": {
+      "platforms": [
+        "facebook"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "platform": "facebook",
+      "name": "Bonuses / Fast Track",
+      "pays": "Meta",
+      "eligibility": {
+        "text": "Bonus cũ từng được gộp vào F1; Fast Track có điều kiện lượng follow ngoài Facebook và thời hạn theo đợt"
+      },
+      "share": "Fast Track công bố 1.000 hoặc 3.000 USD/tháng trong ba tháng theo ngưỡng; không suy rộng",
+      "countries": null,
+      "countryNotes": "null — eligibility theo chương trình, chưa xác nhận VN",
+      "contentRules": "Nội dung gốc theo yêu cầu đợt",
+      "automatedUse": "partly",
+      "reason": "cần đủ điều kiện riêng",
+      "countriesListType": "unknown"
+    },
+    "evidence": [
+      {
+        "url": "https://about.fb.com/news/2024/10/monetize-content-facebooks-new-streamlined-program/amp/",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://about.fb.com/news/2026/03/creator-fast-track-grow-your-audience-earn-money-on-facebook/amp/",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://about.fb.com/news/2024/10/monetize-content-facebooks-new-streamlined-program/amp/",
+        "checkedAt": "2026-11-10",
+        "type": "inference"
+      }
+    ],
+    "confidence": "low",
+    "volatility": "weekly",
+    "watch": [
+      {
+        "url": "https://about.fb.com/news/2024/10/monetize-content-facebooks-new-streamlined-program/amp/",
+        "kind": "changelog"
+      },
+      {
+        "url": "https://about.fb.com/feed/",
+        "kind": "rss"
+      }
+    ],
+    "status": "active",
+    "notes": "Đợt thưởng hoặc Fast Track có hạn, cần dò nguồn mới theo tuần. Đánh giá tự động hóa là suy luận có điều kiện."
+  },
+  {
+    "id": "instagram.gifts",
+    "kind": "monetization_program",
+    "scope": {
+      "platforms": [
+        "instagram"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "platform": "instagram",
+      "name": "Gifts",
+      "pays": "Stars từ người xem Reels",
+      "eligibility": {
+        "text": "18+, tài khoản professional, chính sách kiếm tiền; ngưỡng hiện hành null",
+        "minAge": 18
+      },
+      "share": "Thông báo cũ có mô tả mô hình Stars; null tỷ lệ hiện hành",
+      "countries": null,
+      "countryNotes": "null — kiểm tra Professional Dashboard",
+      "contentRules": "Reels đủ điều kiện",
+      "automatedUse": "partly",
+      "reason": "nếu tài khoản được mở",
+      "countriesListType": "unknown"
+    },
+    "evidence": [
+      {
+        "url": "https://about.fb.com/news/2023/11/giving-creators-more-ways-to-earn-money-on-facebook-and-instagram/",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://about.fb.com/news/2023/11/giving-creators-more-ways-to-earn-money-on-facebook-and-instagram/",
+        "checkedAt": "2026-11-10",
+        "type": "inference"
+      }
+    ],
+    "confidence": "low",
+    "volatility": "quarterly",
+    "watch": [
+      {
+        "url": "https://about.fb.com/news/2023/11/giving-creators-more-ways-to-earn-money-on-facebook-and-instagram/",
+        "kind": "changelog"
+      },
+      {
+        "url": "https://about.fb.com/feed/",
+        "kind": "rss"
+      }
+    ],
+    "status": "active",
+    "notes": "Đợt rollout và ngưỡng tài khoản có thể đổi. Đánh giá tự động hóa là suy luận có điều kiện."
+  },
+  {
+    "id": "instagram.subscriptions",
+    "kind": "monetization_program",
+    "scope": {
+      "platforms": [
+        "instagram"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "platform": "instagram",
+      "name": "Subscriptions",
+      "pays": "Phí tháng người theo dõi",
+      "eligibility": {
+        "text": "Tài khoản và vùng hỗ trợ; ngưỡng hiện hành null"
+      },
+      "share": null,
+      "countries": null,
+      "countryNotes": "null",
+      "contentRules": "Quyền lợi trả phí và chính sách đối tác",
+      "automatedUse": "partly",
+      "reason": "cần quyền lợi đủ giá trị",
+      "countriesListType": "unknown"
+    },
+    "evidence": [
+      {
+        "url": "https://about.fb.com/news/2022/07/new-ways-for-creators-to-connect-with-subscribers-on-instagram/",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://about.fb.com/news/2023/11/giving-creators-more-ways-to-earn-money-on-facebook-and-instagram/",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://about.fb.com/news/2022/07/new-ways-for-creators-to-connect-with-subscribers-on-instagram/",
+        "checkedAt": "2026-11-10",
+        "type": "inference"
+      }
+    ],
+    "confidence": "low",
+    "volatility": "quarterly",
+    "watch": [
+      {
+        "url": "https://about.fb.com/news/2022/07/new-ways-for-creators-to-connect-with-subscribers-on-instagram/",
+        "kind": "changelog"
+      },
+      {
+        "url": "https://about.fb.com/feed/",
+        "kind": "rss"
+      }
+    ],
+    "status": "active",
+    "notes": "Thị trường và điều khoản quyền lợi có thể được cập nhật. Đánh giá tự động hóa là suy luận có điều kiện."
+  },
+  {
+    "id": "instagram.live.badges",
+    "kind": "monetization_program",
+    "scope": {
+      "platforms": [
+        "instagram"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "platform": "instagram",
+      "name": "Badges",
+      "pays": "Người xem mua badge khi Live",
+      "eligibility": {
+        "text": "Tài khoản chuyên nghiệp đủ điều kiện và vùng hỗ trợ; null ngưỡng"
+      },
+      "share": null,
+      "countries": null,
+      "countryNotes": "null",
+      "contentRules": "Chỉ Live đủ điều kiện",
+      "automatedUse": "partly",
+      "reason": "cần vận hành live",
+      "countriesListType": "unknown"
+    },
+    "evidence": [
+      {
+        "url": "https://help.instagram.com/376750824061983",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://help.instagram.com/376750824061983",
+        "checkedAt": "2026-11-10",
+        "type": "inference"
+      }
+    ],
+    "confidence": "low",
+    "volatility": "quarterly",
+    "watch": [
+      {
+        "url": "https://help.instagram.com/376750824061983",
+        "kind": "policy_page"
+      },
+      {
+        "url": "https://about.fb.com/feed/",
+        "kind": "rss"
+      }
+    ],
+    "status": "active",
+    "notes": "Điều kiện LIVE và quốc gia có thể được mở hoặc thu hẹp. Đánh giá tự động hóa là suy luận có điều kiện."
+  },
+  {
+    "id": "instagram.bonuses",
+    "kind": "monetization_program",
+    "scope": {
+      "platforms": [
+        "instagram"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "platform": "instagram",
+      "name": "Bonuses",
+      "pays": "Meta",
+      "eligibility": {
+        "text": "Thông báo holiday bonus 2023 là thử nghiệm theo lời mời"
+      },
+      "share": "null hiện hành",
+      "countries": null,
+      "countryNotes": "null — từng thử ở Mỹ, Hàn, Nhật; chưa xác nhận còn mở",
+      "contentRules": "Điều kiện từng đợt",
+      "automatedUse": "partly",
+      "reason": "không lập dự toán khi chưa có invite",
+      "countriesListType": "unknown"
+    },
+    "evidence": [
+      {
+        "url": "https://about.fb.com/news/2023/11/giving-creators-more-ways-to-earn-money-on-facebook-and-instagram/",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://about.fb.com/news/2023/11/giving-creators-more-ways-to-earn-money-on-facebook-and-instagram/",
+        "checkedAt": "2026-11-10",
+        "type": "inference"
+      }
+    ],
+    "confidence": "low",
+    "volatility": "weekly",
+    "watch": [
+      {
+        "url": "https://about.fb.com/news/2023/11/giving-creators-more-ways-to-earn-money-on-facebook-and-instagram/",
+        "kind": "changelog"
+      },
+      {
+        "url": "https://about.fb.com/feed/",
+        "kind": "rss"
+      }
+    ],
+    "status": "active",
+    "notes": "Chương trình thử theo mùa hoặc lời mời, trạng thái dễ mất hiệu lực. Đánh giá tự động hóa là suy luận có điều kiện."
+  },
+  {
+    "id": "instagram.affiliate",
+    "kind": "monetization_program",
+    "scope": {
+      "platforms": [
+        "instagram"
+      ],
+      "markets": [
+        "VN"
+      ]
+    },
+    "value": {
+      "platform": "instagram",
+      "name": "Affiliate",
+      "pays": "Nhà bán trả hoa hồng qua link",
+      "eligibility": {
+        "text": "Theo mạng affiliate; tình trạng chương trình native hiện hành null"
+      },
+      "share": "Theo hợp đồng",
+      "countries": [
+        "VN"
+      ],
+      "countryNotes": "Có — qua chương trình VN bên ngoài, tính năng native VN null",
+      "contentRules": "Link và disclosure đúng vị trí, kiểm tra link click được",
+      "automatedUse": "partly",
+      "reason": "quản lý tracking và sản phẩm",
+      "countriesListType": "verified_subset"
+    },
+    "evidence": [
+      {
+        "url": "https://affiliate.shopee.vn/",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://www.lazada.vn/lazada-affiliate-program/",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://about.fb.com/news/2024/02/creator-marketplace-for-brands-and-creators-to-collaborate-on-instagram/",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://affiliate.shopee.vn/",
+        "checkedAt": "2026-11-10",
+        "type": "inference"
+      }
+    ],
+    "confidence": "medium",
+    "volatility": "monthly",
+    "watch": [
+      {
+        "url": "https://affiliate.shopee.vn/",
+        "kind": "policy_page"
+      },
+      {
+        "url": "https://about.fb.com/feed/",
+        "kind": "rss"
+      }
+    ],
+    "status": "active",
+    "notes": "Tính năng native và điều khoản mạng affiliate thay đổi riêng. Mảng countries ghi các nước xác nhận trong nguồn đã đối chiếu, có thể chưa đầy đủ. Đánh giá tự động hóa là suy luận có điều kiện."
+  },
+  {
+    "id": "instagram.creator_marketplace",
+    "kind": "monetization_program",
+    "scope": {
+      "platforms": [
+        "instagram"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "platform": "instagram",
+      "name": "Creator Marketplace / brand collabs",
+      "pays": "Nhãn hàng",
+      "eligibility": {
+        "text": "Tài khoản professional đủ điều kiện; mở theo thị trường"
+      },
+      "share": "Thỏa thuận",
+      "countries": null,
+      "countryNotes": "null — bài công bố mở thêm thị trường không đủ xác nhận VN",
+      "contentRules": "Paid partnership label và quyền dùng quảng cáo",
+      "automatedUse": "partly",
+      "reason": "duyệt hợp đồng/creative",
+      "countriesListType": "unknown"
+    },
+    "evidence": [
+      {
+        "url": "https://about.fb.com/news/2024/02/creator-marketplace-for-brands-and-creators-to-collaborate-on-instagram/",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://about.fb.com/news/2024/02/creator-marketplace-for-brands-and-creators-to-collaborate-on-instagram/",
+        "checkedAt": "2026-11-10",
+        "type": "inference"
+      }
+    ],
+    "confidence": "low",
+    "volatility": "monthly",
+    "watch": [
+      {
+        "url": "https://about.fb.com/news/2024/02/creator-marketplace-for-brands-and-creators-to-collaborate-on-instagram/",
+        "kind": "changelog"
+      },
+      {
+        "url": "https://about.fb.com/feed/",
+        "kind": "rss"
+      }
+    ],
+    "status": "active",
+    "notes": "Meta công bố thêm thị trường theo đợt. Đánh giá tự động hóa là suy luận có điều kiện."
+  },
+  {
+    "id": "snapchat.monetization",
+    "kind": "monetization_program",
+    "scope": {
+      "platforms": [
+        "*"
+      ],
+      "markets": [
+        "DZ",
+        "AR",
+        "AU",
+        "AT",
+        "BH",
+        "BE",
+        "BR",
+        "CA",
+        "CO",
+        "DK",
+        "EG",
+        "FI",
+        "FR",
+        "DE",
+        "IN",
+        "ID",
+        "IE",
+        "IT",
+        "JO",
+        "KR",
+        "KW",
+        "LB",
+        "LY",
+        "MY",
+        "MX",
+        "MA",
+        "NL",
+        "NZ",
+        "NG",
+        "NO",
+        "OM",
+        "PK",
+        "PS",
+        "PH",
+        "PL",
+        "QA",
+        "SA",
+        "SG",
+        "ES",
+        "SE",
+        "AE",
+        "GB",
+        "US"
+      ]
+    },
+    "value": {
+      "platform": "snapchat",
+      "name": "Monetization Program",
+      "pays": "Quảng cáo Stories và Spotlight",
+      "eligibility": {
+        "text": "Lời mời, 18+ hoặc tuổi thành niên, Snap Star, 50.000 follow, 15.000 giờ/28 ngày gồm 3.000 giờ Spotlight",
+        "minAge": 18,
+        "followers": 50000,
+        "watchHours": 15000,
+        "spotlightWatchHours": 3000,
+        "windowDays": 28,
+        "minLengthSec": 30
+      },
+      "share": null,
+      "countries": [
+        "DZ",
+        "AR",
+        "AU",
+        "AT",
+        "BH",
+        "BE",
+        "BR",
+        "CA",
+        "CO",
+        "DK",
+        "EG",
+        "FI",
+        "FR",
+        "DE",
+        "IN",
+        "ID",
+        "IE",
+        "IT",
+        "JO",
+        "KR",
+        "KW",
+        "LB",
+        "LY",
+        "MY",
+        "MX",
+        "MA",
+        "NL",
+        "NZ",
+        "NG",
+        "NO",
+        "OM",
+        "PK",
+        "PS",
+        "PH",
+        "PL",
+        "QA",
+        "SA",
+        "SG",
+        "ES",
+        "SE",
+        "AE",
+        "GB",
+        "US"
+      ],
+      "countryNotes": "Không — VN vắng trong danh sách payout công khai",
+      "contentRules": "Spotlight từ 30 giây, nội dung phù hợp quảng cáo",
+      "automatedUse": "partly",
+      "reason": "cần Snap Star và xét từng tài khoản",
+      "countriesListType": "verified_subset"
+    },
+    "evidence": [
+      {
+        "url": "https://help.snapchat.com/hc/en-us/articles/14669003687444-About-Snapchat-s-Monetization-Program",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://help.snapchat.com/hc/en-us/articles/7012298096788-In-what-countries-and-regions-are-Snapchatters-eligible-for-a-payout",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://help.snapchat.com/hc/en-us/articles/14669003687444-About-Snapchat-s-Monetization-Program",
+        "checkedAt": "2026-11-10",
+        "type": "inference"
+      }
+    ],
+    "confidence": "medium",
+    "volatility": "monthly",
+    "watch": [
+      {
+        "url": "https://help.snapchat.com/hc/en-us/articles/14669003687444-About-Snapchat-s-Monetization-Program",
+        "kind": "policy_page"
+      }
+    ],
+    "status": "active",
+    "notes": "Mô hình hợp nhất, thời lượng Spotlight và mốc hiệu suất đã thay đổi. Mảng countries ghi các nước xác nhận trong nguồn đã đối chiếu, có thể chưa đầy đủ. Đánh giá tự động hóa là suy luận có điều kiện."
+  },
+  {
+    "id": "x.creator_revenue_sharing",
+    "kind": "monetization_program",
+    "scope": {
+      "platforms": [
+        "*"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "platform": "x",
+      "name": "Creator Revenue Sharing (cũ)",
+      "pays": "X",
+      "eligibility": {
+        "text": "Trang trợ giúp ghi kết thúc 07/09/2026"
+      },
+      "share": "Không còn áp dụng",
+      "countries": [],
+      "countryNotes": "Không — đã kết thúc",
+      "contentRules": "Không áp dụng",
+      "automatedUse": "no",
+      "reason": "chương trình kết thúc",
+      "countriesListType": "verified_subset"
+    },
+    "evidence": [
+      {
+        "url": "https://help.x.com/en/using-x/creator-revenue-sharing",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://help.x.com/en/using-x/creator-revenue-sharing",
+        "checkedAt": "2026-11-10",
+        "type": "inference"
+      }
+    ],
+    "confidence": "medium",
+    "volatility": "stable",
+    "watch": [
+      {
+        "url": "https://help.x.com/en/using-x/creator-revenue-sharing",
+        "kind": "policy_page"
+      }
+    ],
+    "status": "deprecated",
+    "notes": "Chương trình cũ đã kết thúc, chỉ giữ bản ghi lịch sử. Đánh giá tự động hóa là suy luận có điều kiện."
+  },
+  {
+    "id": "x.original_content_rewards",
+    "kind": "monetization_program",
+    "scope": {
+      "platforms": [
+        "*"
+      ],
+      "markets": [
+        "VN"
+      ]
+    },
+    "value": {
+      "platform": "x",
+      "name": "Original Content Rewards",
+      "pays": "X",
+      "eligibility": {
+        "text": "18+, tài khoản cá nhân/doanh nghiệp, Premium đủ điều kiện, 500 follow xác minh, 500.000 impressions Home Timeline từ người dùng xác minh/90 ngày",
+        "minAge": 18,
+        "followers": 500,
+        "impressions": 500000,
+        "windowDays": 90
+      },
+      "share": "null mức chia; payout tối thiểu 30 USD",
+      "countries": [
+        "VN"
+      ],
+      "countryNotes": "Có — VN nằm trong danh sách",
+      "contentRules": "Loại nội dung được tạo hoặc đăng bằng phương tiện tự động",
+      "automatedUse": "no",
+      "reason": "quy tắc loại nội dung tự động",
+      "countriesListType": "verified_subset"
+    },
+    "evidence": [
+      {
+        "url": "https://help.x.com/en/using-x/original-content-rewards",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://help.x.com/en/using-x/original-content-rewards",
+        "checkedAt": "2026-11-10",
+        "type": "inference"
+      }
+    ],
+    "confidence": "medium",
+    "volatility": "monthly",
+    "watch": [
+      {
+        "url": "https://help.x.com/en/using-x/original-content-rewards",
+        "kind": "policy_page"
+      }
+    ],
+    "status": "active",
+    "supersedes": "x.creator_revenue_sharing",
+    "notes": "Chương trình kế nhiệm có điều kiện đủ tư cách và điều khoản tự động riêng. Mảng countries ghi các nước xác nhận trong nguồn đã đối chiếu, có thể chưa đầy đủ. Đánh giá tự động hóa là suy luận có điều kiện."
+  },
+  {
+    "id": "x.subscriptions",
+    "kind": "monetization_program",
+    "scope": {
+      "platforms": [
+        "*"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "platform": "x",
+      "name": "Subscriptions",
+      "pays": "Phí người theo dõi",
+      "eligibility": {
+        "text": "Theo các điều kiện tài khoản, vùng thanh toán và ngưỡng trong trang trợ giúp"
+      },
+      "share": "null mức ròng",
+      "countries": null,
+      "countryNotes": "null cho creator tại VN",
+      "contentRules": "Tuân điều khoản subscription",
+      "automatedUse": "partly",
+      "reason": "cần chăm quyền lợi",
+      "countriesListType": "unknown"
+    },
+    "evidence": [
+      {
+        "url": "https://help.x.com/en/using-x/subscriptions-creator",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://help.x.com/en/using-x/subscriptions-creator",
+        "checkedAt": "2026-11-10",
+        "type": "inference"
+      }
+    ],
+    "confidence": "low",
+    "volatility": "quarterly",
+    "watch": [
+      {
+        "url": "https://help.x.com/en/using-x/subscriptions-creator",
+        "kind": "policy_page"
+      }
+    ],
+    "status": "active",
+    "notes": "Điều kiện Premium và payout có thể thay đổi. Đánh giá tự động hóa là suy luận có điều kiện."
+  },
+  {
+    "id": "pinterest.partnerships.affiliate",
+    "kind": "monetization_program",
+    "scope": {
+      "platforms": [
+        "*"
+      ],
+      "markets": [
+        "VN"
+      ]
+    },
+    "value": {
+      "platform": "pinterest",
+      "name": "Paid partnerships / affiliate Pins",
+      "pays": "Nhãn hàng hoặc nhà bán",
+      "eligibility": {
+        "text": "Paid partnership label khi đủ quyền; Amazon có cơ chế kết nối riêng"
+      },
+      "share": "Thỏa thuận hoặc theo ngành hàng",
+      "countries": [
+        "VN"
+      ],
+      "countryNotes": "Có qua affiliate VN bên ngoài nếu điều khoản cho phép; native Amazon VN null",
+      "contentRules": "Disclosure và quy tắc link",
+      "automatedUse": "partly",
+      "reason": "cần rà sản phẩm, đối tác và link",
+      "countriesListType": "verified_subset"
+    },
+    "evidence": [
+      {
+        "url": "https://help.pinterest.com/en-gb/business/article/paid-partnerships-for-creators",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://help.pinterest.com/en-gb/business/article/connect-amazon-and-pinterest",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://www.lazada.vn/lazada-affiliate-program/",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://help.pinterest.com/en-gb/business/article/paid-partnerships-for-creators",
+        "checkedAt": "2026-11-10",
+        "type": "inference"
+      }
+    ],
+    "confidence": "medium",
+    "volatility": "monthly",
+    "watch": [
+      {
+        "url": "https://help.pinterest.com/en-gb/business/article/paid-partnerships-for-creators",
+        "kind": "policy_page"
+      }
+    ],
+    "status": "active",
+    "notes": "Kết nối affiliate và paid partnership có thể mở theo đợt. Mảng countries ghi các nước xác nhận trong nguồn đã đối chiếu, có thể chưa đầy đủ. Đánh giá tự động hóa là suy luận có điều kiện."
+  },
+  {
+    "id": "zalo.video.leads",
+    "kind": "monetization_program",
+    "scope": {
+      "platforms": [
+        "*"
+      ],
+      "markets": [
+        "VN"
+      ]
+    },
+    "value": {
+      "platform": "zalo_video",
+      "name": "Lead qua nút liên hệ",
+      "pays": "Đơn hàng hoặc lead ngoài kênh",
+      "eligibility": {
+        "text": "Có kênh, dùng chức năng liên hệ đủ điều kiện"
+      },
+      "share": "null payout nền tảng",
+      "countries": [
+        "VN"
+      ],
+      "countryNotes": "Có — tính năng ở VN",
+      "contentRules": "Nội dung và liên hệ đúng chính sách, cần đo đơn bên ngoài",
+      "automatedUse": "partly",
+      "reason": "phải xử lý lead",
+      "countriesListType": "verified_subset"
+    },
+    "evidence": [
+      {
+        "url": "https://ads.zalo.me/business/huong-dan-tao-kenh-zalo-video/",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://ads.zalo.me/business/huong-dan-tinh-nang-lien-he-zalo-video/",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://ads.zalo.me/business/huong-dan-tao-kenh-zalo-video/",
+        "checkedAt": "2026-11-10",
+        "type": "inference"
+      }
+    ],
+    "confidence": "medium",
+    "volatility": "quarterly",
+    "watch": [
+      {
+        "url": "https://ads.zalo.me/business/huong-dan-tao-kenh-zalo-video/",
+        "kind": "policy_page"
+      }
+    ],
+    "status": "active",
+    "notes": "Nút liên hệ phụ thuộc tính năng và điều kiện tài khoản. Mảng countries ghi các nước xác nhận trong nguồn đã đối chiếu, có thể chưa đầy đủ. Đánh giá tự động hóa là suy luận có điều kiện."
+  },
+  {
+    "id": "china.foreign_creator.eligibility",
+    "kind": "monetization_program",
+    "scope": {
+      "platforms": [
+        "*"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "platform": "douyin_kuaishou",
+      "name": "Điều kiện kênh nước ngoài tại Trung Quốc đại lục",
+      "pays": "Chỉ khảo sát eligibility",
+      "eligibility": {
+        "text": "null — chưa tìm thấy điều khoản công khai xác nhận creator nước ngoài có thể nhận payout"
+      },
+      "share": null,
+      "countries": null,
+      "countryNotes": "Không áp dụng VN theo vùng; tình trạng hồ sơ nước ngoài null",
+      "contentRules": "Đăng nhập, xác minh và quyền nhận tiền là các bước riêng",
+      "automatedUse": null,
+      "reason": "chưa thể kết luận khi thiếu xác nhận",
+      "countriesListType": "unknown"
+    },
+    "evidence": [
+      {
+        "url": "https://www.douyin.com/draft/douyin_agreement/douyin_agreement_privacy.html?id=6773901168964798477",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://cp.kuaishou.com/",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://www.douyin.com/draft/douyin_agreement/douyin_agreement_privacy.html?id=6773901168964798477",
+        "checkedAt": "2026-11-10",
+        "type": "inference"
+      }
+    ],
+    "confidence": "low",
+    "volatility": "monthly",
+    "watch": [
+      {
+        "url": "https://developer.open-douyin.com/forum/bulletin",
+        "kind": "changelog"
+      },
+      {
+        "url": "https://www.kuaishou.com/help/feedback/2784",
+        "kind": "policy_page"
+      }
+    ],
+    "status": "active",
+    "notes": "Chưa xác nhận hồ sơ nước ngoài, điều kiện xác minh/payout có thể đổi. Đánh giá tự động hóa là suy luận có điều kiện. automatedUse null vì chưa có bằng chứng về hồ sơ nước ngoài."
+  },
+  {
+    "id": "affiliate.amazon",
+    "kind": "monetization_program",
+    "scope": {
+      "platforms": [
+        "*"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "platform": "off_platform",
+      "name": "Amazon Associates",
+      "pays": "Đơn hàng đủ điều kiện",
+      "eligibility": {
+        "text": "Đăng ký từng chương trình, tuân disclosure và link placement"
+      },
+      "share": "Theo ngành hàng và storefront",
+      "countries": null,
+      "countryNotes": "null — eligibility người ở VN theo storefront, không có storefront VN trong nguồn",
+      "contentRules": "Không nhầm lượt click với đơn đủ điều kiện",
+      "automatedUse": "partly",
+      "reason": "nội dung tự động, theo dõi link và phê duyệt claim",
+      "countriesListType": "unknown"
+    },
+    "evidence": [
+      {
+        "url": "https://affiliate-program.amazon.com/help/operating/schedule",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://www.ftc.gov/business-guidance/resources/disclosures-101-social-media-influencers",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://affiliate-program.amazon.com/help/operating/schedule",
+        "checkedAt": "2026-11-10",
+        "type": "inference"
+      }
+    ],
+    "confidence": "low",
+    "volatility": "monthly",
+    "watch": [
+      {
+        "url": "https://affiliate-program.amazon.com/help/operating/schedule",
+        "kind": "policy_page"
+      }
+    ],
+    "status": "active",
+    "notes": "Hoa hồng theo ngành hàng và storefront có thể đổi. Đánh giá tự động hóa là suy luận có điều kiện."
+  },
+  {
+    "id": "affiliate.shopee",
+    "kind": "monetization_program",
+    "scope": {
+      "platforms": [
+        "*"
+      ],
+      "markets": [
+        "VN"
+      ]
+    },
+    "value": {
+      "platform": "off_platform",
+      "name": "Shopee Affiliate",
+      "pays": "Đơn hàng đủ điều kiện",
+      "eligibility": {
+        "text": "Theo chương trình VN và kênh đăng ký"
+      },
+      "share": "Thay đổi theo campaign",
+      "countries": [
+        "VN"
+      ],
+      "countryNotes": "Có — VN",
+      "contentRules": "Link hợp lệ và quy tắc nhà bán",
+      "automatedUse": "partly",
+      "reason": "cần đối soát đơn và hoàn trả",
+      "countriesListType": "verified_subset"
+    },
+    "evidence": [
+      {
+        "url": "https://affiliate.shopee.vn/",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://affiliate.shopee.vn/",
+        "checkedAt": "2026-11-10",
+        "type": "inference"
+      }
+    ],
+    "confidence": "medium",
+    "volatility": "weekly",
+    "watch": [
+      {
+        "url": "https://affiliate.shopee.vn/",
+        "kind": "policy_page"
+      }
+    ],
+    "status": "active",
+    "notes": "Hoa hồng và điều kiện chiến dịch có thể đổi ngắn hạn. Mảng countries ghi các nước xác nhận trong nguồn đã đối chiếu, có thể chưa đầy đủ. Đánh giá tự động hóa là suy luận có điều kiện."
+  },
+  {
+    "id": "affiliate.lazada",
+    "kind": "monetization_program",
+    "scope": {
+      "platforms": [
+        "*"
+      ],
+      "markets": [
+        "VN"
+      ]
+    },
+    "value": {
+      "platform": "off_platform",
+      "name": "Lazada Affiliate",
+      "pays": "Đơn đủ điều kiện",
+      "eligibility": {
+        "text": "Theo chương trình VN và kênh đăng ký"
+      },
+      "share": "Thay đổi theo ngành hàng/campaign",
+      "countries": [
+        "VN"
+      ],
+      "countryNotes": "Có — VN",
+      "contentRules": "Tuân chính sách traffic, link và nội dung",
+      "automatedUse": "partly",
+      "reason": "cần đối soát",
+      "countriesListType": "verified_subset"
+    },
+    "evidence": [
+      {
+        "url": "https://www.lazada.vn/lazada-affiliate-program/",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://www.lazada.vn/lazada-affiliate-program/",
+        "checkedAt": "2026-11-10",
+        "type": "inference"
+      }
+    ],
+    "confidence": "medium",
+    "volatility": "weekly",
+    "watch": [
+      {
+        "url": "https://www.lazada.vn/lazada-affiliate-program/",
+        "kind": "policy_page"
+      }
+    ],
+    "status": "active",
+    "notes": "Hoa hồng và điều kiện chiến dịch có thể đổi ngắn hạn. Mảng countries ghi các nước xác nhận trong nguồn đã đối chiếu, có thể chưa đầy đủ. Đánh giá tự động hóa là suy luận có điều kiện."
+  },
+  {
+    "id": "affiliate.impact",
+    "kind": "monetization_program",
+    "scope": {
+      "platforms": [
+        "*"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "platform": "off_platform",
+      "name": "Impact",
+      "pays": "Hành động theo hợp đồng affiliate",
+      "eligibility": {
+        "text": "Partner và từng brand duyệt, cấu hình nhận thanh toán"
+      },
+      "share": "Theo hợp đồng",
+      "countries": null,
+      "countryNotes": "null — kiểm tra hỗ trợ thanh toán và campaign của từng brand",
+      "contentRules": "Disclosure, attribution và giao dịch hoàn",
+      "automatedUse": "partly",
+      "reason": "cần onboarding và đối soát",
+      "countriesListType": "unknown"
+    },
+    "evidence": [
+      {
+        "url": "https://impact.com/partnerships/affiliate-marketing/",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://www.ftc.gov/business-guidance/resources/disclosures-101-social-media-influencers",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://impact.com/partnerships/affiliate-marketing/",
+        "checkedAt": "2026-11-10",
+        "type": "inference"
+      }
+    ],
+    "confidence": "low",
+    "volatility": "monthly",
+    "watch": [
+      {
+        "url": "https://impact.com/partnerships/affiliate-marketing/",
+        "kind": "policy_page"
+      }
+    ],
+    "status": "active",
+    "notes": "Từng hợp đồng và điều kiện thanh toán có thể đổi. Đánh giá tự động hóa là suy luận có điều kiện."
+  },
+  {
+    "id": "commerce.sponsorship",
+    "kind": "monetization_program",
+    "scope": {
+      "platforms": [
+        "*"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "platform": "off_platform",
+      "name": "Sponsorships",
+      "pays": "Nhãn hàng",
+      "eligibility": {
+        "text": "Thương lượng deliverables, quyền sử dụng và disclosure"
+      },
+      "share": "Theo hợp đồng",
+      "countries": [
+        "*"
+      ],
+      "countryNotes": "Có — hợp đồng trực tiếp, điều kiện phụ thuộc nơi ký",
+      "contentRules": "Claim có căn cứ, công bố quan hệ",
+      "automatedUse": "partly",
+      "reason": "ký kết và duyệt do người vận hành",
+      "countriesListType": "mechanism_not_universal_eligibility"
+    },
+    "evidence": [
+      {
+        "url": "https://www.ftc.gov/business-guidance/resources/disclosures-101-social-media-influencers",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://about.fb.com/news/2024/02/creator-marketplace-for-brands-and-creators-to-collaborate-on-instagram/",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://www.ftc.gov/business-guidance/resources/disclosures-101-social-media-influencers",
+        "checkedAt": "2026-11-10",
+        "type": "inference"
+      }
+    ],
+    "confidence": "medium",
+    "volatility": "yearly",
+    "watch": [
+      {
+        "url": "https://www.ftc.gov/business-guidance/resources/disclosures-101-social-media-influencers",
+        "kind": "policy_page"
+      }
+    ],
+    "status": "active",
+    "notes": "Mô hình hợp đồng bền, cập nhật nghĩa vụ disclosure định kỳ. Đánh giá tự động hóa là suy luận có điều kiện."
+  },
+  {
+    "id": "commerce.digital_products",
+    "kind": "monetization_program",
+    "scope": {
+      "platforms": [
+        "*"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "platform": "off_platform",
+      "name": "Sản phẩm số và khóa học",
+      "pays": "Người mua",
+      "eligibility": {
+        "text": "Cửa hàng hỗ trợ sản phẩm, payout, thuế và hoàn trả"
+      },
+      "share": "Theo giá trừ phí nền tảng và chi phí",
+      "countries": [
+        "*"
+      ],
+      "countryNotes": "Có điều kiện qua cửa hàng trực tiếp; Gumroad payout VN null",
+      "contentRules": "Quyền IP, chất lượng sản phẩm, điều khoản bán hàng",
+      "automatedUse": "partly",
+      "reason": "nội dung có thể dẫn khách, phải giao hàng và hỗ trợ",
+      "countriesListType": "mechanism_not_universal_eligibility"
+    },
+    "evidence": [
+      {
+        "url": "https://gumroad.com/pricing",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://gumroad.com/help/article/13-getting-paid",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://gumroad.com/pricing",
+        "checkedAt": "2026-11-10",
+        "type": "inference"
+      }
+    ],
+    "confidence": "medium",
+    "volatility": "quarterly",
+    "watch": [
+      {
+        "url": "https://gumroad.com/pricing",
+        "kind": "policy_page"
+      }
+    ],
+    "status": "active",
+    "notes": "Phí, payout và thị trường phụ thuộc cửa hàng. Đánh giá tự động hóa là suy luận có điều kiện."
+  },
+  {
+    "id": "commerce.stock_licensing",
+    "kind": "monetization_program",
+    "scope": {
+      "platforms": [
+        "*"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "platform": "off_platform",
+      "name": "Licensing footage",
+      "pays": "Bên mua giấy phép stock",
+      "eligibility": {
+        "text": "Quyền tác giả và release khi cần; marketplace duyệt"
+      },
+      "share": "Adobe Stock nêu 35% cho video theo cách tính của họ",
+      "countries": null,
+      "countryNotes": "null — phương thức payout và onboarding VN cần kiểm tra",
+      "contentRules": "Không thể cấp lại quyền trên footage mua nếu giấy phép cấm",
+      "automatedUse": "partly",
+      "reason": "chỉ gửi footage có quyền và được duyệt",
+      "countriesListType": "unknown"
+    },
+    "evidence": [
+      {
+        "url": "https://helpx.adobe.com/stock/contributor/payments-earnings/royalties-pricing/royalty-rates-assets.html",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://submit.shutterstock.com/help/en/articles/10594604-how-much-will-i-be-paid-as-a-contributor-to-shutterstock",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://helpx.adobe.com/stock/contributor/payments-earnings/royalties-pricing/royalty-rates-assets.html",
+        "checkedAt": "2026-11-10",
+        "type": "inference"
+      }
+    ],
+    "confidence": "low",
+    "volatility": "quarterly",
+    "watch": [
+      {
+        "url": "https://helpx.adobe.com/stock/contributor/payments-earnings/royalties-pricing/royalty-rates-assets.html",
+        "kind": "policy_page"
+      }
+    ],
+    "status": "active",
+    "notes": "Biểu royalty, quy tắc nội dung và payout phụ thuộc marketplace. Đánh giá tự động hóa là suy luận có điều kiện."
+  },
+  {
+    "id": "commerce.newsletter_leads",
+    "kind": "monetization_program",
+    "scope": {
+      "platforms": [
+        "*"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "platform": "off_platform",
+      "name": "Newsletter / lead capture",
+      "pays": "Thuê bao, tài trợ hoặc doanh thu downstream",
+      "eligibility": {
+        "text": "Có consent, trang đăng ký, phương thức thanh toán nếu thu phí"
+      },
+      "share": "Theo giá, hợp đồng và chi phí acquisition",
+      "countries": [
+        "*"
+      ],
+      "countryNotes": "Có điều kiện qua hệ thống trực tiếp; payout Substack VN null",
+      "contentRules": "Quyền dữ liệu, unsubscribe, disclosure",
+      "automatedUse": "partly",
+      "reason": "cần đồng ý, bảo vệ và xử lý dữ liệu",
+      "countriesListType": "mechanism_not_universal_eligibility"
+    },
+    "evidence": [
+      {
+        "url": "https://support.substack.com/hc/en-us/articles/360037607131-How-much-does-Substack-cost",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://www.ftc.gov/business-guidance/resources/disclosures-101-social-media-influencers",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://support.substack.com/hc/en-us/articles/360037607131-How-much-does-Substack-cost",
+        "checkedAt": "2026-11-10",
+        "type": "inference"
+      }
+    ],
+    "confidence": "medium",
+    "volatility": "quarterly",
+    "watch": [
+      {
+        "url": "https://support.substack.com/hc/en-us/articles/360037607131-How-much-does-Substack-cost",
+        "kind": "policy_page"
+      }
+    ],
+    "status": "active",
+    "notes": "Phí dịch vụ, payout và yêu cầu về dữ liệu có thể đổi. Đánh giá tự động hóa là suy luận có điều kiện."
+  },
+  {
+    "id": "youtube.multilanguage.audio",
+    "kind": "monetization_program",
+    "scope": {
+      "platforms": [
+        "youtube"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "platform": "youtube",
+      "name": "Multi-language Audio — cùng video",
+      "pays": "Doanh thu từ YPP, Premium hoặc chuyển đổi ở tệp mới",
+      "eligibility": {
+        "text": "Có quyền sử dụng tính năng Multi-language Audio và có track/bản dịch; YPP nếu chia tiền"
+      },
+      "share": "Theo nguồn doanh thu gốc, không có pool dubbing",
+      "countries": [
+        "*"
+      ],
+      "countryNotes": "Có điều kiện theo quyền truy cập của kênh",
+      "contentRules": "Cùng quyền hình/nhạc/giọng và kiểm tra bản dịch",
+      "automatedUse": "partly",
+      "reason": "QA dịch và ghép audio đúng bản",
+      "countriesListType": "mechanism_not_universal_eligibility"
+    },
+    "evidence": [
+      {
+        "url": "https://support.google.com/youtube/answer/6289575",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://support.google.com/youtube/answer/4792576",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://blog.youtube/news-and-events/multi-language-audio/",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://support.google.com/youtube/answer/6289575",
+        "checkedAt": "2026-11-10",
+        "type": "inference"
+      }
+    ],
+    "confidence": "medium",
+    "volatility": "quarterly",
+    "watch": [
+      {
+        "url": "https://support.google.com/youtube/answer/6289575",
+        "kind": "policy_page"
+      },
+      {
+        "url": "https://blog.youtube/rss/",
+        "kind": "rss"
+      }
+    ],
+    "status": "active",
+    "notes": "Quyền truy cập và quy trình audio đa ngôn ngữ phụ thuộc rollout. Đánh giá tự động hóa là suy luận có điều kiện."
+  },
+  {
+    "id": "tactic.niche_rpm_demand",
+    "kind": "creator_tactic",
+    "scope": {
+      "platforms": [
+        "*"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "name": "Chọn ngách và đề tài",
+      "summary": "So nhu cầu và khả năng tạo doanh thu theo nước, định dạng và chi phí. Finance, tech, education là nhóm để thử theo kênh, không có xếp hạng RPM đáng tin cho cả 17 thị trường.",
+      "kpi": "RPM theo geo/format, lãi ròng, median view 28 ngày",
+      "howToAutomate": "Ghép trend theo nước với RPM thực tế, tài trợ, chi phí/phút và số mẫu. Giữ null nếu thiếu dữ liệu, dùng RESEARCH-071 cho thị trường sau khi được rà."
+    },
+    "evidence": [
+      {
+        "url": "https://support.google.com/youtube/answer/9314357",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://trends.google.com/trends/",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://support.google.com/youtube/answer/9314357",
+        "checkedAt": "2026-11-10",
+        "type": "inference"
+      }
+    ],
+    "confidence": "medium",
+    "volatility": "quarterly",
+    "watch": [
+      {
+        "url": "https://support.google.com/youtube/answer/9314357",
+        "kind": "policy_page"
+      },
+      {
+        "url": "https://trends.google.com/trends/",
+        "kind": "policy_page"
+      }
+    ],
+    "status": "active",
+    "notes": "RPM, chi phí và nhu cầu đổi theo quý, thị trường và định dạng."
+  },
+  {
+    "id": "tactic.hook_first_30s",
+    "kind": "creator_tactic",
+    "scope": {
+      "platforms": [
+        "youtube"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "name": "Hook và dựng giữ chân",
+      "summary": "Nêu lời hứa video trong 30 giây đầu, trả lời lời hứa sớm. Thử nhịp đổi cảnh, ví dụ hoặc open loop ở điểm tụt xem.",
+      "kpi": "30s retention, AVD, độ tụt tại mốc",
+      "howToAutomate": "Đọc curve theo mốc timeline, so video cùng nhóm, đề xuất cắt đoạn gây tụt và kiểm lại lời hứa."
+    },
+    "evidence": [
+      {
+        "url": "https://support.google.com/youtube/answer/9314415",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://support.google.com/youtube/answer/9314415",
+        "checkedAt": "2026-11-10",
+        "type": "inference"
+      }
+    ],
+    "confidence": "medium",
+    "volatility": "yearly",
+    "watch": [
+      {
+        "url": "https://support.google.com/youtube/answer/9314415",
+        "kind": "policy_page"
+      }
+    ],
+    "status": "active",
+    "notes": "Kỹ thuật đối chiếu lời hứa với retention khá bền. Rà định nghĩa chỉ số."
+  },
+  {
+    "id": "tactic.thumbnail_title_experiments",
+    "kind": "creator_tactic",
+    "scope": {
+      "platforms": [
+        "youtube"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "name": "Tiêu đề, thumbnail và A/B",
+      "summary": "Viết các phương án rõ lời hứa, khác nhau có chủ đích. Dùng experiment đồng thời khi Studio có quyền.",
+      "kpi": "Watch time share, CTR impressions, retention 30 giây",
+      "howToAutomate": "Sinh 3 biến thể có giả thuyết, kiểm clickbait, lưu kết quả Studio cùng phân khúc."
+    },
+    "evidence": [
+      {
+        "url": "https://support.google.com/youtube/answer/16391400",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://support.google.com/youtube/answer/9314486",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://support.google.com/youtube/answer/16391400",
+        "checkedAt": "2026-11-10",
+        "type": "inference"
+      }
+    ],
+    "confidence": "medium",
+    "volatility": "quarterly",
+    "watch": [
+      {
+        "url": "https://support.google.com/youtube/answer/16391400",
+        "kind": "policy_page"
+      },
+      {
+        "url": "https://support.google.com/youtube/answer/9314486",
+        "kind": "policy_page"
+      }
+    ],
+    "status": "active",
+    "notes": "Chỉ số đánh giá và loại biến thể phụ thuộc công cụ Studio."
+  },
+  {
+    "id": "tactic.length_midroll",
+    "kind": "creator_tactic",
+    "scope": {
+      "platforms": [
+        "youtube"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "name": "Độ dài và mid-roll",
+      "summary": "Chọn độ dài theo lượng thông tin. Chỉ thêm điểm chèn ở đoạn ngắt hợp lý khi đủ điều kiện.",
+      "kpi": "Tỷ lệ rời quanh slot, RPM, phút xem",
+      "howToAutomate": "Đề xuất marker giữa phân đoạn, tránh chen lời thoại, kiểm video sau render."
+    },
+    "evidence": [
+      {
+        "url": "https://support.google.com/youtube/answer/6175006",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://support.google.com/youtube/answer/6175006",
+        "checkedAt": "2026-11-10",
+        "type": "inference"
+      }
+    ],
+    "confidence": "medium",
+    "volatility": "quarterly",
+    "watch": [
+      {
+        "url": "https://support.google.com/youtube/answer/6175006",
+        "kind": "policy_page"
+      }
+    ],
+    "status": "active",
+    "notes": "Ngưỡng đủ điều kiện và quy trình đặt điểm quảng cáo phụ thuộc chính sách."
+  },
+  {
+    "id": "tactic.seo_localization",
+    "kind": "creator_tactic",
+    "scope": {
+      "platforms": [
+        "youtube"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "name": "SEO và bản địa hóa",
+      "summary": "Viết tiêu đề/mô tả dễ hiểu, chapter và caption chính xác. Dùng title/audio bản địa hóa khi có quyền.",
+      "kpi": "Search traffic, watch time theo audio/geo, lỗi caption",
+      "howToAutomate": "Sinh chapter từ timeline, kiểm caption, dịch tên riêng, ghép audio và metadata, rà ngôn ngữ."
+    },
+    "evidence": [
+      {
+        "url": "https://support.google.com/youtube/answer/146402",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://support.google.com/youtube/answer/9884579",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://support.google.com/youtube/answer/4792576",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://support.google.com/youtube/answer/6289575",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://blog.youtube/news-and-events/multi-language-audio/",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://support.google.com/youtube/answer/146402",
+        "checkedAt": "2026-11-10",
+        "type": "inference"
+      }
+    ],
+    "confidence": "medium",
+    "volatility": "quarterly",
+    "watch": [
+      {
+        "url": "https://support.google.com/youtube/answer/146402",
+        "kind": "policy_page"
+      },
+      {
+        "url": "https://support.google.com/youtube/answer/9884579",
+        "kind": "policy_page"
+      }
+    ],
+    "status": "active",
+    "notes": "Caption và metadata bền, tính năng ngôn ngữ và phân phối có thể đổi."
+  },
+  {
+    "id": "tactic.series_cadence",
+    "kind": "creator_tactic",
+    "scope": {
+      "platforms": [
+        "youtube"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "name": "Lịch, series, playlists và điều hướng",
+      "summary": "Thử nhịp xuất bản vừa sức và ghép video thành chuỗi. Dẫn khán giả sang tập tiếp theo bằng playlist, cards hoặc end screen.",
+      "kpi": "Tỷ lệ đúng lịch, end screen CTR, lượt xem tiếp theo",
+      "howToAutomate": "Lập lịch theo múi giờ và audience, gợi ý playlist/cards, giữ vùng end screen trong bản dựng."
+    },
+    "evidence": [
+      {
+        "url": "https://support.google.com/youtube/answer/9314416",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://support.google.com/youtube/answer/6388789",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://support.google.com/youtube/answer/6140493",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://support.google.com/youtube/answer/9314416",
+        "checkedAt": "2026-11-10",
+        "type": "inference"
+      }
+    ],
+    "confidence": "medium",
+    "volatility": "quarterly",
+    "watch": [
+      {
+        "url": "https://support.google.com/youtube/answer/9314416",
+        "kind": "policy_page"
+      },
+      {
+        "url": "https://support.google.com/youtube/answer/6388789",
+        "kind": "policy_page"
+      }
+    ],
+    "status": "active",
+    "notes": "Series bền, khung giờ và placement phải kiểm lại bằng dữ liệu kênh."
+  },
+  {
+    "id": "tactic.shorts_long_funnel",
+    "kind": "creator_tactic",
+    "scope": {
+      "platforms": [
+        "youtube"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "name": "Shorts → video dài và tái định dạng",
+      "summary": "Cắt clip dọc có giá trị riêng từ nguồn có quyền. Chọn related video khớp vấn đề của người xem.",
+      "kpi": "Engaged views, traffic sang video dài, phút xem",
+      "howToAutomate": "Chọn điểm cắt, viết hook, kiểm safe zone và link đến đúng bản dài, gắn ID liên kết."
+    },
+    "evidence": [
+      {
+        "url": "https://support.google.com/youtube/answer/14075157",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://support.google.com/youtube/answer/12504220",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://support.google.com/youtube/answer/14075157",
+        "checkedAt": "2026-11-10",
+        "type": "inference"
+      }
+    ],
+    "confidence": "medium",
+    "volatility": "quarterly",
+    "watch": [
+      {
+        "url": "https://support.google.com/youtube/answer/14075157",
+        "kind": "policy_page"
+      },
+      {
+        "url": "https://support.google.com/youtube/answer/12504220",
+        "kind": "policy_page"
+      }
+    ],
+    "status": "active",
+    "notes": "Related video và khả năng đo luồng chuyển phụ thuộc nền tảng."
+  },
+  {
+    "id": "tactic.community",
+    "kind": "creator_tactic",
+    "scope": {
+      "platforms": [
+        "youtube"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "name": "Cộng đồng",
+      "summary": "Phân loại câu hỏi, trả lời có bối cảnh, ghim comment hữu ích và hỏi qua poll khi phù hợp.",
+      "kpi": "Tỷ lệ trả lời hữu ích, thời gian phản hồi, phản hồi poll",
+      "howToAutomate": "Đọc comment, nhóm chủ đề, soạn nháp và duyệt phản hồi hoặc poll. Không nhắm dữ liệu nhạy cảm."
+    },
+    "evidence": [
+      {
+        "url": "https://support.google.com/youtube/answer/9409631",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://support.google.com/youtube/answer/9482556",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://support.google.com/youtube/answer/9409631",
+        "checkedAt": "2026-11-10",
+        "type": "inference"
+      }
+    ],
+    "confidence": "medium",
+    "volatility": "yearly",
+    "watch": [
+      {
+        "url": "https://support.google.com/youtube/answer/9409631",
+        "kind": "policy_page"
+      },
+      {
+        "url": "https://support.google.com/youtube/answer/9482556",
+        "kind": "policy_page"
+      }
+    ],
+    "status": "active",
+    "notes": "Thói quen phản hồi bền, nút ghim/poll có thể đổi."
+  },
+  {
+    "id": "tactic.analytics_loop",
+    "kind": "creator_tactic",
+    "scope": {
+      "platforms": [
+        "*"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "name": "Vòng đo 48h / 7d / 28d",
+      "summary": "48h xem lỗi phát hành và tín hiệu hook; 7d đối chiếu CTR, retention và nguồn traffic; 28d đối chiếu lợi nhuận và cơ cấu người xem. Đây là nhịp thử nội bộ.",
+      "kpi": "Số thí nghiệm có kết luận, biên lợi nhuận, độ ổn định KPI",
+      "howToAutomate": "Lưu snapshot, normalize theo format và thị trường, thay một yếu tố mỗi lần và ghi lý do."
+    },
+    "evidence": [
+      {
+        "url": "https://support.google.com/youtube/answer/9314415",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://support.google.com/youtube/answer/9314416",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://support.google.com/youtube/answer/9314357",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://support.google.com/youtube/answer/9314415",
+        "checkedAt": "2026-11-10",
+        "type": "inference"
+      }
+    ],
+    "confidence": "medium",
+    "volatility": "yearly",
+    "watch": [
+      {
+        "url": "https://support.google.com/youtube/answer/9314415",
+        "kind": "policy_page"
+      },
+      {
+        "url": "https://support.google.com/youtube/answer/9314416",
+        "kind": "policy_page"
+      }
+    ],
+    "status": "active",
+    "notes": "Mốc đo là đề xuất thử nghiệm, rà lại định nghĩa và độ trễ chỉ số."
+  },
+  {
+    "id": "tactic.ad_suitability",
+    "kind": "creator_tactic",
+    "scope": {
+      "platforms": [
+        "youtube"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "name": "Brand safety và phù hợp quảng cáo",
+      "summary": "Đối chiếu nội dung, thumbnail và metadata với chính sách hiện hành. Tách phân loại quảng cáo, originality và disclosure.",
+      "kpi": "Tỷ lệ hạn chế ads, appeal thành công, false positives",
+      "howToAutomate": "Gắn timestamp và policy ID, chuyển người duyệt với ca thiếu ngữ cảnh, ghi quyết định."
+    },
+    "evidence": [
+      {
+        "url": "https://support.google.com/youtube/answer/6162278",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://support.google.com/youtube/answer/1311392",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://support.google.com/youtube/answer/14328491",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://support.google.com/youtube/answer/6162278",
+        "checkedAt": "2026-11-10",
+        "type": "inference"
+      }
+    ],
+    "confidence": "medium",
+    "volatility": "monthly",
+    "watch": [
+      {
+        "url": "https://support.google.com/youtube/answer/6162278",
+        "kind": "policy_page"
+      },
+      {
+        "url": "https://support.google.com/youtube/answer/1311392",
+        "kind": "policy_page"
+      }
+    ],
+    "status": "active",
+    "notes": "Các danh mục phù hợp quảng cáo và quy tắc khai báo có thể đổi."
+  },
+  {
+    "id": "tactic.trend_seasonality",
+    "kind": "creator_tactic",
+    "scope": {
+      "platforms": [
+        "*"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "name": "Trend và mùa vụ",
+      "summary": "Chọn sự kiện hợp với chủ đề, thị trường và lead time sản xuất. Đo tệp mới lẫn evergreen.",
+      "kpi": "Thời gian từ phát hiện đến đăng, lượt xem tăng thêm, tuổi thọ đề tài",
+      "howToAutomate": "Gom trend RSS/YouTube/Google theo vùng, loại trùng, chấm lead time và rủi ro claim."
+    },
+    "evidence": [
+      {
+        "url": "https://trends.google.com/trends/",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://support.google.com/trends/answer/4365533",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://trends.google.com/trends/",
+        "checkedAt": "2026-11-10",
+        "type": "inference"
+      }
+    ],
+    "confidence": "medium",
+    "volatility": "weekly",
+    "watch": [
+      {
+        "url": "https://trends.google.com/trends/",
+        "kind": "policy_page"
+      },
+      {
+        "url": "https://support.google.com/trends/answer/4365533",
+        "kind": "policy_page"
+      }
+    ],
+    "status": "active",
+    "notes": "Kỹ thuật lên kế hoạch bền, các tín hiệu trend mất hiệu lực nhanh."
+  },
+  {
+    "id": "tactic.sponsor_packaging",
+    "kind": "creator_tactic",
+    "scope": {
+      "platforms": [
+        "*"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "name": "Media kit và tài trợ",
+      "summary": "Đóng gói dữ liệu tệp xem, format, case study và quyền quảng cáo. Tách số thật khỏi dự báo.",
+      "kpi": "Qualified leads, tỷ lệ chốt, doanh thu/chiến dịch",
+      "howToAutomate": "Tổng hợp dữ liệu đã đồng ý chia sẻ, xuất kit, ghi UTM/quyền sử dụng và kiểm disclosure."
+    },
+    "evidence": [
+      {
+        "url": "https://support.google.com/youtube/answer/9385307",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://about.fb.com/news/2024/02/creator-marketplace-for-brands-and-creators-to-collaborate-on-instagram/",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://www.ftc.gov/business-guidance/resources/disclosures-101-social-media-influencers",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://support.google.com/youtube/answer/9385307",
+        "checkedAt": "2026-11-10",
+        "type": "inference"
+      }
+    ],
+    "confidence": "medium",
+    "volatility": "quarterly",
+    "watch": [
+      {
+        "url": "https://support.google.com/youtube/answer/9385307",
+        "kind": "policy_page"
+      },
+      {
+        "url": "https://about.fb.com/news/2024/02/creator-marketplace-for-brands-and-creators-to-collaborate-on-instagram/",
+        "kind": "changelog"
+      }
+    ],
+    "status": "active",
+    "notes": "Mẫu media kit bền, quyền creative và disclosure phụ thuộc thị trường."
+  },
+  {
+    "id": "originality.youtube.script_contribution",
+    "kind": "creator_tactic",
+    "scope": {
+      "platforms": [
+        "youtube"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "name": "Nêu đóng góp riêng trong kịch bản",
+      "summary": "So kịch bản với nguồn. Có phân tích, góc nhìn hoặc cách kể riêng, không chỉ đọc lại bài báo, bài đăng hoặc nội dung người khác. Kiểm cả khi giọng đọc là người thật.",
+      "kpi": "Tỷ lệ clip có đánh dấu đoạn phân tích/góc nhìn",
+      "howToAutomate": "Tạo mục kiểm trước khi đăng cho “Nêu đóng góp riêng trong kịch bản”, lưu kết quả có nguồn và chuyển người duyệt khi thiếu bằng chứng."
+    },
+    "evidence": [
+      {
+        "url": "https://support.google.com/youtube/answer/1311392",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://support.google.com/youtube/answer/1311392",
+        "checkedAt": "2026-11-10",
+        "type": "inference"
+      }
+    ],
+    "confidence": "high",
+    "volatility": "quarterly",
+    "watch": [
+      {
+        "url": "https://support.google.com/youtube/answer/1311392",
+        "kind": "policy_page"
+      }
+    ],
+    "status": "active",
+    "notes": "KPI và cách tự động hóa là đề xuất vận hành."
+  },
+  {
+    "id": "originality.youtube.asset_transformation",
+    "kind": "creator_tactic",
+    "scope": {
+      "platforms": [
+        "youtube"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "name": "Kiểm giá trị bổ sung và quyền stock",
+      "summary": "Với clip/ảnh stock hoặc slideshow, đánh dấu đoạn bổ sung giải thích, phân tích hay thay đổi có ý nghĩa. Ghi license riêng. Không thấy mức tối thiểu phần trăm footage tự quay hay quy định bắt buộc giọng người.",
+      "kpi": "Tỷ lệ asset có quyền và mốc biến đổi",
+      "howToAutomate": "Tạo mục kiểm trước khi đăng cho “Kiểm giá trị bổ sung và quyền stock”, lưu kết quả có nguồn và chuyển người duyệt khi thiếu bằng chứng."
+    },
+    "evidence": [
+      {
+        "url": "https://support.google.com/youtube/answer/1311392",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://support.google.com/youtube/answer/1311392",
+        "checkedAt": "2026-11-10",
+        "type": "inference"
+      }
+    ],
+    "confidence": "high",
+    "volatility": "quarterly",
+    "watch": [
+      {
+        "url": "https://support.google.com/youtube/answer/1311392",
+        "kind": "policy_page"
+      }
+    ],
+    "status": "active",
+    "notes": "KPI và cách tự động hóa là đề xuất vận hành."
+  },
+  {
+    "id": "originality.youtube.channel_sampling",
+    "kind": "creator_tactic",
+    "scope": {
+      "platforms": [
+        "youtube"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "name": "Lấy mẫu để phát hiện lặp cấp kênh",
+      "summary": "lấy mẫu video nổi bật, mới và nhiều watch time. So góc nhìn, câu chữ, nhịp dựng và visual. Thay tiêu đề, màu hoặc vài ảnh trên cùng kịch bản chưa thể hiện khác biệt đáng kể.",
+      "kpi": "Tỷ lệ mẫu bị gắn cờ, số ca xác nhận",
+      "howToAutomate": "Tạo mục kiểm trước khi đăng cho “Lấy mẫu để phát hiện lặp cấp kênh”, lưu kết quả có nguồn và chuyển người duyệt khi thiếu bằng chứng."
+    },
+    "evidence": [
+      {
+        "url": "https://support.google.com/youtube/answer/1311392",
+        "checkedAt": "2026-11-10",
+        "type": "inference"
+      }
+    ],
+    "confidence": "medium",
+    "volatility": "quarterly",
+    "watch": [
+      {
+        "url": "https://support.google.com/youtube/answer/1311392",
+        "kind": "policy_page"
+      }
+    ],
+    "status": "active",
+    "notes": "Suy luận vận hành dựa trên chính sách đã dẫn."
+  },
+  {
+    "id": "originality.youtube.synthetic_disclosure",
+    "kind": "creator_tactic",
+    "scope": {
+      "platforms": [
+        "youtube"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "name": "Kiểm khai báo nội dung tổng hợp",
+      "summary": "Dùng khai báo altered/synthetic khi mô phỏng nội dung chân thực và có chỉnh sửa đáng kể. Trang trợ giúp phân biệt ví dụ clone giọng mình để voiceover/dub với clone giọng người khác. Việc khai báo đúng tự nó không làm mất quyền kiếm tiền.",
+      "kpi": "Tỷ lệ ca phải khai báo có nhãn",
+      "howToAutomate": "Tạo mục kiểm trước khi đăng cho “Kiểm khai báo nội dung tổng hợp”, lưu kết quả có nguồn và chuyển người duyệt khi thiếu bằng chứng."
+    },
+    "evidence": [
+      {
+        "url": "https://support.google.com/youtube/answer/14328491",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://support.google.com/youtube/answer/14328491",
+        "checkedAt": "2026-11-10",
+        "type": "inference"
+      }
+    ],
+    "confidence": "high",
+    "volatility": "monthly",
+    "watch": [
+      {
+        "url": "https://support.google.com/youtube/answer/14328491",
+        "kind": "policy_page"
+      }
+    ],
+    "status": "active",
+    "notes": "KPI và cách tự động hóa là đề xuất vận hành."
+  },
+  {
+    "id": "originality.youtube.production_provenance",
+    "kind": "creator_tactic",
+    "scope": {
+      "platforms": [
+        "youtube"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "name": "Lưu dấu vết sản xuất",
+      "summary": "lưu kịch bản, timeline, nguồn asset và căn cứ cấp quyền để giải thích quy trình. Đọc lý do cụ thể trong Studio khi bị từ chối.",
+      "kpi": "Tỷ lệ video có manifest và nguồn",
+      "howToAutomate": "Tạo mục kiểm trước khi đăng cho “Lưu dấu vết sản xuất”, lưu kết quả có nguồn và chuyển người duyệt khi thiếu bằng chứng."
+    },
+    "evidence": [
+      {
+        "url": "https://support.google.com/youtube/answer/1311392",
+        "checkedAt": "2026-11-10",
+        "type": "inference"
+      }
+    ],
+    "confidence": "medium",
+    "volatility": "quarterly",
+    "watch": [
+      {
+        "url": "https://support.google.com/youtube/answer/1311392",
+        "kind": "policy_page"
+      }
+    ],
+    "status": "active",
+    "notes": "Suy luận vận hành dựa trên chính sách đã dẫn."
+  },
+  {
+    "id": "originality.tiktok.length_watermark",
+    "kind": "creator_tactic",
+    "scope": {
+      "platforms": [
+        "tiktok"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "name": "Đo độ dài và rà watermark",
+      "summary": "Đo độ dài, kiểm watermark và so với clip gốc. Không dựa vào đổi tốc độ, filter hoặc chữ chèn để chứng minh mới.",
+      "kpi": "Tỷ lệ clip đủ độ dài, số ca trùng",
+      "howToAutomate": "Tạo mục kiểm trước khi đăng cho “Đo độ dài và rà watermark”, lưu kết quả có nguồn và chuyển người duyệt khi thiếu bằng chứng."
+    },
+    "evidence": [
+      {
+        "url": "https://support.tiktok.com/en/business-and-creator/creator-rewards-program/creator-rewards-program",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://support.tiktok.com/en/business-and-creator/creator-rewards-program/creator-rewards-program",
+        "checkedAt": "2026-11-10",
+        "type": "inference"
+      }
+    ],
+    "confidence": "high",
+    "volatility": "quarterly",
+    "watch": [
+      {
+        "url": "https://support.tiktok.com/en/business-and-creator/creator-rewards-program/creator-rewards-program",
+        "kind": "policy_page"
+      }
+    ],
+    "status": "active",
+    "notes": "KPI và cách tự động hóa là đề xuất vận hành."
+  },
+  {
+    "id": "originality.tiktok.loops_stills",
+    "kind": "creator_tactic",
+    "scope": {
+      "platforms": [
+        "tiktok"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "name": "Kiểm clip vòng lặp, ảnh tĩnh, chỉ chữ",
+      "summary": "Duyệt từng clip để phát hiện vòng lặp, ảnh tĩnh hoặc chữ đơn thuần. Lưu mốc thời gian và bằng chứng creator tự thiết kế, quay hoặc sản xuất.",
+      "kpi": "Tỷ lệ clip bị cảnh báo theo loại",
+      "howToAutomate": "Tạo mục kiểm trước khi đăng cho “Kiểm clip vòng lặp, ảnh tĩnh, chỉ chữ”, lưu kết quả có nguồn và chuyển người duyệt khi thiếu bằng chứng."
+    },
+    "evidence": [
+      {
+        "url": "https://support.tiktok.com/en/business-and-creator/creator-rewards-program/creator-rewards-program",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://support.tiktok.com/en/business-and-creator/creator-rewards-program/creator-rewards-program",
+        "checkedAt": "2026-11-10",
+        "type": "inference"
+      }
+    ],
+    "confidence": "high",
+    "volatility": "quarterly",
+    "watch": [
+      {
+        "url": "https://support.tiktok.com/en/business-and-creator/creator-rewards-program/creator-rewards-program",
+        "kind": "policy_page"
+      }
+    ],
+    "status": "active",
+    "notes": "KPI và cách tự động hóa là đề xuất vận hành."
+  },
+  {
+    "id": "originality.tiktok.commercial_ai_label",
+    "kind": "creator_tactic",
+    "scope": {
+      "platforms": [
+        "tiktok"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "name": "Tách eligibility tài trợ và nhãn AI",
+      "summary": "Kiểm có tài trợ hoặc tích hợp thương mại trước khi tính payout. Với hình, âm thanh hoặc video AI chân thực, áp dụng quy tắc gắn nhãn; một số nội dung bị cấm dù có nhãn.",
+      "kpi": "Tỷ lệ ca nhãn/loại khỏi dự báo đúng",
+      "howToAutomate": "Tạo mục kiểm trước khi đăng cho “Tách eligibility tài trợ và nhãn AI”, lưu kết quả có nguồn và chuyển người duyệt khi thiếu bằng chứng."
+    },
+    "evidence": [
+      {
+        "url": "https://support.tiktok.com/en/business-and-creator/creator-rewards-program/creator-rewards-program",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://support.tiktok.com/en/using-tiktok/creating-videos/ai-generated-content/",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://support.tiktok.com/en/business-and-creator/creator-rewards-program/creator-rewards-program",
+        "checkedAt": "2026-11-10",
+        "type": "inference"
+      }
+    ],
+    "confidence": "high",
+    "volatility": "monthly",
+    "watch": [
+      {
+        "url": "https://support.tiktok.com/en/business-and-creator/creator-rewards-program/creator-rewards-program",
+        "kind": "policy_page"
+      },
+      {
+        "url": "https://support.tiktok.com/en/using-tiktok/creating-videos/ai-generated-content/",
+        "kind": "policy_page"
+      }
+    ],
+    "status": "active",
+    "notes": "KPI và cách tự động hóa là đề xuất vận hành."
+  },
+  {
+    "id": "originality.facebook.meaningful_enhancement",
+    "kind": "creator_tactic",
+    "scope": {
+      "platforms": [
+        "facebook"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "name": "Chỉ rõ phần biến đổi có ý nghĩa",
+      "summary": "Nếu dùng footage bên thứ ba, chỉ ra đoạn có thông tin, phân tích hoặc cải biên thực chất. Chữ, viền và tốc độ chỉ là chỉnh sửa nhẹ.",
+      "kpi": "Tỷ lệ clip có mốc đóng góp mới",
+      "howToAutomate": "Tạo mục kiểm trước khi đăng cho “Chỉ rõ phần biến đổi có ý nghĩa”, lưu kết quả có nguồn và chuyển người duyệt khi thiếu bằng chứng."
+    },
+    "evidence": [
+      {
+        "url": "https://about.fb.com/news/2026/03/rewarding-original-creators-on-facebook/amp/",
+        "checkedAt": "2026-11-10",
+        "sourceUpdatedAt": "2026-03-13",
+        "type": "official"
+      },
+      {
+        "url": "https://about.fb.com/news/2026/03/rewarding-original-creators-on-facebook/amp/",
+        "checkedAt": "2026-11-10",
+        "sourceUpdatedAt": "2026-03-13",
+        "type": "inference"
+      }
+    ],
+    "confidence": "high",
+    "volatility": "quarterly",
+    "watch": [
+      {
+        "url": "https://about.fb.com/news/2026/03/rewarding-original-creators-on-facebook/amp/",
+        "kind": "changelog"
+      }
+    ],
+    "status": "active",
+    "notes": "KPI và cách tự động hóa là đề xuất vận hành."
+  },
+  {
+    "id": "originality.facebook.caption_spam",
+    "kind": "creator_tactic",
+    "scope": {
+      "platforms": [
+        "facebook"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "name": "Đối chiếu caption và trùng bài",
+      "summary": "Đối chiếu caption, hashtag và nội dung. Kiểm bài trùng lặp giữa các kênh và hành vi spam.",
+      "kpi": "Tỷ lệ cảnh báo spam đã xác nhận",
+      "howToAutomate": "Tạo mục kiểm trước khi đăng cho “Đối chiếu caption và trùng bài”, lưu kết quả có nguồn và chuyển người duyệt khi thiếu bằng chứng."
+    },
+    "evidence": [
+      {
+        "url": "https://about.fb.com/news/2025/04/cracking-down-spammy-content-facebook/",
+        "checkedAt": "2026-11-10",
+        "sourceUpdatedAt": "2025-04-24",
+        "type": "official"
+      },
+      {
+        "url": "https://about.fb.com/news/2025/04/cracking-down-spammy-content-facebook/",
+        "checkedAt": "2026-11-10",
+        "sourceUpdatedAt": "2025-04-24",
+        "type": "inference"
+      }
+    ],
+    "confidence": "high",
+    "volatility": "quarterly",
+    "watch": [
+      {
+        "url": "https://about.fb.com/news/2025/04/cracking-down-spammy-content-facebook/",
+        "kind": "changelog"
+      }
+    ],
+    "status": "active",
+    "notes": "KPI và cách tự động hóa là đề xuất vận hành."
+  },
+  {
+    "id": "originality.facebook.provenance_ai_label",
+    "kind": "creator_tactic",
+    "scope": {
+      "platforms": [
+        "facebook"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "name": "Lưu provenance và kiểm nhãn AI",
+      "summary": "ghi bản gốc, nguồn thứ ba, phân loại AI và phần biến đổi trước khi xuất bản. Kiểm tra nhãn AI theo media và điều kiện upload.",
+      "kpi": "Tỷ lệ video có manifest và quyết định nhãn",
+      "howToAutomate": "Tạo mục kiểm trước khi đăng cho “Lưu provenance và kiểm nhãn AI”, lưu kết quả có nguồn và chuyển người duyệt khi thiếu bằng chứng."
+    },
+    "evidence": [
+      {
+        "url": "https://about.fb.com/news/2024/04/metas-approach-to-labeling-ai-generated-content-and-manipulated-media/",
+        "checkedAt": "2026-11-10",
+        "type": "inference"
+      }
+    ],
+    "confidence": "medium",
+    "volatility": "monthly",
+    "watch": [
+      {
+        "url": "https://about.fb.com/news/2024/04/metas-approach-to-labeling-ai-generated-content-and-manipulated-media/",
+        "kind": "changelog"
+      }
+    ],
+    "status": "active",
+    "notes": "Suy luận vận hành dựa trên chính sách đã dẫn."
+  },
+  {
+    "id": "originality.instagram.repost_transformation",
+    "kind": "creator_tactic",
+    "scope": {
+      "platforms": [
+        "instagram"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "name": "Kiểm đóng góp khi đăng lại",
+      "summary": "Kiểm clip đăng lại có bình luận hoặc sáng tạo mới thực chất. So cả bản đăng gốc và quyền sử dụng.",
+      "kpi": "Tỷ lệ video có phần sáng tạo mới",
+      "howToAutomate": "Tạo mục kiểm trước khi đăng cho “Kiểm đóng góp khi đăng lại”, lưu kết quả có nguồn và chuyển người duyệt khi thiếu bằng chứng."
+    },
+    "evidence": [
+      {
+        "url": "https://help.instagram.com/2635536099905516",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://help.instagram.com/2635536099905516",
+        "checkedAt": "2026-11-10",
+        "type": "inference"
+      }
+    ],
+    "confidence": "high",
+    "volatility": "quarterly",
+    "watch": [
+      {
+        "url": "https://help.instagram.com/2635536099905516",
+        "kind": "policy_page"
+      }
+    ],
+    "status": "active",
+    "notes": "KPI và cách tự động hóa là đề xuất vận hành."
+  },
+  {
+    "id": "originality.instagram.static_formats",
+    "kind": "creator_tactic",
+    "scope": {
+      "platforms": [
+        "instagram"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "name": "Rà video tĩnh, loop, montage chữ",
+      "summary": "Kiểm định dạng tĩnh, looping hoặc montage chữ trước khi dự toán thu nhập.",
+      "kpi": "Tỷ lệ định dạng rủi ro được nhận diện",
+      "howToAutomate": "Tạo mục kiểm trước khi đăng cho “Rà video tĩnh, loop, montage chữ”, lưu kết quả có nguồn và chuyển người duyệt khi thiếu bằng chứng."
+    },
+    "evidence": [
+      {
+        "url": "https://help.instagram.com/2635536099905516",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://help.instagram.com/2635536099905516",
+        "checkedAt": "2026-11-10",
+        "type": "inference"
+      }
+    ],
+    "confidence": "high",
+    "volatility": "quarterly",
+    "watch": [
+      {
+        "url": "https://help.instagram.com/2635536099905516",
+        "kind": "policy_page"
+      }
+    ],
+    "status": "active",
+    "notes": "KPI và cách tự động hóa là đề xuất vận hành."
+  },
+  {
+    "id": "originality.instagram.account_status_labels",
+    "kind": "creator_tactic",
+    "scope": {
+      "platforms": [
+        "instagram"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "name": "Kiểm Account Status, nhãn AI và tài trợ",
+      "summary": "kiểm Account Status, nhãn AI và paid partnership độc lập trước khi đăng.",
+      "kpi": "Tỷ lệ quyết định khai báo và trạng thái được ghi",
+      "howToAutomate": "Tạo mục kiểm trước khi đăng cho “Kiểm Account Status, nhãn AI và tài trợ”, lưu kết quả có nguồn và chuyển người duyệt khi thiếu bằng chứng."
+    },
+    "evidence": [
+      {
+        "url": "https://help.instagram.com/653964212890722",
+        "checkedAt": "2026-11-10",
+        "type": "inference"
+      },
+      {
+        "url": "https://about.fb.com/news/2024/04/metas-approach-to-labeling-ai-generated-content-and-manipulated-media/",
+        "checkedAt": "2026-11-10",
+        "type": "inference"
+      },
+      {
+        "url": "https://about.fb.com/news/2024/02/creator-marketplace-for-brands-and-creators-to-collaborate-on-instagram/",
+        "checkedAt": "2026-11-10",
+        "type": "inference"
+      }
+    ],
+    "confidence": "medium",
+    "volatility": "monthly",
+    "watch": [
+      {
+        "url": "https://help.instagram.com/653964212890722",
+        "kind": "policy_page"
+      },
+      {
+        "url": "https://about.fb.com/news/2024/04/metas-approach-to-labeling-ai-generated-content-and-manipulated-media/",
+        "kind": "changelog"
+      }
+    ],
+    "status": "active",
+    "notes": "Suy luận vận hành dựa trên chính sách đã dẫn."
+  },
+  {
+    "id": "limit.youtube.ypp_ads_subscribers",
+    "kind": "platform_limit",
+    "scope": {
+      "platforms": [
+        "youtube"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "platform": "youtube",
+      "name": "YPP quảng cáo — người đăng ký",
+      "value": 1000,
+      "unit": "subscribers"
+    },
+    "evidence": [
+      {
+        "url": "https://support.google.com/youtube/answer/72851",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      }
+    ],
+    "confidence": "high",
+    "volatility": "quarterly",
+    "watch": [
+      {
+        "url": "https://support.google.com/youtube/answer/72851",
+        "kind": "policy_page"
+      }
+    ],
+    "status": "active",
+    "notes": "Chỉ dùng cùng điều kiện, ngoại lệ và cửa sổ trong nguồn gốc."
+  },
+  {
+    "id": "limit.youtube.ypp_ads_watch_hours",
+    "kind": "platform_limit",
+    "scope": {
+      "platforms": [
+        "youtube"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "platform": "youtube",
+      "name": "YPP quảng cáo — giờ xem theo nhánh dài 12 tháng",
+      "value": 4000,
+      "unit": "hours"
+    },
+    "evidence": [
+      {
+        "url": "https://support.google.com/youtube/answer/72851",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      }
+    ],
+    "confidence": "high",
+    "volatility": "quarterly",
+    "watch": [
+      {
+        "url": "https://support.google.com/youtube/answer/72851",
+        "kind": "policy_page"
+      }
+    ],
+    "status": "active",
+    "notes": "Chỉ dùng cùng điều kiện, ngoại lệ và cửa sổ trong nguồn gốc."
+  },
+  {
+    "id": "limit.youtube.ypp_ads_watch_window_months",
+    "kind": "platform_limit",
+    "scope": {
+      "platforms": [
+        "youtube"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "platform": "youtube",
+      "name": "YPP quảng cáo — cửa sổ giờ xem dài",
+      "value": 12,
+      "unit": "months"
+    },
+    "evidence": [
+      {
+        "url": "https://support.google.com/youtube/answer/72851",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      }
+    ],
+    "confidence": "high",
+    "volatility": "quarterly",
+    "watch": [
+      {
+        "url": "https://support.google.com/youtube/answer/72851",
+        "kind": "policy_page"
+      }
+    ],
+    "status": "active",
+    "notes": "Chỉ dùng cùng điều kiện, ngoại lệ và cửa sổ trong nguồn gốc."
+  },
+  {
+    "id": "limit.youtube.ypp_ads_shorts_views",
+    "kind": "platform_limit",
+    "scope": {
+      "platforms": [
+        "youtube"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "platform": "youtube",
+      "name": "YPP quảng cáo — lượt xem Shorts theo nhánh 90 ngày",
+      "value": 10000000,
+      "unit": "views"
+    },
+    "evidence": [
+      {
+        "url": "https://support.google.com/youtube/answer/72851",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      }
+    ],
+    "confidence": "high",
+    "volatility": "quarterly",
+    "watch": [
+      {
+        "url": "https://support.google.com/youtube/answer/72851",
+        "kind": "policy_page"
+      }
+    ],
+    "status": "active",
+    "notes": "Chỉ dùng cùng điều kiện, ngoại lệ và cửa sổ trong nguồn gốc."
+  },
+  {
+    "id": "limit.youtube.ypp_shorts_window_days",
+    "kind": "platform_limit",
+    "scope": {
+      "platforms": [
+        "youtube"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "platform": "youtube",
+      "name": "YPP — cửa sổ lượt xem Shorts",
+      "value": 90,
+      "unit": "days"
+    },
+    "evidence": [
+      {
+        "url": "https://support.google.com/youtube/answer/72851",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      }
+    ],
+    "confidence": "high",
+    "volatility": "quarterly",
+    "watch": [
+      {
+        "url": "https://support.google.com/youtube/answer/72851",
+        "kind": "policy_page"
+      }
+    ],
+    "status": "active",
+    "notes": "Chỉ dùng cùng điều kiện, ngoại lệ và cửa sổ trong nguồn gốc."
+  },
+  {
+    "id": "limit.youtube.expanded_subscribers",
+    "kind": "platform_limit",
+    "scope": {
+      "platforms": [
+        "youtube"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "platform": "youtube",
+      "name": "Expanded YPP — người đăng ký",
+      "value": 500,
+      "unit": "subscribers"
+    },
+    "evidence": [
+      {
+        "url": "https://support.google.com/youtube/answer/13429240",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      }
+    ],
+    "confidence": "high",
+    "volatility": "quarterly",
+    "watch": [
+      {
+        "url": "https://support.google.com/youtube/answer/13429240",
+        "kind": "policy_page"
+      }
+    ],
+    "status": "active",
+    "notes": "Chỉ dùng cùng điều kiện, ngoại lệ và cửa sổ trong nguồn gốc."
+  },
+  {
+    "id": "limit.youtube.expanded_public_uploads",
+    "kind": "platform_limit",
+    "scope": {
+      "platforms": [
+        "youtube"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "platform": "youtube",
+      "name": "Expanded YPP — video công khai trong 90 ngày",
+      "value": 3,
+      "unit": "uploads"
+    },
+    "evidence": [
+      {
+        "url": "https://support.google.com/youtube/answer/13429240",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      }
+    ],
+    "confidence": "high",
+    "volatility": "quarterly",
+    "watch": [
+      {
+        "url": "https://support.google.com/youtube/answer/13429240",
+        "kind": "policy_page"
+      }
+    ],
+    "status": "active",
+    "notes": "Chỉ dùng cùng điều kiện, ngoại lệ và cửa sổ trong nguồn gốc."
+  },
+  {
+    "id": "limit.youtube.expanded_public_upload_window",
+    "kind": "platform_limit",
+    "scope": {
+      "platforms": [
+        "youtube"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "platform": "youtube",
+      "name": "Expanded YPP — cửa sổ video công khai",
+      "value": 90,
+      "unit": "days"
+    },
+    "evidence": [
+      {
+        "url": "https://support.google.com/youtube/answer/13429240",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      }
+    ],
+    "confidence": "high",
+    "volatility": "quarterly",
+    "watch": [
+      {
+        "url": "https://support.google.com/youtube/answer/13429240",
+        "kind": "policy_page"
+      }
+    ],
+    "status": "active",
+    "notes": "Chỉ dùng cùng điều kiện, ngoại lệ và cửa sổ trong nguồn gốc."
+  },
+  {
+    "id": "limit.youtube.expanded_watch_hours",
+    "kind": "platform_limit",
+    "scope": {
+      "platforms": [
+        "youtube"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "platform": "youtube",
+      "name": "Expanded YPP — giờ xem theo nhánh dài 12 tháng",
+      "value": 3000,
+      "unit": "hours"
+    },
+    "evidence": [
+      {
+        "url": "https://support.google.com/youtube/answer/13429240",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      }
+    ],
+    "confidence": "high",
+    "volatility": "quarterly",
+    "watch": [
+      {
+        "url": "https://support.google.com/youtube/answer/13429240",
+        "kind": "policy_page"
+      }
+    ],
+    "status": "active",
+    "notes": "Chỉ dùng cùng điều kiện, ngoại lệ và cửa sổ trong nguồn gốc."
+  },
+  {
+    "id": "limit.youtube.expanded_watch_window",
+    "kind": "platform_limit",
+    "scope": {
+      "platforms": [
+        "youtube"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "platform": "youtube",
+      "name": "Expanded YPP — cửa sổ giờ xem",
+      "value": 12,
+      "unit": "months"
+    },
+    "evidence": [
+      {
+        "url": "https://support.google.com/youtube/answer/13429240",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      }
+    ],
+    "confidence": "high",
+    "volatility": "quarterly",
+    "watch": [
+      {
+        "url": "https://support.google.com/youtube/answer/13429240",
+        "kind": "policy_page"
+      }
+    ],
+    "status": "active",
+    "notes": "Chỉ dùng cùng điều kiện, ngoại lệ và cửa sổ trong nguồn gốc."
+  },
+  {
+    "id": "limit.youtube.expanded_shorts_views",
+    "kind": "platform_limit",
+    "scope": {
+      "platforms": [
+        "youtube"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "platform": "youtube",
+      "name": "Expanded YPP — lượt xem Shorts theo nhánh 90 ngày",
+      "value": 3000000,
+      "unit": "views"
+    },
+    "evidence": [
+      {
+        "url": "https://support.google.com/youtube/answer/13429240",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      }
+    ],
+    "confidence": "high",
+    "volatility": "quarterly",
+    "watch": [
+      {
+        "url": "https://support.google.com/youtube/answer/13429240",
+        "kind": "policy_page"
+      }
+    ],
+    "status": "active",
+    "notes": "Chỉ dùng cùng điều kiện, ngoại lệ và cửa sổ trong nguồn gốc."
+  },
+  {
+    "id": "limit.youtube.expanded_shorts_window",
+    "kind": "platform_limit",
+    "scope": {
+      "platforms": [
+        "youtube"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "platform": "youtube",
+      "name": "Expanded YPP — cửa sổ view Shorts",
+      "value": 90,
+      "unit": "days"
+    },
+    "evidence": [
+      {
+        "url": "https://support.google.com/youtube/answer/13429240",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      }
+    ],
+    "confidence": "high",
+    "volatility": "quarterly",
+    "watch": [
+      {
+        "url": "https://support.google.com/youtube/answer/13429240",
+        "kind": "policy_page"
+      }
+    ],
+    "status": "active",
+    "notes": "Chỉ dùng cùng điều kiện, ngoại lệ và cửa sổ trong nguồn gốc."
+  },
+  {
+    "id": "limit.youtube.memberships_min_age",
+    "kind": "platform_limit",
+    "scope": {
+      "platforms": [
+        "youtube"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "platform": "youtube",
+      "name": "Tuổi tối thiểu creator cho Memberships",
+      "value": 18,
+      "unit": "years"
+    },
+    "evidence": [
+      {
+        "url": "https://support.google.com/youtube/answer/7636690",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      }
+    ],
+    "confidence": "high",
+    "volatility": "quarterly",
+    "watch": [
+      {
+        "url": "https://support.google.com/youtube/answer/7636690",
+        "kind": "policy_page"
+      }
+    ],
+    "status": "active",
+    "notes": "Chỉ dùng cùng điều kiện, ngoại lệ và cửa sổ trong nguồn gốc."
+  },
+  {
+    "id": "limit.youtube.supers_min_age",
+    "kind": "platform_limit",
+    "scope": {
+      "platforms": [
+        "youtube"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "platform": "youtube",
+      "name": "Tuổi tối thiểu creator cho Supers",
+      "value": 18,
+      "unit": "years"
+    },
+    "evidence": [
+      {
+        "url": "https://support.google.com/youtube/answer/94522",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      }
+    ],
+    "confidence": "high",
+    "volatility": "quarterly",
+    "watch": [
+      {
+        "url": "https://support.google.com/youtube/answer/94522",
+        "kind": "policy_page"
+      }
+    ],
+    "status": "active",
+    "notes": "Chỉ dùng cùng điều kiện, ngoại lệ và cửa sổ trong nguồn gốc."
+  },
+  {
+    "id": "limit.youtube.creator_partnerships_age",
+    "kind": "platform_limit",
+    "scope": {
+      "platforms": [
+        "youtube"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "platform": "youtube",
+      "name": "Tuổi tối thiểu Creator Partnerships",
+      "value": 18,
+      "unit": "years"
+    },
+    "evidence": [
+      {
+        "url": "https://support.google.com/youtube/answer/9385307",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      }
+    ],
+    "confidence": "high",
+    "volatility": "quarterly",
+    "watch": [
+      {
+        "url": "https://support.google.com/youtube/answer/9385307",
+        "kind": "policy_page"
+      }
+    ],
+    "status": "active",
+    "notes": "Chỉ dùng cùng điều kiện, ngoại lệ và cửa sổ trong nguồn gốc."
+  },
+  {
+    "id": "limit.youtube.adsense_min_age",
+    "kind": "platform_limit",
+    "scope": {
+      "platforms": [
+        "youtube"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "platform": "youtube",
+      "name": "Tuổi tối thiểu tự quản lý AdSense",
+      "value": 18,
+      "unit": "years"
+    },
+    "evidence": [
+      {
+        "url": "https://support.google.com/youtube/answer/94522",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      }
+    ],
+    "confidence": "high",
+    "volatility": "quarterly",
+    "watch": [
+      {
+        "url": "https://support.google.com/youtube/answer/94522",
+        "kind": "policy_page"
+      }
+    ],
+    "status": "active",
+    "notes": "Chỉ dùng cùng điều kiện, ngoại lệ và cửa sổ trong nguồn gốc."
+  },
+  {
+    "id": "limit.youtube.shorts_max_sec",
+    "kind": "platform_limit",
+    "scope": {
+      "platforms": [
+        "youtube"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "platform": "youtube",
+      "name": "Shorts — thời lượng tối đa với khung vuông/dọc và điều kiện thời điểm upload",
+      "value": 180,
+      "unit": "seconds"
+    },
+    "evidence": [
+      {
+        "url": "https://support.google.com/youtube/answer/10059070",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      }
+    ],
+    "confidence": "high",
+    "volatility": "quarterly",
+    "watch": [
+      {
+        "url": "https://support.google.com/youtube/answer/10059070",
+        "kind": "policy_page"
+      }
+    ],
+    "status": "active",
+    "notes": "Chỉ dùng cùng điều kiện, ngoại lệ và cửa sổ trong nguồn gốc."
+  },
+  {
+    "id": "limit.youtube.claimed_shorts_boundary_sec",
+    "kind": "platform_limit",
+    "scope": {
+      "platforms": [
+        "youtube"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "platform": "youtube",
+      "name": "Shorts có claim — bị chặn khi vượt ngưỡng",
+      "value": 60,
+      "unit": "seconds"
+    },
+    "evidence": [
+      {
+        "url": "https://support.google.com/youtube/answer/12504220",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      }
+    ],
+    "confidence": "high",
+    "volatility": "quarterly",
+    "watch": [
+      {
+        "url": "https://support.google.com/youtube/answer/12504220",
+        "kind": "policy_page"
+      }
+    ],
+    "status": "active",
+    "notes": "Chỉ dùng cùng điều kiện, ngoại lệ và cửa sổ trong nguồn gốc."
+  },
+  {
+    "id": "limit.youtube.midroll_min_sec",
+    "kind": "platform_limit",
+    "scope": {
+      "platforms": [
+        "youtube"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "platform": "youtube",
+      "name": "Mid-roll video dài đã bật kiếm tiền — thời lượng tối thiểu",
+      "value": 480,
+      "unit": "seconds"
+    },
+    "evidence": [
+      {
+        "url": "https://support.google.com/youtube/answer/6175006",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      }
+    ],
+    "confidence": "high",
+    "volatility": "quarterly",
+    "watch": [
+      {
+        "url": "https://support.google.com/youtube/answer/6175006",
+        "kind": "policy_page"
+      }
+    ],
+    "status": "active",
+    "notes": "Chỉ dùng cùng điều kiện, ngoại lệ và cửa sổ trong nguồn gốc."
+  },
+  {
+    "id": "limit.youtube.test_compare_max_variants",
+    "kind": "platform_limit",
+    "scope": {
+      "platforms": [
+        "youtube"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "platform": "youtube",
+      "name": "Test & Compare — số phương án tối đa",
+      "value": 3,
+      "unit": "variants"
+    },
+    "evidence": [
+      {
+        "url": "https://support.google.com/youtube/answer/16391400",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      }
+    ],
+    "confidence": "high",
+    "volatility": "quarterly",
+    "watch": [
+      {
+        "url": "https://support.google.com/youtube/answer/16391400",
+        "kind": "policy_page"
+      }
+    ],
+    "status": "active",
+    "notes": "Chỉ dùng cùng điều kiện, ngoại lệ và cửa sổ trong nguồn gốc."
+  },
+  {
+    "id": "limit.youtube.end_screen_min_sec",
+    "kind": "platform_limit",
+    "scope": {
+      "platforms": [
+        "youtube"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "platform": "youtube",
+      "name": "End screen — cận dưới đoạn cuối",
+      "value": 5,
+      "unit": "seconds"
+    },
+    "evidence": [
+      {
+        "url": "https://support.google.com/youtube/answer/6388789",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      }
+    ],
+    "confidence": "high",
+    "volatility": "quarterly",
+    "watch": [
+      {
+        "url": "https://support.google.com/youtube/answer/6388789",
+        "kind": "policy_page"
+      }
+    ],
+    "status": "active",
+    "notes": "Chỉ dùng cùng điều kiện, ngoại lệ và cửa sổ trong nguồn gốc."
+  },
+  {
+    "id": "limit.youtube.end_screen_max_sec",
+    "kind": "platform_limit",
+    "scope": {
+      "platforms": [
+        "youtube"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "platform": "youtube",
+      "name": "End screen — cận trên đoạn cuối",
+      "value": 20,
+      "unit": "seconds"
+    },
+    "evidence": [
+      {
+        "url": "https://support.google.com/youtube/answer/6388789",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      }
+    ],
+    "confidence": "high",
+    "volatility": "quarterly",
+    "watch": [
+      {
+        "url": "https://support.google.com/youtube/answer/6388789",
+        "kind": "policy_page"
+      }
+    ],
+    "status": "active",
+    "notes": "Chỉ dùng cùng điều kiện, ngoại lệ và cửa sổ trong nguồn gốc."
+  },
+  {
+    "id": "limit.youtube.watch_page_ad_share",
+    "kind": "platform_limit",
+    "scope": {
+      "platforms": [
+        "youtube"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "platform": "youtube",
+      "name": "Tỷ lệ nhà sáng tạo trên doanh thu ròng Watch Page Ads",
+      "value": 55,
+      "unit": "percent"
+    },
+    "evidence": [
+      {
+        "url": "https://support.google.com/youtube/answer/72902",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      }
+    ],
+    "confidence": "high",
+    "volatility": "quarterly",
+    "watch": [
+      {
+        "url": "https://support.google.com/youtube/answer/72902",
+        "kind": "policy_page"
+      }
+    ],
+    "status": "active",
+    "notes": "Chỉ dùng cùng điều kiện, ngoại lệ và cửa sổ trong nguồn gốc."
+  },
+  {
+    "id": "limit.youtube.shorts_pool_share",
+    "kind": "platform_limit",
+    "scope": {
+      "platforms": [
+        "youtube"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "platform": "youtube",
+      "name": "Tỷ lệ nhà sáng tạo trên phần được phân bổ từ Shorts Creator Pool",
+      "value": 45,
+      "unit": "percent"
+    },
+    "evidence": [
+      {
+        "url": "https://support.google.com/youtube/answer/72902",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      }
+    ],
+    "confidence": "high",
+    "volatility": "quarterly",
+    "watch": [
+      {
+        "url": "https://support.google.com/youtube/answer/72902",
+        "kind": "policy_page"
+      }
+    ],
+    "status": "active",
+    "notes": "Chỉ dùng cùng điều kiện, ngoại lệ và cửa sổ trong nguồn gốc."
+  },
+  {
+    "id": "limit.youtube.commerce_share",
+    "kind": "platform_limit",
+    "scope": {
+      "platforms": [
+        "youtube"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "platform": "youtube",
+      "name": "Tỷ lệ nhà sáng tạo trên doanh thu ròng Commerce",
+      "value": 70,
+      "unit": "percent"
+    },
+    "evidence": [
+      {
+        "url": "https://support.google.com/youtube/answer/72902",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      }
+    ],
+    "confidence": "high",
+    "volatility": "quarterly",
+    "watch": [
+      {
+        "url": "https://support.google.com/youtube/answer/72902",
+        "kind": "policy_page"
+      }
+    ],
+    "status": "active",
+    "notes": "Chỉ dùng cùng điều kiện, ngoại lệ và cửa sổ trong nguồn gốc."
+  },
+  {
+    "id": "limit.tiktok.creator_rewards_min_age",
+    "kind": "platform_limit",
+    "scope": {
+      "platforms": [
+        "tiktok"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "platform": "tiktok",
+      "name": "Creator Rewards — tuổi tối thiểu ngoài ngoại lệ",
+      "value": 18,
+      "unit": "years"
+    },
+    "evidence": [
+      {
+        "url": "https://support.tiktok.com/en/business-and-creator/creator-rewards-program/creator-rewards-program",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      }
+    ],
+    "confidence": "high",
+    "volatility": "monthly",
+    "watch": [
+      {
+        "url": "https://support.tiktok.com/en/business-and-creator/creator-rewards-program/creator-rewards-program",
+        "kind": "policy_page"
+      }
+    ],
+    "status": "active",
+    "notes": "Chỉ dùng cùng điều kiện, ngoại lệ và cửa sổ trong nguồn gốc."
+  },
+  {
+    "id": "limit.tiktok.creator_rewards_kr_min_age",
+    "kind": "platform_limit",
+    "scope": {
+      "platforms": [
+        "tiktok"
+      ],
+      "markets": [
+        "KR"
+      ]
+    },
+    "value": {
+      "platform": "tiktok",
+      "name": "Creator Rewards — tuổi tối thiểu tại Hàn Quốc",
+      "value": 19,
+      "unit": "years"
+    },
+    "evidence": [
+      {
+        "url": "https://support.tiktok.com/en/business-and-creator/creator-rewards-program/creator-rewards-program",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      }
+    ],
+    "confidence": "high",
+    "volatility": "monthly",
+    "watch": [
+      {
+        "url": "https://support.tiktok.com/en/business-and-creator/creator-rewards-program/creator-rewards-program",
+        "kind": "policy_page"
+      }
+    ],
+    "status": "active",
+    "notes": "Chỉ dùng cùng điều kiện, ngoại lệ và cửa sổ trong nguồn gốc."
+  },
+  {
+    "id": "limit.tiktok.creator_rewards_followers",
+    "kind": "platform_limit",
+    "scope": {
+      "platforms": [
+        "tiktok"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "platform": "tiktok",
+      "name": "Creator Rewards — số follow tối thiểu",
+      "value": 10000,
+      "unit": "followers"
+    },
+    "evidence": [
+      {
+        "url": "https://support.tiktok.com/en/business-and-creator/creator-rewards-program/creator-rewards-program",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      }
+    ],
+    "confidence": "high",
+    "volatility": "monthly",
+    "watch": [
+      {
+        "url": "https://support.tiktok.com/en/business-and-creator/creator-rewards-program/creator-rewards-program",
+        "kind": "policy_page"
+      }
+    ],
+    "status": "active",
+    "notes": "Chỉ dùng cùng điều kiện, ngoại lệ và cửa sổ trong nguồn gốc."
+  },
+  {
+    "id": "limit.tiktok.creator_rewards_views",
+    "kind": "platform_limit",
+    "scope": {
+      "platforms": [
+        "tiktok"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "platform": "tiktok",
+      "name": "Creator Rewards — view đủ ngưỡng tài khoản trong 30 ngày",
+      "value": 100000,
+      "unit": "views"
+    },
+    "evidence": [
+      {
+        "url": "https://support.tiktok.com/en/business-and-creator/creator-rewards-program/creator-rewards-program",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      }
+    ],
+    "confidence": "high",
+    "volatility": "monthly",
+    "watch": [
+      {
+        "url": "https://support.tiktok.com/en/business-and-creator/creator-rewards-program/creator-rewards-program",
+        "kind": "policy_page"
+      }
+    ],
+    "status": "active",
+    "notes": "Chỉ dùng cùng điều kiện, ngoại lệ và cửa sổ trong nguồn gốc."
+  },
+  {
+    "id": "limit.tiktok.creator_rewards_window",
+    "kind": "platform_limit",
+    "scope": {
+      "platforms": [
+        "tiktok"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "platform": "tiktok",
+      "name": "Creator Rewards — cửa sổ view của tài khoản",
+      "value": 30,
+      "unit": "days"
+    },
+    "evidence": [
+      {
+        "url": "https://support.tiktok.com/en/business-and-creator/creator-rewards-program/creator-rewards-program",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      }
+    ],
+    "confidence": "high",
+    "volatility": "monthly",
+    "watch": [
+      {
+        "url": "https://support.tiktok.com/en/business-and-creator/creator-rewards-program/creator-rewards-program",
+        "kind": "policy_page"
+      }
+    ],
+    "status": "active",
+    "notes": "Chỉ dùng cùng điều kiện, ngoại lệ và cửa sổ trong nguồn gốc."
+  },
+  {
+    "id": "limit.tiktok.creator_rewards_min_sec",
+    "kind": "platform_limit",
+    "scope": {
+      "platforms": [
+        "tiktok"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "platform": "tiktok",
+      "name": "Creator Rewards — thời lượng tối thiểu",
+      "value": 60,
+      "unit": "seconds"
+    },
+    "evidence": [
+      {
+        "url": "https://support.tiktok.com/en/business-and-creator/creator-rewards-program/creator-rewards-program",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      }
+    ],
+    "confidence": "high",
+    "volatility": "monthly",
+    "watch": [
+      {
+        "url": "https://support.tiktok.com/en/business-and-creator/creator-rewards-program/creator-rewards-program",
+        "kind": "policy_page"
+      }
+    ],
+    "status": "active",
+    "notes": "Chỉ dùng cùng điều kiện, ngoại lệ và cửa sổ trong nguồn gốc."
+  },
+  {
+    "id": "limit.tiktok.creator_rewards_qualified_views",
+    "kind": "platform_limit",
+    "scope": {
+      "platforms": [
+        "tiktok"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "platform": "tiktok",
+      "name": "Creator Rewards — view For You hợp lệ tối thiểu mỗi video trước khi tính thưởng",
+      "value": 1000,
+      "unit": "views"
+    },
+    "evidence": [
+      {
+        "url": "https://support.tiktok.com/en/business-and-creator/creator-rewards-program/how-rewards-work",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      }
+    ],
+    "confidence": "high",
+    "volatility": "monthly",
+    "watch": [
+      {
+        "url": "https://support.tiktok.com/en/business-and-creator/creator-rewards-program/how-rewards-work",
+        "kind": "policy_page"
+      }
+    ],
+    "status": "active",
+    "notes": "Chỉ dùng cùng điều kiện, ngoại lệ và cửa sổ trong nguồn gốc."
+  },
+  {
+    "id": "limit.tiktok.live_gifts_min_age",
+    "kind": "platform_limit",
+    "scope": {
+      "platforms": [
+        "tiktok"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "platform": "tiktok",
+      "name": "LIVE Gifts — tuổi tối thiểu ngoài ngoại lệ",
+      "value": 18,
+      "unit": "years"
+    },
+    "evidence": [
+      {
+        "url": "https://support.tiktok.com/en/live-gifts-wallet/tiktok-live/live-gifts-on-tiktok",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      }
+    ],
+    "confidence": "high",
+    "volatility": "monthly",
+    "watch": [
+      {
+        "url": "https://support.tiktok.com/en/live-gifts-wallet/tiktok-live/live-gifts-on-tiktok",
+        "kind": "policy_page"
+      }
+    ],
+    "status": "active",
+    "notes": "Chỉ dùng cùng điều kiện, ngoại lệ và cửa sổ trong nguồn gốc."
+  },
+  {
+    "id": "limit.tiktok.live_gifts_kr_min_age",
+    "kind": "platform_limit",
+    "scope": {
+      "platforms": [
+        "tiktok"
+      ],
+      "markets": [
+        "KR"
+      ]
+    },
+    "value": {
+      "platform": "tiktok",
+      "name": "LIVE Gifts — tuổi tối thiểu ở Hàn Quốc",
+      "value": 19,
+      "unit": "years"
+    },
+    "evidence": [
+      {
+        "url": "https://support.tiktok.com/en/live-gifts-wallet/tiktok-live/live-gifts-on-tiktok",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      }
+    ],
+    "confidence": "high",
+    "volatility": "monthly",
+    "watch": [
+      {
+        "url": "https://support.tiktok.com/en/live-gifts-wallet/tiktok-live/live-gifts-on-tiktok",
+        "kind": "policy_page"
+      }
+    ],
+    "status": "active",
+    "notes": "Chỉ dùng cùng điều kiện, ngoại lệ và cửa sổ trong nguồn gốc."
+  },
+  {
+    "id": "limit.tiktok.video_gifts_min_age",
+    "kind": "platform_limit",
+    "scope": {
+      "platforms": [
+        "tiktok"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "platform": "tiktok",
+      "name": "Video Gifts — tuổi tối thiểu ngoài ngoại lệ",
+      "value": 18,
+      "unit": "years"
+    },
+    "evidence": [
+      {
+        "url": "https://support.tiktok.com/en/business-and-creator/video-gifts-on-tiktok/video-gifts-on-tiktok",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      }
+    ],
+    "confidence": "high",
+    "volatility": "monthly",
+    "watch": [
+      {
+        "url": "https://support.tiktok.com/en/business-and-creator/video-gifts-on-tiktok/video-gifts-on-tiktok",
+        "kind": "policy_page"
+      }
+    ],
+    "status": "active",
+    "notes": "Chỉ dùng cùng điều kiện, ngoại lệ và cửa sổ trong nguồn gốc."
+  },
+  {
+    "id": "limit.tiktok.video_gifts_kr_min_age",
+    "kind": "platform_limit",
+    "scope": {
+      "platforms": [
+        "tiktok"
+      ],
+      "markets": [
+        "KR"
+      ]
+    },
+    "value": {
+      "platform": "tiktok",
+      "name": "Video Gifts — tuổi tối thiểu ở Hàn Quốc",
+      "value": 19,
+      "unit": "years"
+    },
+    "evidence": [
+      {
+        "url": "https://support.tiktok.com/en/business-and-creator/video-gifts-on-tiktok/video-gifts-on-tiktok",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      }
+    ],
+    "confidence": "high",
+    "volatility": "monthly",
+    "watch": [
+      {
+        "url": "https://support.tiktok.com/en/business-and-creator/video-gifts-on-tiktok/video-gifts-on-tiktok",
+        "kind": "policy_page"
+      }
+    ],
+    "status": "active",
+    "notes": "Chỉ dùng cùng điều kiện, ngoại lệ và cửa sổ trong nguồn gốc."
+  },
+  {
+    "id": "limit.tiktok.video_gifts_followers",
+    "kind": "platform_limit",
+    "scope": {
+      "platforms": [
+        "tiktok"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "platform": "tiktok",
+      "name": "Video Gifts — follow tối thiểu",
+      "value": 10000,
+      "unit": "followers"
+    },
+    "evidence": [
+      {
+        "url": "https://support.tiktok.com/en/business-and-creator/video-gifts-on-tiktok/video-gifts-on-tiktok",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      }
+    ],
+    "confidence": "high",
+    "volatility": "monthly",
+    "watch": [
+      {
+        "url": "https://support.tiktok.com/en/business-and-creator/video-gifts-on-tiktok/video-gifts-on-tiktok",
+        "kind": "policy_page"
+      }
+    ],
+    "status": "active",
+    "notes": "Chỉ dùng cùng điều kiện, ngoại lệ và cửa sổ trong nguồn gốc."
+  },
+  {
+    "id": "limit.tiktok.video_gifts_account_min_age",
+    "kind": "platform_limit",
+    "scope": {
+      "platforms": [
+        "tiktok"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "platform": "tiktok",
+      "name": "Video Gifts — tuổi tài khoản tối thiểu",
+      "value": 30,
+      "unit": "days"
+    },
+    "evidence": [
+      {
+        "url": "https://support.tiktok.com/en/business-and-creator/video-gifts-on-tiktok/video-gifts-on-tiktok",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      }
+    ],
+    "confidence": "high",
+    "volatility": "monthly",
+    "watch": [
+      {
+        "url": "https://support.tiktok.com/en/business-and-creator/video-gifts-on-tiktok/video-gifts-on-tiktok",
+        "kind": "policy_page"
+      }
+    ],
+    "status": "active",
+    "notes": "Chỉ dùng cùng điều kiện, ngoại lệ và cửa sổ trong nguồn gốc."
+  },
+  {
+    "id": "limit.tiktok.video_gifts_post_window",
+    "kind": "platform_limit",
+    "scope": {
+      "platforms": [
+        "tiktok"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "platform": "tiktok",
+      "name": "Video Gifts — cửa sổ có bài công khai",
+      "value": 30,
+      "unit": "days"
+    },
+    "evidence": [
+      {
+        "url": "https://support.tiktok.com/en/business-and-creator/video-gifts-on-tiktok/video-gifts-on-tiktok",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      }
+    ],
+    "confidence": "high",
+    "volatility": "monthly",
+    "watch": [
+      {
+        "url": "https://support.tiktok.com/en/business-and-creator/video-gifts-on-tiktok/video-gifts-on-tiktok",
+        "kind": "policy_page"
+      }
+    ],
+    "status": "active",
+    "notes": "Chỉ dùng cùng điều kiện, ngoại lệ và cửa sổ trong nguồn gốc."
+  },
+  {
+    "id": "limit.tiktok.series_account_min_age",
+    "kind": "platform_limit",
+    "scope": {
+      "platforms": [
+        "tiktok"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "platform": "tiktok",
+      "name": "Series — tuổi tài khoản tối thiểu",
+      "value": 30,
+      "unit": "days"
+    },
+    "evidence": [
+      {
+        "url": "https://support.tiktok.com/en/business-and-creator/tiktok-series/about-tiktok-series",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      }
+    ],
+    "confidence": "high",
+    "volatility": "monthly",
+    "watch": [
+      {
+        "url": "https://support.tiktok.com/en/business-and-creator/tiktok-series/about-tiktok-series",
+        "kind": "policy_page"
+      }
+    ],
+    "status": "active",
+    "notes": "Chỉ dùng cùng điều kiện, ngoại lệ và cửa sổ trong nguồn gốc."
+  },
+  {
+    "id": "limit.tiktok.series_min_age",
+    "kind": "platform_limit",
+    "scope": {
+      "platforms": [
+        "tiktok"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "platform": "tiktok",
+      "name": "Series — tuổi creator tối thiểu",
+      "value": 18,
+      "unit": "years"
+    },
+    "evidence": [
+      {
+        "url": "https://support.tiktok.com/en/business-and-creator/tiktok-series/about-tiktok-series",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      }
+    ],
+    "confidence": "high",
+    "volatility": "monthly",
+    "watch": [
+      {
+        "url": "https://support.tiktok.com/en/business-and-creator/tiktok-series/about-tiktok-series",
+        "kind": "policy_page"
+      }
+    ],
+    "status": "active",
+    "notes": "Chỉ dùng cùng điều kiện, ngoại lệ và cửa sổ trong nguồn gốc."
+  },
+  {
+    "id": "limit.tiktok.series_public_posts",
+    "kind": "platform_limit",
+    "scope": {
+      "platforms": [
+        "tiktok"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "platform": "tiktok",
+      "name": "Series — bài công khai tối thiểu trong 30 ngày",
+      "value": 3,
+      "unit": "uploads"
+    },
+    "evidence": [
+      {
+        "url": "https://support.tiktok.com/en/business-and-creator/tiktok-series/about-tiktok-series",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      }
+    ],
+    "confidence": "high",
+    "volatility": "monthly",
+    "watch": [
+      {
+        "url": "https://support.tiktok.com/en/business-and-creator/tiktok-series/about-tiktok-series",
+        "kind": "policy_page"
+      }
+    ],
+    "status": "active",
+    "notes": "Chỉ dùng cùng điều kiện, ngoại lệ và cửa sổ trong nguồn gốc."
+  },
+  {
+    "id": "limit.tiktok.series_views",
+    "kind": "platform_limit",
+    "scope": {
+      "platforms": [
+        "tiktok"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "platform": "tiktok",
+      "name": "Series — view tối thiểu trong 30 ngày",
+      "value": 1000,
+      "unit": "views"
+    },
+    "evidence": [
+      {
+        "url": "https://support.tiktok.com/en/business-and-creator/tiktok-series/about-tiktok-series",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      }
+    ],
+    "confidence": "high",
+    "volatility": "monthly",
+    "watch": [
+      {
+        "url": "https://support.tiktok.com/en/business-and-creator/tiktok-series/about-tiktok-series",
+        "kind": "policy_page"
+      }
+    ],
+    "status": "active",
+    "notes": "Chỉ dùng cùng điều kiện, ngoại lệ và cửa sổ trong nguồn gốc."
+  },
+  {
+    "id": "limit.tiktok.series_activity_window",
+    "kind": "platform_limit",
+    "scope": {
+      "platforms": [
+        "tiktok"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "platform": "tiktok",
+      "name": "Series — cửa sổ hoạt động",
+      "value": 30,
+      "unit": "days"
+    },
+    "evidence": [
+      {
+        "url": "https://support.tiktok.com/en/business-and-creator/tiktok-series/about-tiktok-series",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      }
+    ],
+    "confidence": "high",
+    "volatility": "monthly",
+    "watch": [
+      {
+        "url": "https://support.tiktok.com/en/business-and-creator/tiktok-series/about-tiktok-series",
+        "kind": "policy_page"
+      }
+    ],
+    "status": "active",
+    "notes": "Chỉ dùng cùng điều kiện, ngoại lệ và cửa sổ trong nguồn gốc."
+  },
+  {
+    "id": "limit.snapchat.spotlight_min_sec",
+    "kind": "platform_limit",
+    "scope": {
+      "platforms": [
+        "*"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "platform": "snapchat",
+      "name": "Spotlight — thời lượng tối thiểu có thể kiếm tiền",
+      "value": 30,
+      "unit": "seconds"
+    },
+    "evidence": [
+      {
+        "url": "https://help.snapchat.com/hc/en-us/articles/14669003687444-About-Snapchat-s-Monetization-Program",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      }
+    ],
+    "confidence": "high",
+    "volatility": "monthly",
+    "watch": [
+      {
+        "url": "https://help.snapchat.com/hc/en-us/articles/14669003687444-About-Snapchat-s-Monetization-Program",
+        "kind": "policy_page"
+      }
+    ],
+    "status": "active",
+    "notes": "Chỉ dùng cùng điều kiện, ngoại lệ và cửa sổ trong nguồn gốc."
+  },
+  {
+    "id": "limit.snapchat.program_followers",
+    "kind": "platform_limit",
+    "scope": {
+      "platforms": [
+        "*"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "platform": "snapchat",
+      "name": "Snap Monetization — follow tối thiểu",
+      "value": 50000,
+      "unit": "followers"
+    },
+    "evidence": [
+      {
+        "url": "https://help.snapchat.com/hc/en-us/articles/14669003687444-About-Snapchat-s-Monetization-Program",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      }
+    ],
+    "confidence": "high",
+    "volatility": "monthly",
+    "watch": [
+      {
+        "url": "https://help.snapchat.com/hc/en-us/articles/14669003687444-About-Snapchat-s-Monetization-Program",
+        "kind": "policy_page"
+      }
+    ],
+    "status": "active",
+    "notes": "Chỉ dùng cùng điều kiện, ngoại lệ và cửa sổ trong nguồn gốc."
+  },
+  {
+    "id": "limit.snapchat.program_watch_hours",
+    "kind": "platform_limit",
+    "scope": {
+      "platforms": [
+        "*"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "platform": "snapchat",
+      "name": "Snap Monetization — tổng giờ xem trong 28 ngày",
+      "value": 15000,
+      "unit": "hours"
+    },
+    "evidence": [
+      {
+        "url": "https://help.snapchat.com/hc/en-us/articles/14669003687444-About-Snapchat-s-Monetization-Program",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      }
+    ],
+    "confidence": "high",
+    "volatility": "monthly",
+    "watch": [
+      {
+        "url": "https://help.snapchat.com/hc/en-us/articles/14669003687444-About-Snapchat-s-Monetization-Program",
+        "kind": "policy_page"
+      }
+    ],
+    "status": "active",
+    "notes": "Chỉ dùng cùng điều kiện, ngoại lệ và cửa sổ trong nguồn gốc."
+  },
+  {
+    "id": "limit.snapchat.program_spotlight_hours",
+    "kind": "platform_limit",
+    "scope": {
+      "platforms": [
+        "*"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "platform": "snapchat",
+      "name": "Snap Monetization — giờ Spotlight trong tổng 28 ngày",
+      "value": 3000,
+      "unit": "hours"
+    },
+    "evidence": [
+      {
+        "url": "https://help.snapchat.com/hc/en-us/articles/14669003687444-About-Snapchat-s-Monetization-Program",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      }
+    ],
+    "confidence": "high",
+    "volatility": "monthly",
+    "watch": [
+      {
+        "url": "https://help.snapchat.com/hc/en-us/articles/14669003687444-About-Snapchat-s-Monetization-Program",
+        "kind": "policy_page"
+      }
+    ],
+    "status": "active",
+    "notes": "Chỉ dùng cùng điều kiện, ngoại lệ và cửa sổ trong nguồn gốc."
+  },
+  {
+    "id": "limit.snapchat.program_watch_window",
+    "kind": "platform_limit",
+    "scope": {
+      "platforms": [
+        "*"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "platform": "snapchat",
+      "name": "Snap Monetization — cửa sổ giờ xem",
+      "value": 28,
+      "unit": "days"
+    },
+    "evidence": [
+      {
+        "url": "https://help.snapchat.com/hc/en-us/articles/14669003687444-About-Snapchat-s-Monetization-Program",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      }
+    ],
+    "confidence": "high",
+    "volatility": "monthly",
+    "watch": [
+      {
+        "url": "https://help.snapchat.com/hc/en-us/articles/14669003687444-About-Snapchat-s-Monetization-Program",
+        "kind": "policy_page"
+      }
+    ],
+    "status": "active",
+    "notes": "Chỉ dùng cùng điều kiện, ngoại lệ và cửa sổ trong nguồn gốc."
+  },
+  {
+    "id": "limit.snapchat.program_min_age",
+    "kind": "platform_limit",
+    "scope": {
+      "platforms": [
+        "*"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "platform": "snapchat",
+      "name": "Snap Monetization — tuổi tối thiểu hoặc tuổi thành niên tại địa phương",
+      "value": 18,
+      "unit": "years"
+    },
+    "evidence": [
+      {
+        "url": "https://help.snapchat.com/hc/en-us/articles/14669003687444-About-Snapchat-s-Monetization-Program",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      }
+    ],
+    "confidence": "high",
+    "volatility": "monthly",
+    "watch": [
+      {
+        "url": "https://help.snapchat.com/hc/en-us/articles/14669003687444-About-Snapchat-s-Monetization-Program",
+        "kind": "policy_page"
+      }
+    ],
+    "status": "active",
+    "notes": "Chỉ dùng cùng điều kiện, ngoại lệ và cửa sổ trong nguồn gốc."
+  },
+  {
+    "id": "limit.x.original_rewards_min_age",
+    "kind": "platform_limit",
+    "scope": {
+      "platforms": [
+        "*"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "platform": "x",
+      "name": "Original Content Rewards — tuổi tối thiểu",
+      "value": 18,
+      "unit": "years"
+    },
+    "evidence": [
+      {
+        "url": "https://help.x.com/en/using-x/original-content-rewards",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      }
+    ],
+    "confidence": "high",
+    "volatility": "monthly",
+    "watch": [
+      {
+        "url": "https://help.x.com/en/using-x/original-content-rewards",
+        "kind": "policy_page"
+      }
+    ],
+    "status": "active",
+    "notes": "Chỉ dùng cùng điều kiện, ngoại lệ và cửa sổ trong nguồn gốc."
+  },
+  {
+    "id": "limit.x.original_rewards_verified_followers",
+    "kind": "platform_limit",
+    "scope": {
+      "platforms": [
+        "*"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "platform": "x",
+      "name": "Original Content Rewards — follow xác minh tối thiểu",
+      "value": 500,
+      "unit": "followers"
+    },
+    "evidence": [
+      {
+        "url": "https://help.x.com/en/using-x/original-content-rewards",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      }
+    ],
+    "confidence": "high",
+    "volatility": "monthly",
+    "watch": [
+      {
+        "url": "https://help.x.com/en/using-x/original-content-rewards",
+        "kind": "policy_page"
+      }
+    ],
+    "status": "active",
+    "notes": "Chỉ dùng cùng điều kiện, ngoại lệ và cửa sổ trong nguồn gốc."
+  },
+  {
+    "id": "limit.x.original_rewards_verified_impressions",
+    "kind": "platform_limit",
+    "scope": {
+      "platforms": [
+        "*"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "platform": "x",
+      "name": "Original Content Rewards — impressions Home Timeline đủ điều kiện trong 90 ngày",
+      "value": 500000,
+      "unit": "impressions"
+    },
+    "evidence": [
+      {
+        "url": "https://help.x.com/en/using-x/original-content-rewards",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      }
+    ],
+    "confidence": "high",
+    "volatility": "monthly",
+    "watch": [
+      {
+        "url": "https://help.x.com/en/using-x/original-content-rewards",
+        "kind": "policy_page"
+      }
+    ],
+    "status": "active",
+    "notes": "Chỉ dùng cùng điều kiện, ngoại lệ và cửa sổ trong nguồn gốc."
+  },
+  {
+    "id": "limit.x.original_rewards_impression_window",
+    "kind": "platform_limit",
+    "scope": {
+      "platforms": [
+        "*"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "platform": "x",
+      "name": "Original Content Rewards — cửa sổ impressions",
+      "value": 90,
+      "unit": "days"
+    },
+    "evidence": [
+      {
+        "url": "https://help.x.com/en/using-x/original-content-rewards",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      }
+    ],
+    "confidence": "high",
+    "volatility": "monthly",
+    "watch": [
+      {
+        "url": "https://help.x.com/en/using-x/original-content-rewards",
+        "kind": "policy_page"
+      }
+    ],
+    "status": "active",
+    "notes": "Chỉ dùng cùng điều kiện, ngoại lệ và cửa sổ trong nguồn gốc."
+  },
+  {
+    "id": "limit.x.original_rewards_payout_min",
+    "kind": "platform_limit",
+    "scope": {
+      "platforms": [
+        "*"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "platform": "x",
+      "name": "Original Content Rewards — payout tối thiểu",
+      "value": 30,
+      "unit": "USD"
+    },
+    "evidence": [
+      {
+        "url": "https://help.x.com/en/using-x/original-content-rewards",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      }
+    ],
+    "confidence": "high",
+    "volatility": "monthly",
+    "watch": [
+      {
+        "url": "https://help.x.com/en/using-x/original-content-rewards",
+        "kind": "policy_page"
+      }
+    ],
+    "status": "active",
+    "notes": "Chỉ dùng cùng điều kiện, ngoại lệ và cửa sổ trong nguồn gốc."
+  },
+  {
+    "id": "tiktok.branded_mission",
+    "kind": "monetization_program",
+    "scope": {
+      "platforms": [
+        "tiktok"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "platform": "tiktok",
+      "name": "Branded Mission",
+      "pays": "Nhãn hàng và quảng cáo UGC",
+      "eligibility": {
+        "text": "18+; ngoại lệ KR19/JP20/TH20/ID21; account cùng nước campaign, không Business; 1.000 followers, 3 bài và 1.000 views/30 ngày",
+        "followers": 1000,
+        "uploads": 3,
+        "views": 1000,
+        "windowDays": 30,
+        "minAge": 18,
+        "minAgeByMarket": {
+          "KR": 19,
+          "JP": 20,
+          "TH": 20,
+          "ID": 21
+        }
+      },
+      "share": "Theo brief",
+      "countries": [
+        "AU",
+        "ID",
+        "JP",
+        "KR",
+        "MY",
+        "PH",
+        "TH",
+        "VN",
+        "FR",
+        "GB",
+        "IT",
+        "DE",
+        "ES",
+        "BR",
+        "CA",
+        "MX",
+        "US",
+        "EG",
+        "SA",
+        "TR",
+        "AE"
+      ],
+      "countryNotes": "Danh sách chương trình trong tài liệu; không là bằng chứng account được nhận.",
+      "contentRules": "Quyền nội dung, disclosure và nghĩa vụ theo chương trình/hợp đồng.",
+      "automatedUse": "partly",
+      "reason": "Sản xuất có thể hỗ trợ bằng agent; quyền, giao dịch và fulfillment cần kiểm.",
+      "countriesListType": "explicit_program_list"
+    },
+    "evidence": [
+      {
+        "url": "https://ads.tiktok.com/resources/help/article/about-branded-mission?lang=en",
+        "checkedAt": "2026-11-11",
+        "type": "official"
+      }
+    ],
+    "confidence": "medium",
+    "volatility": "monthly",
+    "watch": [
+      {
+        "url": "https://ads.tiktok.com/resources/help/article/about-branded-mission?lang=en",
+        "kind": "policy_page"
+      }
+    ],
+    "status": "active",
+    "notes": "Bổ sung deep research 2026-11-11. Đánh giá tự động hoá/hiệu quả là suy luận; chưa xác nhận quyền tài khoản thật. RSS/robots chưa kiểm. Volatility là lịch rà soát đề xuất: phí/rollout theo tháng, phương pháp theo quý, quy tắc claim pháp lý theo năm; không phải half-life đã đo."
+  },
+  {
+    "id": "commerce.patreon.membership",
+    "kind": "monetization_program",
+    "scope": {
+      "platforms": [
+        "patreon"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "platform": "patreon",
+      "name": "Patreon membership/video",
+      "pays": "Hội viên và người mua nội dung",
+      "eligibility": {
+        "text": "Onboarding, quyền nội dung, payout; VN chưa xác nhận"
+      },
+      "share": "Plan mới 10% platform fee, cộng processing/FX/thuế áp dụng",
+      "countries": null,
+      "countryNotes": "null: chưa xác nhận payout/eligibility theo nước.",
+      "contentRules": "Quyền nội dung, disclosure và nghĩa vụ theo chương trình/hợp đồng.",
+      "automatedUse": "partly",
+      "reason": "Sản xuất có thể hỗ trợ bằng agent; quyền, giao dịch và fulfillment cần kiểm.",
+      "countriesListType": "unknown"
+    },
+    "evidence": [
+      {
+        "url": "https://support.patreon.com/hc/en-us/articles/36426991446797-A-standard-platform-fee-for-new-creators-effective-after-August-4-2025",
+        "checkedAt": "2026-11-11",
+        "type": "official"
+      }
+    ],
+    "confidence": "medium",
+    "volatility": "monthly",
+    "watch": [
+      {
+        "url": "https://support.patreon.com/hc/en-us/articles/36426991446797-A-standard-platform-fee-for-new-creators-effective-after-August-4-2025",
+        "kind": "policy_page"
+      }
+    ],
+    "status": "active",
+    "notes": "Bổ sung deep research 2026-11-11. Đánh giá tự động hoá/hiệu quả là suy luận; chưa xác nhận quyền tài khoản thật. RSS/robots chưa kiểm. Volatility là lịch rà soát đề xuất: phí/rollout theo tháng, phương pháp theo quý, quy tắc claim pháp lý theo năm; không phải half-life đã đo."
+  },
+  {
+    "id": "commerce.kofi.support",
+    "kind": "monetization_program",
+    "scope": {
+      "platforms": [
+        "ko-fi"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "platform": "ko-fi",
+      "name": "Ko-fi tips/membership",
+      "pays": "Người ủng hộ/khách hàng",
+      "eligibility": {
+        "text": "Có PayPal/Stripe nhận tiền hợp lệ; khả năng creator VN chưa xác nhận"
+      },
+      "share": "Free one-time tips 0%; sản phẩm khác 5%; Standard tips 5%; cộng phí processor",
+      "countries": null,
+      "countryNotes": "null: chưa xác nhận payout/eligibility theo nước.",
+      "contentRules": "Quyền nội dung, disclosure và nghĩa vụ theo chương trình/hợp đồng.",
+      "automatedUse": "partly",
+      "reason": "Sản xuất có thể hỗ trợ bằng agent; quyền, giao dịch và fulfillment cần kiểm.",
+      "countriesListType": "unknown"
+    },
+    "evidence": [
+      {
+        "url": "https://help.ko-fi.com/hc/en-us/articles/360002506494-Does-Ko-fi-take-a-fee",
+        "checkedAt": "2026-11-11",
+        "type": "official"
+      }
+    ],
+    "confidence": "medium",
+    "volatility": "monthly",
+    "watch": [
+      {
+        "url": "https://help.ko-fi.com/hc/en-us/articles/360002506494-Does-Ko-fi-take-a-fee",
+        "kind": "policy_page"
+      }
+    ],
+    "status": "active",
+    "notes": "Bổ sung deep research 2026-11-11. Đánh giá tự động hoá/hiệu quả là suy luận; chưa xác nhận quyền tài khoản thật. RSS/robots chưa kiểm. Volatility là lịch rà soát đề xuất: phí/rollout theo tháng, phương pháp theo quý, quy tắc claim pháp lý theo năm; không phải half-life đã đo."
+  },
+  {
+    "id": "commerce.crowdfunding",
+    "kind": "monetization_program",
+    "scope": {
+      "platforms": [
+        "kickstarter"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "platform": "kickstarter",
+      "name": "Crowdfunding phim/series",
+      "pays": "Backer",
+      "eligibility": {
+        "text": "Creator ở khu vực hỗ trợ, dự án/fulfillment hợp lệ; eligibility VN chưa truy cập được"
+      },
+      "share": "All-or-nothing; thành công trừ platform 5% và processing",
+      "countries": null,
+      "countryNotes": "null: chưa xác nhận payout/eligibility theo nước.",
+      "contentRules": "Quyền nội dung, disclosure và nghĩa vụ theo chương trình/hợp đồng.",
+      "automatedUse": "partly",
+      "reason": "Sản xuất có thể hỗ trợ bằng agent; quyền, giao dịch và fulfillment cần kiểm.",
+      "countriesListType": "unknown"
+    },
+    "evidence": [
+      {
+        "url": "https://www.kickstarter.com/how-it-works",
+        "checkedAt": "2026-11-11",
+        "type": "official"
+      }
+    ],
+    "confidence": "medium",
+    "volatility": "quarterly",
+    "watch": [
+      {
+        "url": "https://www.kickstarter.com/how-it-works",
+        "kind": "policy_page"
+      }
+    ],
+    "status": "active",
+    "notes": "Bổ sung deep research 2026-11-11. Đánh giá tự động hoá/hiệu quả là suy luận; chưa xác nhận quyền tài khoản thật. RSS/robots chưa kiểm. Volatility là lịch rà soát đề xuất: phí/rollout theo tháng, phương pháp theo quý, quy tắc claim pháp lý theo năm; không phải half-life đã đo."
+  },
+  {
+    "id": "commerce.vod.subscription",
+    "kind": "monetization_program",
+    "scope": {
+      "platforms": [
+        "uscreen"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "platform": "uscreen",
+      "name": "VOD/membership độc lập",
+      "pays": "Người mua quyền xem",
+      "eligibility": {
+        "text": "Quyền nội dung, plan và checkout/payout phù hợp; giá thực trả chưa xác nhận"
+      },
+      "share": null,
+      "countries": null,
+      "countryNotes": "null: chưa xác nhận payout/eligibility theo nước.",
+      "contentRules": "Quyền nội dung, disclosure và nghĩa vụ theo chương trình/hợp đồng.",
+      "automatedUse": "partly",
+      "reason": "Sản xuất có thể hỗ trợ bằng agent; quyền, giao dịch và fulfillment cần kiểm.",
+      "countriesListType": "unknown"
+    },
+    "evidence": [
+      {
+        "url": "https://www.uscreen.tv/pricing/",
+        "checkedAt": "2026-11-11",
+        "type": "official"
+      }
+    ],
+    "confidence": "medium",
+    "volatility": "monthly",
+    "watch": [
+      {
+        "url": "https://www.uscreen.tv/pricing/",
+        "kind": "policy_page"
+      }
+    ],
+    "status": "active",
+    "notes": "Bổ sung deep research 2026-11-11. Đánh giá tự động hoá/hiệu quả là suy luận; chưa xác nhận quyền tài khoản thật. RSS/robots chưa kiểm. Volatility là lịch rà soát đề xuất: phí/rollout theo tháng, phương pháp theo quý, quy tắc claim pháp lý theo năm; không phải half-life đã đo."
+  },
+  {
+    "id": "commerce.video_services",
+    "kind": "monetization_program",
+    "scope": {
+      "platforms": [
+        "off-platform"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "platform": "off-platform",
+      "name": "Dịch vụ video B2B",
+      "pays": "Khách hàng hợp đồng",
+      "eligibility": {
+        "text": "Có quyền thương mại và hợp đồng/nhận tiền hợp lệ; không phải YPP"
+      },
+      "share": "Theo hợp đồng, không có benchmark giá được xác nhận",
+      "countries": null,
+      "countryNotes": "null: chưa xác nhận payout/eligibility theo nước.",
+      "contentRules": "Quyền nội dung, disclosure và nghĩa vụ theo chương trình/hợp đồng.",
+      "automatedUse": "partly",
+      "reason": "Sản xuất có thể hỗ trợ bằng agent; quyền, giao dịch và fulfillment cần kiểm.",
+      "countriesListType": "unknown"
+    },
+    "evidence": [
+      {
+        "url": "https://support.google.com/youtube/answer/9314357?hl=en",
+        "checkedAt": "2026-11-11",
+        "type": "inference"
+      }
+    ],
+    "confidence": "low",
+    "volatility": "quarterly",
+    "watch": [
+      {
+        "url": "https://support.google.com/youtube/answer/9314357?hl=en",
+        "kind": "policy_page"
+      }
+    ],
+    "status": "active",
+    "notes": "Bổ sung deep research 2026-11-11. Đánh giá tự động hoá/hiệu quả là suy luận; chưa xác nhận quyền tài khoản thật. RSS/robots chưa kiểm. Volatility là lịch rà soát đề xuất: phí/rollout theo tháng, phương pháp theo quý, quy tắc claim pháp lý theo năm; không phải half-life đã đo."
+  },
+  {
+    "id": "tactic.contribution_margin",
+    "kind": "creator_tactic",
+    "scope": {
+      "platforms": [
+        "*"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "name": "P&L không đếm trùng",
+      "summary": "Tách estimated/finalized/received và chi phí; RPM tổng hợp không cộng thành khoản thu mới.",
+      "kpi": "Lãi đóng góp/video; chênh lệch cash",
+      "howToAutomate": "Gắn ID giao dịch, trạng thái settlement, currency và nguồn; đề nghị người duyệt chênh lệch."
+    },
+    "evidence": [
+      {
+        "url": "https://support.google.com/youtube/answer/9314357?hl=en",
+        "checkedAt": "2026-11-11",
+        "type": "inference"
+      }
+    ],
+    "confidence": "low",
+    "volatility": "quarterly",
+    "watch": [
+      {
+        "url": "https://support.google.com/youtube/answer/9314357?hl=en",
+        "kind": "policy_page"
+      }
+    ],
+    "status": "active",
+    "notes": "Bổ sung deep research 2026-11-11. Đánh giá tự động hoá/hiệu quả là suy luận; chưa xác nhận quyền tài khoản thật. RSS/robots chưa kiểm. Volatility là lịch rà soát đề xuất: phí/rollout theo tháng, phương pháp theo quý, quy tắc claim pháp lý theo năm; không phải half-life đã đo."
+  },
+  {
+    "id": "tactic.creator_viewer_eligibility",
+    "kind": "creator_tactic",
+    "scope": {
+      "platforms": [
+        "*"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "name": "Creator country khác viewer market",
+      "summary": "Chọn audience US không cấp quyền chương trình US.",
+      "kpi": "Tỷ lệ nguồn thu có bằng chứng eligibility",
+      "howToAutomate": "Đọc residence, account, program, payment readiness; thiếu bằng chứng trả unknown."
+    },
+    "evidence": [
+      {
+        "url": "https://ads.tiktok.com/resources/help/article/about-branded-mission?lang=en",
+        "checkedAt": "2026-11-11",
+        "type": "inference"
+      }
+    ],
+    "confidence": "low",
+    "volatility": "monthly",
+    "watch": [
+      {
+        "url": "https://ads.tiktok.com/resources/help/article/about-branded-mission?lang=en",
+        "kind": "policy_page"
+      }
+    ],
+    "status": "active",
+    "notes": "Bổ sung deep research 2026-11-11. Đánh giá tự động hoá/hiệu quả là suy luận; chưa xác nhận quyền tài khoản thật. RSS/robots chưa kiểm. Volatility là lịch rà soát đề xuất: phí/rollout theo tháng, phương pháp theo quý, quy tắc claim pháp lý theo năm; không phải half-life đã đo."
+  },
+  {
+    "id": "tactic.native_experiment",
+    "kind": "creator_tactic",
+    "scope": {
+      "platforms": [
+        "*"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "name": "Thí nghiệm native có chứng cứ",
+      "summary": "Tối ưu watch time, không chỉ CTR; trước/sau không tự là randomized A/B.",
+      "kpi": "Watch time/share và conversion",
+      "howToAutomate": "Lưu variant, nguồn kết quả và thời gian; nhập từ Studio khi chưa có API."
+    },
+    "evidence": [
+      {
+        "url": "https://support.google.com/youtube/answer/16391400?hl=en",
+        "checkedAt": "2026-11-11",
+        "type": "inference"
+      }
+    ],
+    "confidence": "low",
+    "volatility": "quarterly",
+    "watch": [
+      {
+        "url": "https://support.google.com/youtube/answer/16391400?hl=en",
+        "kind": "policy_page"
+      }
+    ],
+    "status": "active",
+    "notes": "Bổ sung deep research 2026-11-11. Đánh giá tự động hoá/hiệu quả là suy luận; chưa xác nhận quyền tài khoản thật. RSS/robots chưa kiểm. Volatility là lịch rà soát đề xuất: phí/rollout theo tháng, phương pháp theo quý, quy tắc claim pháp lý theo năm; không phải half-life đã đo."
+  },
+  {
+    "id": "originality.commercial_claims",
+    "kind": "creator_tactic",
+    "scope": {
+      "platforms": [
+        "*"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "name": "Không giả trải nghiệm thương mại",
+      "summary": "Phân biệt presenter AI và testimonial ngụ ý trải nghiệm không có thật.",
+      "kpi": "Claim thiếu chứng cứ; khiếu nại",
+      "howToAutomate": "RAG tìm evidence từng claim; chuyển owner kiểm khi không có."
+    },
+    "evidence": [
+      {
+        "url": "https://www.ftc.gov/business-guidance/resources/consumer-reviews-testimonials-rule-questions-answers",
+        "checkedAt": "2026-11-11",
+        "type": "inference"
+      }
+    ],
+    "confidence": "low",
+    "volatility": "yearly",
+    "watch": [
+      {
+        "url": "https://www.ftc.gov/business-guidance/resources/consumer-reviews-testimonials-rule-questions-answers",
+        "kind": "policy_page"
+      }
+    ],
+    "status": "active",
+    "notes": "Bổ sung deep research 2026-11-11. Đánh giá tự động hoá/hiệu quả là suy luận; chưa xác nhận quyền tài khoản thật. RSS/robots chưa kiểm. Volatility là lịch rà soát đề xuất: phí/rollout theo tháng, phương pháp theo quý, quy tắc claim pháp lý theo năm; không phải half-life đã đo."
+  },
+  {
+    "id": "tactic.paid_media_rights",
+    "kind": "creator_tactic",
+    "scope": {
+      "platforms": [
+        "*"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "name": "Quyền paid media theo hợp đồng",
+      "summary": "Giữ quyền chạy ads, lãnh thổ và thời hạn riêng với quyền đăng video.",
+      "kpi": "Deliverable đủ quyền; gia hạn",
+      "howToAutomate": "Ghi terms và ngày hết quyền, nhắc người dùng; không tự ký."
+    },
+    "evidence": [
+      {
+        "url": "https://ads.tiktok.com/resources/help/article/about-branded-mission?lang=en",
+        "checkedAt": "2026-11-11",
+        "type": "inference"
+      }
+    ],
+    "confidence": "low",
+    "volatility": "quarterly",
+    "watch": [
+      {
+        "url": "https://ads.tiktok.com/resources/help/article/about-branded-mission?lang=en",
+        "kind": "policy_page"
+      }
+    ],
+    "status": "active",
+    "notes": "Bổ sung deep research 2026-11-11. Đánh giá tự động hoá/hiệu quả là suy luận; chưa xác nhận quyền tài khoản thật. RSS/robots chưa kiểm. Volatility là lịch rà soát đề xuất: phí/rollout theo tháng, phương pháp theo quý, quy tắc claim pháp lý theo năm; không phải half-life đã đo."
+  },
+  {
+    "id": "tactic.membership_cohorts",
+    "kind": "creator_tactic",
+    "scope": {
+      "platforms": [
+        "*"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "name": "Cohort hội viên và refund",
+      "summary": "Doanh thu hội viên phải trừ phí, refund và chi phí thực hiện quyền lợi.",
+      "kpi": "Net revenue; retention cohort",
+      "howToAutomate": "Nhập export/giao dịch, phân nhóm gia nhập và theo dõi gia hạn."
+    },
+    "evidence": [
+      {
+        "url": "https://support.patreon.com/hc/en-us/articles/36426991446797-A-standard-platform-fee-for-new-creators-effective-after-August-4-2025",
+        "checkedAt": "2026-11-11",
+        "type": "inference"
+      }
+    ],
+    "confidence": "low",
+    "volatility": "quarterly",
+    "watch": [
+      {
+        "url": "https://support.patreon.com/hc/en-us/articles/36426991446797-A-standard-platform-fee-for-new-creators-effective-after-August-4-2025",
+        "kind": "policy_page"
+      }
+    ],
+    "status": "active",
+    "notes": "Bổ sung deep research 2026-11-11. Đánh giá tự động hoá/hiệu quả là suy luận; chưa xác nhận quyền tài khoản thật. RSS/robots chưa kiểm. Volatility là lịch rà soát đề xuất: phí/rollout theo tháng, phương pháp theo quý, quy tắc claim pháp lý theo năm; không phải half-life đã đo."
+  },
+  {
+    "id": "originality.stock_marketplace_policy",
+    "kind": "creator_tactic",
+    "scope": {
+      "platforms": [
+        "*"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "name": "Quyền nộp stock theo marketplace",
+      "summary": "Không suy policy Adobe thành quyền bán AI ở Shutterstock.",
+      "kpi": "Submission bị từ chối; asset thiếu quyền",
+      "howToAutomate": "Đọc policy từng marketplace và lưu generator/license provenance."
+    },
+    "evidence": [
+      {
+        "url": "https://submit.shutterstock.com/help/en/articles/10594622-content-policy-updates-ai-generated-content",
+        "checkedAt": "2026-11-11",
+        "type": "inference"
+      }
+    ],
+    "confidence": "low",
+    "volatility": "monthly",
+    "watch": [
+      {
+        "url": "https://submit.shutterstock.com/help/en/articles/10594622-content-policy-updates-ai-generated-content",
+        "kind": "policy_page"
+      }
+    ],
+    "status": "active",
+    "notes": "Bổ sung deep research 2026-11-11. Đánh giá tự động hoá/hiệu quả là suy luận; chưa xác nhận quyền tài khoản thật. RSS/robots chưa kiểm. Volatility là lịch rà soát đề xuất: phí/rollout theo tháng, phương pháp theo quý, quy tắc claim pháp lý theo năm; không phải half-life đã đo."
+  },
+  {
+    "id": "limit.youtube.native_ab_variants",
+    "kind": "platform_capability",
+    "scope": {
+      "platforms": [
+        "youtube"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "platform": "youtube",
+      "name": "Số biến thể native A/B",
+      "value": 3,
+      "unit": "variants",
+      "api": false
+    },
+    "evidence": [
+      {
+        "url": "https://support.google.com/youtube/answer/16391400?hl=en",
+        "checkedAt": "2026-11-11",
+        "type": "official"
+      }
+    ],
+    "confidence": "medium",
+    "volatility": "monthly",
+    "watch": [
+      {
+        "url": "https://support.google.com/youtube/answer/16391400?hl=en",
+        "kind": "policy_page"
+      }
+    ],
+    "status": "active",
+    "notes": "Bổ sung deep research 2026-11-11. Đánh giá tự động hoá/hiệu quả là suy luận; chưa xác nhận quyền tài khoản thật. RSS/robots chưa kiểm. Volatility là lịch rà soát đề xuất: phí/rollout theo tháng, phương pháp theo quý, quy tắc claim pháp lý theo năm; không phải half-life đã đo."
+  },
+  {
+    "id": "limit.adsense.usd_payment_threshold",
+    "kind": "platform_capability",
+    "scope": {
+      "platforms": [
+        "youtube"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "platform": "youtube",
+      "name": "Ngưỡng chi trả AdSense tài khoản USD",
+      "value": 100,
+      "unit": "USD",
+      "api": false
+    },
+    "evidence": [
+      {
+        "url": "https://support.google.com/adsense/answer/1709871?hl=en",
+        "checkedAt": "2026-11-11",
+        "type": "official"
+      }
+    ],
+    "confidence": "medium",
+    "volatility": "monthly",
+    "watch": [
+      {
+        "url": "https://support.google.com/adsense/answer/1709871?hl=en",
+        "kind": "policy_page"
+      }
+    ],
+    "status": "active",
+    "notes": "Bổ sung deep research 2026-11-11. Đánh giá tự động hoá/hiệu quả là suy luận; chưa xác nhận quyền tài khoản thật. RSS/robots chưa kiểm. Volatility là lịch rà soát đề xuất: phí/rollout theo tháng, phương pháp theo quý, quy tắc claim pháp lý theo năm; không phải half-life đã đo."
+  },
+  {
+    "id": "capability.adobe.ai_stock_video",
+    "kind": "platform_capability",
+    "scope": {
+      "platforms": [
+        "adobe-stock"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "platform": "adobe-stock",
+      "name": "Có nhận submission video AI theo điều kiện",
+      "value": true,
+      "api": false
+    },
+    "evidence": [
+      {
+        "url": "https://helpx.adobe.com/stock/contributor/submit-your-content/submit-generative-ai-content/generative-ai-video-submission-guidelines.html",
+        "checkedAt": "2026-11-11",
+        "type": "official"
+      }
+    ],
+    "confidence": "medium",
+    "volatility": "monthly",
+    "watch": [
+      {
+        "url": "https://helpx.adobe.com/stock/contributor/submit-your-content/submit-generative-ai-content/generative-ai-video-submission-guidelines.html",
+        "kind": "policy_page"
+      }
+    ],
+    "status": "active",
+    "notes": "Bổ sung deep research 2026-11-11. Đánh giá tự động hoá/hiệu quả là suy luận; chưa xác nhận quyền tài khoản thật. RSS/robots chưa kiểm. Volatility là lịch rà soát đề xuất: phí/rollout theo tháng, phương pháp theo quý, quy tắc claim pháp lý theo năm; không phải half-life đã đo."
+  },
+  {
+    "id": "capability.shutterstock.ai_contributor_submission",
+    "kind": "platform_capability",
+    "scope": {
+      "platforms": [
+        "shutterstock"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "platform": "shutterstock",
+      "name": "Nhận AI-generated content từ contributor",
+      "value": false,
+      "api": false
+    },
+    "evidence": [
+      {
+        "url": "https://submit.shutterstock.com/help/en/articles/10594622-content-policy-updates-ai-generated-content",
+        "checkedAt": "2026-11-11",
+        "type": "official"
+      }
+    ],
+    "confidence": "medium",
+    "volatility": "monthly",
+    "watch": [
+      {
+        "url": "https://submit.shutterstock.com/help/en/articles/10594622-content-policy-updates-ai-generated-content",
+        "kind": "policy_page"
+      }
+    ],
+    "status": "active",
+    "notes": "Bổ sung deep research 2026-11-11. Đánh giá tự động hoá/hiệu quả là suy luận; chưa xác nhận quyền tài khoản thật. RSS/robots chưa kiểm. Volatility là lịch rà soát đề xuất: phí/rollout theo tháng, phương pháp theo quý, quy tắc claim pháp lý theo năm; không phải half-life đã đo."
+  }
+]

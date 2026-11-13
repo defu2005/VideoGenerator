@@ -8,6 +8,7 @@ import { registerRenderRoutes } from "../src/api/render.js";
 import { runFfmpeg, probeMedia } from "../src/media/ffmpeg.js";
 import { StageError } from "../src/pipeline/stageExecutor.js";
 import { RenderService, type MediaTools } from "../src/services/renderService.js";
+import { saveRenderSettings } from "../src/settings/render.js";
 import { RenderExecutor } from "../src/stages/render/renderExecutor.js";
 import { projectDir } from "../src/storage/paths.js";
 import { createPipelineHarness } from "./pipelineFixtures.js";
@@ -130,6 +131,32 @@ describe("RenderService with a fake ffmpeg", () => {
     const again = await service.render(project(), new AbortController().signal);
     expect(again.reused).toBe(true);
     expect(calls.length).toBe(count);
+  });
+
+  it("finishes the render and still applies retention when originality recheck throws", async () => {
+    const { harness, timelines, project } = setup();
+    const { tools } = fakeTools();
+    const oldId = randomUUID();
+    harness.sqlite.prepare(
+      `INSERT INTO renders (id, project_id, input_hash, status, output_path, duration_sec, size_bytes, width, height, report, created_at, version, pinned)
+       VALUES (?, ?, 'not-this-render', 'DONE', 'missing-old.mp4', 3, 1, 160, 90, '{}', '2000-01-01T00:00:00.000Z', 1, 0)`,
+    ).run(oldId, harness.projectId);
+    saveRenderSettings(harness.sqlite, { keepVersions: 1 });
+    harness.sqlite.exec("DROP TABLE source_manifests");
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      const service = new RenderService(harness.sqlite, harness.config, timelines, tools);
+      const { render, reused } = await service.render(project(), new AbortController().signal);
+      expect(reused).toBe(false);
+      expect(render.status).toBe("DONE");
+      const old = harness.sqlite.prepare("SELECT deleted_at FROM renders WHERE id = ?").get(oldId) as { deleted_at: string | null };
+      expect(old.deleted_at).toBeTruthy();
+      const logged = warn.mock.calls.map((call) => String(call[0])).join("\n");
+      expect(logged).toContain(harness.projectId);
+      expect(logged).toContain("source_manifests");
+    } finally {
+      warn.mockRestore();
+    }
   });
 
   it("reuses cached clips when only the mix changes", async () => {

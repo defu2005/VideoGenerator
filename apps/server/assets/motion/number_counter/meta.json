@@ -1,0 +1,44 @@
+{
+  "id": "number_counter",
+  "version": 1,
+  "nameVi": "Số đếm",
+  "descriptionVi": "Đếm tới một giá trị, có tiền tố và hậu tố.",
+  "kinds": [
+    "overlay"
+  ],
+  "minDurationSec": 1.5,
+  "maxDurationSec": 5,
+  "defaultDurationSec": 2.5,
+  "safeArea": "center",
+  "origin": "written for this app",
+  "variables": [
+    {
+      "name": "value",
+      "type": "number",
+      "default": 0
+    },
+    {
+      "name": "prefix",
+      "type": "string",
+      "maxLength": 8,
+      "default": ""
+    },
+    {
+      "name": "suffix",
+      "type": "string",
+      "maxLength": 8,
+      "default": ""
+    },
+    {
+      "name": "label",
+      "type": "string",
+      "maxLength": 32,
+      "default": ""
+    },
+    {
+      "name": "color",
+      "type": "color",
+      "default": "#F8FAFC"
+    }
+  ]
+}

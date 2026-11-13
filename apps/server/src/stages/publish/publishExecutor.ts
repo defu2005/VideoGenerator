@@ -1,4 +1,4 @@
-import { isPublishStage } from "@vg/shared";
+import { PROTECTED_PROJECT_ID, isPublishStage } from "@vg/shared";
 import type { StageContext, StageExecutor, StageResult } from "../../pipeline/stageExecutor.js";
 import { StageError } from "../../pipeline/stageExecutor.js";
 import type { PublishService } from "../../publishing/publishService.js";
@@ -11,6 +11,9 @@ export class PublishExecutor implements StageExecutor {
   constructor(private readonly publish: PublishService) {}
 
   async run(context: StageContext): Promise<StageResult> {
+    if (context.project.id === PROTECTED_PROJECT_ID) {
+      throw new StageError("Dự án này được bảo vệ, không thể đăng tự động.", "PROTECTED_PROJECT", false);
+    }
     if (!isPublishStage(context.job.stage)) {
       throw new StageError("Not a publish job", "INVALID_JOB", false);
     }
@@ -19,13 +22,38 @@ export class PublishExecutor implements StageExecutor {
       throw new StageError("PUBLISH job missing publication id in scope", "INVALID_JOB", false);
     }
 
-    context.reportProgress(1, "Chuẩn bị đăng");
-    this.publish.markUploading(publicationId);
+    const checkpoint = this.publish.require(publicationId);
+    if (checkpoint.status === "PUBLISHED") {
+      return { message: `Đã đăng: ${checkpoint.externalUrl ?? publicationId}` };
+    }
+    if (checkpoint.status === "UPLOADING") {
+      const message = "Chưa rõ bài đã đăng hay chưa. Kiểm tra trên nền tảng trước khi thử lại.";
+      this.publish.markFailed(publicationId, message);
+      throw new StageError(message, "PUBLISH_OUTCOME_UNKNOWN", false);
+    }
+    if (checkpoint.status === "FAILED" || checkpoint.status === "CANCELLED") {
+      throw new StageError(checkpoint.lastError ?? "Lượt đăng đã kết thúc.", "PUBLISH_INACTIVE", false);
+    }
+    if (checkpoint.externalId || checkpoint.publishedAt) {
+      if (this.publish.reconcilePublishedCheckpoint(publicationId)) {
+        return { message: `Đã đăng: ${checkpoint.externalUrl ?? publicationId}` };
+      }
+      const message = "Lượt đăng có dấu tải lên trước đó. Kiểm tra trên nền tảng trước khi thử lại.";
+      this.publish.markFailed(publicationId, message);
+      throw new StageError(message, "PUBLISH_OUTCOME_UNKNOWN", false);
+    }
 
+    context.reportProgress(1, "Chuẩn bị đăng");
+    let uploadStarted = false;
     try {
       const prepared = await this.publish.prepareUpload(publicationId, context.signal);
+      context.signal.throwIfAborted();
+      if (!this.publish.markUploading(publicationId)) {
+        throw new StageError("Trạng thái lượt đăng đã thay đổi.", "PUBLISH_INACTIVE", false);
+      }
+      uploadStarted = true;
       const result = await prepared.publisher.upload(
-        prepared.input,
+        { ...prepared.input, projectId: context.project.id },
         prepared.tokens,
         context.signal,
         (progress) => {
@@ -37,6 +65,13 @@ export class PublishExecutor implements StageExecutor {
       const warnNote = result.warnings?.length ? ` (${result.warnings.length} cảnh báo)` : "";
       return { message: `Đã đăng: ${result.externalUrl}${warnNote}` };
     } catch (error) {
+      if (context.signal.aborted || error instanceof StageError) throw error;
+      if ((error as { code?: string }).code === "YOUTUBE_CLAIM") {
+        this.publish.recordPlatformClaim(publicationId, (error as { reason?: string }).reason ?? "claim");
+        const message = error instanceof Error ? error.message : "YouTube từ chối video.";
+        this.publish.markFailed(publicationId, message);
+        throw new StageError(message, "YOUTUBE_CLAIM", false);
+      }
       if (error instanceof YoutubeQuotaExceededError || (error as { code?: string }).code === "YOUTUBE_QUOTA_EXCEEDED") {
         const rescheduleAt = error instanceof YoutubeQuotaExceededError
           ? error.rescheduleAt
@@ -63,9 +98,16 @@ export class PublishExecutor implements StageExecutor {
         throw new StageError(message, "PUBLISH_VALIDATION_FAILED", false);
       }
 
+      if (uploadStarted && status !== 429) {
+        const uncertain = "Chưa rõ bài đã đăng hay chưa. Kiểm tra trên nền tảng trước khi thử lại.";
+        this.publish.markFailed(publicationId, uncertain);
+        throw new StageError(uncertain, "PUBLISH_OUTCOME_UNKNOWN", false);
+      }
       const retryable = retryableFlag ?? (status === 429 || (typeof status === "number" && status >= 500) || status === undefined);
       const willRetry = retryable && context.job.attempt < context.job.maxAttempts;
-      if (!willRetry) {
+      if (willRetry && uploadStarted) {
+        this.publish.markWaitingForRetry(publicationId, message);
+      } else if (!willRetry) {
         this.publish.markFailed(publicationId, message);
       }
       throw new StageError(message, "PUBLISH_UPLOAD_FAILED", retryable);

@@ -1,4 +1,4 @@
-import { LlmProviderIdSchema, type LlmProviderId, type LlmProviderInfo, type LlmRoute, type LlmSelection, type LlmSettings, type LlmTaskId, type Project } from "@vg/shared";
+import { LlmProviderIdSchema, omnirouteModelSeesImages, visionImageBatchLimit, type LlmModelRef, type LlmProviderId, type LlmProviderInfo, type LlmRoute, type LlmSelection, type LlmSettings, type LlmTaskId, type Project } from "@vg/shared";
 import type { AppConfig } from "../../lib/config.js";
 import { AnthropicProvider } from "./anthropic.js";
 import { ClaudeCliProvider, resolveClaudeCliPath } from "./claudeCli.js";
@@ -11,10 +11,11 @@ import { OllamaNativeProvider } from "./ollamaNative.js";
 import { OpenAiCompatibleProvider } from "./openaiCompatible.js";
 import { LlmError, type LlmProvider } from "./types.js";
 import { fetchAnthropicModels, fetchGeminiModels, readCopilotAccountModels } from "./modelLists.js";
-import { OmniRouteCatalogService, omniRouteBaseUrl } from "./omnirouteCatalog.js";
+import { OmniRouteCatalogService, omniRouteBaseUrl, providerWithCapabilities } from "./omnirouteCatalog.js";
 import { defaultLlmGatewaySettings } from "./gatewaySettings.js";
-import type { LlmGatewaySettings } from "@vg/shared";
+import type { LlmConnectionSettings, LlmGatewaySettings } from "@vg/shared";
 import type { LlmQuotaController } from "./quota.js";
+import { FailoverTracker } from "./failover.js";
 
 // Active Claude models, newest first within each family. Deprecated ones are left out.
 const CLAUDE_MODELS = [
@@ -29,13 +30,50 @@ export class LlmProviderRegistry {
   private readonly modelCache = new Map<string, { expiresAt: number; models: string[] }>();
   readonly omnirouteCatalog: OmniRouteCatalogService;
   quota: LlmQuotaController | null = null;
+  /** TASK-127: in-memory cooldowns and failover events. */
+  readonly failover = new FailoverTracker();
   private loadGatewaySettings: () => LlmGatewaySettings = defaultLlmGatewaySettings;
+  private loadVisionMarks: () => LlmModelRef[] = () => [];
+  private loadConnections: () => LlmConnectionSettings | null = () => null;
+  private resolveCustomKey: (slug: string) => string | undefined = () => undefined;
+  private customEndpoints = new Map<string, { baseUrl: string; apiKey?: string }>();
+  private disabled = new Set<string>();
 
   constructor(
     private readonly config: AppConfig,
     private readonly options: { copilotHome?: string; fetchImpl?: typeof fetch } = {},
   ) {
     this.omnirouteCatalog = new OmniRouteCatalogService(config, options.fetchImpl ?? fetch);
+    this.build();
+  }
+
+  /** Settings saved in Kết nối → AI: disabled providers, vision overrides and custom providers. */
+  setConnectionLoader(loader: () => LlmConnectionSettings | null, customKey: (slug: string) => string | undefined): void {
+    this.loadConnections = loader;
+    this.resolveCustomKey = customKey;
+  }
+
+  /** Rebuilds every provider from the current config and saved settings. No restart needed. */
+  reload(): void {
+    this.modelCache.clear();
+    this.build();
+  }
+
+  isDisabled(id: string): boolean {
+    return this.disabled.has(id);
+  }
+
+  private build(): void {
+    this.providers.clear();
+    this.customEndpoints.clear();
+    const config = this.config;
+    let connections: LlmConnectionSettings | null = null;
+    try { connections = this.loadConnections(); } catch { connections = null; }
+    const envVisionFlag = (name: string, id?: string) => {
+      const override = id ? connections?.providers[id]?.vision : undefined;
+      if (override !== undefined) return override ? { vision: true, maxImagesPerCall: 10 } : { vision: false, maxImagesPerCall: 0 };
+      return envVisionFlagFromEnv(name);
+    };
     const timeoutMs = Math.min(config.LLM_TIMEOUT_MS, Math.max(1, config.STAGE_TIMEOUT_MS - 1));
     if (config.ANTHROPIC_API_KEY) {
       this.addProvider(new AnthropicProvider(config.ANTHROPIC_API_KEY, config.ANTHROPIC_MODEL || null, timeoutMs));
@@ -44,8 +82,8 @@ export class LlmProviderRegistry {
       this.addProvider(new GeminiProvider(config.GEMINI_API_KEY, config.GEMINI_MODEL || null, timeoutMs));
     }
 
-    if (config.OPENAI_API_KEY) this.addCompatible("openai", "OpenAI", config.OPENAI_BASE_URL, config.OPENAI_API_KEY, config.OPENAI_MODEL, true, envVisionFlag("OPENAI_VISION"));
-    if (config.OLLAMA_BASE_URL) this.addCompatible("ollama", "Ollama", config.OLLAMA_BASE_URL, undefined, config.OLLAMA_MODEL, false, envVisionFlag("OLLAMA_VISION"));
+    if (config.OPENAI_API_KEY) this.addCompatible("openai", "OpenAI", config.OPENAI_BASE_URL, config.OPENAI_API_KEY, config.OPENAI_MODEL, true, envVisionFlag("OPENAI_VISION", "openai"));
+    if (config.OLLAMA_BASE_URL) this.addCompatible("ollama", "Ollama", config.OLLAMA_BASE_URL, undefined, config.OLLAMA_MODEL, false, envVisionFlag("OLLAMA_VISION", "ollama"));
     if (config.REMOTE_OLLAMA_BASE_URL && config.REMOTE_OLLAMA_TOKEN) {
       this.addProvider(new OllamaNativeProvider(
         "remote-ollama",
@@ -54,19 +92,20 @@ export class LlmProviderRegistry {
         config.REMOTE_OLLAMA_TOKEN,
         config.REMOTE_OLLAMA_MODEL || "llama3.2:1b",
         timeoutMs,
-        envVisionFlag("OLLAMA_VISION") || envVisionFlag("REMOTE_OLLAMA_VISION"),
+        ((connections?.providers["remote-ollama"]?.vision ?? (envVisionFlag("OLLAMA_VISION").vision || envVisionFlag("REMOTE_OLLAMA_VISION").vision))
+          ? { vision: true, maxImagesPerCall: 10 } : { vision: false, maxImagesPerCall: 0 }),
       ));
     }
-    if (config.OPENROUTER_API_KEY) this.addCompatible("openrouter", "OpenRouter", "https://openrouter.ai/api/v1", config.OPENROUTER_API_KEY, config.OPENROUTER_MODEL, true, envVisionFlag("OPENROUTER_VISION"));
-    if (config.DEEPSEEK_API_KEY) this.addCompatible("deepseek", "DeepSeek", "https://api.deepseek.com/v1", config.DEEPSEEK_API_KEY, config.DEEPSEEK_MODEL, true, envVisionFlag("DEEPSEEK_VISION"));
-    if (config.GROQ_API_KEY) this.addCompatible("groq", "Groq", "https://api.groq.com/openai/v1", config.GROQ_API_KEY, config.GROQ_MODEL, true, envVisionFlag("GROQ_VISION"));
+    if (config.OPENROUTER_API_KEY) this.addCompatible("openrouter", "OpenRouter", "https://openrouter.ai/api/v1", config.OPENROUTER_API_KEY, config.OPENROUTER_MODEL, true, envVisionFlag("OPENROUTER_VISION", "openrouter"));
+    if (config.DEEPSEEK_API_KEY) this.addCompatible("deepseek", "DeepSeek", "https://api.deepseek.com/v1", config.DEEPSEEK_API_KEY, config.DEEPSEEK_MODEL, true, envVisionFlag("DEEPSEEK_VISION", "deepseek"));
+    if (config.GROQ_API_KEY) this.addCompatible("groq", "Groq", "https://api.groq.com/openai/v1", config.GROQ_API_KEY, config.GROQ_MODEL, true, envVisionFlag("GROQ_VISION", "groq"));
     // OmniRoute is a local gateway (default port 20128); setting its URL or key turns it on.
     if (config.OMNIROUTE_BASE_URL || config.OMNIROUTE_API_KEY) {
-      this.addCompatible("omniroute", "OmniRoute", omniRouteBaseUrl(config), config.OMNIROUTE_API_KEY, config.OMNIROUTE_MODEL, true, envVisionFlag("OMNIROUTE_VISION"));
+      this.addCompatible("omniroute", "OmniRoute", omniRouteBaseUrl(config), config.OMNIROUTE_API_KEY, config.OMNIROUTE_MODEL, true, envVisionFlag("OMNIROUTE_VISION", "omniroute"));
     }
-    if (config.OPENCODE_API_KEY) this.addCompatible("opencode", "OpenCode Zen", config.OPENCODE_BASE_URL, config.OPENCODE_API_KEY, config.OPENCODE_MODEL, true, envVisionFlag("OPENCODE_VISION"));
+    if (config.OPENCODE_API_KEY) this.addCompatible("opencode", "OpenCode Zen", config.OPENCODE_BASE_URL, config.OPENCODE_API_KEY, config.OPENCODE_MODEL, true, envVisionFlag("OPENCODE_VISION", "opencode"));
     if (config.CUSTOM_LLM_BASE_URL) {
-      this.addCompatible("custom", "Custom OpenAI-compatible", config.CUSTOM_LLM_BASE_URL, config.CUSTOM_LLM_API_KEY, config.CUSTOM_LLM_MODEL, true, envVisionFlag("CUSTOM_LLM_VISION"));
+      this.addCompatible("custom", "Custom OpenAI-compatible", config.CUSTOM_LLM_BASE_URL, config.CUSTOM_LLM_API_KEY, config.CUSTOM_LLM_MODEL, true, envVisionFlag("CUSTOM_LLM_VISION", "custom"));
     }
     if (config.CLAUDE_CLI_ENABLED) {
       this.addProvider(new ClaudeCliProvider(
@@ -97,6 +136,23 @@ export class LlmProviderRegistry {
       ));
     }
     if (config.LLM_ENABLE_MOCK) this.addProvider(new MockLlmProvider());
+    for (const custom of connections?.custom ?? []) {
+      if (!custom.enabled) continue;
+      const id = `custom-${custom.slug}`;
+      const apiKey = this.resolveCustomKey(custom.slug);
+      this.customEndpoints.set(id, { baseUrl: custom.baseUrl, ...(apiKey ? { apiKey } : {}) });
+      this.addCompatible(id, custom.label, custom.baseUrl, apiKey, custom.defaultModel, true,
+        { embeddings: custom.embeddings ?? false, vision: custom.vision ?? false, maxImagesPerCall: custom.vision ? 10 : 0 });
+    }
+    this.disabled = new Set(Object.entries(connections?.providers ?? {}).filter(([, value]) => value.enabled === false).map(([id]) => id));
+    for (const id of this.disabled) this.providers.delete(id);
+  }
+
+  /** Custom providers saved in the app, as `custom-<slug>`. */
+  customProviders(): Array<{ id: string; label: string; enabled: boolean }> {
+    let connections: LlmConnectionSettings | null = null;
+    try { connections = this.loadConnections(); } catch { connections = null; }
+    return (connections?.custom ?? []).map((custom) => ({ id: `custom-${custom.slug}`, label: custom.label, enabled: custom.enabled }));
   }
 
   get(id: string): LlmProvider | undefined {
@@ -111,12 +167,38 @@ export class LlmProviderRegistry {
     return this.loadGatewaySettings();
   }
 
+  setVisionMarkLoader(loader: () => LlmModelRef[]): void {
+    this.loadVisionMarks = loader;
+  }
+
+  visionMarks(): LlmModelRef[] {
+    return this.loadVisionMarks();
+  }
+
+  /** A saved mark lets one model accept images when its provider is not a vision provider. */
+  applyVisionMark(provider: LlmProvider, model: string): LlmProvider {
+    if (provider.capabilities?.vision) return provider;
+    if (provider.id === "omniroute" && omnirouteModelSeesImages(model)) {
+      return providerWithCapabilities(provider, {
+        vision: true,
+        maxImagesPerCall: visionImageBatchLimit(provider.capabilities?.maxImagesPerCall),
+      });
+    }
+    const marked = this.visionMarks().some((row) => row.provider === provider.id && row.model === model);
+    if (!marked) return provider;
+    return providerWithCapabilities(provider, {
+      vision: true,
+      maxImagesPerCall: visionImageBatchLimit(provider.capabilities?.maxImagesPerCall),
+    });
+  }
+
   isSupportedProvider(id: string): boolean {
-    return LlmProviderIdSchema.safeParse(id).success;
+    if (LlmProviderIdSchema.safeParse(id).success) return true;
+    return this.customProviders().some((custom) => custom.id === id);
   }
 
   async suggestModels(id: string, fetchImpl: typeof fetch = fetch): Promise<string[]> {
-    if (!LlmProviderIdSchema.safeParse(id).success) return [];
+    if (!this.isSupportedProvider(id)) return [];
     const provider = this.providers.get(id);
     // Shown when the live list is unavailable (provider not configured, offline, CLI without a list command).
     const staticModels: Record<string, string[]> = {
@@ -196,7 +278,9 @@ export class LlmProviderRegistry {
         return this.omnirouteCatalog.peekModels().map((model) => model.id);
       }
     }
-    const baseUrl = id === "openai" ? this.config.OPENAI_BASE_URL
+    const customEndpoint = this.customEndpoints.get(id);
+    const baseUrl = customEndpoint ? customEndpoint.baseUrl
+      : id === "openai" ? this.config.OPENAI_BASE_URL
       : id === "ollama" ? this.config.OLLAMA_BASE_URL
         : id === "openrouter" ? "https://openrouter.ai/api/v1"
           : id === "deepseek" ? "https://api.deepseek.com/v1"
@@ -205,7 +289,8 @@ export class LlmProviderRegistry {
               : id === "custom" ? this.config.CUSTOM_LLM_BASE_URL
                 : undefined;
     if (!baseUrl) return [];
-    const key = id === "openai" ? this.config.OPENAI_API_KEY
+    const key = customEndpoint ? customEndpoint.apiKey
+      : id === "openai" ? this.config.OPENAI_API_KEY
       : id === "openrouter" ? this.config.OPENROUTER_API_KEY
         : id === "deepseek" ? this.config.DEEPSEEK_API_KEY
           : id === "groq" ? this.config.GROQ_API_KEY
@@ -245,24 +330,25 @@ export class LlmProviderRegistry {
       "copilot-cli": "GitHub Copilot CLI",
       "antigravity-cli": "Antigravity CLI (tài khoản Google)",
     };
+    const inApp = "Nhập key trong Kết nối → AI.";
     const hints: Record<LlmProviderId, string> = {
-      anthropic: "Set ANTHROPIC_API_KEY to configure Anthropic API.",
-      gemini: "Set GEMINI_API_KEY to configure Gemini API.",
-      openai: "Set OPENAI_API_KEY to configure OpenAI API.",
-      ollama: "Set OLLAMA_BASE_URL and OLLAMA_MODEL to configure Ollama.",
-      "remote-ollama": "Đặt REMOTE_OLLAMA_BASE_URL và REMOTE_OLLAMA_TOKEN (tunnel HTTPS của Ollama, API /api/chat).",
-      openrouter: "Set OPENROUTER_API_KEY to configure OpenRouter.",
-      deepseek: "Set DEEPSEEK_API_KEY to configure DeepSeek.",
-      groq: "Set GROQ_API_KEY to configure Groq.",
-      omniroute: "Chạy OmniRoute (mặc định http://127.0.0.1:20128/v1), tạo endpoint key trong dashboard rồi đặt OMNIROUTE_API_KEY (và OMNIROUTE_BASE_URL nếu khác cổng).",
-      opencode: "Tạo API key trong OpenCode Zen console rồi đặt OPENCODE_API_KEY (OPENCODE_BASE_URL=https://opencode.ai/zen/go/v1 cho gói Go).",
-      custom: "Set CUSTOM_LLM_BASE_URL to configure a compatible provider.",
-      mock: "Set LLM_ENABLE_MOCK=true to enable the mock provider.",
-      "claude-cli": "Enable CLAUDE_CLI_ENABLED and install/sign in to Claude Code CLI.",
-      "copilot-cli": "Enable COPILOT_CLI_ENABLED and install/sign in to GitHub Copilot CLI.",
-      "antigravity-cli": "Cài agy và chạy `agy` một lần để đăng nhập Google",
+      anthropic: inApp,
+      gemini: inApp,
+      openai: inApp,
+      ollama: "Chạy Ollama rồi nhập địa chỉ và model trong Kết nối → AI.",
+      "remote-ollama": "Nhập địa chỉ tunnel HTTPS và token trong Kết nối → AI.",
+      openrouter: "Đăng nhập OpenRouter hoặc nhập key trong Kết nối → AI.",
+      deepseek: inApp,
+      groq: inApp,
+      omniroute: "Chạy OmniRoute (mặc định http://127.0.0.1:20128/v1), tạo endpoint key trong dashboard rồi nhập trong Kết nối → AI.",
+      opencode: "Tạo API key trong OpenCode Zen console rồi nhập trong Kết nối → AI.",
+      custom: "Nhập địa chỉ API trong Kết nối → AI.",
+      mock: "Chỉ dùng khi phát triển (LLM_ENABLE_MOCK=true).",
+      "claude-cli": "Bật Claude Code CLI trong Kết nối → AI, rồi cài và đăng nhập CLI.",
+      "copilot-cli": "Bật GitHub Copilot CLI trong Kết nối → AI, rồi cài và đăng nhập CLI.",
+      "antigravity-cli": "Cài agy và chạy agy một lần để đăng nhập Google",
     };
-    return LlmProviderIdSchema.options.map((id) => {
+    const builtIn: LlmProviderInfo[] = LlmProviderIdSchema.options.map((id) => {
       const provider = this.providers.get(id);
       const isCliProvider = id === "claude-cli" || id === "copilot-cli" || id === "antigravity-cli";
       const configured = provider
@@ -270,7 +356,8 @@ export class LlmProviderRegistry {
           ? provider.configured === true
           : id !== "ollama" || Boolean(provider.defaultModel ?? this.config.LLM_DEFAULT_MODEL)
         : false;
-      const hint = configured ? "Đã cấu hình." : provider?.hint ?? (id === "ollama" && provider ? "Set OLLAMA_MODEL" : hints[id]);
+      const hint = this.disabled.has(id) ? "Đã tắt trong Kết nối → AI."
+        : configured ? "Đã cấu hình." : provider?.hint ?? (id === "ollama" && provider ? "Nhập model cho Ollama trong Kết nối → AI." : hints[id]);
       return {
         id,
         label: provider?.label ?? labels[id],
@@ -281,6 +368,18 @@ export class LlmProviderRegistry {
         ...(monthCalls ? { usage: { monthCalls: monthCalls.get(id) ?? 0 } } : {}),
       };
     });
+    const custom: LlmProviderInfo[] = this.customProviders().map((entry) => {
+      const provider = this.providers.get(entry.id);
+      return {
+        id: entry.id,
+        label: entry.label,
+        configured: Boolean(provider),
+        defaultModel: provider?.defaultModel ?? null,
+        hint: provider ? "Đã cấu hình." : "Đã tắt trong Kết nối → AI.",
+        ...(monthCalls ? { usage: { monthCalls: monthCalls.get(entry.id) ?? 0 } } : {}),
+      };
+    });
+    return [...builtIn, ...custom];
   }
 
   resolve(
@@ -300,17 +399,17 @@ export class LlmProviderRegistry {
       ?? this.config.LLM_DEFAULT_PROVIDER;
     const provider = providerId ? this.providers.get(providerId) : undefined;
     if (providerId === "claude-cli" && !this.config.CLAUDE_CLI_ENABLED) {
-      throw createNotConfiguredError("Claude Code CLI is disabled. Set CLAUDE_CLI_ENABLED=true to enable it.");
+      throw createNotConfiguredError("Claude Code CLI đang tắt. Bật trong Kết nối → AI.");
     }
     if (providerId === "copilot-cli" && !this.config.COPILOT_CLI_ENABLED) {
-      throw createNotConfiguredError("GitHub Copilot CLI is disabled. Set COPILOT_CLI_ENABLED=true to enable it.");
+      throw createNotConfiguredError("GitHub Copilot CLI đang tắt. Bật trong Kết nối → AI.");
     }
     if (providerId === "antigravity-cli" && !this.config.ANTIGRAVITY_CLI_ENABLED) {
-      throw createNotConfiguredError("Antigravity CLI is disabled. Set ANTIGRAVITY_CLI_ENABLED=true to enable it.");
+      throw createNotConfiguredError("Antigravity CLI đang tắt. Bật trong Kết nối → AI.");
     }
     if (!provider) {
       throw createNotConfiguredError(providerId
-        ? `LLM provider "${providerId}" is not configured. Set its API key or base URL in the server environment.`
+        ? (this.disabled.has(providerId) ? `Nhà cung cấp AI "${providerId}" đang tắt. Bật lại trong Kết nối → AI.` : `Nhà cung cấp AI "${providerId}" chưa được cấu hình. Nhập key trong Kết nối → AI.`)
         : "No LLM provider is selected. Choose an AI provider in project settings or set LLM_DEFAULT_PROVIDER.");
     }
     if (provider.id === "claude-cli" && !provider.configured) {
@@ -361,6 +460,8 @@ export class LlmProviderRegistry {
     if (!model && provider.id !== "claude-cli" && provider.id !== "copilot-cli" && provider.id !== "antigravity-cli") {
       throw createNotConfiguredError(`No model is configured for ${provider.label}. Set the model in project or app settings, or configure ${provider.id.toUpperCase()}_MODEL.`);
     }
+    if (task === "retrievalEmbed" && !provider.capabilities?.embeddings) throw createNotConfiguredError("Provider does not support embeddings");
+    provider = this.applyVisionMark(provider, model);
     return {
       provider,
       model,
@@ -407,7 +508,7 @@ export class LlmProviderRegistry {
     apiKey: string | undefined,
     model: string | undefined,
     supportsJson = true,
-    visionCapabilities: { vision: boolean; maxImagesPerCall: number } = { vision: false, maxImagesPerCall: 0 },
+    visionCapabilities: { vision: boolean; maxImagesPerCall: number; embeddings?: boolean } = { vision: false, maxImagesPerCall: 0 },
   ): void {
     this.addProvider(new OpenAiCompatibleProvider(
       id,
@@ -417,7 +518,7 @@ export class LlmProviderRegistry {
       model || null,
       Math.min(this.config.LLM_TIMEOUT_MS, Math.max(1, this.config.STAGE_TIMEOUT_MS - 1)),
       supportsJson,
-      visionCapabilities,
+      { ...visionCapabilities, ...(id === "custom" ? { embeddings: this.loadConnections()?.providers.custom?.embeddings ?? false } : {}) },
     ));
   }
 
@@ -430,16 +531,16 @@ export class LlmProviderRegistry {
   private requireConfiguredProvider(providerId: string): LlmProvider {
     const provider = this.providers.get(providerId);
     if (providerId === "claude-cli" && !this.config.CLAUDE_CLI_ENABLED) {
-      throw createNotConfiguredError("Claude Code CLI is disabled. Set CLAUDE_CLI_ENABLED=true to enable it.");
+      throw createNotConfiguredError("Claude Code CLI đang tắt. Bật trong Kết nối → AI.");
     }
     if (providerId === "copilot-cli" && !this.config.COPILOT_CLI_ENABLED) {
-      throw createNotConfiguredError("GitHub Copilot CLI is disabled. Set COPILOT_CLI_ENABLED=true to enable it.");
+      throw createNotConfiguredError("GitHub Copilot CLI đang tắt. Bật trong Kết nối → AI.");
     }
     if (providerId === "antigravity-cli" && !this.config.ANTIGRAVITY_CLI_ENABLED) {
-      throw createNotConfiguredError("Antigravity CLI is disabled. Set ANTIGRAVITY_CLI_ENABLED=true to enable it.");
+      throw createNotConfiguredError("Antigravity CLI đang tắt. Bật trong Kết nối → AI.");
     }
     if (!provider) {
-      throw createNotConfiguredError(`LLM provider "${providerId}" is not configured. Set its API key or base URL in the server environment.`);
+      throw createNotConfiguredError((this.disabled.has(providerId) ? `Nhà cung cấp AI "${providerId}" đang tắt. Bật lại trong Kết nối → AI.` : `Nhà cung cấp AI "${providerId}" chưa được cấu hình. Nhập key trong Kết nối → AI.`));
     }
     if ((provider.id === "claude-cli" || provider.id === "copilot-cli" || provider.id === "antigravity-cli") && !provider.configured) {
       throw createNotConfiguredError(provider.hint ?? `${provider.label} is not configured.`);
@@ -502,7 +603,7 @@ function createNotConfiguredError(message: string): LlmError {
   return new LlmError(message, "LLM_NOT_CONFIGURED", false);
 }
 
-function envVisionFlag(name: string, env: NodeJS.ProcessEnv = process.env): { vision: boolean; maxImagesPerCall: number } {
+function envVisionFlagFromEnv(name: string, env: NodeJS.ProcessEnv = process.env): { vision: boolean; maxImagesPerCall: number } {
   const raw = env[name]?.trim().toLowerCase();
   const enabled = raw === "1" || raw === "true" || raw === "yes";
   return enabled ? { vision: true, maxImagesPerCall: 10 } : { vision: false, maxImagesPerCall: 0 };

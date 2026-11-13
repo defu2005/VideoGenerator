@@ -1,0 +1,48 @@
+{
+  "mcpServers": {
+    "video-agent": {
+      "command": "node",
+      "args": ["${workspaceFolder}/apps/mcp/dist/index.js"],
+      "env": {
+        "VG_API_URL": "http://127.0.0.1:3001",
+        "VG_TOOL_SOURCE": "agent"
+      }
+    },
+    "filesystem": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-filesystem",
+        "${workspaceFolder}"
+      ]
+    },
+    "fetch": {
+      "command": "python",
+      "args": ["-m", "mcp_server_fetch"]
+    },
+    "git": {
+      "command": "python",
+      "args": [
+        "-m",
+        "mcp_server_git",
+        "--repository",
+        "${workspaceFolder}"
+      ]
+    },
+    "playwright": {
+      "command": "npx",
+      "args": ["-y", "@playwright/mcp@latest"]
+    },
+    "duckduckgo-search": {
+      "command": "npx",
+      "args": ["-y", "duckduckgo-mcp-server"]
+    },
+    "omniroute": {
+      "command": "node",
+      "args": ["C:/Users/defu/AppData/Roaming/npm/node_modules/omniroute/bin/omniroute.mjs", "--mcp"],
+      "env": {
+        "OMNIROUTE_BASE_URL": "http://127.0.0.1:20128"
+      }
+    }
+  }
+}

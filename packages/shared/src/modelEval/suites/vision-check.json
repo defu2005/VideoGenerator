@@ -1,0 +1,144 @@
+{
+  "id": "vision-check",
+  "titleVi": "Kiểm tra ảnh",
+  "taskId": "visionCheck",
+  "rubricVi": "Chấm ảnh fixture, không dùng ảnh người dùng.",
+  "cases": [
+    {
+      "id": "vision-check-1",
+      "taskId": "visionCheck",
+      "input": {
+        "image": "fixtures/vision-sample.png",
+        "case": 1,
+        "expect": "khop"
+      },
+      "graders": [
+        {
+          "kind": "exact",
+          "expected": {
+            "label": "khop"
+          }
+        }
+      ]
+    },
+    {
+      "id": "vision-check-2",
+      "taskId": "visionCheck",
+      "input": {
+        "image": "fixtures/vision-sample.png",
+        "case": 2,
+        "expect": "khop"
+      },
+      "graders": [
+        {
+          "kind": "exact",
+          "expected": {
+            "label": "khop"
+          }
+        }
+      ]
+    },
+    {
+      "id": "vision-check-3",
+      "taskId": "visionCheck",
+      "input": {
+        "image": "fixtures/vision-sample.png",
+        "case": 3,
+        "expect": "khop"
+      },
+      "graders": [
+        {
+          "kind": "exact",
+          "expected": {
+            "label": "khop"
+          }
+        }
+      ]
+    },
+    {
+      "id": "vision-check-4",
+      "taskId": "visionCheck",
+      "input": {
+        "image": "fixtures/vision-sample.png",
+        "case": 4,
+        "expect": "khop"
+      },
+      "graders": [
+        {
+          "kind": "exact",
+          "expected": {
+            "label": "khop"
+          }
+        }
+      ]
+    },
+    {
+      "id": "vision-check-5",
+      "taskId": "visionCheck",
+      "input": {
+        "image": "fixtures/vision-sample.png",
+        "case": 5,
+        "expect": "khop"
+      },
+      "graders": [
+        {
+          "kind": "exact",
+          "expected": {
+            "label": "khop"
+          }
+        }
+      ]
+    },
+    {
+      "id": "vision-check-6",
+      "taskId": "visionCheck",
+      "input": {
+        "image": "fixtures/vision-sample.png",
+        "case": 6,
+        "expect": "khop"
+      },
+      "graders": [
+        {
+          "kind": "exact",
+          "expected": {
+            "label": "khop"
+          }
+        }
+      ]
+    },
+    {
+      "id": "vision-check-7",
+      "taskId": "visionCheck",
+      "input": {
+        "image": "fixtures/vision-sample.png",
+        "case": 7,
+        "expect": "khop"
+      },
+      "graders": [
+        {
+          "kind": "exact",
+          "expected": {
+            "label": "khop"
+          }
+        }
+      ]
+    },
+    {
+      "id": "vision-check-8",
+      "taskId": "visionCheck",
+      "input": {
+        "image": "fixtures/vision-sample.png",
+        "case": 8,
+        "expect": "khop"
+      },
+      "graders": [
+        {
+          "kind": "exact",
+          "expected": {
+            "label": "khop"
+          }
+        }
+      ]
+    }
+  ]
+}

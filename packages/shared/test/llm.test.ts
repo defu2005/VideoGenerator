@@ -9,6 +9,8 @@ import {
   ModelAdvisorProposalSchema,
   OmniRouteHealthSchema,
   OmniRouteModelInfoSchema,
+  omnirouteModelSeesImages,
+  visionImageBatchLimit,
   ProfileLlmSettingsSchema,
 } from "../src/index.js";
 
@@ -45,7 +47,8 @@ describe("LLM routing schemas", () => {
   });
 
   it("catalogs the task tiers and budget feature controls", () => {
-    expect(LLM_TASKS).toHaveLength(26);
+    expect(LLM_TASKS).toHaveLength(37);
+    expect(LLM_TASKS.find(task => task.id === "knowledgeWatch")).toMatchObject({ stage: "KNOWLEDGE", tier: "fast", qualityWeight: 1, budgetFeature: "providerIntelExtract" });
     expect(LLM_TASKS.find((task) => task.id === "research")).toMatchObject({ stage: "RESEARCH", tier: "strong", qualityWeight: 3 });
     expect(LLM_TASKS.find((task) => task.id === "sceneQueries")).toMatchObject({
       stage: "SCENE_PLAN",
@@ -114,6 +117,14 @@ describe("LLM routing schemas", () => {
       stage: "SCRIPT",
       tier: "strong",
       budgetFeature: "translateScript",
+    });
+    expect(LLM_TASKS.find((task) => task.id === "providerIntelExtract")).toMatchObject({
+      stage: "SETTINGS",
+      tier: "fast",
+      budgetFeature: "providerIntelExtract",
+    });
+    expect(LLM_TASKS.find((task) => task.id === "editPlan")).toMatchObject({
+      stage: "TIMELINE", tier: "strong", qualityWeight: 2, budgetFeature: "editPlan",
     });
     expect(LLM_TASKS.find((task) => task.id === "visionCheck")?.needsVision).toBe(true);
     expect(LLM_TASKS.find((task) => task.id === "script")?.qualityWeight).toBe(3);
@@ -195,5 +206,13 @@ describe("LLM routing schemas", () => {
       configured: false,
       setupHint: "hint",
     }).reachable).toBe(false);
+  });
+
+  it("treats Grok 4 model ids as vision when the catalog omits the flag", () => {
+    expect(omnirouteModelSeesImages("grok-cli/grok-4.7")).toBe(true);
+    expect(omnirouteModelSeesImages("grok-cli/grok-4.5-low")).toBe(true);
+    expect(omnirouteModelSeesImages("grok-cli/grok-3")).toBe(false);
+    expect(visionImageBatchLimit(0)).toBe(10);
+    expect(visionImageBatchLimit(undefined)).toBe(10);
   });
 });

@@ -1,0 +1,136 @@
+{
+  "id": "script-review",
+  "titleVi": "Biên tập kịch bản",
+  "taskId": "scriptReview",
+  "rubricVi": "Nhận xét có điểm và lý do.",
+  "cases": [
+    {
+      "id": "script-review-1",
+      "taskId": "scriptReview",
+      "input": {
+        "script": "Đoạn 1 nói về sông Hồng."
+      },
+      "graders": [
+        {
+          "kind": "requiredKeys",
+          "keys": [
+            "score",
+            "notes"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "script-review-2",
+      "taskId": "scriptReview",
+      "input": {
+        "script": "Đoạn 2 nói về sông Hồng."
+      },
+      "graders": [
+        {
+          "kind": "requiredKeys",
+          "keys": [
+            "score",
+            "notes"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "script-review-3",
+      "taskId": "scriptReview",
+      "input": {
+        "script": "Đoạn 3 nói về sông Hồng."
+      },
+      "graders": [
+        {
+          "kind": "requiredKeys",
+          "keys": [
+            "score",
+            "notes"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "script-review-4",
+      "taskId": "scriptReview",
+      "input": {
+        "script": "Đoạn 4 nói về sông Hồng."
+      },
+      "graders": [
+        {
+          "kind": "requiredKeys",
+          "keys": [
+            "score",
+            "notes"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "script-review-5",
+      "taskId": "scriptReview",
+      "input": {
+        "script": "Đoạn 5 nói về sông Hồng."
+      },
+      "graders": [
+        {
+          "kind": "requiredKeys",
+          "keys": [
+            "score",
+            "notes"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "script-review-6",
+      "taskId": "scriptReview",
+      "input": {
+        "script": "Đoạn 6 nói về sông Hồng."
+      },
+      "graders": [
+        {
+          "kind": "requiredKeys",
+          "keys": [
+            "score",
+            "notes"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "script-review-7",
+      "taskId": "scriptReview",
+      "input": {
+        "script": "Đoạn 7 nói về sông Hồng."
+      },
+      "graders": [
+        {
+          "kind": "requiredKeys",
+          "keys": [
+            "score",
+            "notes"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "script-review-8",
+      "taskId": "scriptReview",
+      "input": {
+        "script": "Đoạn 8 nói về sông Hồng."
+      },
+      "graders": [
+        {
+          "kind": "requiredKeys",
+          "keys": [
+            "score",
+            "notes"
+          ]
+        }
+      ]
+    }
+  ]
+}

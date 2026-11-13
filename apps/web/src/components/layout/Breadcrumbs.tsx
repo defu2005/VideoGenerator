@@ -7,6 +7,7 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-
 
 const PROFILE_TABS: Record<string, string> = {
   direction: "Định hướng",
+  autonomy: "Tự vận hành",
   brief: "Brief mặc định",
   topics: "Chủ đề",
   automation: "Tự động hoá",

@@ -1,8 +1,10 @@
 import { z } from "zod";
 import { PipelineStageSchema } from "../enums.js";
+import { EmphasisEffectSchema, SubtitleStyleIdSchema, TransitionTypeSchema } from "../edit/plan.js";
+import { MotionTemplateIdSchema } from "../motion/templates.js";
 import { VisualMotionSchema } from "./visual.js";
 
-export const ReviewProposalSchema = z.discriminatedUnion("type", [
+const ReviewProposalUnion = z.discriminatedUnion("type", [
   z.object({
     type: z.literal("EDIT_NARRATION"),
     sceneId: z.string().uuid(),
@@ -49,7 +51,67 @@ export const ReviewProposalSchema = z.discriminatedUnion("type", [
     type: z.literal("NOTE"),
     text: z.string().min(1).max(2000),
   }).strict(),
+  z.object({
+    type: z.literal("SET_TRANSITION"),
+    afterSceneId: z.string().uuid(),
+    transitionType: TransitionTypeSchema,
+    durationSec: z.number(),
+  }).strict(),
+  z.object({
+    type: z.literal("SET_EMPHASIS"),
+    sceneId: z.string().uuid(),
+    wordIndexStart: z.number().int().nonnegative(),
+    wordIndexEnd: z.number().int().nonnegative(),
+    effects: z.array(EmphasisEffectSchema).min(1),
+  }).strict(),
+  z.object({
+    type: z.literal("REMOVE_EMPHASIS"),
+    sceneId: z.string().uuid(),
+    wordIndexStart: z.number().int().nonnegative(),
+  }).strict(),
+  z.object({
+    type: z.literal("ADD_GRAPHIC"),
+    sceneId: z.string().uuid().nullable(),
+    templateId: MotionTemplateIdSchema,
+    startSec: z.number().nonnegative().optional(),
+    durationSec: z.number().positive().optional(),
+    variables: z.record(z.string(), z.union([z.string(), z.number()])),
+  }).strict(),
+  z.object({
+    type: z.literal("EDIT_GRAPHIC"),
+    graphicId: z.string().min(1),
+    templateId: MotionTemplateIdSchema.optional(),
+    startSec: z.number().nonnegative().optional(),
+    durationSec: z.number().positive().optional(),
+    variables: z.record(z.string(), z.union([z.string(), z.number()])).optional(),
+  }).strict(),
+  z.object({
+    type: z.literal("REMOVE_GRAPHIC"),
+    graphicId: z.string().min(1),
+  }).strict(),
+  z.object({
+    type: z.literal("SET_SUBTITLE_STYLE"),
+    style: SubtitleStyleIdSchema,
+  }).strict(),
+  z.object({
+    type: z.literal("DELETE_SCENE"),
+    sceneId: z.string().uuid(),
+  }).strict(),
+  z.object({
+    type: z.literal("SPLIT_SCENE"),
+    sceneId: z.string().uuid(),
+    atWordIndex: z.number().int().positive(),
+  }).strict(),
+  z.object({
+    type: z.literal("REGENERATE_SCENE_VOICE"),
+    sceneId: z.string().uuid(),
+  }).strict(),
 ]);
+
+export const ReviewProposalSchema = z.intersection(
+  ReviewProposalUnion,
+  z.object({ baseRevision: z.number().int().nonnegative().optional() }),
+);
 export type ReviewProposal = z.infer<typeof ReviewProposalSchema>;
 
 export const ReviewAssistantOutputSchema = z.object({

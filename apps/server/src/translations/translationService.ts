@@ -1,4 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
+import { inheritWorkspace } from "../auth/requestContext.js";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type Database from "better-sqlite3";
@@ -668,6 +669,7 @@ export function createTranslationService(deps: {
       at,
       projectId,
     );
+      inheritWorkspace(deps.sqlite, "projects", childId, "projects", projectId);
     createProjectDir(deps.config.DATA_DIR, childId);
     seedStages(childId);
     const byId = new Map(translated.scenes.map((scene) => [scene.id, scene.narration]));

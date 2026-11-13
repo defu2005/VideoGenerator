@@ -6,6 +6,7 @@ import Database from "better-sqlite3";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Project } from "@vg/shared";
 import { buildApp } from "../src/app.js";
+import { testActor } from "./testActor.js";
 import { parseConfig, type AppConfig } from "../src/lib/config.js";
 
 const storageState = vi.hoisted(() => ({ failProjectRemoval: false }));
@@ -45,7 +46,7 @@ beforeEach(() => {
     DATA_DIR: dataDir,
     DATABASE_PATH: join(dataDir, "app.db"),
   };
-  app = buildApp({ config });
+  app = buildApp({ testActor,  config });
 });
 
 afterEach(async () => {
@@ -203,7 +204,7 @@ describe("project API", () => {
     expect(estimate.json()).toMatchObject({
       mode: "BALANCED",
       features: { storyMode: "separate" },
-      total: { min: 7, max: 12 },
+      total: { min: 10, max: 15 },
     });
   });
 
@@ -385,7 +386,7 @@ describe("project API", () => {
   it("returns deleted and warns when project directory removal fails", async () => {
     await app.close();
     config = { ...config, LOG_LEVEL: "warn" };
-    app = buildApp({ config });
+    app = buildApp({ testActor,  config });
     const created = await createProject();
     const warning = vi.spyOn(app.log, "warn");
 

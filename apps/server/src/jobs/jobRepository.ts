@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { nextFairProfile } from "../operator/autopilot.js";
 import Database from "better-sqlite3";
 import {
   PipelineStateSchema,
@@ -9,6 +10,8 @@ import {
   JobSchema,
   StageRecordSchema,
   STAGE_ORDER,
+  isSideJobStage,
+  jobLane,
   type Job,
   type JobError,
   type JobUsage,
@@ -57,6 +60,7 @@ type JobRow = {
   finished_at: string | null;
   run_after: string;
   previous_state: string;
+  node_id?: string | null;
 };
 
 type StageRow = {
@@ -79,7 +83,7 @@ export class JobRepository {
     private readonly now: () => Date = () => new Date(),
   ) {}
 
-  atomic<T>(work: () => T): T {
+  atomic<T>(work: () => T, lock: "deferred" | "immediate" = "deferred"): T {
     if (this.eventQueue) return work();
     const queued: PipelineEvent[] = [];
     const run = this.sqlite.transaction(() => {
@@ -90,7 +94,7 @@ export class JobRepository {
         this.eventQueue = undefined;
       }
     });
-    const result = run();
+    const result = run[lock]();
     for (const event of queued) this.events.publish(event);
     return result;
   }
@@ -265,35 +269,83 @@ export class JobRepository {
     return next;
   }
 
+  /** Lease columns live apart from updateJob so a normal status update never touches them. */
+  setJobLease(jobId: string, lease: { nodeId: string; leaseId: string; leaseUntil: string; heartbeatAt: string } | null): void {
+    if (!lease) {
+      // Ending a lease keeps node_id on a finished job so the history still says which machine ran it.
+      this.sqlite.prepare(
+        "UPDATE jobs SET node_id = CASE WHEN status IN ('QUEUED', 'RUNNING') THEN NULL ELSE node_id END, lease_id = NULL, lease_until = NULL, heartbeat_at = NULL WHERE id = ?",
+      ).run(jobId);
+      return;
+    }
+    this.sqlite.prepare("UPDATE jobs SET node_id = ?, lease_id = ?, lease_until = ?, heartbeat_at = ? WHERE id = ?")
+      .run(lease.nodeId, lease.leaseId, lease.leaseUntil, lease.heartbeatAt, jobId);
+  }
+
+  getJobLease(jobId: string): { nodeId: string; leaseId: string; leaseUntil: string } | null {
+    const row = this.sqlite.prepare("SELECT node_id, lease_id, lease_until FROM jobs WHERE id = ?").get(jobId) as
+      { node_id: string | null; lease_id: string | null; lease_until: string | null } | undefined;
+    return row?.node_id && row.lease_id && row.lease_until ? { nodeId: row.node_id, leaseId: row.lease_id, leaseUntil: row.lease_until } : null;
+  }
+
   getPreviousState(jobId: string): StageState {
     const row = this.sqlite.prepare("SELECT previous_state FROM jobs WHERE id = ?").get(jobId) as { previous_state: StageState } | undefined;
     return row?.previous_state ?? "PENDING";
   }
 
-  getActiveJob(projectId: string): Job | null {
-    const row = this.sqlite.prepare(
-      "SELECT * FROM jobs WHERE project_id = ? AND status IN ('QUEUED', 'RUNNING') ORDER BY created_at ASC LIMIT 1",
-    ).get(projectId) as JobRow | undefined;
-    return row ? this.toJob(row) : null;
+  getActiveJobs(projectId: string): Job[] {
+    const rows = this.sqlite.prepare(
+      "SELECT * FROM jobs WHERE project_id = ? AND status IN ('QUEUED', 'RUNNING') ORDER BY created_at ASC, rowid ASC",
+    ).all(projectId) as JobRow[];
+    return this.toJobs(rows);
   }
 
-  getNextQueuedJob(now: Date): Job | undefined {
-    const row = this.sqlite.prepare(
-      "SELECT j.* FROM jobs j WHERE j.status = 'QUEUED' AND j.run_after <= ? AND NOT EXISTS (SELECT 1 FROM jobs active WHERE active.project_id = j.project_id AND active.status = 'RUNNING') ORDER BY j.created_at ASC LIMIT 1",
-    ).get(now.toISOString()) as JobRow | undefined;
-    return row ? this.toJob(row) : undefined;
+  getActiveJob(projectId: string): Job | null {
+    return this.getActiveJobs(projectId)[0] ?? null;
+  }
+
+  getNextQueuedJob(now: Date, canStart: (job: Job) => boolean = () => true): Job | undefined {
+    const rows = this.sqlite.prepare(
+      `SELECT j.* FROM jobs j
+       WHERE j.project_id IS NOT NULL
+         AND (j.scope IS NULL OR j.scope NOT LIKE 'retrieval_index:%')
+         AND j.status = 'QUEUED' AND j.run_after <= ?
+       ORDER BY j.created_at ASC, j.rowid ASC`,
+    ).all(now.toISOString()) as JobRow[];
+    const runningRows = this.sqlite.prepare(
+      `SELECT project_id, stage FROM jobs
+       WHERE project_id IS NOT NULL AND status = 'RUNNING'
+         AND (scope IS NULL OR scope NOT LIKE 'retrieval_index:%')`,
+    ).all() as Array<{ project_id: string; stage: PipelineStage }>;
+    const runningByProject = new Map<string, PipelineStage[]>();
+    for (const row of runningRows) {
+      const list = runningByProject.get(row.project_id) ?? [];
+      list.push(row.stage);
+      runningByProject.set(row.project_id, list);
+    }
+    const ready = rows.map((row) => this.toJob(row)).filter((job) =>
+      canStart(job) && canRunAlongside(runningByProject.get(job.projectId) ?? [], job.stage));
+    const waiting = ready.filter((job) => job.error?.code === "LLM_QUOTA_WAIT");
+    const profileOf = (projectId: string) => (this.sqlite.prepare("SELECT profile_id FROM projects WHERE id = ?").get(projectId) as { profile_id: string | null } | undefined)?.profile_id ?? "";
+    const profiles = [...new Set(waiting.map((job) => profileOf(job.projectId)).filter(Boolean))];
+    if (profiles.length >= 2) {
+      const pick = nextFairProfile(this.sqlite, profiles);
+      const chosen = waiting.find((job) => profileOf(job.projectId) === pick);
+      if (chosen) return chosen;
+    }
+    return ready[0];
   }
 
   listJobs(projectId: string, limit: number): Job[] {
     const rows = this.sqlite.prepare(
       "SELECT * FROM jobs WHERE project_id = ? ORDER BY created_at DESC, rowid DESC LIMIT ?",
     ).all(projectId, limit) as JobRow[];
-    return rows.map((row) => this.toJob(row));
+    return this.toJobs(rows);
   }
 
   getRunningJobs(): Job[] {
     const rows = this.sqlite.prepare("SELECT * FROM jobs WHERE status = 'RUNNING'").all() as JobRow[];
-    return rows.map((row) => this.toJob(row));
+    return this.toJobs(rows);
   }
 
   getPipeline(projectId: string): PipelineState | undefined {
@@ -307,6 +359,7 @@ export class JobRepository {
       status: project.status,
       stages: this.getStages(projectId),
       activeJob: this.getActiveJob(projectId),
+      activeJobs: this.getActiveJobs(projectId),
     });
     return state;
   }
@@ -341,7 +394,18 @@ export class JobRepository {
     });
   }
 
-  private toJob(row: JobRow): Job {
+  /** Rows to jobs with the node names resolved by one query, never one per row. */
+  private toJobs(rows: JobRow[]): Job[] {
+    const ids = [...new Set(rows.map((row) => row.node_id).filter((id): id is string => !!id))];
+    const names = new Map<string, string>();
+    if (ids.length) {
+      const found = this.sqlite.prepare(`SELECT id, name FROM nodes WHERE id IN (${ids.map(() => "?").join(",")})`).all(...ids) as Array<{ id: string; name: string }>;
+      for (const node of found) names.set(node.id, node.name);
+    }
+    return rows.map((row) => this.toJob(row, row.node_id ? names.get(row.node_id) ?? null : null));
+  }
+
+  private toJob(row: JobRow, nodeName: string | null = null): Job {
     return JobSchema.parse({
       id: row.id,
       projectId: row.project_id,
@@ -358,6 +422,8 @@ export class JobRepository {
       startedAt: row.started_at,
       finishedAt: row.finished_at,
       runAfter: row.run_after,
+      nodeId: row.node_id ?? null,
+      nodeName,
     });
   }
 
@@ -374,6 +440,17 @@ export class JobRepository {
       at: this.now().toISOString(),
     });
   }
+}
+
+function canRunAlongside(running: PipelineStage[], candidate: PipelineStage): boolean {
+  if (running.length === 0) return true;
+  if (isSideJobStage(candidate) || running.some((stage) => isSideJobStage(stage))) return false;
+  const lane = jobLane(candidate);
+  if (lane === null) return false;
+  return running.every((stage) => {
+    const other = jobLane(stage);
+    return other !== null && other !== lane;
+  });
 }
 
 function parseJson(value: unknown): unknown | null {

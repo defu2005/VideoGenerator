@@ -168,6 +168,8 @@ export class MetadataService {
           registry: this.registry,
           route: selected,
           task: "metadata",
+          knowledgeProject: project,
+          knowledgeQuery: (script?.title??project.topic)+" "+narrationSummary,
           system: prompt.system,
           prompt: prompt.prompt,
           schema: VideoMetadataDraftSchema,

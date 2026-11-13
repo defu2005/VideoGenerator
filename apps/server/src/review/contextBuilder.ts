@@ -63,10 +63,14 @@ export type ReviewContextDocument = {
     query: string | null;
   };
   subtitles: { cueCount: number } | null;
-  timeline: {
-    totalDurationSec: number | null;
-    warnings: Array<{ code: string; sceneId: string | null; message: string }>;
-  };
+    timeline: {
+      revision: number;
+      totalDurationSec: number | null;
+      transitions: Array<{ afterSceneId: string; type: string; durationSec: number }>;
+      emphasis: Array<{ sceneId: string; wordIndexStart: number; effects: string[] }>;
+      graphics: Array<{ id: string; templateId: string; startSec: number }>;
+      warnings: Array<{ code: string; sceneId: string | null; message: string }>;
+    };
   appliedProposals: ReviewProposal[];
 };
 
@@ -160,7 +164,23 @@ export function buildReviewContext(input: {
       ? { cueCount: timeline.subtitles.cueCount }
       : null,
     timeline: {
+      revision: timeline?.revision ?? 0,
       totalDurationSec: timeline?.totalDurationSec ?? null,
+      transitions: (timeline?.editPlan?.transitions ?? []).slice(0, 24).map((item) => ({
+        afterSceneId: item.afterSceneId,
+        type: item.type,
+        durationSec: item.durationSec,
+      })),
+      emphasis: (timeline?.editPlan?.emphasis ?? []).slice(0, 24).map((item) => ({
+        sceneId: item.sceneId,
+        wordIndexStart: item.wordIndexStart,
+        effects: item.effects,
+      })),
+      graphics: (timeline?.graphics ?? []).slice(0, 24).map((graphic) => ({
+        id: graphic.id,
+        templateId: graphic.templateId,
+        startSec: graphic.startSec,
+      })),
       warnings: (timeline?.warnings ?? []).map((warning) => ({
         code: warning.code,
         sceneId: warning.sceneId,

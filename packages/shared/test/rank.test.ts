@@ -77,4 +77,36 @@ describe("visual ranking", () => {
     expect(ranked.map((item) => item.providerItemId)).toEqual(["on-topic", "self-vouched"]);
     expect(ranked[1].scoreBreakdown).toMatchObject({ keyword: 0, lowRelevance: true });
   });
+
+  it("marks the Hermes off-topic examples as low relevance for Band of the Hawk", () => {
+    const options = {
+      queryTerms: "Band of the Hawk",
+      sceneTerms: "Berserk",
+      targetAspect: 16 / 9,
+      entities: ["Band of the Hawk"],
+    };
+    const flickr = scoreCandidate({
+      ...candidate, title: "Stone castle", description: "A fortress", tags: ["Berserk"], provider: "flickr",
+    }, options);
+    const cosplay = scoreCandidate({
+      ...candidate, title: "Berserk cosplay at a convention", description: "Costume photo", tags: ["Berserk"],
+    }, options);
+    const hawks = scoreCandidate({
+      ...candidate, title: "Golden Hawks marching band", description: "Parade", tags: ["band"],
+    }, options);
+    const real = scoreCandidate({
+      ...candidate, title: "Band of the Hawk armor", description: "Berserk manga still of the mercenary band", tags: ["Berserk"],
+    }, options);
+    expect(flickr.breakdown.lowRelevance).toBe(true);
+    expect(cosplay.breakdown.lowRelevance).toBe(true);
+    expect(hawks.breakdown.lowRelevance).toBe(true);
+    expect(real.breakdown.lowRelevance).toBe(false);
+    const licensed = { ...candidate, title: "Band of the Hawk armor", license: { kind: "CC_BY" as const }, licenseVerified: true };
+    const web = { ...candidate, title: "Band of the Hawk panel", providerItemId: "web-1", license: { kind: "UNKNOWN" as const }, licenseVerified: false };
+    const off = rankCandidates([web, licensed], { ...options, copyrightMode: "off" });
+    const commentary = rankCandidates([licensed, web], { ...options, copyrightMode: "commentary" });
+    expect(off[0].providerItemId).toBe(licensed.providerItemId);
+    expect(commentary.find((item) => item.licenseVerified === false)?.scoreBreakdown.usage).toBe("commentary");
+    expect(hawks.breakdown.reasons).toEqual(expect.arrayContaining(["fan"]));
+  });
 });

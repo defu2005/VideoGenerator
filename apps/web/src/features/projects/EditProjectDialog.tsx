@@ -4,6 +4,7 @@ import { ApiRequestError } from "../../services/apiClient";
 import { useUpdateProject } from "../../hooks/useProjects";
 import { ProjectFormFields, type ProjectDraft } from "./ProjectFormFields";
 import { BriefFields } from "./BriefFields";
+import { EditStyleFields } from "./EditStyleFields";
 import { guidelineDraftFromSettings, guidelineSettingsFromDraft, type GuidelineDraft } from "./GuidelineFieldset";
 
 function draftFromProject(project: Project): ProjectDraft {
@@ -277,7 +278,7 @@ export function EditProjectDialog({
       <form onSubmit={submit} noValidate>
         <div className="dialog-heading">
           <div><p className="eyebrow">PROJECT LIBRARY</p><h2 id="edit-project-title">Edit project</h2></div>
-          <button className="icon-button" type="button" aria-label="Close dialog" onClick={onClose}>×</button>
+          <button className="icon-button" type="button" aria-label="Đóng" onClick={onClose}>×</button>
         </div>
         <div className="dialog-form-body">
           {requestError && <p className="request-error" role="alert">{requestError}</p>}
@@ -300,6 +301,17 @@ export function EditProjectDialog({
             onChange={changeBrief}
             onReset={resetBrief}
           />
+          <fieldset className="form-row">
+            <legend>Phong cách dựng của dự án</legend>
+            <EditStyleFields
+              idPrefix="Dự án"
+              edit={briefSettings.edit}
+              onChange={(edit) => {
+                setBriefSettings((current) => ({ ...current, edit }));
+                setBriefChanges((current) => [...new Set([...current, "edit"])]);
+              }}
+            />
+          </fieldset>
         </div>
         <div className="dialog-actions">
           <button className="button button-secondary" type="button" onClick={onClose} disabled={mutation.isPending}>Cancel</button>

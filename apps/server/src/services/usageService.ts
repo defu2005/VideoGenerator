@@ -5,6 +5,7 @@ import {
   PipelineStageSchema,
   ProjectUsageSchema,
   UsageTotalsSchema,
+  localDateString,
   type AppUsage,
   type JobUsage,
   type ProjectUsage,
@@ -17,7 +18,7 @@ import {
 
 type UsageJobRow = {
   id: string;
-  project_id: string;
+  project_id: string | null;
   project_title: string;
   stage: string;
   scope: string | null;
@@ -178,12 +179,17 @@ function getJobRows(
   sqlite: Database.Database,
   projectId?: string,
   range?: Pick<UsageQuery, "from" | "to">,
+  profileId?: string,
 ): UsageJobRow[] {
   const clauses = ["j.usage IS NOT NULL"];
   const bindings: (string | number)[] = [];
   if (projectId) {
     clauses.push("j.project_id = ?");
     bindings.push(projectId);
+  }
+  if (profileId) {
+    clauses.push("p.profile_id = ?");
+    bindings.push(profileId);
   }
   if (range?.from) {
     clauses.push("substr(COALESCE(j.started_at, j.created_at), 1, 10) >= ?");
@@ -194,9 +200,9 @@ function getJobRows(
     bindings.push(range.to);
   }
   return sqlite.prepare(`
-    SELECT j.id, j.project_id, p.title AS project_title, j.stage, j.scope,
+    SELECT j.id, j.project_id, COALESCE(p.title, 'Trợ lý') AS project_title, j.stage, j.scope,
       j.status, j.attempt, j.usage, j.created_at, j.started_at, j.finished_at
-    FROM jobs j JOIN projects p ON p.id = j.project_id
+    FROM jobs j LEFT JOIN projects p ON p.id = j.project_id
     WHERE ${clauses.join(" AND ")}
     ORDER BY COALESCE(j.started_at, j.created_at), j.rowid
   `).all(...bindings) as UsageJobRow[];
@@ -207,6 +213,36 @@ export class UsageService {
     private readonly sqlite: Database.Database,
     private readonly usdVndRate: number,
   ) {}
+
+  getAutomationSpend(day: string, timezone: string, profileId?: string): { dailyUsd: number; monthlyUsd: number } {
+    const from = `${day.slice(0, 7)}-01`;
+    const adjacentDay = (value: string, offset: number) =>
+      new Date(Date.parse(value) + offset * 86_400_000).toISOString().slice(0, 10);
+    const spend = { dailyUsd: 0, monthlyUsd: 0 };
+    const range = { from: adjacentDay(from, -1), to: adjacentDay(day, 1) };
+    for (const job of getJobRows(this.sqlite, undefined, range, profileId)) {
+      const timestamp = new Date(job.started_at ?? job.created_at);
+      if (!Number.isFinite(timestamp.getTime())) continue;
+      const jobDay = localDateString(timestamp, timezone);
+      if (jobDay < from || jobDay > day) continue;
+      const amount = usageForJob(job)?.totals.costUsd ?? 0;
+      spend.monthlyUsd += amount;
+      if (jobDay === day) spend.dailyUsd += amount;
+    }
+    const manual = this.sqlite.prepare(`SELECT cost_entries.date, cost_entries.amount, cost_entries.currency
+      FROM cost_entries LEFT JOIN projects ON projects.id = cost_entries.project_id
+      WHERE cost_entries.date BETWEEN ? AND ? AND cost_entries.source IN ('manual', 'auto')
+        AND cost_entries.kind IN ('llm', 'tts', 'stock_media', 'image')
+        AND (? IS NULL OR COALESCE(cost_entries.profile_id, projects.profile_id) = ?)`)
+      .all(from, day, profileId ?? null, profileId ?? null) as { date: string; amount: number; currency: string }[];
+    for (const entry of manual) {
+      const amount = entry.currency === "USD" ? entry.amount : entry.currency === "VND" && this.usdVndRate > 0
+        ? entry.amount / this.usdVndRate : 0;
+      spend.monthlyUsd += amount;
+      if (entry.date === day) spend.dailyUsd += amount;
+    }
+    return spend;
+  }
 
   getProjectUsage(projectId: string): ProjectUsage {
     const totals = emptyTotals();
@@ -245,12 +281,14 @@ export class UsageService {
       const run = usageForJob(job);
       if (!run) continue;
       addTotals(totals, run.totals);
-      let project = projectTotals.get(job.project_id);
-      if (!project) {
-        project = { title: job.project_title, totals: emptyTotals() };
-        projectTotals.set(job.project_id, project);
+      if (job.project_id) {
+        let project = projectTotals.get(job.project_id);
+        if (!project) {
+          project = { title: job.project_title, totals: emptyTotals() };
+          projectTotals.set(job.project_id, project);
+        }
+        addTotals(project.totals, run.totals);
       }
-      addTotals(project.totals, run.totals);
 
       for (const call of run.calls) {
         const key = query.groupBy === "day"
@@ -259,9 +297,9 @@ export class UsageService {
             ? call.provider
             : query.groupBy === "model"
               ? `${call.provider}/${call.model}`
-              : job.project_id;
+              : (job.project_id ?? "assistant");
         const label = query.groupBy === "project"
-          ? job.project_title
+          ? (job.project_id ? job.project_title : "Trợ lý")
           : query.groupBy === "model"
             ? `${call.provider} · ${call.model}`
             : key;

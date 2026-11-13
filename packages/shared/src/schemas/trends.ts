@@ -18,6 +18,7 @@ export const TrendUrgencySchema = z.enum(["today", "this_week", "evergreen"]);
 export type TrendUrgency = z.infer<typeof TrendUrgencySchema>;
 
 export const TrendIdeaSchema = z.object({
+  earlierProjectId: z.string().uuid().optional(),
   title: z.string().min(1).max(500),
   angle: z.string().min(1).max(500),
   whyNow: z.string().min(1).max(500),

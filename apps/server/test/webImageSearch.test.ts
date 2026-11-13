@@ -1,3 +1,4 @@
+import { testActor } from "./testActor.js";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import Database from "better-sqlite3";
@@ -339,7 +340,7 @@ describe("web-search route and auto-approve gate", () => {
       LLM_ENABLE_MOCK: "true",
       LLM_DEFAULT_PROVIDER: "mock",
     });
-    const app = buildApp({ config });
+    const app = buildApp({ testActor,  config });
     try {
       const created = await app.inject({
         method: "POST",

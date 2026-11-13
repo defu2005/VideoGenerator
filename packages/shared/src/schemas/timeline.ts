@@ -1,4 +1,6 @@
 import { z } from "zod";
+import { EditPlanSchema, MotionPresetSchema, TransitionTypeSchema } from "../edit/plan.js";
+import { TimelineGraphicSchema } from "../motion/templates.js";
 import { LicenseKindSchema } from "../enums.js";
 import { VisualMotionSchema } from "./visual.js";
 
@@ -17,6 +19,7 @@ export const TimelineVisualSchema = z.object({
   startSec: z.number().nonnegative(),
   endSec: z.number().nonnegative(),
   motion: VisualMotionSchema,
+  motionPreset: MotionPresetSchema.optional(),
   licenseKind: LicenseKindSchema.nullable(),
 }).strict();
 export type TimelineVisual = z.infer<typeof TimelineVisualSchema>;
@@ -40,6 +43,11 @@ export const TimelineSceneSchema = z.object({
   /** Fades happen inside the clip, so they never change the scene duration. */
   fadeInSec: z.number().nonnegative(),
   fadeOutSec: z.number().nonnegative(),
+  /** Transition into the next scene. The tail of this clip is extended by durationSec. */
+  transitionOut: z.object({
+    type: TransitionTypeSchema,
+    durationSec: z.number().nonnegative(),
+  }).strict().optional(),
 }).strict();
 export type TimelineScene = z.infer<typeof TimelineSceneSchema>;
 
@@ -89,6 +97,9 @@ export const TimelineSchema = z.object({
   warnings: z.array(TimelineWarningSchema),
   /** Count of assets per license kind (visuals + music). A warning source, never a block. */
   licenseSummary: z.record(z.string(), z.number().int().nonnegative()),
+  editPlan: EditPlanSchema.optional(),
+  graphics: z.array(TimelineGraphicSchema).optional(),
+  revision: z.number().int().nonnegative().optional(),
 }).strict();
 export type Timeline = z.infer<typeof TimelineSchema>;
 

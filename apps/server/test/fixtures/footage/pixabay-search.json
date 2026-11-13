@@ -1,0 +1,27 @@
+{
+  "hits": [
+    {
+      "id": 55,
+      "pageURL": "https://pixabay.com/videos/55",
+      "tags": "biển, sóng",
+      "duration": 10,
+      "user": "Minh Tran",
+      "videos": {
+        "large": { "url": "https://cdn.pixabay.com/55-large.mp4", "width": 1920, "height": 1080, "size": 9000000, "thumbnail": "https://cdn.pixabay.com/55.jpg" },
+        "medium": { "url": "https://cdn.pixabay.com/55-medium.mp4", "width": 1280, "height": 720, "size": 4000000 },
+        "small": { "url": "https://cdn.pixabay.com/55-small.mp4", "width": 640, "height": 360, "size": 900000 },
+        "tiny": { "url": "https://cdn.pixabay.com/55-tiny.mp4", "width": 426, "height": 240, "size": 200000 }
+      }
+    },
+    {
+      "id": 56,
+      "pageURL": "https://pixabay.com/videos/56",
+      "tags": "rừng",
+      "duration": 9,
+      "user": "",
+      "videos": {
+        "small": { "url": "https://cdn.pixabay.com/56.mp4", "width": 640, "height": 360, "size": 1000 }
+      }
+    }
+  ]
+}

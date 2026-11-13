@@ -11,7 +11,7 @@ import { ApiRequestError } from "../../services/apiClient";
 import { ConfirmDialog } from "../../components/ConfirmDialog";
 import { EmptyState } from "../../components/EmptyState";
 import { ErrorState } from "../../components/ErrorState";
-import { Spinner } from "../../components/Spinner";
+import { ProjectListSkeleton } from "../../components/ui/Skeleton";
 import { useDeleteProject, useDuplicateProject, useProjects, useSetProjectArchived } from "../../hooks/useProjects";
 import { useProfiles } from "../../hooks/useProfiles";
 import { CreateProjectDialog } from "./CreateProjectDialog";
@@ -160,12 +160,12 @@ export function ProjectListPage() {
           <label className="search-field">
             <span aria-hidden="true">⌕</span>
             <input
-              aria-label="Search projects"
-              placeholder="Search projects…"
+              aria-label="Tìm dự án"
+              placeholder="Tìm dự án…"
               value={searchText}
               onChange={(event) => setSearchText(event.target.value)}
             />
-            {searchText && <button type="button" aria-label="Clear search" onClick={() => setSearchText("")}>×</button>}
+            {searchText && <button type="button" aria-label="Xóa từ khóa" onClick={() => setSearchText("")}>×</button>}
           </label>
           <ProjectFilters
             statuses={query.status ?? []}
@@ -184,7 +184,7 @@ export function ProjectListPage() {
         {actionError && <p className="request-error action-error" role="alert">{actionError}</p>}
         {projectUsage.isError && <p className="request-error action-error" role="alert">Không thể tải tổng token: {projectUsage.error instanceof Error ? projectUsage.error.message : "lỗi không xác định"}</p>}
         {projects.isPending ? (
-          <Spinner label="Loading projects" />
+          <ProjectListSkeleton label="Đang tải danh sách dự án" />
         ) : projects.isError ? (
           <ErrorState message={getErrorMessage(projects.error)} onRetry={() => void projects.refetch()} />
         ) : projects.data.items.length === 0 ? (

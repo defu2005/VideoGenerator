@@ -23,6 +23,11 @@ describe("pipeline state machine", () => {
     const pending = [{ state: "PENDING" as const }];
     expect(deriveProjectStatus({ activeJob: { stage: "RENDER" }, stages: pending, projectStage: "TOPIC" })).toBe("RENDERING");
     expect(deriveProjectStatus({ activeJob: { stage: "SCRIPT" }, stages: pending, projectStage: "TOPIC" })).toBe("GENERATING");
+    expect(deriveProjectStatus({
+      activeJob: { stage: "SUBTITLE" },
+      stages: [{ state: "WAITING_USER" }, { state: "RUNNING" }],
+      projectStage: "VISUAL_REVIEW",
+    })).toBe("REVIEW");
     expect(deriveProjectStatus({ activeJob: null, stages: [{ state: "WAITING_USER" }], projectStage: "VISUAL_REVIEW" })).toBe("REVIEW");
     expect(deriveProjectStatus({ activeJob: null, stages: [{ state: "FAILED" }], projectStage: "SCRIPT" })).toBe("FAILED");
     expect(deriveProjectStatus({ activeJob: null, stages: pending, projectStage: "DONE" })).toBe("COMPLETED");
@@ -97,9 +102,8 @@ describe("pipeline state machine", () => {
     await drainUntilGate(manual);
     manual.orchestrator.approveGate(manual.projectId, "VISUAL_REVIEW");
     const state = manual.orchestrator.getPipeline(manual.projectId);
-    expect(state.activeJob).toBeNull();
     expect(state.runMode).toBeNull();
-    expect(state.stages.find((stage) => stage.stage === "VOICE")?.state).toBe("PENDING");
+    expect(state.stages.find((stage) => stage.stage === "TIMELINE")?.state).toBe("PENDING");
   });
 
   it("allows only one active job per project and marks downstream completed stages stale", () => {
@@ -180,6 +184,66 @@ describe("pipeline state machine", () => {
     }
   });
 
+  it("keeps checkpoint progress when a running job is resumed", () => {
+    const harness = makeHarness();
+    const job = harness.repository.createJob({
+      projectId: harness.projectId,
+      stage: "VISUAL_SEARCH",
+      maxAttempts: 1,
+      previousState: "PENDING",
+    });
+    harness.repository.updateJob(job.id, {
+      status: "RUNNING",
+      progress: 70,
+      message: "Vision-checking candidate images",
+      startedAt: harness.clock().toISOString(),
+    });
+    harness.repository.updateStage(harness.projectId, "VISUAL_SEARCH", {
+      state: "RUNNING",
+      progress: 70,
+      message: "Vision-checking candidate images",
+      jobId: job.id,
+    });
+    harness.orchestrator.resumeRunningJobs();
+    const queued = harness.repository.getStage(harness.projectId, "VISUAL_SEARCH");
+    expect(queued.progress).toBe(70);
+    expect(queued.state).toBe("QUEUED");
+    expect(queued.message).toContain("Vision-checking candidate images");
+    expect(harness.repository.getJob(job.id)?.progress).toBe(70);
+
+    const started = harness.orchestrator.startJob(job.id);
+    expect(started?.status).toBe("RUNNING");
+    expect(started?.progress).toBe(70);
+    expect(harness.repository.getStage(harness.projectId, "VISUAL_SEARCH").progress).toBe(70);
+  });
+
+  it("derives visual-search resume progress from checkpoints when the job progress is still zero", () => {
+    const harness = makeHarness();
+    const now = harness.clock().toISOString();
+    for (const sceneId of ["scene-a", "scene-b"]) {
+      harness.sqlite.prepare(
+        `INSERT INTO visual_search_checkpoints (scene_id, project_id, search_hash, queries, candidates, created_at)
+         VALUES (?, ?, 'hash', '[]', '[]', ?)`,
+      ).run(sceneId, harness.projectId, now);
+    }
+    const job = harness.repository.createJob({
+      projectId: harness.projectId,
+      stage: "VISUAL_SEARCH",
+      maxAttempts: 1,
+      previousState: "PENDING",
+    });
+    harness.repository.updateJob(job.id, { status: "RUNNING", progress: 0, startedAt: now });
+    harness.repository.updateStage(harness.projectId, "VISUAL_SEARCH", {
+      state: "RUNNING",
+      progress: 0,
+      message: "Searching visuals: scene 1/2",
+      jobId: job.id,
+    });
+    harness.orchestrator.resumeRunningJobs();
+    expect(harness.repository.getStage(harness.projectId, "VISUAL_SEARCH").progress).toBe(55);
+    expect(harness.repository.getJob(job.id)?.progress).toBe(55);
+  });
+
   it("releases every project event listener after repeated subscriptions", () => {
     const events = new PipelineEventBus();
     const projectId = "55555555-5555-4555-8555-555555555555";
@@ -204,5 +268,116 @@ describe("pipeline state machine", () => {
     unsubscribe();
     expect(published).toBe(0);
     expect(harness.repository.getStage(harness.projectId, "RESEARCH").state).toBe("PENDING");
+  });
+
+  it("queues visuals and voice together, then starts timeline only after both gates", async () => {
+    const harness = makeHarness({ config: { FAKE_STAGE_DELAY_MS: 0, WORKER_CONCURRENCY: 3 } });
+    harness.orchestrator.runAll(harness.projectId);
+    for (let step = 0; step < 8; step += 1) {
+      const state = harness.orchestrator.getPipeline(harness.projectId);
+      const visual = state.stages.find((stage) => stage.stage === "VISUAL_SEARCH")?.state;
+      const voice = state.stages.find((stage) => stage.stage === "VOICE")?.state;
+      if (visual === "QUEUED" && voice === "QUEUED") break;
+      await harness.worker.tick();
+    }
+    let state = harness.orchestrator.getPipeline(harness.projectId);
+    expect(state.stages.find((stage) => stage.stage === "VISUAL_SEARCH")?.state).toBe("QUEUED");
+    expect(state.stages.find((stage) => stage.stage === "VOICE")?.state).toBe("QUEUED");
+
+    for (let step = 0; step < 12; step += 1) {
+      state = harness.orchestrator.getPipeline(harness.projectId);
+      const review = state.stages.find((stage) => stage.stage === "VISUAL_REVIEW")?.state;
+      const music = state.stages.find((stage) => stage.stage === "MUSIC_REVIEW")?.state;
+      if (review === "WAITING_USER" && music === "WAITING_USER") break;
+      await harness.worker.tick();
+    }
+    state = harness.orchestrator.getPipeline(harness.projectId);
+    expect(state.status).toBe("REVIEW");
+    expect(state.currentStage).toBe("VISUAL_REVIEW");
+    expect(state.stages.find((stage) => stage.stage === "VOICE")?.state).toBe("DONE");
+    expect(state.stages.find((stage) => stage.stage === "SUBTITLE")?.state).toBe("DONE");
+    expect(state.stages.find((stage) => stage.stage === "MUSIC_SEARCH")?.state).toBe("DONE");
+    expect(state.stages.find((stage) => stage.stage === "TIMELINE")?.state).toBe("PENDING");
+
+    harness.orchestrator.approveGate(harness.projectId, "VISUAL_REVIEW");
+    expect(harness.repository.getStage(harness.projectId, "TIMELINE").state).toBe("PENDING");
+    harness.orchestrator.approveGate(harness.projectId, "MUSIC_REVIEW");
+    expect(harness.repository.getStage(harness.projectId, "TIMELINE").state).toBe("QUEUED");
+    expect(harness.repository.listJobs(harness.projectId, 30).filter((job) => job.stage === "TIMELINE")).toHaveLength(1);
+  });
+
+  it("keeps voice done and stales timeline when visuals are searched again", () => {
+    const harness = makeHarness();
+    const done = ["RESEARCH", "SCRIPT", "SCENE_PLAN", "VISUAL_SEARCH", "VISUAL_REVIEW", "VOICE", "SUBTITLE", "MUSIC_SEARCH", "MUSIC_REVIEW", "TIMELINE"] as const;
+    harness.repository.atomic(() => {
+      for (const stage of done) {
+        harness.repository.updateStage(harness.projectId, stage, { state: "DONE", progress: 100 });
+      }
+    });
+    harness.orchestrator.runStage(harness.projectId, "VISUAL_SEARCH");
+    expect(harness.repository.getStage(harness.projectId, "VISUAL_SEARCH").state).toBe("QUEUED");
+    expect(harness.repository.getStage(harness.projectId, "VOICE").state).toBe("DONE");
+    expect(harness.repository.getStage(harness.projectId, "SUBTITLE").state).toBe("DONE");
+    expect(harness.repository.getStage(harness.projectId, "MUSIC_SEARCH").state).toBe("DONE");
+    expect(harness.repository.getStage(harness.projectId, "TIMELINE").state).toBe("STALE");
+    expect(harness.repository.getStage(harness.projectId, "VISUAL_REVIEW").state).toBe("STALE");
+  });
+
+  it("cancels one lane while the other stays queued", async () => {
+    const harness = makeHarness({ config: { FAKE_STAGE_DELAY_MS: 0, WORKER_CONCURRENCY: 3 } });
+    harness.orchestrator.runAll(harness.projectId);
+    for (let step = 0; step < 8; step += 1) {
+      const state = harness.orchestrator.getPipeline(harness.projectId);
+      const visual = state.stages.find((stage) => stage.stage === "VISUAL_SEARCH")?.state;
+      const voice = state.stages.find((stage) => stage.stage === "VOICE")?.state;
+      if (visual === "QUEUED" && voice === "QUEUED") break;
+      await harness.worker.tick();
+    }
+    harness.orchestrator.cancel(harness.projectId, "VOICE");
+    const state = harness.orchestrator.getPipeline(harness.projectId);
+    expect(state.runMode).toBe("ALL");
+    expect(state.stages.find((stage) => stage.stage === "VISUAL_SEARCH")?.state).toBe("QUEUED");
+    expect(state.activeJobs?.some((job) => job.stage === "VISUAL_SEARCH")).toBe(true);
+    expect(state.activeJobs?.some((job) => job.stage === "VOICE")).toBe(false);
+    expect(harness.repository.listJobs(harness.projectId, 10).find((job) => job.stage === "VOICE")?.status).toBe("CANCELLED");
+    harness.orchestrator.cancel(harness.projectId);
+    const cleared = harness.orchestrator.getPipeline(harness.projectId);
+    expect(cleared.runMode).toBeNull();
+    expect(cleared.activeJob).toBeNull();
+    expect(cleared.stages.find((stage) => stage.stage === "VISUAL_SEARCH")?.state).not.toBe("QUEUED");
+  });
+
+  it("resumes two running jobs and keeps the visual checkpoint", () => {
+    const harness = makeHarness();
+    const now = harness.clock().toISOString();
+    const visual = harness.repository.createJob({
+      projectId: harness.projectId,
+      stage: "VISUAL_SEARCH",
+      maxAttempts: 1,
+      previousState: "PENDING",
+    });
+    const voice = harness.repository.createJob({
+      projectId: harness.projectId,
+      stage: "VOICE",
+      maxAttempts: 1,
+      previousState: "PENDING",
+    });
+    harness.repository.updateJob(visual.id, { status: "RUNNING", progress: 70, message: "Vision-checking candidate images", startedAt: now });
+    harness.repository.updateJob(voice.id, { status: "RUNNING", progress: 15, message: "Reading", startedAt: now });
+    harness.repository.updateStage(harness.projectId, "VISUAL_SEARCH", {
+      state: "RUNNING", progress: 70, message: "Vision-checking candidate images", jobId: visual.id,
+    });
+    harness.repository.updateStage(harness.projectId, "VOICE", {
+      state: "RUNNING", progress: 15, message: "Reading", jobId: voice.id,
+    });
+    harness.orchestrator.resumeRunningJobs();
+    expect(harness.repository.getStage(harness.projectId, "VISUAL_SEARCH")).toMatchObject({
+      state: "QUEUED",
+      progress: 70,
+    });
+    expect(harness.repository.getStage(harness.projectId, "VISUAL_SEARCH").message).toContain("Vision-checking candidate images");
+    expect(harness.repository.getStage(harness.projectId, "VOICE")).toMatchObject({ state: "QUEUED", progress: 15 });
+    expect(harness.repository.getJob(visual.id)?.status).toBe("QUEUED");
+    expect(harness.repository.getJob(voice.id)?.status).toBe("QUEUED");
   });
 });

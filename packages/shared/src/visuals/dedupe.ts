@@ -1,3 +1,5 @@
+import { hamming, hexToHash } from "./phash.js";
+
 export type DedupeCandidate = {
   provider: string;
   providerItemId: string;
@@ -9,6 +11,11 @@ export type DedupeCandidate = {
   sourceProvider?: string;
   relevanceScore?: number;
   scoreBreakdown?: Record<string, unknown>;
+  phash?: string;
+  phashCenter?: string;
+  width?: number;
+  height?: number;
+  alsoFoundAt?: Array<{ provider: string; sourceUrl: string }>;
 };
 
 export function normalizedImageUrl(input: string): string {
@@ -37,7 +44,6 @@ export function dedupeKey(candidate: DedupeCandidate): string {
 }
 
 export function dedupeCandidates<T extends DedupeCandidate>(candidates: T[]): T[] {
-  // TODO(TASK-012): add perceptual-hash matching when image decoding enters scope.
   const seen = new Map<string, T>();
   for (const candidate of candidates) {
     const keys = new Set([
@@ -46,10 +52,15 @@ export function dedupeCandidates<T extends DedupeCandidate>(candidates: T[]): T[
       `source:${normalizedImageUrl(candidate.sourceUrl)}`,
       ...crossProviderFileKeys(candidate),
     ]);
-    const prior = [...keys].map((key) => seen.get(key)).find((value) => value !== undefined);
+    const hashPrior = candidate.phash
+      ? [...seen.values()].find((value) => value.phash && hamming(hexToHash(value.phash), hexToHash(candidate.phash!)) <= 6)
+      : undefined;
+    const prior = hashPrior ?? [...keys].map((key) => seen.get(key)).find((value) => value !== undefined);
     if (prior) {
-      const winner = evidenceRank(candidate) > evidenceRank(prior) ? candidate : prior;
-      for (const key of [...keys, ...candidateKeys(prior)]) seen.set(key, winner);
+      const winner = preferCandidate(candidate, prior);
+      const loser = winner === candidate ? prior : candidate;
+      winner.alsoFoundAt = [...(winner.alsoFoundAt ?? []), ...(loser.alsoFoundAt ?? []), { provider: loser.provider, sourceUrl: loser.sourceUrl }];
+      for (const key of [...keys, ...candidateKeys(prior), ...candidateKeys(candidate)]) seen.set(key, winner);
     } else {
       for (const key of keys) seen.set(key, candidate);
     }
@@ -72,6 +83,13 @@ function candidateKeys(candidate: DedupeCandidate): string[] {
     `source:${normalizedImageUrl(candidate.sourceUrl)}`,
     ...crossProviderFileKeys(candidate),
   ];
+}
+
+function preferCandidate<T extends DedupeCandidate>(left: T, right: T): T {
+  const leftPixels = (left.width ?? 0) * (left.height ?? 0);
+  const rightPixels = (right.width ?? 0) * (right.height ?? 0);
+  if (leftPixels !== rightPixels) return leftPixels > rightPixels ? left : right;
+  return evidenceRank(left) > evidenceRank(right) ? left : right;
 }
 
 function evidenceRank(candidate: DedupeCandidate): number {

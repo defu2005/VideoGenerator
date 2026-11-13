@@ -163,7 +163,7 @@ export function TopicsTab({ profile }: { profile: ProfileDetail }) {
                 />
                 <div className="topic-queue-main">
                   <strong>{topic.topic}</strong>
-                  {topic.notes && <small>{topic.notes}</small>}
+                  {topic.notes && <small>{topic.notes}{topic.notes.match(/\[project:([^\]]+)\]/)?.[1] && <a href={"/projects/"+topic.notes.match(/\[project:([^\]]+)\]/)![1]+"/script"}>Mở video đã làm</a>}</small>}
                   <span className="topic-meta">
                     {topic.status} · {topic.source} · ưu tiên {topic.priority}
                   </span>

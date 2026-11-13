@@ -3,9 +3,12 @@ import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useSearchParams } from "react-router-dom";
 import { ConfirmDialog } from "../../components/ConfirmDialog";
+import { useConfirm } from "../../components/useConfirm";
 import { ErrorState } from "../../components/ErrorState";
+import { useToast } from "../../components/ui/Toast";
 import { Spinner } from "../../components/Spinner";
 import { pipelineKeys, usePipeline } from "../../hooks/usePipeline";
+import { stageBlocked } from "../pipeline/activeJobs";
 import { visualKeys, useVisuals } from "../../hooks/useVisuals";
 import { approvePipelineGate } from "../../services/pipelineApi";
 import {
@@ -40,12 +43,26 @@ type VisualMutationContext = {
   previousActiveVisuals: SceneVisuals | null;
 };
 
+const attentionNames: Record<string, string> = {
+  lowRelevance: "ảnh lệch chủ đề",
+  vision_reject: "AI nhìn loại ảnh",
+  vision_missing: "chưa có kết quả AI nhìn",
+  invalid_source: "ảnh nguồn không dùng được",
+  no_candidate: "không có ảnh đúng",
+  source_risk: "nguồn rủi ro cao",
+};
+
+function attentionText(reason: string | null | undefined, fallback?: string): string {
+  if (reason && attentionNames[reason]) return attentionNames[reason];
+  return fallback || "chưa có ảnh đúng chủ đề";
+}
+
 const statuses: SceneVisualStatus[] = ["NO_VISUAL", "SEARCHING", "REVIEW_REQUIRED", "NEEDS_ATTENTION", "APPROVED", "READY_FOR_RENDER", "SKIPPED"];
 const statusNames: Record<SceneVisualStatus, string> = {
   NO_VISUAL: "Chưa có ảnh",
   SEARCHING: "Đang tìm",
   REVIEW_REQUIRED: "Cần xem",
-  NEEDS_ATTENTION: "Cần bạn xem (AI)",
+  NEEDS_ATTENTION: "Cần bạn",
   APPROVED: "Đã duyệt",
   READY_FOR_RENDER: "Sẵn sàng render",
   SKIPPED: "Không dùng ảnh",
@@ -84,6 +101,7 @@ function imageUrl(projectId: string, candidate: VisualCandidate | null): string 
 
 export function VisualReview({ project }: { project: Project }) {
   const queryClient = useQueryClient();
+  const toast = useToast();
   const [searchParams, setSearchParams] = useSearchParams();
   const visualsQuery = useVisuals(project.id);
   const pipeline = usePipeline(project.id);
@@ -99,6 +117,7 @@ export function VisualReview({ project }: { project: Project }) {
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [confirmAll, setConfirmAll] = useState(false);
+  const { ask, dialog: visionDialog } = useConfirm();
   const [page, setPage] = useState(0);
   const [candidateLimit, setCandidateLimit] = useState(8);
   const [approvingAll, setApprovingAll] = useState(false);
@@ -213,12 +232,15 @@ export function VisualReview({ project }: { project: Project }) {
       }
       await queryClient.invalidateQueries({ queryKey: visualKeys.project(project.id) });
       setNotice("");
+      toast.success("Đã cập nhật hình");
     },
     onError: (cause, action, context) => {
       if (context?.previousVisuals) queryClient.setQueryData(visualKeys.project(project.id), context.previousVisuals);
       if (action.sceneId === activeSceneId && context) setActiveVisuals(context.previousActiveVisuals);
       setNotice("");
-      setError(cause instanceof Error ? cause.message : "Không thể cập nhật ảnh.");
+      const message = cause instanceof Error ? cause.message : "Không thể cập nhật ảnh.";
+      setError(message);
+      toast.error(message);
     },
     onSettled: () => void queryClient.invalidateQueries({ queryKey: visualKeys.project(project.id) }),
   });
@@ -290,7 +312,7 @@ export function VisualReview({ project }: { project: Project }) {
     return () => window.removeEventListener("keydown", onKey);
   }, [activeSceneId, activeVisuals, mutate, rows]);
 
-  if (visualsQuery.isPending || pipeline.isPending) return <Spinner label="Loading visuals" />;
+  if (visualsQuery.isPending || pipeline.isPending) return <Spinner label="Đang tải hình" />;
   if (visualsQuery.isError) return <ErrorState message={visualsQuery.error.message} onRetry={() => void visualsQuery.refetch()} />;
   if (pipeline.isError) return <ErrorState message={pipeline.error.message} onRetry={() => void pipeline.refetch()} />;
 
@@ -299,8 +321,11 @@ export function VisualReview({ project }: { project: Project }) {
     try {
       const next = await approvePipelineGate(project.id, "VISUAL_REVIEW");
       queryClient.setQueryData(pipelineKeys.detail(project.id), next);
+      toast.success("Đã duyệt cổng");
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Không thể duyệt cổng hình ảnh.");
+      const message = cause instanceof Error ? cause.message : "Không thể duyệt cổng hình ảnh.";
+      setError(message);
+      toast.error(message);
     }
   }
 
@@ -309,7 +334,8 @@ export function VisualReview({ project }: { project: Project }) {
     setApprovingAll(true);
     try {
       const result = await approveAllSceneVisuals(project.id);
-      setNotice(`Đã duyệt ${result.approved} ảnh. ${result.failed.length ? `Thất bại: ${result.failed.length} scene.` : ""}`);
+      const skippedNote = result.skipped ? ` Bỏ qua ${result.skipped} cảnh chưa đủ liên quan.` : "";
+      setNotice(`Đã duyệt ${result.approved} ảnh.${skippedNote} ${result.failed.length ? `Thất bại: ${result.failed.length} scene.` : ""}`);
       if (result.failed.length) {
         const rateLimited = result.failed.filter((item) => item.retryable && /HTTP 429|giới hạn tốc độ/i.test(item.reason));
         const messages = [
@@ -385,7 +411,7 @@ export function VisualReview({ project }: { project: Project }) {
       {error && <p className="request-error" role="alert">{error}</p>}
       {notice && <p className="visual-notice" role="status">{notice}</p>}
       <header className="panel visual-toolbar">
-        <div className="visual-status-chips" aria-label="Visual status counts">
+        <div className="visual-status-chips" aria-label="Số trạng thái hình">
           {statuses.map((status) => <span className="visual-chip" key={status}>{statusNames[status]} · {visualsQuery.data.summary.statusCounts[status] ?? 0}</span>)}
         </div>
         <div className="visual-license-summary">
@@ -396,7 +422,7 @@ export function VisualReview({ project }: { project: Project }) {
         </div>
         <div className="visual-top-actions">
           <button className="button button-secondary" type="button" disabled={mutate.isPending || !rows.some((row) => ["DISCOVERED", "REVIEW_REQUIRED", "REPLACED"].includes(row.selection?.status ?? ""))} onClick={() => setConfirmAll(true)}>Duyệt tất cả</button>
-          <button className="button button-primary" type="button" disabled={!canApproveGate || gate?.state !== "WAITING_USER" || Boolean(pipeline.data.activeJob)} title={canApproveGate ? undefined : `${needsAttention} scene cần xử lý`} onClick={() => void approveGate()}>Duyệt xong → tiếp tục</button>
+          <button className="button button-primary" type="button" disabled={!canApproveGate || gate?.state !== "WAITING_USER" || stageBlocked("VISUAL_REVIEW", pipeline.data)} title={canApproveGate ? undefined : `${needsAttention} scene cần xử lý`} onClick={() => void approveGate()}>Duyệt xong → tiếp tục</button>
         </div>
         <p className="visual-gate-reason" role="status">{canApproveGate ? "Tất cả scene đã sẵn sàng hoặc được bỏ qua." : `${needsAttention} scene cần xử lý trước khi duyệt cổng.`}</p>
         <label className="visual-filter">Lọc
@@ -406,6 +432,24 @@ export function VisualReview({ project }: { project: Project }) {
           </select>
         </label>
       </header>
+          {reused.size > 0 && (
+        <div className="visual-warning" role="status">
+          <p>{[...reused.values()].reduce((total, orders) => total + orders.length, 0)} cảnh đang dùng ảnh trùng — Tìm ảnh khác</p>
+          <div className="visual-candidate-grid">
+            {rows.filter((row) => row.selectedCandidate && reused.has(row.selectedCandidate.sourceUrl || row.selectedCandidate.providerItemId)).map((row) => (
+              <figure key={row.sceneId}>
+                {row.selectedCandidate && imageUrl(project.id, row.selectedCandidate)
+                  ? <img src={imageUrl(project.id, row.selectedCandidate)} alt="" loading="lazy" />
+                  : null}
+                <figcaption>Cảnh {row.order + 1}</figcaption>
+              </figure>
+            ))}
+          </div>
+          <button type="button" onClick={() => void fetch(`/api/projects/${project.id}/visuals/dedupe`, { method: "POST" }).then(() => queryClient.invalidateQueries({ queryKey: visualKeys.project(project.id) }))}>
+            Tìm ảnh khác
+          </button>
+        </div>
+      )}
       {paged.map((row) => {
         const candidate = row.selectedCandidate;
         const reusedAt = candidate ? reused.get(candidate.sourceUrl || candidate.providerItemId) : undefined;
@@ -417,11 +461,20 @@ export function VisualReview({ project }: { project: Project }) {
               <p>{row.narration.slice(0, 170)}</p>
               <span className={`visual-status status-${row.status.toLowerCase()}`}>{statusNames[row.status]}</span>
               {row.status === "NEEDS_ATTENTION"
-                ? <span className="visual-warning">Cần bạn xem · {row.visionMeta?.reason ?? "AI nhìn chưa đạt"}</span>
+                ? <span className="visual-warning">Cần bạn · {attentionText(row.attentionReason, row.visionMeta?.reason)}</span>
                 : row.selectedCandidate?.visionCheck
                   ? <span className="visual-chip">Đã kiểm tra bằng AI · {row.selectedCandidate.visionCheck.fit}/10</span>
                   : null}
               {row.lowRelevance && <span className="visual-warning">Ít liên quan</span>}
+              {row.lowRelevance && (
+                <button type="button" onClick={() => void fetch(`/api/projects/${project.id}/visuals/research`, {
+                  method: "POST",
+                  headers: { "content-type": "application/json" },
+                  body: JSON.stringify({ reason: "low_relevance" }),
+                })}>
+                  Tìm lại ảnh cho cảnh lệch chủ đề
+                </button>
+              )}
               {reusedAt && <span className="visual-warning">Ảnh dùng lại ở scene {reusedAt.filter((number) => number !== row.order + 1).join(", ")}</span>}
               {candidate && <span className={`visual-warning license-${candidate.license.kind.toLowerCase()}`}>{licenseBadge(candidate)}</span>}
             </div>
@@ -435,12 +488,17 @@ export function VisualReview({ project }: { project: Project }) {
               <button className="button button-secondary" type="button" disabled={!candidate || mutate.isPending} onClick={() => run({ type: "reject", sceneId: row.sceneId })}>Bỏ ảnh này</button>
               <button className="button button-secondary" type="button" disabled={mutate.isPending} onClick={() => run({ type: "remove", sceneId: row.sceneId })}>Không dùng ảnh</button>
               <button className="button button-secondary" type="button" onClick={() => openPanel(row.sceneId)}>Đổi ảnh</button>
+              <button className="button button-secondary" type="button" onClick={() => void fetch(`/api/projects/${project.id}/scenes/${row.sceneId}/crop`, {
+                method: "POST",
+                headers: { "content-type": "application/json" },
+                body: JSON.stringify({ aspect: project.settings.aspectRatio === "9:16" || project.settings.aspectRatio === "1:1" ? project.settings.aspectRatio : "16:9" }),
+              })}>Cắt ảnh</button>
             </div>
           </article>
         );
       })}
       {visible.length === 0 && <p className="panel visual-empty">Không có scene phù hợp bộ lọc.</p>}
-      {rows.length > 40 && <nav className="visual-pagination" aria-label="Phân trang scene">
+      {rows.length > 40 && <nav className="visual-pagination" aria-label="Phân trang cảnh">
         <button className="button button-secondary" type="button" disabled={page === 0} onClick={() => setPage((value) => value - 1)}>Trước</button>
         <span>{page + 1} / {Math.max(1, Math.ceil(visible.length / 40))}</span>
         <button className="button button-secondary" type="button" disabled={(page + 1) * 40 >= visible.length} onClick={() => setPage((value) => value + 1)}>Sau</button>
@@ -517,7 +575,8 @@ export function VisualReview({ project }: { project: Project }) {
                     {item.scoreBreakdown.lowRelevance === true && <span>Ít liên quan</span>}
                     {(item.scoreBreakdown.reusedAcrossScenes === true || rows.some((row) => row.sceneId !== activeSceneId
                       && row.selectedCandidate?.sourceUrl === item.sourceUrl)) && <span>Dùng lại</span>}
-                    {item.watermark !== "NONE" && <span>Watermark {item.watermark.toLowerCase()}</span>}
+                    {(item.watermark === "SUSPECTED" || item.visionCheck?.issues.includes("watermark")) && <span>Đã loại vì có watermark</span>}
+                    {item.watermark === "UNKNOWN" && <span>Watermark chưa rõ</span>}
                   </div>
                   <button className="button button-secondary" type="button" disabled={mutate.isPending} onClick={() => run({ type: "select", sceneId: activeSceneId, candidateId: item.id })}>Chọn · {index + 1}</button>
                   <button
@@ -525,7 +584,14 @@ export function VisualReview({ project }: { project: Project }) {
                     type="button"
                     disabled={mutate.isPending}
                     onClick={() => {
-                      if (!window.confirm("Kiểm tra lại bằng AI? Ước tính ~1 lượt gọi vision (≈1000 token ảnh).")) return;
+                      void (async () => {
+                      const accepted = await ask({
+                        title: "Kiểm tra lại bằng AI?",
+                        message: "Ước tính khoảng 1 lượt gọi vision (khoảng 1000 token ảnh).",
+                        confirmLabel: "Kiểm tra",
+                        cancelLabel: "Hủy",
+                      });
+                      if (!accepted || !activeSceneId) return;
                       void visionCheckCandidate(project.id, activeSceneId, item.id)
                         .then(async () => {
                           setActiveVisuals(await getSceneVisuals(project.id, activeSceneId));
@@ -535,6 +601,7 @@ export function VisualReview({ project }: { project: Project }) {
                         .catch((cause: unknown) => {
                           setError(cause instanceof Error ? cause.message : "Không kiểm tra được bằng AI.");
                         });
+                      })();
                     }}
                   >
                     Kiểm tra lại bằng AI
@@ -603,6 +670,7 @@ export function VisualReview({ project }: { project: Project }) {
         onCancel={() => setConfirmAll(false)}
         onConfirm={() => void approveAll()}
       />
+      {visionDialog}
     </section>
   );
 }

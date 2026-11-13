@@ -6,6 +6,7 @@ import {
   VisualStatusSchema,
   WatermarkStatusSchema,
 } from "../enums.js";
+import { VISUAL_ATTENTION_REASONS, type VisualAttentionReason } from "../visuals/sceneQuery.js";
 import { SceneVisionMetaSchema, VisionCheckSchema } from "./vision.js";
 
 export const LicenseMetadataSchema = z.object({
@@ -108,6 +109,8 @@ export const VisualCandidateSchema = z.object({
   downloadedAt: z.string().datetime({ offset: true }).nullable().optional(),
   downloadError: z.string().nullable().optional(),
   visionCheck: VisionCheckSchema.nullable().optional(),
+  phash: z.string().regex(/^[a-f0-9]{16}$/).optional(),
+  phashCenter: z.string().regex(/^[a-f0-9]{16}$/).optional(),
   createdAt: z.string().datetime({ offset: true }),
   searchHash: z.string().optional(),
 }).strict();
@@ -160,6 +163,7 @@ export const ProjectVisualsSchema = z.object({
     startSec: z.number().nonnegative(),
     durationSec: z.number().nonnegative(),
     visionMeta: SceneVisionMetaSchema.optional(),
+    attentionReason: z.enum(VISUAL_ATTENTION_REASONS).nullable().optional(),
   }).strict()),
   summary: z.object({
     withImage: z.number().int().nonnegative(),
@@ -172,24 +176,28 @@ export const ProjectVisualsSchema = z.object({
 export type ProjectVisuals = z.infer<typeof ProjectVisualsSchema>;
 
 export function deriveSceneVisualStatus(
-  selection: Pick<VisualSelection, "status"> & { candidateId: string } | null,
+  selection: (Pick<VisualSelection, "status"> & { candidateId: string; selectedBy?: VisualSelection["selectedBy"] }) | null,
   candidates: Pick<VisualCandidate, "id" | "localPath" | "sha256" | "actualWidth" | "actualHeight">[],
   noVisual: boolean,
   stageState: string | null | undefined,
   visionNeedsAttention = false,
+  attentionReason: VisualAttentionReason | null = null,
 ): import("../enums.js").SceneVisualStatus {
   if (noVisual) return "SKIPPED";
   if (stageState === "RUNNING") return "SEARCHING";
-  if (visionNeedsAttention) return "NEEDS_ATTENTION";
+  const owned = selection?.selectedBy === "USER" || selection?.status === "CUSTOM" || selection?.status === "AI_GENERATED";
+  if (visionNeedsAttention && !owned) return "NEEDS_ATTENTION";
   if (!selection) return "NO_VISUAL";
   if (selection.status === "DISCOVERED" || selection.status === "REVIEW_REQUIRED" || selection.status === "REPLACED") {
     return "REVIEW_REQUIRED";
   }
   if (selection.status === "APPROVED" || selection.status === "CUSTOM" || selection.status === "AI_GENERATED") {
     const candidate = candidates.find((item) => item.id === selection.candidateId);
-    return candidate?.localPath && candidate.sha256 && candidate.actualWidth && candidate.actualHeight
-      ? "READY_FOR_RENDER"
-      : "APPROVED";
+    const downloaded = Boolean(candidate?.localPath && candidate.sha256 && candidate.actualWidth && candidate.actualHeight);
+    if (!downloaded) return "APPROVED";
+    const owned = selection.selectedBy === "USER" || selection.status === "CUSTOM" || selection.status === "AI_GENERATED";
+    if (attentionReason && !owned) return "NEEDS_ATTENTION";
+    return "READY_FOR_RENDER";
   }
   return "NO_VISUAL";
 }

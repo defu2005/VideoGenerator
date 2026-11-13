@@ -1,3 +1,4 @@
+import { useCan } from "../../hooks/useCan";
 import type { StageRecord } from "@vg/shared";
 import { GATES } from "@vg/shared";
 
@@ -8,9 +9,14 @@ type Props = {
   onRun(): void;
   onRetry(): void;
   onApprove(): void;
+  onCancel?: () => void;
+  /** Where the active job runs: a worker name, or null for the main machine. Undefined hides the line. */
+  machine?: string | null;
 };
 
-export function StageRow({ record, canRun, busy, onRun, onRetry, onApprove }: Props) {
+export function StageRow({ record, canRun, busy, onRun, onRetry, onApprove, onCancel, machine }: Props) {
+  const mayApprove = useCan("gate.approve");
+  const mayRun = useCan("stage.run");
   const isGate = GATES.includes(record.stage);
   const label = record.stage.replaceAll("_", " ");
   return (
@@ -27,21 +33,25 @@ export function StageRow({ record, canRun, busy, onRun, onRetry, onApprove }: Pr
           <span style={{ width: `${record.progress}%` }} />
         </div>
       )}
+      {machine !== undefined && <p className="stage-machine">{machine ? `Máy: ${machine}` : "Máy chính"}</p>}
       {record.message && <p className="stage-message">{record.message}</p>}
       {record.error && <p className="stage-error" role="alert">{record.error.message}</p>}
       <div className="stage-actions">
-        {record.state === "WAITING_USER" && (
+        {mayApprove && record.state === "WAITING_USER" && (
           <button type="button" className="button button-primary" disabled={busy} onClick={onApprove}>
             {record.stage === "FINAL_APPROVAL" ? "Approve All" : "Approve"}
           </button>
         )}
-        {record.state === "FAILED" && (
+        {mayRun && record.state === "FAILED" && (
           <button type="button" className="button button-secondary" disabled={busy} onClick={onRetry}>Retry</button>
         )}
-        {canRun && record.state !== "FAILED" && (
+        {mayRun && canRun && record.state !== "FAILED" && (
           <button type="button" className="button button-secondary" disabled={busy} onClick={onRun}>
             {record.state === "DONE" ? "Run again" : "Run"}
           </button>
+        )}
+        {(record.state === "QUEUED" || record.state === "RUNNING") && onCancel && (
+          <button type="button" className="button button-danger-outline" disabled={busy} onClick={onCancel}>Hủy làn</button>
         )}
       </div>
     </li>

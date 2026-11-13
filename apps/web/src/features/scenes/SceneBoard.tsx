@@ -2,6 +2,7 @@ import { resolveBudget, type Project, type Scene } from "@vg/shared";
 import { useNavigate } from "react-router-dom";
 import { useEffect, useRef, useState } from "react";
 import { ConfirmDialog } from "../../components/ConfirmDialog";
+import { guardDirtyNavigation, useConfirm } from "../../components/useConfirm";
 import { ErrorState } from "../../components/ErrorState";
 import { Spinner } from "../../components/Spinner";
 import { usePipeline } from "../../hooks/usePipeline";
@@ -22,6 +23,13 @@ export function SceneBoard({ project }: { project: Project }) {
   const [editorDirty, setEditorDirty] = useState(false);
   const editorDirtyRef = useRef(editorDirty);
   editorDirtyRef.current = editorDirty;
+  const { ask, dialog: leaveDialog } = useConfirm();
+  const discardRequest = {
+    title: "Bỏ thay đổi chưa lưu?",
+    message: "Các sửa trên cảnh này sẽ mất.",
+    confirmLabel: "Bỏ thay đổi",
+    cancelLabel: "Ở lại",
+  };
   useEffect(() => {
     const beforeUnload = (event: BeforeUnloadEvent) => {
       if (!editorDirtyRef.current) return;
@@ -29,13 +37,12 @@ export function SceneBoard({ project }: { project: Project }) {
       event.returnValue = "";
     };
     const confirmNavigation = (event: MouseEvent) => {
-      if (!editorDirtyRef.current || !(event.target instanceof Element)) return;
-      const link = event.target.closest("a[href]") as HTMLAnchorElement | null;
-      if (!link || link.origin !== window.location.origin || link.pathname === window.location.pathname) return;
-      if (!window.confirm("You have unsaved scene changes. Leave without saving?")) {
-        event.preventDefault();
-        event.stopPropagation();
-      }
+      guardDirtyNavigation(event, editorDirtyRef.current, ask, {
+        title: "Bỏ thay đổi chưa lưu?",
+        message: "Các sửa trên cảnh sẽ mất nếu bạn rời trang.",
+        confirmLabel: "Rời trang",
+        cancelLabel: "Ở lại",
+      });
     };
     window.addEventListener("beforeunload", beforeUnload);
     document.addEventListener("click", confirmNavigation, true);
@@ -43,11 +50,11 @@ export function SceneBoard({ project }: { project: Project }) {
       window.removeEventListener("beforeunload", beforeUnload);
       document.removeEventListener("click", confirmNavigation, true);
     };
-  }, []);
+  }, [ask]);
   const stage = pipeline.data?.stages.find((record) => record.stage === "SCENE_PLAN");
   const scriptStage = pipeline.data?.stages.find((record) => record.stage === "SCRIPT");
 
-  if (scenesQuery.isPending || pipeline.isPending) return <Spinner label="Loading scene board" />;
+  if (scenesQuery.isPending || pipeline.isPending) return <Spinner label="Đang tải bảng cảnh" />;
   if (scenesQuery.isError) return <ErrorState message={scenesQuery.error.message} onRetry={() => void scenesQuery.refetch()} />;
   if (pipeline.isError) return <ErrorState message={pipeline.error.message} onRetry={() => void pipeline.refetch()} />;
   if (visualsQuery.isError) return <ErrorState message={visualsQuery.error.message} onRetry={() => void visualsQuery.refetch()} />;
@@ -81,7 +88,7 @@ export function SceneBoard({ project }: { project: Project }) {
   }
 
   async function reorder(sceneIds: string[]) {
-    if (editorDirty && !window.confirm("Discard unsaved scene changes?")) return;
+    if (editorDirty && !await ask(discardRequest)) return;
     if (await mutateAction({ type: "reorder", sceneIds })) setEditorDirty(false);
   }
 
@@ -96,9 +103,11 @@ export function SceneBoard({ project }: { project: Project }) {
         </div>
         <DurationBar totalSec={summary.totalSec} targetSec={summary.targetSec} />
         <button className="button button-primary" type="button" disabled={!canRun} onClick={() => {
-          if (editorDirty && !window.confirm("Discard unsaved scene changes?")) return;
-          if (edited) setConfirmOverwrite(true);
-          else void runScenePlan();
+          void (async () => {
+            if (editorDirty && !await ask(discardRequest)) return;
+            if (edited) setConfirmOverwrite(true);
+            else void runScenePlan();
+          })();
         }}>
           Regenerate scene plan
           <small>{featureEnabled ? `1 lượt (${project.settings.budget.mode})` : "0 lượt gọi AI"}</small>
@@ -114,7 +123,7 @@ export function SceneBoard({ project }: { project: Project }) {
         </section>
       ) : (
         <div className={`scene-board-content${selected ? " has-editor" : ""}`}>
-          <div className="scene-grid" aria-label="Scenes storyboard">
+          <div className="scene-grid" aria-label="Bảng cảnh">
             {summary.scenes.map((scene) => (
               <SceneCard
                 key={scene.id}
@@ -125,9 +134,11 @@ export function SceneBoard({ project }: { project: Project }) {
                 count={summary.scenes.length}
                 active={selected?.id === scene.id}
                 onSelect={() => {
-                  if (editorDirty && !window.confirm("Discard unsaved scene changes?")) return;
-                  setEditorDirty(false);
-                  setSelectedId(scene.id);
+                  void (async () => {
+                    if (editorDirty && !await ask(discardRequest)) return;
+                    setEditorDirty(false);
+                    setSelectedId(scene.id);
+                  })();
                 }}
                 onReviewVisual={() => navigate(`/projects/${project.id}/visuals?scene=${scene.id}`)}
                 onDragStart={(event) => {
@@ -176,6 +187,7 @@ export function SceneBoard({ project }: { project: Project }) {
         onCancel={() => setConfirmOverwrite(false)}
         onConfirm={() => void runScenePlan(true)}
       />
+      {leaveDialog}
       {stage?.state === "FAILED" && stage.message && <p className="request-error" role="alert">{stage.message}</p>}
     </div>
   );

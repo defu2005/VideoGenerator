@@ -9,6 +9,7 @@ export const PublicationStatusSchema = z.enum([
   "PUBLISHED",
   "FAILED",
   "CANCELLED",
+  "WITHDRAWN",
 ]);
 export type PublicationStatus = z.infer<typeof PublicationStatusSchema>;
 
@@ -73,6 +74,7 @@ export type PublicationListResponse = z.infer<typeof PublicationListResponseSche
 
 /** Metadata trimmed for a platform upload. */
 export const PublishInputSchema = z.object({
+  projectId: z.string().uuid().optional(),
   videoPath: z.string().min(1),
   format: z.enum(["landscape", "vertical"]),
   title: z.string(),
@@ -123,8 +125,8 @@ export const AppCredentialsStatusSchema = z.object({
 export type AppCredentialsStatus = z.infer<typeof AppCredentialsStatusSchema>;
 
 export const PlatformAppCredentialsInputSchema = z.object({
-  clientId: z.string().trim().min(1).max(500),
-  clientSecret: z.string().trim().min(1).max(500),
+  clientId: z.string().trim().max(500),
+  clientSecret: z.string().trim().max(500),
 }).strict();
 export type PlatformAppCredentialsInput = z.infer<typeof PlatformAppCredentialsInputSchema>;
 
@@ -153,6 +155,7 @@ export const AccountConnectionDetailSchema = z.object({
   canConnect: z.boolean(),
   /** Vietnamese hint shown when Kết nối is disabled; null when canConnect. */
   connectBlockedReason: z.string().nullable(),
+  marketWarning: z.string().nullable().optional(),
   /**
    * After Meta OAuth, before the user picks a Page (facebook_reels) or IG account
    * (instagram_reels). Empty/omitted when not applicable.

@@ -51,6 +51,10 @@ export function applyRawReviewProposal(
   });
 }
 
+export function undoReviewTimeline(projectId: string): Promise<ReviewApplyResult> {
+  return apiRequest<ReviewApplyResult>(`${reviewPath(projectId)}/undo`, { method: "POST" });
+}
+
 export function resetProjectReview(projectId: string): Promise<{ ok: true }> {
   return apiRequest<{ ok: true }>(reviewPath(projectId), { method: "DELETE" });
 }

@@ -22,7 +22,7 @@ export const LlmCallUsageSchema = z.object({
   cached: z.boolean(),
   fallback: z.boolean(),
   /** Set when this call ran because an earlier model was out of quota. */
-  fallbackReason: z.literal("quota").optional(),
+  fallbackReason: z.enum(["quota", "quota_swap"]).optional(),
   ok: z.boolean(),
   /** Character count for a TTS call. */
   characters: z.number().int().nonnegative().optional(),
@@ -71,6 +71,10 @@ export const JobSchema = z.object({
   startedAt: z.string().datetime({ offset: true }).nullable(),
   finishedAt: z.string().datetime({ offset: true }).nullable(),
   runAfter: z.string().datetime({ offset: true }),
+  /** The worker node running this job, or none when it runs on this machine. */
+  nodeId: z.string().nullable().optional(),
+  /** Name of that node, filled by list queries with one lookup. Empty means this machine. */
+  nodeName: z.string().nullable().optional(),
 });
 export type Job = z.infer<typeof JobSchema>;
 
@@ -82,6 +86,7 @@ export const PipelineStateSchema = z.object({
   status: ProjectStatusSchema,
   stages: z.array(StageRecordSchema),
   activeJob: JobSchema.nullable(),
+  activeJobs: z.array(JobSchema).optional(),
 });
 export type PipelineState = z.infer<typeof PipelineStateSchema>;
 

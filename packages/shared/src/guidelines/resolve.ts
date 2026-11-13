@@ -1,6 +1,7 @@
 import type { AspectRatio } from "../enums.js";
 import type { ProjectSettings } from "../schemas/project.js";
 import { builtInGuidelinePack } from "./packs.js";
+import { marketName, marketPack, type MarketPack } from "../markets/index.js";
 import type {
   GuidelinePack,
   GuidelinePackParams,
@@ -11,7 +12,7 @@ import type {
 } from "./schema.js";
 
 type GuidelineProject = {
-  settings: Pick<ProjectSettings, "platform" | "style" | "tone" | "audience" | "budget"> & {
+  settings: Pick<ProjectSettings, "platform" | "style" | "tone" | "audience" | "budget" | "market"> & {
     guidelines?: ProjectSettings["guidelines"];
   };
 };
@@ -29,12 +30,12 @@ export const PROJECT_RULES_PACK_ID = "project";
 const SEVERITY_ORDER: Record<GuidelineSeverity, number> = { MUST: 0, SHOULD: 1, TIP: 2 };
 
 /** Channel packs that fit a brief's style, tone and audience (at most 3). */
-export function suggestGuidelinePacks(settings: Pick<ProjectSettings, "style" | "tone" | "audience">): string[] {
+export function suggestGuidelinePacks(settings: Pick<ProjectSettings, "style" | "tone" | "audience">, lookup = builtInGuidelinePack): string[] {
   const ids: string[] = [];
   if (settings.audience === "kids") ids.push("kids");
   ids.push(settings.style);
   if (settings.tone === "dramatic" && settings.style !== "news") ids.push("drama");
-  return [...new Set(ids)].filter((id) => builtInGuidelinePack(id)?.kind === "CHANNEL").slice(0, 3);
+  return [...new Set(ids)].filter((id) => lookup(id)?.kind === "CHANNEL").slice(0, 3);
 }
 
 /** FILTER from BALANCED up, REMIND in ECO, unless the project chose. */
@@ -49,16 +50,32 @@ export function platformGuidelinePackId(project: GuidelineProject): string | nul
   return choice;
 }
 
-export function channelGuidelinePackIds(project: GuidelineProject): string[] {
-  return project.settings.guidelines?.channelPacks ?? suggestGuidelinePacks(project.settings);
+export function channelGuidelinePackIds(project: GuidelineProject, lookup = builtInGuidelinePack): string[] {
+  return project.settings.guidelines?.channelPacks ?? suggestGuidelinePacks(project.settings, lookup);
 }
 
 /** The packs, rules and limits that apply to a project. User packs win over built-in packs with the same id. */
-export function activeGuidelines(project: GuidelineProject, userPacks: readonly GuidelinePack[] = []): ActiveGuidelines {
-  const lookup = (id: string) => userPacks.find((pack) => pack.id === id) ?? builtInGuidelinePack(id);
+export function activeGuidelines(
+  project: GuidelineProject, userPacks: readonly GuidelinePack[] = [],
+  builtIn = builtInGuidelinePack, lookupMarket: (code: string) => MarketPack | null = marketPack,
+): ActiveGuidelines {
+  const lookup = (id: string) => userPacks.find((pack) => pack.id === id) ?? builtIn(id);
   const platformId = platformGuidelinePackId(project);
-  const ids = [...new Set([...(platformId ? [platformId] : []), ...channelGuidelinePackIds(project)])];
-  const packs = ids.map(lookup).filter((pack): pack is GuidelinePack => Boolean(pack));
+  const code = project.settings.market;
+  const marketId = code ? `market:${code}` : null;
+  const ids = [...new Set([platformId, marketId, ...channelGuidelinePackIds(project, lookup)])];
+  const packs = ids.flatMap((id) => {
+    if (!id) return [];
+    const pack = lookup(id);
+    if (pack) return [pack];
+    const market = id === marketId && code ? lookupMarket(code) : null;
+    if (!market) return [];
+    return [{
+      id, kind: "MARKET", name: marketName(market), description: "", reviewedAt: market.checkedAt,
+      sourceUrls: [...new Set(market.rules.map((rule) => rule.source))].slice(0, 10),
+      rules: market.rules.map(({ source: _source, ...rule }) => rule),
+    } satisfies GuidelinePack];
+  });
   const customRules = project.settings.guidelines?.customRules ?? [];
   if (customRules.length) {
     packs.push({

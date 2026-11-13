@@ -1,0 +1,176 @@
+{
+  "id": "script-long",
+  "titleVi": "Kịch bản dài",
+  "taskId": "script",
+  "rubricVi": "Lời dẫn dài vẫn giữ mạch và không dùng cụm cấm.",
+  "cases": [
+    {
+      "id": "script-long-1",
+      "taskId": "script",
+      "input": {
+        "topic": "Kịch bản dài 1",
+        "seconds": 480
+      },
+      "graders": [
+        {
+          "kind": "length",
+          "min": 80,
+          "max": 4000
+        },
+        {
+          "kind": "bannedPhrases",
+          "phrases": [
+            "đừng bỏ lỡ"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "script-long-2",
+      "taskId": "script",
+      "input": {
+        "topic": "Kịch bản dài 2",
+        "seconds": 480
+      },
+      "graders": [
+        {
+          "kind": "length",
+          "min": 80,
+          "max": 4000
+        },
+        {
+          "kind": "bannedPhrases",
+          "phrases": [
+            "đừng bỏ lỡ"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "script-long-3",
+      "taskId": "script",
+      "input": {
+        "topic": "Kịch bản dài 3",
+        "seconds": 480
+      },
+      "graders": [
+        {
+          "kind": "length",
+          "min": 80,
+          "max": 4000
+        },
+        {
+          "kind": "bannedPhrases",
+          "phrases": [
+            "đừng bỏ lỡ"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "script-long-4",
+      "taskId": "script",
+      "input": {
+        "topic": "Kịch bản dài 4",
+        "seconds": 480
+      },
+      "graders": [
+        {
+          "kind": "length",
+          "min": 80,
+          "max": 4000
+        },
+        {
+          "kind": "bannedPhrases",
+          "phrases": [
+            "đừng bỏ lỡ"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "script-long-5",
+      "taskId": "script",
+      "input": {
+        "topic": "Kịch bản dài 5",
+        "seconds": 480
+      },
+      "graders": [
+        {
+          "kind": "length",
+          "min": 80,
+          "max": 4000
+        },
+        {
+          "kind": "bannedPhrases",
+          "phrases": [
+            "đừng bỏ lỡ"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "script-long-6",
+      "taskId": "script",
+      "input": {
+        "topic": "Kịch bản dài 6",
+        "seconds": 480
+      },
+      "graders": [
+        {
+          "kind": "length",
+          "min": 80,
+          "max": 4000
+        },
+        {
+          "kind": "bannedPhrases",
+          "phrases": [
+            "đừng bỏ lỡ"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "script-long-7",
+      "taskId": "script",
+      "input": {
+        "topic": "Kịch bản dài 7",
+        "seconds": 480
+      },
+      "graders": [
+        {
+          "kind": "length",
+          "min": 80,
+          "max": 4000
+        },
+        {
+          "kind": "bannedPhrases",
+          "phrases": [
+            "đừng bỏ lỡ"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "script-long-8",
+      "taskId": "script",
+      "input": {
+        "topic": "Kịch bản dài 8",
+        "seconds": 480
+      },
+      "graders": [
+        {
+          "kind": "length",
+          "min": 80,
+          "max": 4000
+        },
+        {
+          "kind": "bannedPhrases",
+          "phrases": [
+            "đừng bỏ lỡ"
+          ]
+        }
+      ]
+    }
+  ]
+}

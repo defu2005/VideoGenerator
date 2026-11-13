@@ -1,6 +1,7 @@
 import { statSync } from "node:fs";
 import { open as openFile } from "node:fs/promises";
 import type Database from "better-sqlite3";
+import { noteExternalHttp } from "../knowledge/httpSignal.js";
 import {
   TIKTOK_AUDIT_PRIVATE_WARNING_VI,
   TIKTOK_CAPTION_MAX_UTF16,
@@ -17,6 +18,7 @@ import {
   type TokenSet,
 } from "@vg/shared";
 import type { AppConfig } from "../lib/config.js";
+import type { KnowledgeService } from "../knowledge/service.js";
 import type { TokenVault } from "./tokenVault.js";
 import type { Publisher, PublisherIdentity } from "./types.js";
 
@@ -42,6 +44,7 @@ export type TikTokPublisherOptions = {
   config: AppConfig;
   vault: TokenVault;
   sqlite: Database.Database;
+  knowledge?: KnowledgeService;
   fetchImpl?: TikTokFetch;
   /** Injected sleep for status polling / 429 backoff (tests use a no-op or short delay). */
   sleep?: (ms: number) => Promise<void>;
@@ -104,7 +107,7 @@ export function planTikTokChunks(videoSize: number): { chunkSize: number; totalC
   return { chunkSize, totalChunkCount };
 }
 
-export function buildTikTokCaption(title: string, tags: string[]): string {
+export function buildTikTokCaption(title: string, tags: string[], maxLength = TIKTOK_CAPTION_MAX_UTF16): string {
   const hashtags = tags
     .map((tag) => tag.trim())
     .filter(Boolean)
@@ -113,7 +116,7 @@ export function buildTikTokCaption(title: string, tags: string[]): string {
   const caption = hashtags.length
     ? (base ? `${base}\n\n${hashtags.join(" ")}` : hashtags.join(" "))
     : base;
-  return trimUtf16(caption, TIKTOK_CAPTION_MAX_UTF16);
+  return trimUtf16(caption, maxLength);
 }
 
 export function resolveTikTokPrivacy(
@@ -180,13 +183,17 @@ function privacyToVisibility(level: TikTokPrivacyLevel): PublishVisibility {
 
 export class TikTokPublisher implements Publisher {
   readonly platform = "tiktok" as const;
-  readonly limits = {
-    maxDurationSec: 10 * 60,
-    maxTitleChars: TIKTOK_CAPTION_MAX_UTF16,
-    maxDescriptionChars: TIKTOK_CAPTION_MAX_UTF16,
-    maxTags: 30,
-    supportsScheduledPublishAt: false,
-  };
+  get limits() {
+    const limit = this.options.knowledge?.value("limit.tiktok.caption_max_utf16", { value: TIKTOK_CAPTION_MAX_UTF16 }).value;
+    const caption = limit && Number.isSafeInteger(limit) && limit > 0 ? limit : TIKTOK_CAPTION_MAX_UTF16;
+    return {
+      maxDurationSec: 10 * 60,
+      maxTitleChars: caption,
+      maxDescriptionChars: caption,
+      maxTags: 30,
+      supportsScheduledPublishAt: false,
+    };
+  }
 
   private readonly fetchImpl: TikTokFetch;
   private readonly sleep: (ms: number) => Promise<void>;
@@ -397,7 +404,6 @@ export class TikTokPublisher implements Publisher {
     const fileStat = statSync(input.videoPath);
     const fileSize = fileStat.size;
     const plan = planTikTokChunks(fileSize);
-    const caption = buildTikTokCaption(input.title, input.tags);
 
     let privacyLevel: TikTokPrivacyLevel | undefined;
     let visibilityUsed: PublishVisibility | undefined;
@@ -406,6 +412,14 @@ export class TikTokPublisher implements Publisher {
     if (mode === "inbox") {
       init = await this.initInboxUpload(tokens.accessToken, plan, fileSize, signal);
     } else {
+      const caption = buildTikTokCaption(input.title, input.tags, this.limits.maxTitleChars);
+      const knowledge = this.options.knowledge;
+      if (knowledge && input.projectId) {
+        const fact = knowledge.get("limit.tiktok.caption_max_utf16");
+        if (fact) knowledge.recordProjectReads(input.projectId, {
+          [fact.entry.id]: `${fact.layer}:${fact.revision}`,
+        });
+      }
       const resolved = resolveTikTokPrivacy(input.visibility, creator.privacyLevelOptions);
       privacyLevel = resolved.privacyLevel;
       if (resolved.warning) warnings.push(resolved.warning);
@@ -842,6 +856,7 @@ async function safeJson(response: Response): Promise<unknown> {
 function mapTikTokAuthError(body: unknown, status: number): Error {
   const error = (body as { error?: string; error_description?: string } | null)?.error;
   if (error === "invalid_grant" || error === "invalid_client" || status === 401) {
+    noteExternalHttp({ provider: "tiktok", endpoint: "oauth.token", status: status === 401 ? 401 : undefined, error: error === "invalid_grant" ? "invalid_grant" : undefined, category: "E1" });
     return Object.assign(new Error("Thông tin đăng nhập TikTok không hợp lệ — cần Kết nối lại"), {
       status: 401,
       retryable: false,

@@ -7,6 +7,8 @@ export interface StageContext {
   signal: AbortSignal;
   reportProgress(pct: number, message?: string): void;
   recordUsage(usage: Partial<JobUsage>): void;
+  /** TASK-125: optional facts for the overdue checker (child process alive, LLM call in flight, quota wait). */
+  reportActivity?(activity: { childAlive?: boolean | null; childNote?: string | null; llmInFlight?: boolean | null; quotaWait?: boolean | null }): void;
   logger: FastifyBaseLogger;
 }
 

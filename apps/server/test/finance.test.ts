@@ -269,6 +269,8 @@ describe("YouTube revenue upsert", () => {
 
 describe("monthly report + payout", () => {
   it("generates once and regenerate replaces", async () => {
+    // monthly_reports.workspace_id is NOT NULL: a real install always has the default workspace.
+    sqlite.prepare("INSERT INTO organization (id, name, slug, created_at, metadata) VALUES ('ws-finance', 'Test', 'ws-finance', ?, '{}')").run(Date.now());
     const finance = createFinance();
     finance.createRevenue({
       kind: "ads",

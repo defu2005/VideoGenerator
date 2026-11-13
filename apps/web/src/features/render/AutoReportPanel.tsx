@@ -8,11 +8,16 @@ const CODE_LABEL: Record<AutoReportCode, string> = {
   VISUAL_LOW_FIT: "Ảnh fit thấp",
   VISUAL_UNVERIFIED_LICENSE: "License chưa xác minh",
   VISUAL_REUSED_NEIGHBOUR: "Tái sử dụng scene lân cận",
+  VISUAL_TITLE_CARD: "Thẻ tiêu đề",
+  VISUAL_EXTRA_SEARCH: "Cần ảnh riêng",
   VISUAL_SKIPPED: "Bỏ qua scene",
   VISUAL_DOWNLOAD_FAILED: "Tải ảnh thất bại",
+  VISUAL_NEEDS_USER: "Cần bạn chọn ảnh",
+  ORIGINALITY_NEEDS_USER: "Cần bạn kiểm tra tính nguyên bản",
   MUSIC_AUTO_PICKED: "Tự chọn nhạc",
   MUSIC_NONE: "Không dùng nhạc",
   RENDER_VISION_ISSUE: "Lỗi vision sau render",
+  FORMAT_CHOSEN: "Đã chọn mẫu video",
 };
 
 function sceneLink(projectId: string, entry: AutoReportEntry) {

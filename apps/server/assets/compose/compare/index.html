@@ -1,0 +1,181 @@
+<!DOCTYPE html><html><head><meta charset="utf-8"><style>
+.panel{position:absolute}
+.side{position:absolute;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center}
+.chip{flex:none;display:flex;align-items:center;font-weight:var(--vg-w-display);letter-spacing:var(--vg-track-caps);text-transform:uppercase;white-space:nowrap}
+.txt{font-weight:var(--vg-w-display);letter-spacing:var(--vg-track-display);text-transform:var(--vg-case-display);text-wrap:balance}
+.badge{position:absolute;display:flex;align-items:center;justify-content:center;font-weight:var(--vg-w-display);letter-spacing:var(--vg-track-display)}
+.rule{position:absolute}
+</style><script src="gsap.min.js"></script><script src="common.js"></script></head><body>
+<div id="root" data-composition-id="main" data-start="0" data-duration="3" data-width="1920" data-height="1080" data-fps="30">
+<script>
+// tokens-v1 (TASK-110). Colours, type, motion, spacing and shape come from VG.S.
+// Axes: layout (split | stack), join (badge | divider), entrance, background.
+// The shot's own choice stays on shotStyle (versus, before_after, myth_fact).
+const VG = window.VGInit();
+const { v, W, H, D, END, portrait, box, tl, at, el, fitText, M, axis, alpha, enter, fallbackStyle } = VG;
+const S = fallbackStyle();
+const K = S.color, T = S.type, L = S.layout, SP = S.space;
+const root = document.getElementById("root");
+const m = Math.min(W, H);
+const rawStyle = v.style && typeof v.style === "object" ? v.shotStyle : v.style;
+const style = ["versus", "before_after", "myth_fact"].includes(rawStyle) ? rawStyle : "versus";
+const reveal = ["sequence", "together"].includes(v.reveal) ? v.reveal : "sequence";
+const winner = ["left", "right", "none"].includes(v.winner) ? v.winner : style === "versus" ? "none" : "right";
+const sideOf = (x) => ({ label: String((x && x.label) || "").trim(), text: String((x && x.text) || "").trim() });
+const data = [sideOf(v.left), sideOf(v.right)];
+// Without a picked axis, 9:16 stays stacked and 16:9 stays side by side, as the old template did.
+const layoutId = axis("layout", ["split", "stack"], v.style && v.style.axes ? undefined : (portrait ? "stack" : "split"));
+const stacked = layoutId === "stack";
+const join = axis("join", ["badge", "divider"]);
+const strokePx = (share, min) => Math.max(min, Math.round(m * share * L.stroke));
+const radiusPx = (size) => Math.round(size * L.radius);
+// Clearance so the badge sits between the two texts. A plain divider needs only a gap.
+const gap = join === "badge" ? Math.round(m * 0.065) : Math.round(SP * 0.6);
+
+// Geometry: split is left | right, stack is top / bottom. Tints are full bleed, text stays in the safe box.
+const splitX = box.x + box.w / 2;
+const splitY = box.y + box.h / 2;
+const panelRect = stacked
+  ? [{ x: 0, y: 0, w: W, h: splitY }, { x: 0, y: splitY, w: W, h: H - splitY }]
+  : [{ x: 0, y: 0, w: splitX, h: H }, { x: splitX, y: 0, w: W - splitX, h: H }];
+const area = stacked
+  ? [{ x: box.x, y: box.y, w: box.w, h: box.h / 2 - gap }, { x: box.x, y: splitY + gap, w: box.w, h: box.h / 2 - gap }]
+  : [{ x: box.x, y: box.y, w: box.w / 2 - gap, h: box.h }, { x: splitX + gap, y: box.y, w: box.w / 2 - gap, h: box.h }];
+
+const isWin = (i) => winner === (i ? "right" : "left");
+const washDir = (i) => (stacked ? (i ? "180deg" : "0deg") : (i ? "90deg" : "270deg"));
+// The winning side is the raised ground (text was checked against it). The other side steps back.
+const tint = (i) => (isWin(i)
+  ? `linear-gradient(${washDir(i)}, ${alpha(K.text, 0x12)} 0%, ${alpha(K.text, 0)} 75%), ${K.bgAlt}`
+  : winner === "none" ? (i ? alpha(K.bgAlt, 0xD9) : alpha(K.bgDeep, 0x99)) : alpha(K.bgDeep, 0xBF));
+const NS = "http://www.w3.org/2000/svg";
+const icon = (kind, size, color) => {
+  const svg = document.createElementNS(NS, "svg");
+  svg.setAttribute("viewBox", "0 0 24 24");
+  svg.setAttribute("width", size);
+  svg.setAttribute("height", size);
+  svg.style.flex = "none";
+  const path = document.createElementNS(NS, "path");
+  path.setAttribute("d", { check: "M4.5 12.5l5 5L19.5 7", cross: "M6 6l12 12M18 6L6 18", right: "M4 12h15M13 5.5l6.5 6.5-6.5 6.5", down: "M12 4v15M5.5 13l6.5 6.5 6.5-6.5" }[kind]);
+  path.setAttribute("fill", "none");
+  path.setAttribute("stroke", color);
+  // The icon is drawn on a 24 grid; the stroke scales with the channel rule.
+  path.setAttribute("stroke-width", String(Math.max(2, 3.2 * L.stroke)));
+  path.setAttribute("stroke-linecap", "round");
+  path.setAttribute("stroke-linejoin", "round");
+  svg.appendChild(path);
+  return svg;
+};
+
+const parts = data.map((side, i) => {
+  const panel = el("div", "panel", root);
+  const r = panelRect[i];
+  panel.style.cssText = `left:${r.x}px;top:${r.y}px;width:${r.w}px;height:${r.h}px;background:${tint(i)}`;
+  const a = area[i];
+  const wrap = el("div", "side", root);
+  wrap.style.cssText = `left:${a.x}px;top:${a.y}px;width:${a.w}px;height:${a.h}px;gap:${Math.round(SP * 0.7)}px`;
+  let chip = null;
+  if (side.label) {
+    chip = el("div", "chip", wrap);
+    const solid = isWin(i);
+    const chipR = radiusPx(T.md);
+    chip.style.cssText = `gap:${Math.round(SP * 0.35)}px;padding:${Math.round(SP * 0.3)}px ${Math.round(SP * 0.8)}px;border-radius:${chipR}px;` + (solid
+      ? `background:${K.accent};color:${K.onAccent}`
+      : `background:${alpha(K.bgDeep, 0x99)};color:${K.text};box-shadow:inset 0 0 0 ${strokePx(0.0025, 2)}px ${alpha(K.text, 0x73)}`);
+    if (style === "myth_fact") chip.appendChild(icon(i ? "check" : "cross", "1.05em", solid ? K.onAccent : K.text));
+    el("span", "", chip, side.label);
+  }
+  const txt = el("div", "txt", wrap, side.text);
+  txt.style.lineHeight = String(T.lineHeight);
+  txt.style.color = K.text;
+  let mark = null;
+  if (isWin(i)) {
+    mark = el("div", "", wrap);
+    const markH = strokePx(0.011, 6);
+    // A short rule under the winner, about a sixth of the short side, so it does not span the panel.
+    mark.style.cssText = `flex:none;width:${Math.round(m * 0.15)}px;height:${markH}px;border-radius:${radiusPx(markH / 2)}px;background:${K.accent}`;
+  }
+  return { panel, wrap, chip, txt, mark, a };
+});
+
+// Both sides share one text size, so neither looks more important by accident.
+VG.layout(() => {
+  const chipFs = portrait ? T.md : T.sm;
+  parts.forEach((p) => {
+    if (p.chip) fitText(p.chip, { maxW: p.a.w, maxH: chipFs * T.lineHeight * 2, maxLines: 1, maxFs: chipFs, minFs: Math.round(T.xs * 0.5), lh: T.lineHeight });
+  });
+  const sizes = parts.map((p) => {
+    const chipH = (p.chip ? p.chip.offsetHeight + Math.round(SP * 0.7) : 0) + (p.mark ? p.mark.offsetHeight + Math.round(SP * 0.7) : 0);
+    // Inner margin so glyphs are not flush with the panel edge.
+    const maxW = Math.floor(p.a.w * 0.96);
+    p.txt.style.width = maxW + "px";
+    return fitText(p.txt, { maxW, maxH: Math.max(T.sm, p.a.h - chipH), maxLines: stacked ? 3 : 4, maxFs: T.xxl, minFs: Math.round(T.xs * 0.5), lh: T.lineHeight });
+  });
+  const fs = Math.min(...sizes);
+  parts.forEach((p) => { p.txt.style.fontSize = fs + "px"; });
+});
+
+// Divider, and the versus badge when this shot's join axis asks for it.
+const thick = strokePx(0.004, 3);
+const rule = el("div", "rule", root);
+rule.style.cssText = stacked
+  ? `left:0;top:${Math.round(splitY - thick / 2)}px;width:${W}px;height:${thick}px;background:${K.accent}`
+  : `left:${Math.round(splitX - thick / 2)}px;top:0;width:${thick}px;height:${H}px;background:${K.accent}`;
+const showBadge = join === "badge";
+// Badge diameter is a share of the short side so the mark stays between the two panels.
+const br = Math.round(m * 0.052);
+const bx = stacked ? box.x + box.w / 2 : splitX;
+const by = stacked ? splitY : box.y + box.h / 2;
+let badge = null;
+if (showBadge) {
+  badge = el("div", "badge", root);
+  badge.style.cssText = `left:${Math.round(bx - br)}px;top:${Math.round(by - br)}px;width:${2 * br}px;height:${2 * br}px;border-radius:${radiusPx(br)}px;background:${K.bgDeep};color:${K.accent};box-shadow:0 0 0 ${thick}px ${K.accent};font-size:${Math.min(T.lg, Math.round(br * 0.9))}px`;
+  if (style === "versus") badge.textContent = String(v.badge || "VS").slice(0, 3);
+  else badge.appendChild(icon(stacked ? "down" : "right", Math.round(br * 1.15), K.accent));
+}
+
+// Motion: the first side opens the shot; the second arrives on its word (rightAt).
+const tB = reveal === "together" ? M.fast * 0.4 : Math.min(Math.max(M.slow, END - M.slow * 2), Number.isFinite(Number(v.rightAt)) && v.rightAt != null ? Math.max(M.base, Number(v.rightAt)) : Math.max(M.slow * 2, D * 0.42));
+const origin = (i) => (stacked ? (i ? "50% 0%" : "50% 100%") : (i ? "0% 50%" : "100% 50%"));
+const grow = stacked ? { scaleY: 0 } : { scaleX: 0 };
+parts.forEach((p, i) => {
+  const t = i ? tB : 0;
+  tl.from(p.panel, Object.assign({ transformOrigin: origin(i), duration: M.slow, ease: M.enter }, grow), at(t, M.slow));
+  if (p.chip) enter(p.chip, t + M.fast * 0.3);
+  enter(p.txt, t + M.fast * 0.5);
+  if (p.mark) tl.from(p.mark, { scaleX: 0, transformOrigin: "50% 50%", duration: M.base, ease: M.enter }, at(t + M.base, M.base));
+});
+tl.from(rule, Object.assign({ transformOrigin: "50% 50%", duration: M.base, ease: M.enter }, stacked ? { scaleX: 0 } : { scaleY: 0 }), at(Math.max(0, tB - M.fast * 0.5), M.base));
+const hit = Math.max(M.fast * 0.2, tB + M.fast * 0.6);
+if (showBadge && winner === "none" && badge) {
+  // No winner: the badge slams in, both sides recoil, a ring goes out, then each side has its turn.
+  const ring = el("div", "badge", root);
+  ring.style.cssText = `left:${Math.round(bx - br)}px;top:${Math.round(by - br)}px;width:${2 * br}px;height:${2 * br}px;border-radius:${radiusPx(br)}px;box-shadow:0 0 0 ${thick}px ${K.accent};opacity:0`;
+  tl.fromTo(badge, { scale: 2.6, opacity: 0 }, { scale: 1, opacity: 1, duration: M.fast, ease: M.exit }, at(Math.max(0, hit - M.fast), M.fast));
+  tl.fromTo(ring, { scale: 1, opacity: 0.9 }, { scale: 3.2, opacity: 0, duration: M.slow, ease: M.move, immediateRender: false }, at(hit, M.slow));
+  parts.forEach((p, i) => {
+    const push = (i ? 1 : -1) * SP * 0.45;
+    tl.to(p.wrap, Object.assign({ duration: M.fast, ease: M.move, yoyo: true, repeat: 1 }, stacked ? { y: push } : { x: push }), at(hit, M.fast));
+  });
+  if (reveal !== "together") {
+    const back = Math.min(END - M.base, tB + Math.max(M.slow * 2, (END - tB) * 0.6));
+    if (back > hit + M.slow) {
+      tl.to(parts[0].txt, { opacity: 0.55, duration: M.fast }, at(hit + M.fast, M.fast));
+      tl.to(parts[0].txt, { opacity: 1, duration: M.base }, at(back, M.base));
+      // The side being read grows by a twentieth, then returns.
+      tl.fromTo(parts[1].txt, { scale: 1 }, { scale: 1.05, duration: M.fast, yoyo: true, repeat: 1, ease: M.move, immediateRender: false }, at(back, M.base));
+      tl.fromTo(parts[0].txt, { scale: 1 }, { scale: 1.05, duration: M.fast, yoyo: true, repeat: 1, ease: M.move, immediateRender: false }, at(back, M.base));
+    }
+  }
+} else if (showBadge && badge) {
+  tl.from(badge, { scale: 0, opacity: 0, duration: M.base, ease: M.emphasis }, at(Math.max(M.fast * 0.2, tB - M.fast * 0.2), M.base));
+} else if (winner === "none") {
+  tl.fromTo(rule, { scale: 1 }, { scale: 1.06, duration: M.fast, yoyo: true, repeat: 1, ease: M.emphasis, immediateRender: false }, at(hit, M.fast));
+}
+// The losing side steps back once the other has landed.
+if (winner !== "none") {
+  const loser = parts[winner === "right" ? 0 : 1];
+  tl.to(loser.txt, { opacity: 0.72, duration: M.fast }, at(tB + M.slow, M.fast));
+}
+VG.finish();
+</script></div></body></html>

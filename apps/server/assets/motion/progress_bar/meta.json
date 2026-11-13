@@ -1,0 +1,21 @@
+{
+  "id": "progress_bar",
+  "version": 1,
+  "nameVi": "Thanh tiến độ",
+  "descriptionVi": "Thanh mỏng trên cùng suốt video dọc.",
+  "kinds": [
+    "overlay"
+  ],
+  "minDurationSec": 1,
+  "maxDurationSec": 3600,
+  "defaultDurationSec": 30,
+  "safeArea": "top",
+  "origin": "written for this app",
+  "variables": [
+    {
+      "name": "color",
+      "type": "color",
+      "default": "#F5C518"
+    }
+  ]
+}

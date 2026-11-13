@@ -60,7 +60,7 @@ export function UsagePage() {
   return (
     <div className="page-stack usage-page">
       <div className="page-heading">
-        <div><p className="eyebrow">MỨC DÙNG AI</p><h1>Mức sử dụng</h1><p className="page-subtitle">Token, lượt gọi và chi phí ước tính trên toàn ứng dụng.</p></div>
+        <div><p className="eyebrow">MỨC DÙNG AI</p><h1>Mức sử dụng</h1><p className="page-subtitle">Token, lượt gọi và chi phí ước tính trên toàn ứng dụng, gồm cả trợ lý. Nhóm theo Video thì trợ lý là một dòng riêng, không nằm trong danh sách video.</p></div>
       </div>
       <section className="panel usage-filters" aria-label="Bộ lọc mức sử dụng">
         <label>Từ ngày<input type="date" value={from} onChange={(event) => setFrom(event.target.value)} /></label>

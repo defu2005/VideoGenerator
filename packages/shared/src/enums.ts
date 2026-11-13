@@ -7,6 +7,8 @@ export const PROJECT_STATUSES = [
   "RENDERING",
   "COMPLETED",
   "FAILED",
+  /** Quality repair budget ran out (TASK-121). Reversible; nothing is deleted. */
+  "SHELVED",
 ] as const;
 export const ProjectStatusSchema = z.enum(PROJECT_STATUSES);
 export type ProjectStatus = z.infer<typeof ProjectStatusSchema>;
@@ -30,6 +32,10 @@ export const PIPELINE_STAGES = [
   "PUBLISH",
   /** Side job: cut a vertical short from a finished render. */
   "CLIP",
+  /** Side job: assistant chat usage. Not a project pipeline stage. */
+  "ASSISTANT",
+  /** Side job (TASK-120): download stock footage into the cache, on this machine or on a worker node. */
+  "MEDIA_FETCH",
 ] as const;
 export const PipelineStageSchema = z.enum(PIPELINE_STAGES);
 export type PipelineStage = z.infer<typeof PipelineStageSchema>;
@@ -40,7 +46,7 @@ export function isPublishStage(stage: PipelineStage): boolean {
 
 /** Jobs that must not move pipeline stages (publish and clip export). */
 export function isSideJobStage(stage: PipelineStage): boolean {
-  return stage === "PUBLISH" || stage === "CLIP";
+  return stage === "PUBLISH" || stage === "CLIP" || stage === "ASSISTANT" || stage === "MEDIA_FETCH";
 }
 
 export const AUTONOMY_MODES = ["AUTO", "ASSISTED", "MANUAL"] as const;

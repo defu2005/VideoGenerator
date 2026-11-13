@@ -1,8 +1,9 @@
+import type { KnowledgeService } from "../knowledge/service.js";
 import type { PlatformId, TokenSet } from "@vg/shared";
 import type { YoutubeQuotaTracker } from "../publishing/youtubeQuota.js";
 import { FacebookMetricsFetcher } from "./facebookFetcher.js";
 import { InstagramMetricsFetcher } from "./instagramFetcher.js";
-import { ANALYTICS_REQUIRED_SCOPES } from "./scopes.js";
+import { analyticsScopes } from "./scopes.js";
 import { TikTokMetricsFetcher } from "./tiktokFetcher.js";
 import type {
   AnalyticsLogger,
@@ -15,6 +16,7 @@ import { YoutubeMetricsFetcher } from "./youtubeFetcher.js";
 
 export type CreateFetchersOptions = {
   fetchImpl?: typeof fetch;
+  knowledge?: KnowledgeService;
   youtubeQuota?: YoutubeQuotaTracker;
   logger?: AnalyticsLogger;
   now?: () => Date;
@@ -23,7 +25,7 @@ export type CreateFetchersOptions = {
 /** Mock platform: empty metrics, no API calls. */
 export class MockMetricsFetcher implements MetricsFetcher {
   readonly platform = "mock" as const;
-  readonly requiredScopes = [...ANALYTICS_REQUIRED_SCOPES.mock];
+  readonly requiredScopes = analyticsScopes("mock");
 
   async fetchVideoMetrics(
     _pubs: PubRef[],
@@ -49,6 +51,7 @@ export function createFetchers(options: CreateFetchersOptions = {}): Map<Platfor
     fetchImpl: options.fetchImpl,
     logger: options.logger,
     now: options.now,
+    knowledge: options.knowledge,
   };
   const map = new Map<PlatformId, MetricsFetcher>();
   map.set(

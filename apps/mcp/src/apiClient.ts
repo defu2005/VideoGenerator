@@ -1,3 +1,5 @@
+import { existsSync, readFileSync } from "node:fs";
+import { dirname, isAbsolute, join, resolve } from "node:path";
 import type {
   CreateProjectInput,
   CreateProjectResponse,
@@ -17,6 +19,42 @@ import type {
 } from "@vg/shared";
 
 const SERVER_DOWN_GUIDANCE = "Start it with `npm run dev`.";
+
+function workspaceRoot(start: string): string {
+  let directory = resolve(start);
+  while (true) {
+    if (existsSync(join(directory, "package.json"))) {
+      try {
+        const manifest = JSON.parse(readFileSync(join(directory, "package.json"), "utf8")) as { workspaces?: unknown };
+        if (manifest.workspaces !== undefined) return directory;
+      } catch {
+        // Keep walking if this package.json is not the workspace root.
+      }
+    }
+    const parent = dirname(directory);
+    if (parent === directory) return resolve(start);
+    directory = parent;
+  }
+}
+
+function resolveDataDir(): string {
+  const root = workspaceRoot(process.cwd());
+  const configured = process.env.DATA_DIR?.trim();
+  if (!configured) return join(root, "data");
+  return isAbsolute(configured) ? configured : resolve(root, configured);
+}
+
+function localServiceApiKey(): string | undefined {
+  const fromEnv = process.env.VG_API_KEY?.trim();
+  if (fromEnv) return fromEnv;
+  const path = join(resolveDataDir(), "secrets", "local-services.key");
+  try {
+    const key = readFileSync(path, "utf8").trim();
+    return key || undefined;
+  } catch {
+    return undefined;
+  }
+}
 
 export class VideoAgentApiError extends Error {
   constructor(
@@ -58,6 +96,10 @@ export class VideoAgentApiClient {
 
   getProject(projectId: string): Promise<Project> {
     return this.request(`/api/projects/${encodeURIComponent(projectId)}`);
+  }
+
+  getComposePlan(projectId: string): Promise<unknown> {
+    return this.request(`/api/projects/${encodeURIComponent(projectId)}/compose-plan`);
   }
 
   getProjectUsage(projectId: string): Promise<ProjectUsage> {
@@ -115,6 +157,46 @@ export class VideoAgentApiClient {
 
   getLlmQuotaStatus(): Promise<unknown> {
     return this.request("/api/llm/quota");
+  }
+
+  getLlmHealth(): Promise<unknown> {
+    return this.request("/api/llm/health");
+  }
+
+  getVisionMarks(): Promise<{ models: Array<{ provider: string; model: string }> }> {
+    return this.request("/api/settings/llm-vision-models");
+  }
+
+  getAppLlmRouting(): Promise<unknown> {
+    return this.request("/api/settings/llm-routing");
+  }
+
+  recomputeStageTimeouts(projectId: string): Promise<unknown> {
+    return this.request(`/api/projects/${encodeURIComponent(projectId)}/stage-timeouts/recompute`, { method: "POST" });
+  }
+
+  setStageTimeout(projectId: string, stage: string, timeoutSec: number | null): Promise<unknown> {
+    return this.request(`/api/projects/${encodeURIComponent(projectId)}/stage-timeouts`, {
+      method: "PATCH",
+      body: JSON.stringify({ stage, timeoutSec }),
+    });
+  }
+
+  retryStage(projectId: string, stage: string): Promise<unknown> {
+    return this.request(`/api/projects/${encodeURIComponent(projectId)}/pipeline/stages/${encodeURIComponent(stage)}/retry`, {
+      method: "POST",
+    });
+  }
+
+  assignLlmRoutes(body: {
+    scope?: "app" | "project";
+    projectId?: string;
+    assignments: Array<{ task: string; provider: string; model: string }>;
+  }): Promise<unknown> {
+    return this.request("/api/settings/llm-routing/assign", {
+      method: "POST",
+      body: JSON.stringify(body),
+    });
   }
 
   getLlmRoutes(projectId: string): Promise<{
@@ -269,7 +351,7 @@ export class VideoAgentApiClient {
     return this.request("/api/automation/status");
   }
 
-  listRegistryTools(): Promise<{ tools: Array<{ name: string; description: string; risk: string; properties?: Record<string, unknown> }> }> {
+  listRegistryTools(): Promise<{ tools: Array<{ name: string; description: string; risk: string; properties?: Record<string, unknown>; inputSchema?: Record<string, unknown> }> }> {
     return this.request("/api/registry/tools");
   }
 
@@ -279,12 +361,44 @@ export class VideoAgentApiClient {
     summaryVi?: string;
   }> {
     const headers: Record<string, string> = {};
-    if (process.env.VG_TOOL_SOURCE === "operator") headers["x-vg-tool-source"] = "operator";
+    if (process.env.VG_TOOL_SOURCE === "operator" || process.env.VG_TOOL_SOURCE === "agent") {
+      headers["x-vg-tool-source"] = process.env.VG_TOOL_SOURCE;
+    }
+    for (const [envName, header] of [
+      ["VG_AGENT_KIND", "x-vg-agent-kind"],
+      ["VG_AGENT_NAME", "x-vg-agent-name"],
+      ["VG_AGENT_MODEL", "x-vg-agent-model"],
+      ["VG_ENVIRONMENT", "x-vg-environment"],
+    ] as const) {
+      const value = process.env[envName];
+      if (value) headers[header] = value;
+    }
+    if (process.env.VG_TOOL_SOURCE === "operator" && process.env.VG_OPERATOR_MANAGED === "1") {
+      headers["x-vg-operator-managed"] = "1";
+      if (process.env.VG_OPERATOR_INVOCATION) headers["x-vg-operator-invocation"] = process.env.VG_OPERATOR_INVOCATION;
+    }
     return this.request("/api/registry/invoke", {
       method: "POST",
       headers,
       body: JSON.stringify({ name, args }),
     });
+  }
+
+  callApp(method: "GET" | "POST" | "PUT" | "PATCH" | "DELETE", path: string, body?: unknown): Promise<unknown> {
+    return this.request(path, {
+      method,
+      ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+    });
+  }
+
+  getEvents(query: { since?: string; types?: string[]; projectId?: string; limit?: number } = {}): Promise<unknown> {
+    const params = new URLSearchParams();
+    if (query.since) params.set("since", query.since);
+    if (query.types?.length) params.set("types", query.types.join(","));
+    if (query.projectId) params.set("projectId", query.projectId);
+    if (query.limit) params.set("limit", String(query.limit));
+    const suffix = params.size ? `?${params.toString()}` : "";
+    return this.request(`/api/events${suffix}`);
   }
 
   searchUserGuide(query: string): Promise<unknown> {
@@ -294,12 +408,15 @@ export class VideoAgentApiClient {
 
   private async request<T>(path: string, init?: RequestInit): Promise<T> {
     let response: Response;
+    const apiKey = localServiceApiKey();
     try {
       response = await this.fetchImpl(`${this.baseUrl}${path}`, {
         ...init,
         headers: {
           Accept: "application/json",
           ...(init?.body === undefined ? {} : { "Content-Type": "application/json" }),
+          ...(apiKey ? { "x-api-key": apiKey } : {}),
+          ...(process.env.VG_WORKSPACE_ID?.trim() ? { "x-workspace-id": process.env.VG_WORKSPACE_ID.trim() } : {}),
           ...init?.headers,
         },
       });

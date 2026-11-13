@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { spawn, type SpawnOptions } from "node:child_process";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { EdgeTtsProvider } from "../src/providers/tts/edgeTts.js";
+import { EdgeTtsProvider, isEdgeNetworkError } from "../src/providers/tts/edgeTts.js";
 import { StageError } from "../src/pipeline/stageExecutor.js";
 
 const roots: string[] = [];
@@ -194,7 +194,7 @@ describe("EdgeTtsProvider", () => {
     const root = mkdtempSync(join(tmpdir(), "vg-edge-tts-"));
     roots.push(root);
     const output = join(root, "voice.mp3");
-    const fake = fakeSpawn(() => ({ code: 1, stderr: "Connection reset by peer" }));
+    const fake = fakeSpawn(() => ({ code: 1, stderr: "Invalid voice name" }));
     const sleep = vi.fn(async () => undefined);
     const provider = new EdgeTtsProvider("edge-tts.exe", 1000, {
       spawnProcess: fake.spawnProcess,
@@ -207,10 +207,36 @@ describe("EdgeTtsProvider", () => {
       voice: "vi-VN-HoaiMyNeural",
       rate: "+0%",
       outPath: output,
-    })).rejects.toThrow(/Connection reset by peer/);
+    })).rejects.toThrow(/Invalid voice name/);
 
     expect(fake.calls).toHaveLength(1);
     expect(sleep).not.toHaveBeenCalled();
+  });
+
+  it("retries a DNS failure four times and then asks the user to check the network", async () => {
+    const root = mkdtempSync(join(tmpdir(), "vg-edge-tts-"));
+    roots.push(root);
+    const output = join(root, "voice.mp3");
+    const fake = fakeSpawn(() => ({ code: 1, stderr: "ClientConnectorError: Cannot connect to host speech.platform.bing.com:443 ssl:default [getaddrinfo failed]" }));
+    const sleep = vi.fn(async () => undefined);
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    const provider = new EdgeTtsProvider("edge-tts.exe", 1000, {
+      spawnProcess: fake.spawnProcess,
+      sleep,
+      probeDuration: vi.fn(async () => 1),
+    });
+    const error = await provider.synthesize({
+      text: "mạng lỗi",
+      voice: "vi-VN-HoaiMyNeural",
+      rate: "+0%",
+      outPath: output,
+    }).catch((caught: unknown) => caught);
+    expect(error).toMatchObject({ code: "TTS_NETWORK", retryable: true });
+    expect(fake.calls).toHaveLength(4);
+    expect(sleep.mock.calls.map(([delay]) => delay)).toEqual([30_000, 30_000, 30_000]);
+    expect(warn.mock.calls.some(([line]) => String(line).includes("attempt=2/4"))).toBe(true);
+    expect(isEdgeNetworkError("WSServerHandshakeError: 403")).toBe(false);
+    expect(isEdgeNetworkError("Temporary failure in name resolution")).toBe(true);
   });
 
   it("reports a missing binary as a non-retryable stage error", async () => {

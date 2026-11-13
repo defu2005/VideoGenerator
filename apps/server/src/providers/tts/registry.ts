@@ -23,6 +23,7 @@ import type { AppConfig } from "../../lib/config.js";
 import { defaultVoiceFor } from "../../lib/defaultVoice.js";
 import { probeDurationSec } from "../../media/ffmpeg.js";
 import { StageError } from "../../pipeline/stageExecutor.js";
+import { currentAutonomyBudget } from "../../operator/autonomyBudget.js";
 import type { TokenVault } from "../../publishing/tokenVault.js";
 import { getSpeechToTextSettings, transcribeWithSpeechCli } from "../../settings/speechToText.js";
 import { readTtsSettings, ttsSecretKey } from "../../settings/tts.js";
@@ -61,6 +62,7 @@ export class TtsProviderRegistry {
   private readonly spawnProcess: typeof spawn;
   private readonly sleep: (ms: number) => Promise<void>;
   private readonly ctx: TtsContext;
+  private readonly settingsOverride: (() => TtsAppSettings) | null;
 
   constructor(
     private readonly config: AppConfig,
@@ -70,8 +72,13 @@ export class TtsProviderRegistry {
       fetchImpl?: typeof fetch;
       spawnProcess?: typeof spawn;
       sleep?: (ms: number) => Promise<void>;
+      /** A worker node has no database: it reads settings from its own environment. */
+      settings?: () => TtsAppSettings;
+      /** A worker node holds the key it was lent in memory only. */
+      secret?: (providerId: string) => string | null;
     },
   ) {
+    this.settingsOverride = deps?.settings ?? null;
     this.fetchImpl = deps?.fetchImpl ?? fetch;
     this.spawnProcess = deps?.spawnProcess ?? spawn;
     this.sleep = deps?.sleep ?? ((ms) => new Promise((resolve) => setTimeout(resolve, ms)));
@@ -79,7 +86,7 @@ export class TtsProviderRegistry {
     this.sqlite = deps?.sqlite ?? null;
     this.ctx = {
       config,
-      secret: (id) => this.vault?.loadSecret(ttsSecretKey(id)) ?? null,
+      secret: deps?.secret ?? ((id) => this.vault?.loadSecret(ttsSecretKey(id)) ?? null),
       fetchImpl: this.fetchImpl,
       spawnProcess: this.spawnProcess,
       sleep: this.sleep,
@@ -104,6 +111,7 @@ export class TtsProviderRegistry {
   }
 
   readSettings(): TtsAppSettings {
+    if (this.settingsOverride) return this.settingsOverride();
     if (!this.sqlite) return emptyTtsSettings(this.config.TTS_PROVIDER);
     return readTtsSettings(this.sqlite, this.config.TTS_PROVIDER);
   }
@@ -161,6 +169,35 @@ export class TtsProviderRegistry {
     });
   }
 
+  /**
+   * TASK-120: synthesize with exactly one provider and no fallback. A worker node uses it so the control plane
+   * (which planned the voice) is the only place that decides about fallbacks.
+   */
+  async synthesizeSingle(input: {
+    providerId: string;
+    text: string;
+    language: string;
+    outPath: string;
+    signal?: AbortSignal;
+    voice: string;
+    rate: string;
+    model?: string;
+    style?: string;
+  }): Promise<TtsSynthesisResult & { providerId: string; voice: string; rate: string; audioPath: string }> {
+    return this.runChain({
+      chain: [input.providerId],
+      text: input.text,
+      language: input.language,
+      outPath: input.outPath,
+      signal: input.signal,
+      voice: input.voice,
+      rate: input.rate,
+      model: input.model,
+      style: input.style,
+      pinnedProvider: input.providerId,
+    });
+  }
+
   async synthesizePreview(input: {
     providerId: string;
     voice: string;
@@ -204,15 +241,33 @@ export class TtsProviderRegistry {
     pinnedProvider: string;
     onUsage?: (usage: Partial<JobUsage>) => void;
   }): Promise<TtsSynthesisResult & { providerId: string; voice: string; rate: string; audioPath: string }> {
+    const free = new Set(["mock", "piper", "vieneu", "edge-tts"]);
+    let budgetWait: StageError | undefined;
+    const checkBudget = (id: string) => {
+      const budget = currentAutonomyBudget();
+      if (budget?.state === "stop" && !free.has(id)) {
+        budgetWait = new StageError("Đã chạm hạn mức chi cho giọng đọc. Chờ kỳ ngân sách mới.", "AUTONOMY_BUDGET_WAIT",
+          true, budget.retryAt ?? undefined);
+        throw budgetWait;
+      }
+    };
+    const budgetState = currentAutonomyBudget()?.state;
+    const conserving = budgetState === "warn" || budgetState === "stop";
+    const candidates = conserving ? [...new Set([...input.chain, "piper", "vieneu"])] : input.chain;
+    const chain = conserving
+      ? [...candidates.filter((id) => free.has(id)), ...candidates.filter((id) => !free.has(id))]
+      : candidates;
     try {
       const chosen = await runProviderFallback({
-        chain: input.chain,
+        chain,
         isAvailable: (id) => this.providers.get(id)?.isAvailable() ?? false,
         run: async (id) => {
+          checkBudget(id);
           const provider = this.providers.get(id);
           if (!provider) throw new Error(`Thiếu nhà cung cấp ${id}.`);
           const voices = await provider.listVoices();
-          const voice = input.voice || defaultVoiceFor(input.language, voices, this.config);
+          const voice = (!conserving || id === input.pinnedProvider ? input.voice : "")
+            || defaultVoiceFor(input.language, voices, this.config);
           const ext = audioExtensionFor(id);
           const target = input.outPath.replace(/\.[^.]+$/, `.${ext}`);
           mkdirSync(dirname(target), { recursive: true });
@@ -222,6 +277,7 @@ export class TtsProviderRegistry {
             maxChars: provider.capabilities.maxCharsPerRequest,
             outPath: target,
             synthesizePart: async (text, outPath) => {
+              checkBudget(id);
               const part = await provider.synthesize({
                 text,
                 voice,
@@ -281,8 +337,11 @@ export class TtsProviderRegistry {
       };
     } catch (error) {
       if (error instanceof Error && error.name === "AbortError") throw error;
+      if (error instanceof StageError && error.code === "TTS_NETWORK") throw error;
+      if (budgetWait) throw budgetWait;
       const message = error instanceof Error ? error.message : "Không tạo được giọng đọc.";
-      throw new StageError(message, "TTS_FAILED", true);
+      const code = error instanceof StageError ? error.code : "";
+      throw new StageError(code ? `${message} (${code})` : message, "TTS_FAILED", true);
     }
   }
 

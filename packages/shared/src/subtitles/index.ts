@@ -1,3 +1,5 @@
+import { calloutMarginV, closeSubtitleGaps, hexToAssColour, karaokeAssText, popAssText, type SubtitleStyleId, type TimedWord } from "../edit/plan.js";
+
 export type SubtitleCue = {
   index?: number;
   sceneId?: string;
@@ -5,6 +7,8 @@ export type SubtitleCue = {
   endSec: number;
   text: string;
   edited?: boolean;
+  words?: TimedWord[];
+  wordsEstimated?: boolean;
 };
 
 export type SubtitleOptions = {
@@ -273,6 +277,13 @@ export function toAss(cues: SubtitleCue[], style: Record<string, unknown> = {}):
   const marginBottom = Number.isFinite(rawMargin) && rawMargin >= 0 ? rawMargin : defaultMargin;
   const textColor = String(style.textColor ?? "&H00FFFFFF");
   const outlineColor = String(style.outlineColor ?? "&H00000000");
+  const subtitleStyle = (style.subtitleStyle as SubtitleStyleId | undefined) ?? "clean";
+  const highlight = hexToAssColour(String(style.highlightColor ?? "#F5C518"));
+  const bold = subtitleStyle === "clean" || subtitleStyle === "pop" ? -1 : 0;
+  const borderStyle = subtitleStyle === "box" ? 3 : 1;
+  const backColour = subtitleStyle === "box" ? "&H64000000" : "&H00000000";
+  const shadow = subtitleStyle === "clean" ? 1 : 0;
+  const calloutMargin = calloutMarginV(height, marginBottom);
 
   const header = [
     "[Script Info]",
@@ -285,16 +296,24 @@ export function toAss(cues: SubtitleCue[], style: Record<string, unknown> = {}):
     "",
     "[V4+ Styles]",
     "Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding",
-    `Style: Default,${fontName},${fontSize},${textColor},&H00000000,${outlineColor},&H00000000,0,0,0,0,100,100,0,0,1,3,0,2,100,100,${marginBottom},1`,
+    `Style: Default,${fontName},${fontSize},${textColor},${highlight},${outlineColor},${backColour},${bold},0,0,0,100,100,0,0,${borderStyle},3,${shadow},2,100,100,${marginBottom},1`,
+    `Style: Callout,${fontName},${Math.round(fontSize * 1.4)},${highlight},${highlight},${outlineColor},&H00000000,-1,0,0,0,100,100,0,0,1,4,0,8,80,80,${calloutMargin},1`,
     "",
     "[Events]",
     "Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text",
   ].join("\n");
 
-  const dialogs = cues
-    .filter((cue) => cue.text.trim())
-    .sort((a, b) => (a.startSec ?? 0) - (b.startSec ?? 0))
-    .map((cue) => `Dialogue: 0,${formatAssTime(cue.startSec)},${formatAssTime(cue.endSec)},Default,,0,0,0,,${escapeAssText(cue.text.trim())}`)
+  const closed = closeSubtitleGaps(cues.filter((cue) => cue.text.trim()));
+  const dialogs = closed
+    .map((cue) => {
+      const words = cue.words ?? [];
+      const body = subtitleStyle === "karaoke"
+        ? karaokeAssText(words.length ? words : [{ text: cue.text.trim(), startSec: cue.startSec, endSec: cue.endSec }], cue.startSec, cue.endSec, cue.wordsEstimated || words.length === 0)
+        : subtitleStyle === "pop"
+          ? popAssText(words.length ? words.slice(0, 3) : [{ text: cue.text.trim(), startSec: cue.startSec, endSec: cue.endSec }])
+          : escapeAssText(cue.text.trim());
+      return `Dialogue: 0,${formatAssTime(cue.startSec)},${formatAssTime(cue.endSec)},Default,,0,0,0,,${body}`;
+    })
     .join("\n");
 
   return `${header}\n${dialogs}\n`;

@@ -1,6 +1,8 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { LlmHealthBadges } from "./LlmHealthBadges";
 import { ErrorState } from "../../components/ErrorState";
+import { useToast } from "../../components/ui/Toast";
 import { Spinner } from "../../components/Spinner";
 import { ModelField } from "../llm/ModelField";
 import {
@@ -124,6 +126,7 @@ function TaskRoutingRow({
 
 export function AiSettingsPage() {
   const queryClient = useQueryClient();
+  const toast = useToast();
   const settings = useQuery({ queryKey: ["llm-routing"], queryFn: getAppLlmRouting });
   const providers = useQuery({ queryKey: ["llm-providers"], queryFn: getLlmProviders });
   const tasks = useQuery({ queryKey: ["llm-tasks"], queryFn: getLlmTasks });
@@ -140,7 +143,9 @@ export function AiSettingsPage() {
       setDraft(saved);
       await queryClient.invalidateQueries({ queryKey: ["llm-routing"] });
       await queryClient.invalidateQueries({ queryKey: ["project-llm-routes"] });
+      toast.success("Đã lưu cài đặt AI");
     },
+    onError: (reason) => toast.error(reason instanceof Error ? reason.message : "Không lưu được cài đặt AI"),
   });
 
   useEffect(() => {
@@ -229,6 +234,7 @@ export function AiSettingsPage() {
       {mutation.isError && <p className="request-error" role="alert">{mutation.error instanceof Error ? mutation.error.message : "Không lưu được cài đặt AI"}</p>}
       {mutation.isSuccess && <p className="success-message" role="status">Đã lưu cài đặt mô hình AI.</p>}
       {tab === "routes" && <>
+      <LlmHealthBadges />
       <OmniRouteGatewaySection />
       <ModelAdvisorPanel scope="app" />
       <form className="panel ai-routing-form" onSubmit={submit}>

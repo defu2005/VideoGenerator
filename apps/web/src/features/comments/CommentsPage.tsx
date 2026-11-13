@@ -238,7 +238,7 @@ export function CommentsPage() {
             </label>
             <div className="comment-video">
               {item.thumbnailUrl ? (
-                <img src={item.thumbnailUrl} alt="" className="comment-thumb" />
+                <img src={item.thumbnailUrl} alt="" className="comment-thumb" loading="lazy" />
               ) : (
                 <span className="comment-thumb comment-thumb-empty" aria-hidden="true" />
               )}

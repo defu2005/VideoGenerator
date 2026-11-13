@@ -76,3 +76,10 @@ Routing and skill shape follow ideas from [paulpas/agent-skill-router](https://g
 - Section 7 live check was not run. It needs a real `cursor-agent` session, which uses the network and the user's Cursor allowance, and step 3 creates then deletes a project. The CLI is present on disk at `%LOCALAPPDATA%/cursor-agent/versions/2026.11.05-86047df` (`index.js` and `node.exe`). It was not executed. Ticks were not enabled. Nothing was published, rendered, or gate-approved. The protected project was not opened.
 - This session had no browser tool. The operator page, engine switch, queue line, pending card, and resume command were exercised in component tests only. A running dev server was not clicked through.
 - TASK-046 provider research, the model scorecard, and the `research-provider` / `compare-models` skills are not in this task. Duties and seeded standing orders are arrays a later module can extend. Seeded orders stay `enabled: false`.
+
+## Follow-up on 2026-11-09
+
+- `apps/server/src/operator/service.ts` and `apps/server/test/operator.test.ts` cover interrupted queued and running work. Startup records the terminal status and chat notice in one transaction. Repeated startup does not duplicate the notice. Runs are left for manual review because a running job may have taken actions before the interruption.
+- `apps/server/src/services/projectService.ts` selects the ID from the joined project to fix the dashboard typecheck after jobs gained nullable project IDs.
+- `docs/ARCHITECTURE.md` records the separation between the operator runtime and per-task model routing. `packages/shared/src/features/featureMap.ts`, `docs/user-guide/tro-ly-va-telegram.md`, and `docs/user-guide/nhat-ky-thay-doi.md` document restart behavior.
+- Typecheck and build passed. Workspace tests passed (shared 337, MCP 17, server 650 with 1 skipped, web 149). No migration or dependency change. Live browser and CLI verification remain open.

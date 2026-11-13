@@ -26,6 +26,17 @@ import {
 } from "@vg/shared";
 import { apiRequest } from "./apiClient";
 
+export type LlmHealth = {
+  cooldowns: Array<{ provider: string; model: string | null; until: string; reason: "rate_limit" | "quota" | "unavailable"; streak: number; code: string }>;
+  recentFailovers: Array<{ at: string; task: string; from: string; to: string; reason: string }>;
+  failoversLast10Min: number;
+};
+
+/** TASK-127: providers resting after a quota or rate limit, and recent automatic failovers. */
+export function getLlmHealth(): Promise<LlmHealth> {
+  return apiRequest<LlmHealth>("/llm/health");
+}
+
 export function getLlmProviders(): Promise<LlmProviderInfo[]> {
   return apiRequest<unknown>("/llm/providers").then((response) => {
     const parsed = LlmProviderInfoSchema.array().safeParse(response);

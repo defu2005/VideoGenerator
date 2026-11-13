@@ -1,16 +1,21 @@
 import { randomUUID } from "node:crypto";
-import { mkdtempSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { BraveImageProvider } from "../src/providers/images/brave.js";
 import type { Project } from "@vg/shared";
 import { buildApp } from "../src/app.js";
+import { testActor } from "./testActor.js";
 import { parseConfig, type AppConfig } from "../src/lib/config.js";
 import { PipelineEventBus } from "../src/jobs/eventBus.js";
 import { JobRepository } from "../src/jobs/jobRepository.js";
-import { VisualService } from "../src/services/visualService.js";
+import { ImageStore, type StoredImage } from "../src/services/imageStore.js";
+import { solidPng } from "./pngFixture.js";
 import { LlmProviderRegistry } from "../src/providers/llm/registry.js";
 import { TokenBucketRateLimiter } from "../src/providers/images/rateLimiter.js";
+import { VisualService } from "../src/services/visualService.js";
+import { projectDir } from "../src/storage/paths.js";
 import type { StageContext } from "../src/pipeline/stageExecutor.js";
 import { buildClaudeArgs } from "../src/providers/llm/claudeCli.js";
 import { buildCopilotArgs } from "../src/providers/llm/copilotCli.js";
@@ -32,6 +37,12 @@ function noWaitLimiter() {
   return new TokenBucketRateLimiter({ mock: 60_000 }, () => 0, async () => undefined);
 }
 
+class OfflineImageStore extends ImageStore {
+  override async download(projectId: string, _url: string): Promise<StoredImage> {
+    return this.storeBuffer(projectId, solidPng(320, 320));
+  }
+}
+
 beforeEach(async () => {
   dataDir = join(root, `run-${randomUUID()}`);
   config = parseConfig({
@@ -43,7 +54,7 @@ beforeEach(async () => {
     LLM_ENABLE_MOCK: "true",
     LLM_DEFAULT_PROVIDER: "mock",
   });
-  app = buildApp({ config });
+  app = buildApp({ testActor,  config });
   const created = await app.inject({
     method: "POST",
     url: "/api/projects",
@@ -78,7 +89,10 @@ beforeEach(async () => {
     sqlite.prepare("UPDATE project_stages SET state = 'DONE' WHERE project_id = ? AND stage = ?").run(project.id, stage);
   }
   const repository = new JobRepository(sqlite, new PipelineEventBus());
-  visuals = new VisualService(sqlite, repository, config, app.log, { limiter: noWaitLimiter() });
+  visuals = new VisualService(sqlite, repository, config, app.log, {
+    limiter: noWaitLimiter(),
+    imageStore: new OfflineImageStore(dataDir, config.IMAGE_SEARCH_USER_AGENT),
+  });
   llm = new LlmProviderRegistry(config);
 });
 
@@ -160,6 +174,29 @@ describe("TASK-004G MAX vision", () => {
     expect(first?.visionMeta?.reSearchHistory?.length ?? 0).toBeGreaterThan(0);
   });
 
+  it("calls Brave once after vision rejects a scene", async () => {
+    const enabled = { ...config, BRAVE_SEARCH_API_KEY: "fixture-key" };
+    const web = vi.spyOn(BraveImageProvider.prototype, "search").mockResolvedValue([]);
+    const service = new VisualService(
+      sqlite,
+      new JobRepository(sqlite, new PipelineEventBus()),
+      enabled,
+      app.log,
+      {
+        limiter: noWaitLimiter(),
+        imageStore: new OfflineImageStore(dataDir, enabled.IMAGE_SEARCH_USER_AGENT),
+      },
+    );
+    try {
+      const result = await service.executeStage(stageContext(), llm);
+      const rejects = result.message.split("vision_reject:").length - 1;
+      expect(rejects).toBeGreaterThan(0);
+      expect(web).toHaveBeenCalledTimes(rejects);
+    } finally {
+      web.mockRestore();
+    }
+  });
+
   it("fails fast with VISION_PROVIDER_REQUIRED when the vision route cannot accept images", async () => {
     const mock = llm.get("mock");
     expect(mock).toBeTruthy();
@@ -174,12 +211,43 @@ describe("TASK-004G MAX vision", () => {
     const scene = visuals.getSceneVisuals(project.id, sceneIds[1]!);
     const candidate = scene.candidates[0];
     expect(candidate).toBeTruthy();
+    const relative = "visuals/vision-check.png";
+    const absolute = join(projectDir(dataDir, project.id), relative);
+    mkdirSync(join(absolute, ".."), { recursive: true });
+    writeFileSync(absolute, solidPng(320, 320));
+    sqlite.prepare("UPDATE visual_candidates SET local_path = ? WHERE id = ?").run(relative, candidate!.id);
     const response = await app.inject({
       method: "POST",
       url: `/api/projects/${project.id}/scenes/${sceneIds[1]}/visuals/${candidate!.id}/vision-check`,
     });
     expect(response.statusCode).toBe(200);
     expect(response.json().candidate.visionCheck.fit).toBeTypeOf("number");
+  });
+
+  it("refuses a missing or undersized source instead of scoring a placeholder", async () => {
+    await visuals.executeStage(stageContext(), llm);
+    const candidate = visuals.getSceneVisuals(project.id, sceneIds[1]!).candidates[0]!;
+    sqlite.prepare("UPDATE visual_candidates SET local_path = ? WHERE id = ?").run("visuals/missing.png", candidate.id);
+    const missing = await app.inject({
+      method: "POST",
+      url: `/api/projects/${project.id}/scenes/${sceneIds[1]}/visuals/${candidate.id}/vision-check`,
+    });
+    expect(missing.statusCode).toBe(422);
+    expect(missing.json().error.code).toBe("VISION_SOURCE_MISSING");
+
+    const relative = "visuals/tiny.png";
+    const absolute = join(projectDir(dataDir, project.id), relative);
+    mkdirSync(join(absolute, ".."), { recursive: true });
+    writeFileSync(absolute, solidPng(32, 32));
+    sqlite.prepare("UPDATE visual_candidates SET local_path = ? WHERE id = ?").run(relative, candidate.id);
+    const invalid = await app.inject({
+      method: "POST",
+      url: `/api/projects/${project.id}/scenes/${sceneIds[1]}/visuals/${candidate.id}/vision-check`,
+    });
+    expect(invalid.statusCode).toBe(422);
+    expect(invalid.json().error.code).toBe("VISION_SOURCE_INVALID");
+    const row = sqlite.prepare("SELECT score_breakdown FROM visual_candidates WHERE id = ?").get(candidate.id) as { score_breakdown: string };
+    expect(JSON.parse(row.score_breakdown).invalidSource).toBe(true);
   });
 
   it("estimate endpoint includes MAX vision call counts", async () => {

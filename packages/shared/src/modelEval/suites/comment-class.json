@@ -1,0 +1,128 @@
+{
+  "id": "comment-class",
+  "titleVi": "Phân loại bình luận",
+  "taskId": "commentAssist",
+  "rubricVi": "Nhãn khớp nhãn mẫu.",
+  "cases": [
+    {
+      "id": "comment-class-1",
+      "taskId": "commentAssist",
+      "input": {
+        "text": "Bình luận 1"
+      },
+      "graders": [
+        {
+          "kind": "exact",
+          "expected": {
+            "label": "câu hỏi"
+          }
+        }
+      ]
+    },
+    {
+      "id": "comment-class-2",
+      "taskId": "commentAssist",
+      "input": {
+        "text": "Bình luận 2"
+      },
+      "graders": [
+        {
+          "kind": "exact",
+          "expected": {
+            "label": "câu hỏi"
+          }
+        }
+      ]
+    },
+    {
+      "id": "comment-class-3",
+      "taskId": "commentAssist",
+      "input": {
+        "text": "Bình luận 3"
+      },
+      "graders": [
+        {
+          "kind": "exact",
+          "expected": {
+            "label": "câu hỏi"
+          }
+        }
+      ]
+    },
+    {
+      "id": "comment-class-4",
+      "taskId": "commentAssist",
+      "input": {
+        "text": "Bình luận 4"
+      },
+      "graders": [
+        {
+          "kind": "exact",
+          "expected": {
+            "label": "câu hỏi"
+          }
+        }
+      ]
+    },
+    {
+      "id": "comment-class-5",
+      "taskId": "commentAssist",
+      "input": {
+        "text": "Bình luận 5"
+      },
+      "graders": [
+        {
+          "kind": "exact",
+          "expected": {
+            "label": "câu hỏi"
+          }
+        }
+      ]
+    },
+    {
+      "id": "comment-class-6",
+      "taskId": "commentAssist",
+      "input": {
+        "text": "Bình luận 6"
+      },
+      "graders": [
+        {
+          "kind": "exact",
+          "expected": {
+            "label": "câu hỏi"
+          }
+        }
+      ]
+    },
+    {
+      "id": "comment-class-7",
+      "taskId": "commentAssist",
+      "input": {
+        "text": "Bình luận 7"
+      },
+      "graders": [
+        {
+          "kind": "exact",
+          "expected": {
+            "label": "câu hỏi"
+          }
+        }
+      ]
+    },
+    {
+      "id": "comment-class-8",
+      "taskId": "commentAssist",
+      "input": {
+        "text": "Bình luận 8"
+      },
+      "graders": [
+        {
+          "kind": "exact",
+          "expected": {
+            "label": "câu hỏi"
+          }
+        }
+      ]
+    }
+  ]
+}

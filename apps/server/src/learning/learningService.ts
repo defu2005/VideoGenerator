@@ -1,3 +1,4 @@
+import { enqueueIndex } from "../retrieval/service.js";
 import { randomUUID } from "node:crypto";
 import type Database from "better-sqlite3";
 import {
@@ -212,6 +213,7 @@ export class LearningService {
           topicClusters: stats.topicClusters,
           observedDuration: stats.observedDuration,
           overallMedian: stats.overallMedian,
+          composeNotes: stats.composeNotes,
         },
         titleTests,
         topicAngles: hints.topicAngles,
@@ -226,6 +228,14 @@ export class LearningService {
     }
     const recommendations = validateRecommendations(generated.recommendations, stats);
     const patterns = [...generated.patterns];
+    for (const note of stats.composeNotes) {
+      patterns.unshift({
+        kind: "length",
+        finding: note,
+        evidence: "Nhóm xem nhiều và nhóm xem ít, theo phần trăm xem trung bình.",
+        confidence: "medium",
+      });
+    }
     for (const test of titleTests) {
       patterns.push({
         kind: "hook",
@@ -251,6 +261,7 @@ export class LearningService {
       `INSERT INTO profile_insights (id, profile_id, created_at, period, json, status)
        VALUES (?, ?, ?, ?, ?, 'new')`,
     ).run(id, profileId, createdAt, period, JSON.stringify(stored));
+    enqueueIndex(this.deps.sqlite,{scope:"source",kind:"lesson",sourceId:profileId});
 
     if (mode === "auto") {
       const fields = this.autoFields(profileId, recommendations);
@@ -785,6 +796,7 @@ export class LearningService {
 function compactRow(row: FeatureRow): {
   hook: string;
   title: string;
+  format: string | null;
   durationSec: number | null;
   postingTime: string;
   score: number | null;
@@ -792,6 +804,7 @@ function compactRow(row: FeatureRow): {
   return {
     hook: row.hook,
     title: row.title,
+    format: row.format,
     durationSec: row.durationSec,
     postingTime: row.postingTime,
     score: row.score,

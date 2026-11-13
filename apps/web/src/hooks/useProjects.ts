@@ -28,6 +28,12 @@ export function useProjects(query: ProjectListQuery) {
   return useQuery({
     queryKey: projectKeys.list(query),
     queryFn: () => getProjects(query),
+    refetchInterval: (query) => {
+      const items = query.state.data?.items;
+      const hasActive = items?.some((p) => p.status === "GENERATING" || p.status === "RENDERING");
+      return hasActive ? 3000 : false;
+    },
+    refetchIntervalInBackground: false,
   });
 }
 
@@ -36,6 +42,12 @@ export function useProject(id: string) {
     queryKey: projectKeys.detail(id),
     queryFn: () => getProject(id),
     enabled: Boolean(id),
+    refetchInterval: (query) => {
+      const project = query.state.data;
+      const isActive = project?.status === "GENERATING" || project?.status === "RENDERING";
+      return isActive ? 3000 : false;
+    },
+    refetchIntervalInBackground: false,
   });
 }
 
@@ -43,6 +55,12 @@ export function useDashboardStats() {
   return useQuery({
     queryKey: projectKeys.dashboard,
     queryFn: getDashboardStats,
+    refetchInterval: (query) => {
+      const recent = query.state.data?.recent;
+      const hasActive = recent?.some((p) => p.status === "GENERATING" || p.status === "RENDERING");
+      return hasActive ? 3000 : false;
+    },
+    refetchIntervalInBackground: false,
   });
 }
 

@@ -12,6 +12,7 @@ import {
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { AppError } from "../lib/errors.js";
+import { requireValidPlatformApp } from "../publishing/appCredentialValidation.js";
 import type { PublishService } from "../publishing/publishService.js";
 import type { TokenVault } from "../publishing/tokenVault.js";
 
@@ -157,6 +158,7 @@ export function registerPublicationRoutes(
     const body = PlatformAppCredentialsInputSchema.parse(request.body);
     const account = deps.publish.requireAccount(accountId);
     if (account.profile_id !== id) throw new AppError(404, "ACCOUNT_NOT_FOUND", "Platform account not found");
+    requireValidPlatformApp(account.platform, body);
     const { idHint } = deps.vault.storeAppCredentials({
       accountId,
       platform: account.platform,

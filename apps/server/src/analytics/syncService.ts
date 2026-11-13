@@ -1,3 +1,5 @@
+import { enqueueIndex } from "../retrieval/service.js";
+import { scopeSql } from "../auth/requestContext.js";
 import { randomUUID } from "node:crypto";
 import type Database from "better-sqlite3";
 import type {
@@ -177,8 +179,10 @@ export class AnalyticsSyncService {
       `SELECT a.id, a.profile_id, a.platform, a.display_name,
               a.analytics_status, a.analytics_last_error, a.analytics_synced_at
        FROM platform_accounts a
+       JOIN profiles scope_p ON scope_p.id = a.profile_id
+       WHERE ${scopeSql("scope_p.workspace_id", "a.profile_id").sql}
        ORDER BY a.platform, a.display_name`,
-    ).all() as Array<{
+    ).all(...scopeSql("scope_p.workspace_id", "a.profile_id").args) as Array<{
       id: string;
       profile_id: string;
       platform: PlatformId;
@@ -407,6 +411,8 @@ export class AnalyticsSyncService {
     }
 
     const fetchedAt = this.now().toISOString();
+    const projectRevision = this.sqlite.prepare(`SELECT json_extract(j.settings, '$.knowledgeRev') AS revision
+      FROM publications p JOIN projects j ON j.id = p.project_id WHERE p.id = ?`);
     let count = 0;
     const insert = this.sqlite.prepare(
       `INSERT INTO publication_metrics_snapshots (
@@ -424,6 +430,7 @@ export class AnalyticsSyncService {
 
     const tx = this.sqlite.transaction(() => {
       for (const [publicationId, metrics] of map) {
+        const revision = projectRevision.get(publicationId) as { revision: string | null } | undefined;
         const id = randomUUID();
         insert.run(
           id,
@@ -439,7 +446,7 @@ export class AnalyticsSyncService {
           metrics.avgViewPct ?? null,
           metrics.subscribersGained ?? null,
           metrics.reach ?? null,
-          JSON.stringify(metrics.raw ?? {}),
+          JSON.stringify({ ...metrics.raw, knowledgeRev: revision?.revision ?? "unknown" }),
         );
         const latest = {
           views: metrics.views ?? null,

@@ -6,6 +6,7 @@ import Database from "better-sqlite3";
 import { afterAll, afterEach, describe, expect, it } from "vitest";
 import type { Project } from "@vg/shared";
 import { buildApp } from "../src/app.js";
+import { testActor } from "./testActor.js";
 import { parseConfig } from "../src/lib/config.js";
 
 const root = mkdtempSync(join(tmpdir(), "vg-usage-test-"));
@@ -27,7 +28,7 @@ function createApp() {
     LOG_LEVEL: "silent",
     USD_VND_RATE: "25000",
   });
-  const app = buildApp({ config });
+  const app = buildApp({ testActor,  config });
   apps.push(app);
   return { app, config };
 }

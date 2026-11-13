@@ -1,0 +1,136 @@
+{
+  "id": "tool-choice",
+  "titleVi": "Chọn công cụ trợ lý",
+  "taskId": "assistantChat",
+  "rubricVi": "Đúng tên công cụ và tham số.",
+  "cases": [
+    {
+      "id": "tool-choice-1",
+      "taskId": "assistantChat",
+      "input": {
+        "ask": "Liệt kê dự án 1"
+      },
+      "graders": [
+        {
+          "kind": "toolCall",
+          "name": "list_projects",
+          "args": {
+            "page": 1
+          }
+        }
+      ]
+    },
+    {
+      "id": "tool-choice-2",
+      "taskId": "assistantChat",
+      "input": {
+        "ask": "Liệt kê dự án 2"
+      },
+      "graders": [
+        {
+          "kind": "toolCall",
+          "name": "list_projects",
+          "args": {
+            "page": 1
+          }
+        }
+      ]
+    },
+    {
+      "id": "tool-choice-3",
+      "taskId": "assistantChat",
+      "input": {
+        "ask": "Liệt kê dự án 3"
+      },
+      "graders": [
+        {
+          "kind": "toolCall",
+          "name": "list_projects",
+          "args": {
+            "page": 1
+          }
+        }
+      ]
+    },
+    {
+      "id": "tool-choice-4",
+      "taskId": "assistantChat",
+      "input": {
+        "ask": "Liệt kê dự án 4"
+      },
+      "graders": [
+        {
+          "kind": "toolCall",
+          "name": "list_projects",
+          "args": {
+            "page": 1
+          }
+        }
+      ]
+    },
+    {
+      "id": "tool-choice-5",
+      "taskId": "assistantChat",
+      "input": {
+        "ask": "Liệt kê dự án 5"
+      },
+      "graders": [
+        {
+          "kind": "toolCall",
+          "name": "list_projects",
+          "args": {
+            "page": 1
+          }
+        }
+      ]
+    },
+    {
+      "id": "tool-choice-6",
+      "taskId": "assistantChat",
+      "input": {
+        "ask": "Liệt kê dự án 6"
+      },
+      "graders": [
+        {
+          "kind": "toolCall",
+          "name": "list_projects",
+          "args": {
+            "page": 1
+          }
+        }
+      ]
+    },
+    {
+      "id": "tool-choice-7",
+      "taskId": "assistantChat",
+      "input": {
+        "ask": "Liệt kê dự án 7"
+      },
+      "graders": [
+        {
+          "kind": "toolCall",
+          "name": "list_projects",
+          "args": {
+            "page": 1
+          }
+        }
+      ]
+    },
+    {
+      "id": "tool-choice-8",
+      "taskId": "assistantChat",
+      "input": {
+        "ask": "Liệt kê dự án 8"
+      },
+      "graders": [
+        {
+          "kind": "toolCall",
+          "name": "list_projects",
+          "args": {
+            "page": 1
+          }
+        }
+      ]
+    }
+  ]
+}

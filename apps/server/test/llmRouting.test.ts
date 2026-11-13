@@ -5,6 +5,7 @@ import { createLlmCacheKey } from "../src/providers/llm/cache.js";
 import { LlmProviderRegistry, resolveLlmRoute } from "../src/providers/llm/registry.js";
 import { generateRoutedStructured } from "../src/providers/llm/structured.js";
 import { LlmError } from "../src/providers/llm/types.js";
+import { runWithAutonomyBudget } from "../src/operator/autonomyBudget.js";
 import { z } from "zod";
 
 const now = "2026-11-03T00:00:00.000Z";
@@ -31,6 +32,29 @@ function project(llm?: unknown) {
 }
 
 describe("task-specific LLM routing", () => {
+  it("uses a configured free route at 80% and rejects paid calls at 100%", async () => {
+    const request = vi.fn(async () => { throw new Error("paid provider must not be contacted"); });
+    vi.stubGlobal("fetch", request);
+    const registry = new LlmProviderRegistry(parseConfig({ OPENAI_API_KEY: "fixture", LLM_ENABLE_MOCK: "true" }));
+    const execute = (withFallback: boolean) => generateRoutedStructured({
+      registry,
+      route: registry.resolveTask("research", project({ tasks: { research: {
+        provider: "openai", model: "gpt-fixture",
+        ...(withFallback ? { fallback: { provider: "mock", model: "fixture-free" } } : {}),
+      } } })),
+      task: "research", system: "research", prompt: "Offline fixture",
+      schema: z.object({ summary: z.string() }), schemaName: "research", schemaVersion: "1",
+      maxOutputTokens: 200, signal: new AbortController().signal,
+    });
+    const retryAt = "2026-11-10T17:00:00.000Z";
+    const warning = await runWithAutonomyBudget(() => ({ state: "warn", retryAt: null }), () => execute(true));
+    expect(warning.provider).toBe("mock");
+    const stopped = await runWithAutonomyBudget(() => ({ state: "stop", retryAt }), () => execute(true));
+    expect(stopped.provider).toBe("mock");
+    await expect(runWithAutonomyBudget(() => ({ state: "stop", retryAt }), () => execute(false)))
+      .rejects.toMatchObject({ code: "AUTONOMY_BUDGET_WAIT", retryAt });
+    expect(request).not.toHaveBeenCalled();
+  });
   it("resolves all six sources in precedence order", () => {
     const config = parseConfig({
       LLM_ENABLE_MOCK: "true",

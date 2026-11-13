@@ -32,24 +32,24 @@ describe("ScriptEditor", () => {
       onSave={onSave}
     />);
 
-    fireEvent.click(screen.getByRole("button", { name: "Add section" }));
-    const headings = screen.getAllByLabelText("Heading");
+    fireEvent.click(screen.getByRole("button", { name: "Thêm phần" }));
+    const headings = screen.getAllByLabelText("Tiêu đề phần");
     fireEvent.change(headings[1], { target: { value: "Next" } });
-    fireEvent.click(screen.getAllByRole("button", { name: "Move up" })[1]);
+    fireEvent.click(screen.getAllByRole("button", { name: "Lên" })[1]);
     expect(screen.getAllByText("Next", { selector: "legend" })[0]).toBeTruthy();
 
-    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    fireEvent.click(screen.getByRole("button", { name: "Lưu" }));
     await waitFor(() => expect(onSave).toHaveBeenCalledTimes(1));
     const saved = onSave.mock.calls[0][0];
     expect(saved.sections[0].heading).toBe("Next");
     expect(saved.sections[0].estDurationSec).toBe(0);
 
-    fireEvent.change(screen.getAllByLabelText("Primary visual search query (English)")[0], { target: { value: "cinematic notebook" } });
-    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    fireEvent.change(screen.getAllByLabelText("Câu tìm hình chính (tiếng Anh)")[0], { target: { value: "cinematic notebook" } });
+    fireEvent.click(screen.getByRole("button", { name: "Lưu" }));
     await waitFor(() => expect(onSave).toHaveBeenCalledTimes(2));
     expect(onSave.mock.calls[1][0].sections[0].visualQueries.primary).toBe("cinematic notebook");
 
-    fireEvent.click(screen.getAllByRole("button", { name: "Remove" })[1]);
-    expect(screen.getAllByLabelText("Heading")).toHaveLength(1);
+    fireEvent.click(screen.getAllByRole("button", { name: "Xóa phần" })[1]);
+    expect(screen.getAllByLabelText("Tiêu đề phần")).toHaveLength(1);
   });
 });

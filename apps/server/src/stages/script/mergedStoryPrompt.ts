@@ -1,5 +1,6 @@
 import { appendChannelDirection, type BudgetFeatures, type Project } from "@vg/shared";
 import { appendGuidelineGuidance } from "../../guidelines/promptText.js";
+import { formatLine, marketScriptLine } from "./prompt.js";
 
 export function mergedStoryPrompt(
   project: Project,
@@ -23,8 +24,10 @@ export function mergedStoryPrompt(
       `Topic: ${project.topic}`,
       `Description: ${project.description || "(none)"}`,
       `Language: ${project.settings.language}`,
+      ...marketScriptLine(project.settings.market),
       `Style: ${project.settings.style}; tone: ${project.settings.tone}; audience: ${project.settings.audience}; platform: ${project.settings.platform}${pacing}`,
       `Target duration: ${project.settings.targetDurationSec} seconds`,
+      formatLine(project),
       `Speaking pace: ${pace} words per minute`,
       "Return {research:{summary,keyFacts,timeline,angles,outline,cautions},script:{title,hook,sections,outro,music}}.",
       `Research: ${factTargets[depth]} keyFacts[{fact,confidence,sourceHint|null}], at most 10 timeline[{date,event}] and 6 cautions[string]; outline 3-8 items [{section,purpose,points[string]}].`,

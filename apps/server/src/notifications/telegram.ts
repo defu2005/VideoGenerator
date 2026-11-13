@@ -10,6 +10,7 @@ import {
   saveTelegramUpdateOffset,
   TELEGRAM_BOT_TOKEN_KEY,
 } from "../settings/notifications.js";
+import { setTelegramConflict, telegramConflict } from "../supervision/snapshot.js";
 
 const MAX_MESSAGE_CHARS = 4000;
 const POLL_TIMEOUT_SEC = 25;
@@ -195,7 +196,9 @@ export class TelegramClient {
 
     if (!response.ok || !payload.ok) {
       const desc = maskTelegramSecret(payload.description ?? `HTTP ${response.status}`, this.token);
-      throw new Error(`Telegram ${method} error: ${desc}`);
+      const err = new Error(`Telegram ${method} error: ${desc}`) as Error & { status?: number };
+      err.status = response.status;
+      throw err;
     }
     return payload.result as T;
   }
@@ -303,19 +306,38 @@ export class TelegramPoller {
     return new TelegramClient(token, this.fetchImpl);
   }
 
+  getBackoffMs(): number {
+    return this.backoffMs;
+  }
+
   /** Exposed for tests — process one getUpdates cycle. */
   async pollOnce(signal?: AbortSignal): Promise<void> {
     if (!this.shouldPoll()) return;
     const client = this.createClient();
     if (!client) return;
 
-    const offset = getTelegramUpdateOffset(this.deps.sqlite);
-    const updates = await client.getUpdates(offset, 0, signal);
-    for (const update of updates) {
-      await this.dispatchUpdate(client, update);
-      saveTelegramUpdateOffset(this.deps.sqlite, update.update_id + 1);
+    try {
+      const offset = getTelegramUpdateOffset(this.deps.sqlite);
+      const updates = await client.getUpdates(offset, 0, signal);
+      if (telegramConflict(this.deps.sqlite)) {
+        setTelegramConflict(this.deps.sqlite, false);
+      }
+      for (const update of updates) {
+        await this.dispatchUpdate(client, update);
+        saveTelegramUpdateOffset(this.deps.sqlite, update.update_id + 1);
+      }
+      this.backoffMs = BACKOFF_START_MS;
+    } catch (error) {
+      const status = (error as { status?: number })?.status;
+      const message = error instanceof Error ? error.message : String(error);
+      const isConflict = status === 409 || message.includes("409") || message.toLowerCase().includes("conflict");
+      if (isConflict) {
+        setTelegramConflict(this.deps.sqlite, true);
+        this.backoffMs = Math.min(BACKOFF_MAX_MS, Math.max(30_000, this.backoffMs * 2));
+      } else {
+        throw error;
+      }
     }
-    this.backoffMs = BACKOFF_START_MS;
   }
 
   /**
@@ -355,6 +377,12 @@ export class TelegramPoller {
           error instanceof Error ? error.message : String(error),
           token,
         );
+        const status = (error as { status?: number })?.status;
+        const isConflict = status === 409 || message.includes("409") || message.toLowerCase().includes("conflict");
+        if (isConflict) {
+          setTelegramConflict(this.deps.sqlite, true);
+          this.backoffMs = Math.min(BACKOFF_MAX_MS, Math.max(30_000, this.backoffMs * 2));
+        }
         this.deps.logger.warn({ err: message }, "Telegram poller error");
         await this.sleepFn(this.backoffMs);
         this.backoffMs = Math.min(BACKOFF_MAX_MS, this.backoffMs * 2);

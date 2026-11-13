@@ -58,7 +58,7 @@ describe("timeline builder", () => {
 
   it("keeps fades inside scenes and longer at the video edges", () => {
     const result = buildTimeline({ aspectRatio: "16:9", musicEnabled: false, music: null, scenes: [scene(0), scene(1), scene(2)] });
-    expect(result.scenes.map((item) => [item.fadeInSec, item.fadeOutSec])).toEqual([[0.5, 0.25], [0.25, 0.25], [0.25, 0.8]]);
+    expect(result.scenes.map((item) => [item.fadeInSec, item.fadeOutSec])).toEqual([[0.5, 0], [0, 0], [0, 0.8]]);
   });
 
   it("never lets a manual duration cut the voice", () => {
@@ -93,6 +93,21 @@ describe("timeline builder", () => {
     expect(b.motion.to.zoom).toBeLessThan(b.motion.from.zoom);
     expect(result.licenseSummary).toEqual({ CC0: 1, UNKNOWN: 1 });
     expect(result.warnings.map((item) => item.code)).toEqual(["LICENSE_UNKNOWN"]);
+  });
+
+  it("keeps a copyrighted still on screen for at most four seconds", () => {
+    const result = buildTimeline({
+      aspectRatio: "16:9",
+      musicEnabled: false,
+      music: null,
+      scenes: [scene(0, {
+        durationOverrideSec: 12,
+        voice: null,
+        visuals: [{ candidateId: "still", path: "visuals/still.jpg", ready: true, licenseKind: "UNKNOWN", motion: null, commentary: true }],
+      })],
+    });
+    const visual = result.scenes[0].visuals[0];
+    expect(visual.endSec - visual.startSec).toBeLessThanOrEqual(4);
   });
 
   it("uses a placeholder for missing or unapproved visuals, silently for no-visual scenes", () => {
@@ -130,5 +145,12 @@ describe("timeline builder", () => {
     const off = buildTimeline({ aspectRatio: "16:9", musicEnabled: false, music, scenes: [scene(0)] });
     expect(off.music).toBeNull();
     expect(off.warnings).toEqual([]);
+  });
+
+  it("uses the recipe edit preset for the first transition", () => {
+    const story = buildTimeline({ aspectRatio: "16:9", musicEnabled: false, music: null, scenes: [scene(0), scene(1)] });
+    const calm = buildTimeline({ aspectRatio: "16:9", musicEnabled: false, music: null, scenes: [scene(0), scene(1)], editPreset: "calm" });
+    expect(story.scenes[0]?.transitionOut?.type).toBe("zoomin");
+    expect(calm.scenes[0]?.transitionOut?.type).toBe("fade");
   });
 });

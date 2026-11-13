@@ -1,8 +1,9 @@
-import type { ReviewAssistantOutput, ReviewProposal } from "@vg/shared";
+import { motionTemplate, type ReviewAssistantOutput, type ReviewProposal } from "@vg/shared";
 
 export type ReviewValidationContext = {
   sceneIds: Set<string>;
   sceneCount: number;
+  graphicIds?: Set<string>;
 };
 
 export type ValidatedReviewOutput = {
@@ -66,7 +67,24 @@ function dropReason(proposal: ReviewProposal, context: ReviewValidationContext):
     case "MUSIC_QUERY":
     case "EDIT_METADATA":
     case "NOTE":
+    case "SET_SUBTITLE_STYLE":
       return null;
+    case "SET_TRANSITION":
+      return context.sceneIds.has(proposal.afterSceneId) ? null : "sceneId không hợp lệ (SET_TRANSITION)";
+    case "SET_EMPHASIS":
+    case "REMOVE_EMPHASIS":
+    case "DELETE_SCENE":
+    case "SPLIT_SCENE":
+    case "REGENERATE_SCENE_VOICE":
+      return context.sceneIds.has(proposal.sceneId) ? null : `sceneId không hợp lệ (${proposal.type})`;
+    case "ADD_GRAPHIC":
+      if (proposal.sceneId && !context.sceneIds.has(proposal.sceneId)) return "sceneId không hợp lệ (ADD_GRAPHIC)";
+      return motionTemplate(proposal.templateId) ? null : "mẫu đồ họa không có";
+    case "EDIT_GRAPHIC":
+    case "REMOVE_GRAPHIC":
+      return context.graphicIds && !context.graphicIds.has(proposal.graphicId)
+        ? "không thấy đồ họa"
+        : null;
     default: {
       const _exhaustive: never = proposal;
       return `loại đề xuất không hỗ trợ: ${String((_exhaustive as ReviewProposal).type)}`;

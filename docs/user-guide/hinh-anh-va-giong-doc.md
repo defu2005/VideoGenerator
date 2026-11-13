@@ -29,7 +29,15 @@ Dùng để chốt ảnh từng cảnh. Tab **Visuals**.
 2. Bấm **Approve** ở cổng visual khi cả dự án ổn.
 3. Ảnh lệch: sửa câu tìm ở tab **Scenes** rồi chạy lại.
 
-Không **Approve** thì **ASSISTED** và **MANUAL** không sang giọng. **AUTO** tự qua cổng và ghi vào báo cáo nếu có cảnh báo. Ảnh người thật hoặc bản quyền là việc bạn tự xét.
+Không **Approve** thì **ASSISTED** và **MANUAL** không sang giọng. **AUTO** cũng dừng ở cổng này khi cảnh chưa có ảnh đúng chủ đề, rồi hỏi bạn. Ảnh người thật hoặc bản quyền là việc bạn tự xét.
+
+Ảnh bị chặn có một trong các lý do: **ảnh lệch chủ đề** (không khớp tên tác phẩm, nhân vật hoặc chỉ khớp từ chung), **AI nhìn loại ảnh**, **chưa có kết quả AI nhìn** (chế độ MAX), **ảnh nguồn không dùng được** (nhỏ hơn 64 px hoặc nhẹ hơn 2 KB), **không có ảnh đúng**, hoặc **nguồn rủi ro cao** (Reddit, fan-art, trang tổng hợp, giấy phép web không rõ). Bạn sửa bằng cách tải ảnh lên, dán URL, chọn ảnh khác, tìm lại, hoặc đánh dấu cảnh **không cần ảnh**. Ảnh bạn tự chọn vẫn được dùng. Ảnh do agent chọn có thể được thay khi tìm được ảnh đúng hơn và qua AI nhìn.
+
+Cảnh lệch chủ đề có nút **Tìm lại ảnh cho cảnh lệch chủ đề**. Nếu tìm web đang tắt, app ghi một mục **Cần bạn** cho dự án đó. Ảnh có bản quyền mặc định tắt. Chỉ bạn đổi được sang chế độ bình luận, và ảnh đó hiện tối đa 4 giây.
+
+Nút **Cắt ảnh** chỉ chạy khi bạn bấm. Ảnh khác tỉ lệ video được cắt thành khung lớn nhất đúng tỉ lệ. Ảnh đã đúng tỉ lệ được cắt còn 9/10 mỗi chiều. File gốc được giữ. Render dùng ảnh đã cắt khi có file cắt cho đúng ảnh đang chọn.
+
+App không gán cùng một ảnh cho hai cảnh. Cảnh không còn ảnh riêng thì dùng thẻ tiêu đề, ghi **Thẻ tiêu đề** trong báo cáo. Ảnh từ kho có watermark bị loại khỏi lựa chọn tự động. Trong hồ sơ, **Chất lượng ảnh** có **Tiết kiệm** và **Tốt nhất**. Tốt nhất tìm rộng hơn và tốn thêm lượt. Hồ sơ mới mặc định Tốt nhất. Nút **Dùng chế độ Tốt nhất cho mọi hồ sơ** đổi các hồ sơ hiện có. Tốt nhất không bật ảnh có bản quyền.
 
 ## Kiểm tra ảnh bằng AI nhìn {#kiem-tra-anh}
 

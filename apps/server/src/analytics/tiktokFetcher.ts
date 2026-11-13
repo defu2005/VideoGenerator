@@ -1,5 +1,6 @@
+import type { KnowledgeService } from "../knowledge/service.js";
 import type { TokenSet } from "@vg/shared";
-import { ANALYTICS_REQUIRED_SCOPES } from "./scopes.js";
+import { analyticsScopes } from "./scopes.js";
 import { chunkIds } from "./youtubeFetcher.js";
 import {
   AnalyticsHttpError,
@@ -16,6 +17,7 @@ const VIDEO_QUERY_URL = "https://open.tiktokapis.com/v2/video/query/";
 const USER_INFO_URL = "https://open.tiktokapis.com/v2/user/info/";
 
 export type TikTokFetcherOptions = {
+  knowledge?: KnowledgeService;
   fetchImpl?: typeof fetch;
   logger?: AnalyticsLogger;
   now?: () => Date;
@@ -31,14 +33,14 @@ type TikTokVideo = {
 
 export class TikTokMetricsFetcher implements MetricsFetcher {
   readonly platform = "tiktok" as const;
-  readonly requiredScopes = [...ANALYTICS_REQUIRED_SCOPES.tiktok];
+  get requiredScopes() { return analyticsScopes(this.platform, this.options.knowledge); }
 
   private readonly fetchImpl: typeof fetch;
   private readonly logger?: AnalyticsLogger;
   private readonly now: () => Date;
   private loggedRejected = false;
 
-  constructor(options: TikTokFetcherOptions = {}) {
+  constructor(private readonly options: TikTokFetcherOptions = {}) {
     this.fetchImpl = options.fetchImpl ?? fetch;
     this.logger = options.logger;
     this.now = options.now ?? (() => new Date());

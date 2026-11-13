@@ -1,3 +1,6 @@
+import type { AuthActor } from "../auth/actor.js";
+import { can, FORBIDDEN_MESSAGE } from "../auth/policy.js";
+import { TOOL_ACTIONS, toolResource } from "../auth/toolActions.js";
 import {
   AssistantChatStepSchema,
   type AssistantMessage,
@@ -25,6 +28,7 @@ import {
 } from "./tools.js";
 import { z } from "zod";
 import { getAssistantSettings } from "../settings/assistant.js";
+import { getNotificationTimezone } from "../settings/notifications.js";
 import { logToolAudit } from "../registry/audit.js";
 import { hardBlockMessage, shouldCreatePending } from "../registry/policy.js";
 import type Database from "better-sqlite3";
@@ -58,6 +62,7 @@ export type AssistantLoopInput = {
   config: AppConfig;
   registry: LlmProviderRegistry;
   toolCtx: AssistantToolContext;
+  actor: AuthActor;
   history: AssistantMessage[];
   userText: string;
   profileSummaries: Array<{ id: string; name: string; platforms: string[] }>;
@@ -72,6 +77,7 @@ export type AssistantLoopInput = {
     tool: string;
     args: unknown;
     summary: string;
+    actor: AuthActor;
   }) => AssistantPendingAction;
   runPendingNow: (input: {
     tool: string;
@@ -134,12 +140,13 @@ function truncateJson(value: unknown, max = TOOL_RESULT_MAX): string {
   return `${text.slice(0, max)}… [cắt bớt]`;
 }
 
-function buildSystemPrompt(input: {
+export function buildSystemPrompt(input: {
   now: Date;
+  timezone: string;
   profiles: AssistantLoopInput["profileSummaries"];
 }): string {
   const catalog = getToolCatalogForPrompt();
-  const dateStr = input.now.toLocaleString("vi-VN", { timeZone: "Asia/Ho_Chi_Minh" });
+  const dateStr = input.now.toLocaleString("vi-VN", { timeZone: input.timezone });
   return [
     "Bạn là trợ lý điều khiển ứng dụng tạo video. Trả lời JSON theo schema AssistantChat.",
     "Luật:",
@@ -149,7 +156,7 @@ function buildSystemPrompt(input: {
     "- Tối đa 4 công cụ mỗi bước.",
     "- delete_project và delete_topic luôn cần người dùng xác nhận riêng.",
     "- Khi người dùng hỏi cách làm (làm sao, ở đâu, hướng dẫn): gọi search_user_guide và trả lời theo các mục tìm được, nêu tên mục.",
-    `- Ngày giờ hiện tại (${input.now.toLocaleString("en-US", { timeZone: "Asia/Ho_Chi_Minh" })} Asia/Ho_Chi_Minh): ${dateStr}`,
+    `- Ngày giờ hiện tại (${input.now.toLocaleString("en-US", { timeZone: input.timezone })} ${input.timezone}): ${dateStr}`,
     "Hồ sơ:",
     JSON.stringify(input.profiles),
     "Danh mục công cụ (name, description, risk, args):",
@@ -194,9 +201,9 @@ export async function runAssistantLoop(input: AssistantLoopInput): Promise<Assis
 
   const stepNotes: string[] = [];
   const now = new Date();
+  const system = buildSystemPrompt({ now, timezone: getNotificationTimezone(input.sqlite), profiles: input.profileSummaries });
 
   for (let step = 0; step < MAX_STEPS; step += 1) {
-    const system = buildSystemPrompt({ now, profiles: input.profileSummaries });
     const prompt = [
       "## Lịch sử",
       historyForPrompt(input.history),
@@ -309,6 +316,20 @@ export async function runAssistantLoop(input: AssistantLoopInput): Promise<Assis
         return buildResult();
       }
 
+      const needed = TOOL_ACTIONS[call.tool];
+      const decision = needed
+        ? can(input.actor, needed, toolResource(input.sqlite, parsedArgs))
+        : { ok: false as const, status: 403 as const, reason: FORBIDDEN_MESSAGE };
+      if (!decision.ok) {
+        logToolAudit(input.sqlite, {
+          source: "assistant", tool: call.tool, args: parsedArgs, risk, decision: "refused",
+          summary: decision.reason, actor: input.actor,
+        });
+        toolActivity.push({ tool: call.tool, summary: decision.reason, risk, ok: false, error: decision.reason });
+        replyParts.push(decision.reason);
+        continue;
+      }
+
       const needsConfirm = shouldCreatePending({
         name: call.tool,
         args: parsedArgs,
@@ -324,8 +345,10 @@ export async function runAssistantLoop(input: AssistantLoopInput): Promise<Assis
           tool: call.tool,
           args: parsedArgs,
           summary,
+          actor: input.actor,
         });
         logToolAudit(input.sqlite, {
+          actor: input.actor,
           source: "assistant",
           tool: call.tool,
           args: parsedArgs,

@@ -1,3 +1,9 @@
+import { buildKnowledgeBlock, saveKnowledgeUse, TASK_KINDS } from "../../retrieval/context.js";
+import { autonomyBudgetStatus, currentAutonomyBudget, hasAutonomySpendLimit, holdAutonomyUsd, runWithAutonomyBudget } from "../../operator/autonomyBudget.js";
+import { effectiveAutonomy } from "../../operator/autonomy.js";
+import { gatewayBypassOn } from "../../operator/playbooks.js";
+import { UsageService } from "../../services/usageService.js";
+import type { Project } from "@vg/shared";
 import type { FastifyBaseLogger } from "fastify";
 import { join } from "node:path";
 import { z } from "zod";
@@ -5,15 +11,20 @@ import {
   fallbackChainOf,
   formatHourMinute,
   orderChainForBudget,
+  preferCheapestQualified,
   type LlmCallUsage,
   type LlmGatewaySettings,
   type LlmQuotaKind,
   type LlmTaskId,
+  omnirouteModelSeesImages,
+  visionImageBatchLimit,
 } from "@vg/shared";
 import type { LlmProviderRegistry, ResolvedLlmRoute } from "./registry.js";
 import { LlmCache, createLlmCacheKey } from "./cache.js";
-import type { LlmImageAttachment, LlmProvider } from "./types.js";
+import type { LlmFunction, LlmImageAttachment, LlmProvider } from "./types.js";
 import { LlmError } from "./types.js";
+import { isFailoverError } from "./failover.js";
+import { estimatePromptTokens } from "./tokenEstimate.js";
 import { prepareVisionImages, visionCacheKeyExtra } from "./visionImages.js";
 import {
   envOmnirouteVision,
@@ -22,6 +33,7 @@ import {
 } from "./omnirouteCatalog.js";
 
 const gatewayFallbackLogged = new WeakSet<AbortSignal>();
+const unmeteredProviders = new Set(["mock", "ollama", "claude-cli", "copilot-cli", "antigravity-cli"]);
 
 export async function generateStructured<T>(input: {
   provider: LlmProvider;
@@ -39,10 +51,14 @@ export async function generateStructured<T>(input: {
   logger?: FastifyBaseLogger;
   task?: LlmTaskId;
   images?: LlmImageAttachment[];
+  functions?: LlmFunction[];
   /** Project data dir used to cache resized vision JPEGs. */
   visionCacheDir?: string;
   /** Real provider attempts only. Cache hits and preflight errors do not call this. */
   onRealCall?: (call: { provider: string; model: string; inputTokens: number; outputTokens: number }) => void;
+  beforeProviderCall?: () => void;
+  /** Runs on the extracted JSON before schema.safeParse, at every parse point. */
+  normalize?: (raw: unknown) => unknown;
 } ): Promise<{
   value: T;
   usage: { llmCalls: number; inputTokens: number; outputTokens: number; tokensUnknown?: boolean; calls: LlmCallUsage[] };
@@ -68,7 +84,7 @@ export async function generateStructured<T>(input: {
   });
   const cached = input.cache?.get(key);
   if (cached) {
-    const parsed = extractJson(cached.responseText);
+    const parsed = applyNormalize(input.normalize, extractJson(cached.responseText));
     const result = input.schema.safeParse(parsed);
     if (!result.success) {
       throw new LlmError("Cached LLM output no longer matches its schema", "LLM_INVALID_OUTPUT", false);
@@ -118,6 +134,7 @@ export async function generateStructured<T>(input: {
   const maxOutputTokens = Math.min(input.maxOutputTokens, input.provider.limits?.maxOutputTokens ?? Number.POSITIVE_INFINITY);
   const requestImages = preparedImages.map((image) => ({ path: image.path, label: image.label }));
   let response;
+  input.beforeProviderCall?.();
   try {
     response = await input.provider.generate({
       schemaName: input.schemaName,
@@ -126,7 +143,8 @@ export async function generateStructured<T>(input: {
       system: input.system,
       messages: [{ role: "user", content: input.prompt }],
       maxOutputTokens,
-      json: true,
+      json: !input.functions?.length,
+      ...(input.functions?.length ? { functions: input.functions } : {}),
       ...(requestImages.length ? { images: requestImages } : {}),
     }, input.signal);
   } catch (error) {
@@ -186,11 +204,12 @@ export async function generateStructured<T>(input: {
   }
 
   let rawText = response.text;
-  let validation = validateOutput(input.schema, rawText);
+  let validation = validateOutput(input.schema, rawText, input.normalize);
   const repairAttempts = input.repairAttempts ?? 1;
   let repairs = 0;
   while (!validation.success && repairs < repairAttempts) {
     try {
+      input.beforeProviderCall?.();
       response = await input.provider.generate({
         schemaName: input.schemaName,
         jsonSchema,
@@ -199,14 +218,20 @@ export async function generateStructured<T>(input: {
         messages: [
           { role: "user", content: input.prompt },
           { role: "assistant", content: rawText },
-          { role: "user", content: `Correct the JSON to satisfy these validation issues. Return only corrected JSON:\n${JSON.stringify(validation.issues)}` },
+          { role: "user", content: input.functions?.length
+            ? `Correct the tool call and use valid JSON arguments. Validation issues:\n${JSON.stringify(validation.issues)}`
+            : `Correct the JSON to satisfy these validation issues. Return only corrected JSON:\n${JSON.stringify(validation.issues)}` },
         ],
         maxOutputTokens,
-        json: true,
+        json: !input.functions?.length,
+        ...(input.functions?.length ? { functions: input.functions } : {}),
         ...(requestImages.length ? { images: requestImages } : {}),
       }, input.signal);
     } catch (error) {
       if (input.signal.aborted || isAbortError(error)) throw error;
+      if (error instanceof LlmError && error.code === "AUTONOMY_BUDGET_WAIT") {
+        throw withUsage(error, usage(), input.provider.id === "copilot-cli");
+      }
       const errorUsage = error instanceof LlmError ? error.usage : undefined;
       callDetails.push({
         task: input.task ?? "unknown",
@@ -261,7 +286,7 @@ export async function generateStructured<T>(input: {
       );
     }
     rawText = response.text;
-    validation = validateOutput(input.schema, rawText);
+    validation = validateOutput(input.schema, rawText, input.normalize);
   }
   if (!validation.success) {
     input.logger?.warn({
@@ -289,14 +314,48 @@ type RoutedResult<T> = Awaited<ReturnType<typeof generateStructured<T>>>;
 type UsageSlice = { llmCalls: number; inputTokens: number; outputTokens: number; tokensUnknown?: boolean };
 
 export async function generateRoutedStructured<T>(input: {
+  knowledgeQuery?: string;
+  knowledgeProject?: Project;
   registry: LlmProviderRegistry;
   route: ResolvedLlmRoute;
   task: LlmTaskId;
   gatewaySettings?: LlmGatewaySettings;
 } & Omit<Parameters<typeof generateStructured<T>>[0], "provider" | "model" | "task">): Promise<RoutedResult<T>> {
-  const { registry, route: originalRoute, task, gatewaySettings, ...request } = input;
+  if (currentAutonomyBudget() || !input.cache?.sqlite) return routeStructured(input);
+  const sqlite = input.cache.sqlite;
+  try {
+    const profileId = input.route.profileId ?? undefined;
+    if (!hasAutonomySpendLimit(sqlite, profileId)) return routeStructured(input);
+    const level = effectiveAutonomy(sqlite, { profileId }).level;
+    if (level !== "supervised" && level !== "autonomous") return routeStructured(input);
+    const usage = new UsageService(sqlite, 26_000);
+    return runWithAutonomyBudget(() => autonomyBudgetStatus(sqlite, usage, profileId), () => routeStructured(input));
+  } catch {
+    return routeStructured(input);
+  }
+}
+
+async function routeStructured<T>(input: {
+  knowledgeQuery?: string;
+  knowledgeProject?: Project;
+  registry: LlmProviderRegistry;
+  route: ResolvedLlmRoute;
+  task: LlmTaskId;
+  gatewaySettings?: LlmGatewaySettings;
+  swapCandidates?: import("@vg/shared").SwapCandidate[];
+} & Omit<Parameters<typeof generateStructured<T>>[0], "provider" | "model" | "task">): Promise<RoutedResult<T>> {
+  const { registry, route: originalRoute, task, gatewaySettings, knowledgeProject, knowledgeQuery, ...request } = input;
+  if (knowledgeProject && input.cache && TASK_KINDS[task]) {
+    const knowledge = await buildKnowledgeBlock(input.cache.sqlite, {project:knowledgeProject,stage:task,taskId:task,query:knowledgeQuery ?? [knowledgeProject.topic,knowledgeProject.description,request.prompt.slice(0,1000)].join(" ")});
+    if (knowledge.block) {
+      request.prompt += "\n\n"+knowledge.block;
+      if(input.cache.sqlite.prepare("SELECT 1 FROM projects WHERE id=?").get(knowledgeProject.id)) saveKnowledgeUse(input.cache.sqlite,knowledgeProject.id,task==="research"?"RESEARCH":task==="metadata"?"TIMELINE":task==="reviewChat"?"FINAL_APPROVAL":"SCRIPT",task,knowledge.uses);
+    }
+  }
   await registry.quota?.refreshIfStale(originalRoute.provider.id, originalRoute.model);
-  const settings = gatewaySettings ?? registry.getGatewaySettings();
+  const settings = input.cache?.sqlite && gatewayBypassOn(input.cache.sqlite)
+    ? { ...(gatewaySettings ?? registry.getGatewaySettings()), mode: "off" as const }
+    : gatewaySettings ?? registry.getGatewaySettings();
   const applied = await applyOmnirouteGateway(registry, originalRoute, settings, task);
   const route = applied.route;
   const gatewayDirect = applied.directFallback;
@@ -309,16 +368,35 @@ export async function generateRoutedStructured<T>(input: {
     ? (call: { provider: string; model: string; inputTokens: number; outputTokens: number }) => quota.recordCall(call)
     : undefined;
 
-  const callModel = (provider: ResolvedLlmRoute["provider"], model: string, maxOutputTokens?: number) => generateStructured({
+  const callModel = async (provider: ResolvedLlmRoute["provider"], model: string, maxOutputTokens?: number) => {
+    const kind = quota?.kindOf(provider.id, model);
+    const paid = kind === "paid" && !unmeteredProviders.has(provider.id);
+    const release = paid ? holdAutonomyUsd(0.01) : () => undefined;
+    try {
+      return await generateStructured({
     ...request,
     provider,
     model,
     task,
     maxOutputTokens: maxOutputTokens ?? route.maxOutputTokens ?? request.maxOutputTokens,
+    beforeProviderCall: () => {
+      request.beforeProviderCall?.();
+      const budget = currentAutonomyBudget();
+      if (budget?.state !== "stop") return;
+      const kind = quota?.kindOf(provider.id, model);
+      if (unmeteredProviders.has(provider.id)
+          || kind === "free_tier" || kind === "subscription") return;
+      throw new LlmError("Đã chạm hạn mức chi. Chờ kỳ ngân sách mới hoặc dùng model miễn phí.", "AUTONOMY_BUDGET_WAIT", true,
+        undefined, undefined, undefined, budget.retryAt ?? undefined);
+    },
     ...(onRealCall ? { onRealCall } : {}),
   });
+    } finally {
+      release();
+    }
+  };
 
-  const tagCalls = (calls: LlmCallUsage[], fallback: boolean, reason?: "quota") => calls.map((call) => (
+  const tagCalls = (calls: LlmCallUsage[], fallback: boolean, reason?: "quota" | "quota_swap") => calls.map((call) => (
     fallback ? { ...call, fallback: true, ...(reason ? { fallbackReason: reason } : {}) } : call
   ));
 
@@ -326,7 +404,7 @@ export async function generateRoutedStructured<T>(input: {
     firstCalls: LlmCallUsage[],
     firstUsage: UsageSlice,
     generated: RoutedResult<T>,
-    reason?: "quota",
+    reason?: "quota" | "quota_swap",
   ): RoutedResult<T> => ({
     ...generated,
     usage: {
@@ -397,15 +475,38 @@ export async function generateRoutedStructured<T>(input: {
     maxOutputTokens?: number;
     originalPrimary: boolean;
     kind: LlmQuotaKind | null;
+    quality: number | null;
+    costUsd: number | null;
+  };
+  const statFor = (provider: string, model: string) => {
+    const sqlite = input.cache?.sqlite;
+    if (!sqlite) return { quality: null, costUsd: null };
+    try {
+      const row = sqlite.prepare(`SELECT quality, p50_cost_usd AS cost FROM model_task_stats
+        WHERE provider = ? AND model = ? AND task_id = ? ORDER BY day DESC LIMIT 1`)
+        .get(provider, model, task) as { quality: string; cost: string | null } | undefined;
+      if (!row) return { quality: null, costUsd: null };
+      const quality = Number(row.quality);
+      const costUsd = row.cost == null ? null : Number(row.cost);
+      return {
+        quality: Number.isFinite(quality) ? quality : null,
+        costUsd: costUsd != null && Number.isFinite(costUsd) ? costUsd : null,
+      };
+    } catch {
+      return { quality: null, costUsd: null };
+    }
   };
 
   const userChain = gatewayOnly ? [] : fallbackChainOf(originalRoute);
+  const kindOf = (provider: string, model: string): LlmQuotaKind | null =>
+    quota?.kindOf(provider, model) ?? (unmeteredProviders.has(provider) ? "subscription" : null);
   const steps: Step[] = [{
     provider: route.provider,
     model: route.model,
     maxOutputTokens: route.maxOutputTokens,
     originalPrimary: true,
-    kind: quota?.kindOf(route.provider.id, route.model) ?? null,
+    kind: kindOf(route.provider.id, route.model),
+    ...statFor(route.provider.id, route.model),
   }];
   for (const entry of userChain) {
     if (entry.provider === route.provider.id && (entry.model ?? route.provider.defaultModel ?? "") === route.model) continue;
@@ -416,13 +517,18 @@ export async function generateRoutedStructured<T>(input: {
         model: resolved.model,
         maxOutputTokens: route.maxOutputTokens,
         originalPrimary: false,
-        kind: quota?.kindOf(resolved.provider.id, resolved.model) ?? null,
+        kind: kindOf(resolved.provider.id, resolved.model),
+        ...statFor(resolved.provider.id, resolved.model),
       });
     } catch (error) {
       if (!(error instanceof LlmError)) throw error;
     }
   }
-  const ordered = orderChainForBudget(steps, route.budgetMode);
+  const budgetState = currentAutonomyBudget()?.state;
+  const eco = budgetState === "warn" || budgetState === "stop";
+  const ranked = orderChainForBudget(steps, eco ? "ECO" : route.budgetMode);
+  const minQuality = ranked.some((step) => (step.quality ?? 0) > 1) ? 7 : 0.7;
+  const ordered = eco ? preferCheapestQualified(ranked, minQuality) : ranked;
   const policy = quota?.policyFor(route.profileId) ?? {
     policy: "wait" as const,
     paidFallbackDailyUsd: 1,
@@ -433,6 +539,7 @@ export async function generateRoutedStructured<T>(input: {
   let priorUsage: UsageSlice = { llmCalls: 0, inputTokens: 0, outputTokens: 0 };
   let quotaPressure = false;
   let lastError: LlmError | undefined;
+  let budgetWait: LlmError | undefined;
 
   const quotaWait = () => {
     const retryAt = quota?.earliestRetryAt(ordered.map((step) => ({ provider: step.provider.id, model: step.model }))) ?? null;
@@ -454,13 +561,59 @@ export async function generateRoutedStructured<T>(input: {
     return mergedError(message, "LLM_QUOTA_WAIT", true, undefined, priorCalls, priorUsage, [], undefined, undefined, retryAt);
   };
 
+  // TASK-127: failover bookkeeping. `attempts` explains why each provider did not answer.
+  const tracker = registry.failover;
+  const chained = ordered.length > 1;
+  const attempts: Array<{ label: string; outcome: "skipped" | "failed"; reason: string }> = [];
+  let lastFailed: { label: string; reason: string } | undefined;
+  const labelOf = (step: Step) => `${step.provider.id}/${step.model}`;
+  const estimatedPrompt = estimatePromptTokens(`${request.system}\n${request.prompt}`, request.images?.length ?? 0, true);
+  const capabilityGap = (step: Step): string | null => {
+    const caps = step.provider.capabilities;
+    if (request.images?.length) {
+      if (!caps?.vision) return "không đọc được ảnh (vision)";
+      if (request.images.length > caps.maxImagesPerCall) return `chỉ nhận tối đa ${caps.maxImagesPerCall} ảnh mỗi lần`;
+    }
+    if (!request.functions?.length && caps?.json === false) return "không hỗ trợ đầu ra JSON";
+    const maxInput = step.provider.limits?.maxInputTokens;
+    if (maxInput && estimatedPrompt > maxInput) return `prompt (~${estimatedPrompt} token) vượt giới hạn ${maxInput}`;
+    return null;
+  };
+  const exhausted = () => {
+    const detail = attempts.map((a) => `${a.label} (${a.outcome === "skipped" ? "bỏ qua" : "lỗi"}: ${a.reason})`).join("; ");
+    const untils = ordered.map((s) => tracker.cooldownFor(s.provider.id, s.model)?.until ?? 0).filter((n) => n > 0);
+    const until = untils.length ? Math.min(...untils) : 0;
+    return mergedError(
+      `Mọi nhà cung cấp LLM đều không dùng được: ${detail}`,
+      "LLM_ALL_PROVIDERS_EXHAUSTED", true, undefined, priorCalls, priorUsage, [], undefined, undefined,
+      until > Date.now() ? new Date(until).toISOString() : undefined,
+    );
+  };
+
   for (const step of ordered) {
     const paidFallback = step.kind === "paid" && !step.originalPrimary;
     if (paidFallback) {
       const underCap = policy.policy === "paid_fallback" && (quota?.todaySpendUsd() ?? 0) < policy.paidFallbackDailyUsd;
-      if (!underCap) continue;
+      if (!underCap) {
+        attempts.push({ label: labelOf(step), outcome: "skipped", reason: "model trả phí, chính sách hiện tại không cho dùng thay thế" });
+        continue;
+      }
+    }
+    if (chained) {
+      const cooling = tracker.cooldownFor(step.provider.id, step.model);
+      if (cooling) {
+        attempts.push({ label: labelOf(step), outcome: "skipped", reason: `đang nghỉ đến ${new Date(cooling.until).toISOString()} (${cooling.reason})` });
+        continue;
+      }
+      const gap = step.originalPrimary ? null : capabilityGap(step);
+      if (gap) {
+        attempts.push({ label: labelOf(step), outcome: "skipped", reason: gap });
+        request.logger?.info({ task, provider: step.provider.id, model: step.model, reason: gap }, "LLM failover skipped a fallback that cannot serve the call");
+        continue;
+      }
     }
     if (quota?.isUnavailable(step.provider.id, step.model)) {
+      attempts.push({ label: labelOf(step), outcome: "skipped", reason: "hết quota" });
       quotaPressure = true;
       if (step.originalPrimary && gatewayDirect && !gatewayOnly) {
         try {
@@ -483,6 +636,11 @@ export async function generateRoutedStructured<T>(input: {
     }
     try {
       const generated = await callModel(step.provider, step.model, step.maxOutputTokens);
+      tracker.recordSuccess(step.provider.id, step.model);
+      if (lastFailed) {
+        tracker.recordFailover({ task, from: lastFailed.label, to: labelOf(step), reason: lastFailed.reason });
+        request.logger?.warn({ task, from: lastFailed.label, to: labelOf(step), reason: lastFailed.reason }, "LLM failover: answered by the next provider in the chain");
+      }
       const asFallback = priorCalls.length > 0 || !step.originalPrimary;
       if (paidFallback) {
         const fresh = generated.usage.calls.filter((call) => !call.cached).at(-1);
@@ -498,7 +656,8 @@ export async function generateRoutedStructured<T>(input: {
       return mergeUsage(priorCalls, priorUsage, generated, quotaPressure ? "quota" : undefined);
     } catch (error) {
       if (!(error instanceof LlmError)) throw error;
-      if (step.originalPrimary && gatewayDirect && shouldGatewayFallback(error) && priorCalls.length === 0) {
+      if (error.code === "AUTONOMY_BUDGET_WAIT") budgetWait = error;
+      if (step.originalPrimary && gatewayDirect && (shouldGatewayFallback(error) || error.code === "AUTONOMY_BUDGET_WAIT") && priorCalls.length === 0) {
         logGatewayFallbackOnce(request.signal, request.logger, {
           task,
           from: `${route.provider.id}/${route.model}`,
@@ -526,6 +685,9 @@ export async function generateRoutedStructured<T>(input: {
           );
         }
       }
+      if (isFailoverError(error)) tracker.recordFailure(step.provider.id, step.model, error);
+      attempts.push({ label: labelOf(step), outcome: "failed", reason: error.code });
+      lastFailed = { label: labelOf(step), reason: error.code };
       const reason = quota && isQuotaSignal(error) ? "quota" as const : undefined;
       if (reason && quota) {
         quota.onQuotaFailure({ provider: step.provider.id, model: step.model, error });
@@ -544,7 +706,7 @@ export async function generateRoutedStructured<T>(input: {
         error.code,
         error.retryable,
         error.status,
-        priorCalls.slice(0, -tagged.length),
+        priorCalls.slice(0, priorCalls.length - tagged.length),
         {
           llmCalls: priorUsage.llmCalls - (error.usage?.llmCalls ?? 0),
           inputTokens: priorUsage.inputTokens - (error.usage?.inputTokens ?? 0),
@@ -560,7 +722,56 @@ export async function generateRoutedStructured<T>(input: {
     }
   }
 
-  if (quota && quotaPressure) throw quotaWait();
+  if (budgetWait) throw mergedError(budgetWait.message, budgetWait.code, true, undefined,
+    priorCalls, priorUsage, [], undefined, undefined, budgetWait.retryAt);
+  if (quota && quotaPressure) {
+    const sqlite = input.cache?.sqlite;
+    let allowSwap = false;
+    if (sqlite) {
+      const { effectiveAutonomy } = await import("../../operator/autonomy.js");
+      const level = effectiveAutonomy(sqlite, { profileId: route.profileId ?? undefined }).level;
+      const row = route.profileId
+        ? sqlite.prepare("SELECT llm FROM profiles WHERE id = ?").get(route.profileId) as { llm: string | { autoSwapOnQuota?: boolean } } | undefined
+        : undefined;
+      let raw: { autoSwapOnQuota?: boolean } | undefined;
+      try {
+        if (row && typeof row.llm === "string") raw = JSON.parse(row.llm) as { autoSwapOnQuota?: boolean };
+        else if (row && typeof row.llm === "object") raw = row.llm;
+      } catch {
+        raw = undefined;
+      }
+      allowSwap = raw?.autoSwapOnQuota ?? (level === "supervised" || level === "autonomous");
+    }
+    if (!allowSwap) throw quotaWait();
+    const { findEquivalentModel } = await import("@vg/shared");
+    const catalogCandidates = registry.omnirouteCatalog.peekModels().map((item) => ({
+      provider: "omniroute",
+      model: item.id,
+      vision: item.vision === true,
+      paid: (item.pricing?.inputPerMTok ?? 0) > 0 || (item.pricing?.outputPerMTok ?? 0) > 0,
+      tier: 1,
+      family: item.id.split("/")[0],
+    }));
+    const pick = findEquivalentModel({
+      provider: route.provider.id,
+      model: route.model,
+      budgetMode: route.budgetMode === "ECO" || route.budgetMode === "QUALITY" ? route.budgetMode : "BALANCED",
+      taskNeedsVision: task === "visionCheck",
+    }, [...(input.swapCandidates ?? []), ...catalogCandidates]);
+    if (pick) {
+      try {
+        const resolved = registry.resolveFallback({ provider: pick.provider, model: pick.model });
+        const generated = await callModel(resolved.provider, resolved.model, route.maxOutputTokens);
+        return mergeUsage(priorCalls, priorUsage, generated, "quota_swap");
+      } catch (error) {
+        if (!(error instanceof LlmError)) throw error;
+      }
+    }
+    throw quotaWait();
+  }
+  if (chained && attempts.length >= 2 && attempts.some((a) => a.outcome === "failed" || a.reason.startsWith("đang nghỉ"))) {
+    throw exhausted();
+  }
   if (lastError) throw lastError;
   if (quota) throw quotaWait();
   throw new LlmError("No LLM provider is available for this task.", "LLM_NOT_CONFIGURED", false);
@@ -610,11 +821,18 @@ async function applyOmnirouteGateway(
   }
 
   const catalogVision = target.catalogModel?.vision;
-  const capabilities = catalogVision === undefined
+  const marked = omnirouteModelSeesImages(target.omnirouteModel)
+    || registry.visionMarks().some((row) =>
+    (row.provider === "omniroute" && row.model === target.omnirouteModel)
+    || (row.provider === route.provider.id && row.model === route.model));
+  let capabilities = catalogVision === undefined
     ? (omni.capabilities ?? envOmnirouteVision())
     : catalogVision
-      ? { vision: true, maxImagesPerCall: Math.max(1, omni.capabilities?.maxImagesPerCall ?? 10) }
+      ? { vision: true, maxImagesPerCall: visionImageBatchLimit(omni.capabilities?.maxImagesPerCall) }
       : { vision: false, maxImagesPerCall: 0 };
+  if (marked && !capabilities.vision) {
+    capabilities = { vision: true, maxImagesPerCall: visionImageBatchLimit(capabilities.maxImagesPerCall) };
+  }
   const provider = providerWithCapabilities(omni, capabilities);
 
   const gatewayRoute: ResolvedLlmRoute = {
@@ -654,7 +872,7 @@ function isAbortError(error: unknown): boolean {
 }
 
 // Errors raised before a request reaches the provider (missing CLI, nothing configured) spend no call.
-const NOT_SENT_CODES = new Set(["LLM_NOT_CONFIGURED", "LLM_LIMIT_TOO_SMALL", "VISION_PROVIDER_REQUIRED", "FFMPEG_MISSING"]);
+const NOT_SENT_CODES = new Set(["LLM_NOT_CONFIGURED", "LLM_LIMIT_TOO_SMALL", "VISION_PROVIDER_REQUIRED", "FFMPEG_MISSING", "AUTONOMY_BUDGET_WAIT"]);
 
 export function assertVisionCapable(provider: LlmProvider, images: LlmImageAttachment[] | undefined): void {
   if (!images?.length) return;
@@ -704,12 +922,16 @@ function withUsage(
   );
 }
 
-function validateOutput<T>(schema: z.ZodType<T>, text: string):
+function applyNormalize(normalize: ((raw: unknown) => unknown) | undefined, value: unknown): unknown {
+  return normalize ? normalize(value) : value;
+}
+
+function validateOutput<T>(schema: z.ZodType<T>, text: string, normalize?: (raw: unknown) => unknown):
   | { success: true; data: T }
   | { success: false; issues: { path: string; message: string }[] } {
   let value: unknown;
   try {
-    value = extractJson(text);
+    value = applyNormalize(normalize, extractJson(text));
   } catch {
     return { success: false, issues: [{ path: "", message: "Output must contain one valid JSON object." }] };
   }

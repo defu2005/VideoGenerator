@@ -9,6 +9,7 @@ import type { Project, ProjectMusic } from "@vg/shared";
 import { PipelineEventBus } from "../src/jobs/eventBus.js";
 import { JobRepository } from "../src/jobs/jobRepository.js";
 import { buildApp } from "../src/app.js";
+import { testActor } from "./testActor.js";
 import { parseConfig, type AppConfig } from "../src/lib/config.js";
 import { OpenverseMusicProvider, openverseQueryFallbacks } from "../src/providers/music/openverse.js";
 import { LocalMusicProvider } from "../src/providers/music/local.js";
@@ -85,7 +86,7 @@ beforeEach(() => {
     TTS_PROVIDER: "mock",
     MUSIC_PROVIDERS: "mock",
   });
-  app = buildApp({ config });
+  app = buildApp({ testActor,  config });
   sqlite = new Database(config.DATABASE_PATH);
   repository = new JobRepository(sqlite, new PipelineEventBus());
 });

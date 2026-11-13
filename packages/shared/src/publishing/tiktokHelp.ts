@@ -1,3 +1,5 @@
+import { snapshotKnowledge } from "../knowledge/snapshot.js";
+
 /** Vietnamese setup help for TikTok OAuth + Content Posting API. Shown in the UI. */
 export const TIKTOK_SETUP_HELP_VI = `Cách kết nối TikTok (dùng app trên developers.tiktok.com của bạn):
 
@@ -30,7 +32,7 @@ export const TIKTOK_SCOPES = [
 ] as const;
 
 /** Caption / title limit in UTF-16 code units (TikTok docs). */
-export const TIKTOK_CAPTION_MAX_UTF16 = 2200;
+export const TIKTOK_CAPTION_MAX_UTF16 = (snapshotKnowledge("limit.tiktok.caption_max_utf16")!.value as { value: number }).value;
 
 /** Prefer this chunk size for multi-chunk FILE_UPLOAD (within 5–64 MB). */
 export const TIKTOK_PREFERRED_CHUNK_BYTES = 10 * 1024 * 1024;

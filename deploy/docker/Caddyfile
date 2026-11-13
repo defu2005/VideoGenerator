@@ -1,0 +1,15 @@
+# DOMAIN is a hostname (automatic HTTPS) or :80 for a LAN-only install.
+# flush_interval -1 keeps SSE (/api/.../events) from being buffered.
+{$DOMAIN::80} {
+	handle /api/* {
+		reverse_proxy vg:3001 {
+			flush_interval -1
+		}
+	}
+	handle {
+		encode gzip
+		root * /srv
+		try_files {path} /index.html
+		file_server
+	}
+}

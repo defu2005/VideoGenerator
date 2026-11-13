@@ -20,8 +20,11 @@ export const LlmProviderIdSchema = z.enum([
 ]);
 export type LlmProviderId = z.infer<typeof LlmProviderIdSchema>;
 
+/** Built-in provider ids plus custom OpenAI-compatible providers saved in the app (`custom-<slug>`). */
+export const LlmProviderRefIdSchema = z.union([LlmProviderIdSchema, z.string().regex(/^custom-[a-z0-9][a-z0-9-]{0,30}$/)]);
+
 export const LlmProviderInfoSchema = z.object({
-  id: LlmProviderIdSchema,
+  id: LlmProviderRefIdSchema,
   label: z.string(),
   configured: z.boolean(),
   defaultModel: z.string().nullable(),
@@ -67,6 +70,7 @@ export function fallbackChainOf(route: { fallback?: LlmFallback; fallbacks?: Llm
 }
 
 export const LlmTaskIdSchema = z.enum([
+  "retrievalEmbed",
   "research",
   "script",
   "scriptReview",
@@ -86,6 +90,7 @@ export const LlmTaskIdSchema = z.enum([
   "reviewChat",
   "modelAdvisor",
   "topicSuggest",
+  "stylePack",
   "assistantChat",
   "financeInsight",
   "performanceInsight",
@@ -93,6 +98,15 @@ export const LlmTaskIdSchema = z.enum([
   "commentAssist",
   "trendMatch",
   "translateScript",
+  "providerIntelExtract",
+  "knowledgeWatch",
+  "editPlan",
+  "formatPick",
+  "stageTimeouts",
+  "operatorPlan",
+  "operatorClassify",
+  "operatorRepair",
+  "overdueCheck",
 ]);
 export type LlmTaskId = z.infer<typeof LlmTaskIdSchema>;
 
@@ -127,6 +141,7 @@ export const LLM_TASKS: {
   { id: "reviewChat", label: "Góp ý trước render", stage: "FINAL_APPROVAL", purpose: "Optional pre-render review chat with structured proposals.", tier: "strong", qualityWeight: 2, needsLongContext: true },
   { id: "modelAdvisor", label: "Gợi ý model bằng AI", stage: "SETTINGS", purpose: "Propose an LLM route for every task given available models and budget mode.", tier: "fast", qualityWeight: 1, budgetFeature: "modelAdvisor" },
   { id: "topicSuggest", label: "Gợi ý chủ đề", stage: "SETTINGS", purpose: "Suggest video topics from a profile direction without repeating past topics.", tier: "fast", qualityWeight: 1, budgetFeature: "topicSuggest" },
+  { id: "stylePack", label: "Gợi ý phong cách kênh", stage: "SETTINGS", purpose: "Propose a channel style pack (tokens-v1) that differs from the other channels.", tier: "fast", qualityWeight: 1 },
   { id: "assistantChat", label: "Trợ lý AI điều khiển app", stage: "SETTINGS", purpose: "Chat assistant that clarifies requests and runs app tools (web + Telegram).", tier: "fast", qualityWeight: 1, budgetFeature: "assistantChat" },
   { id: "financeInsight", label: "Nhận xét báo cáo doanh thu", stage: "SETTINGS", purpose: "3–5 Vietnamese bullet points on what went well or badly in a monthly finance report.", tier: "fast", qualityWeight: 1, budgetFeature: "financeInsight" },
   { id: "performanceInsight", label: "Bài học từ số liệu", stage: "SETTINGS", purpose: "Vietnamese patterns and recommendations from past video performance for one profile.", tier: "strong", qualityWeight: 2, budgetFeature: "performanceInsight" },
@@ -134,6 +149,16 @@ export const LLM_TASKS: {
   { id: "commentAssist", label: "Phân loại và gợi ý trả lời bình luận", stage: "SETTINGS", purpose: "Classify comments and draft short replies in the comment's language.", tier: "fast", qualityWeight: 1, budgetFeature: "commentAssist" },
   { id: "trendMatch", label: "Ghép xu hướng với kênh", stage: "SETTINGS", purpose: "Turn trending items into a few topic ideas that fit the channel.", tier: "fast", qualityWeight: 1, budgetFeature: "trendMatch" },
   { id: "translateScript", label: "Dịch kịch bản", stage: "SCRIPT", purpose: "Translate a finished script scene by scene for another language.", tier: "strong", qualityWeight: 3, needsLongContext: true, budgetFeature: "translateScript" },
+  { id: "providerIntelExtract", label: "Trích trang nhà cung cấp", stage: "SETTINGS", purpose: "Propose quote-backed provider facts from an official page. Values without a verbatim quote are dropped.", tier: "fast", qualityWeight: 1, budgetFeature: "providerIntelExtract" },
+  { id: "knowledgeWatch", label: "Đọc thay đổi tri thức", stage: "KNOWLEDGE", purpose: "Read a changed official source and propose only quote-backed knowledge changes.", tier: "fast", qualityWeight: 1, budgetFeature: "providerIntelExtract" },
+  { id: "editPlan", label: "Kế hoạch dựng", stage: "TIMELINE", purpose: "Choose transitions, camera motion, emphasis and the subtitle style for one video.", tier: "strong", qualityWeight: 2, budgetFeature: "editPlan" },
+  { id: "formatPick", label: "Chọn mẫu video", stage: "SCRIPT", purpose: "Pick a format recipe from the topic, niche and aspect.", tier: "fast", qualityWeight: 1, budgetFeature: "formatPick" },
+  { id: "stageTimeouts", label: "Thời gian tối đa mỗi bước", stage: "SETTINGS", purpose: "Choose a per-stage timeout from the brief.", tier: "fast", qualityWeight: 1, budgetFeature: "stageTimeouts" },
+  { id: "operatorPlan", label: "Lập mục tiêu tự vận hành", stage: "SETTINGS", purpose: "Turn the owner's goal into a structured plan.", tier: "fast", qualityWeight: 1, budgetFeature: "operatorPlan" },
+  { id: "operatorClassify", label: "Phân loại lời chủ kênh", stage: "SETTINGS", purpose: "Classify an owner message as a goal, request, feedback or control.", tier: "fast", qualityWeight: 1, budgetFeature: "operatorClassify" },
+  { id: "operatorRepair", label: "Chọn cách tự sửa chất lượng", stage: "SETTINGS", purpose: "Pick one repair action per quality issue from a fixed list. Code keeps the facts and the limits.", tier: "fast", qualityWeight: 1, budgetFeature: "operatorPlan" },
+  { id: "overdueCheck", label: "Kiểm tra bước chạy quá giờ", stage: "SETTINGS", purpose: "Pick wait or escalate for a stage that passed its limit. Code owns the facts and the limits.", tier: "fast", qualityWeight: 1, budgetFeature: "operatorPlan" },
+  { id: "retrievalEmbed", label: "Embedding tri thức", stage: "RESEARCH", purpose: "Embed channel knowledge for retrieval.", tier: "fast", qualityWeight: 1, budgetFeature: "knowledgeEmbeddings" },
 ];
 
 function normalizeLlmSettings(value: unknown): unknown {
@@ -160,15 +185,77 @@ function normalizeLlmSettings(value: unknown): unknown {
     ...(typeof legacy.autoModel === "boolean" ? { autoModel: legacy.autoModel } : {}),
     ...(legacy.quotaPolicy === "wait" || legacy.quotaPolicy === "paid_fallback" ? { quotaPolicy: legacy.quotaPolicy } : {}),
     ...(typeof legacy.paidFallbackDailyUsd === "number" ? { paidFallbackDailyUsd: legacy.paidFallbackDailyUsd } : {}),
+    ...(typeof legacy.autoSwapOnQuota === "boolean" ? { autoSwapOnQuota: legacy.autoSwapOnQuota } : {}),
+    ...(legacy.capabilityOverrides && typeof legacy.capabilityOverrides === "object" && !Array.isArray(legacy.capabilityOverrides)
+      ? { capabilityOverrides: legacy.capabilityOverrides } : {}),
   };
 }
 
+const CapabilityOverrideSchema = z.object({
+  vision: z.boolean().optional(),
+  tools: z.boolean().optional(),
+  json: z.boolean().optional(),
+}).strict();
 const LlmSettingsObjectSchema = z.object({
   default: LlmRouteSchema.optional(),
   tasks: z.partialRecord(LlmTaskIdSchema, LlmRouteSchema).optional(),
+  autoSwapOnQuota: z.boolean().optional(),
+  capabilityOverrides: z.record(z.string(), CapabilityOverrideSchema).optional(),
 }).strict();
 export const LlmSettingsSchema = z.preprocess(normalizeLlmSettings, LlmSettingsObjectSchema);
 export type LlmSettings = z.infer<typeof LlmSettingsSchema>;
+
+export const VISION_ROUTE_TASKS: LlmTaskId[] = LLM_TASKS.filter((task) => task.needsVision).map((task) => task.id);
+
+/** Grok 4 and later accept images. The OmniRoute catalog often omits the vision flag. */
+export function omnirouteModelSeesImages(model: string): boolean {
+  const id = model.trim().toLowerCase();
+  return /(?:^|\/)grok-(?:4(?:[.-]|$)|imagine(?:[/-]|$)|2-vision(?:[/-]|$))/.test(id);
+}
+
+/** A provider flagged vision-off stores maxImagesPerCall 0. Enabling vision uses at least 10. */
+export function visionImageBatchLimit(current: number | undefined): number {
+  return Math.max(10, current && current > 0 ? current : 0);
+}
+
+export const LlmModelRefSchema = z.object({
+  provider: z.string().min(1).max(80),
+  model: z.string().min(1).max(200),
+}).strict();
+export type LlmModelRef = z.infer<typeof LlmModelRefSchema>;
+
+export const LlmVisionMarksSchema = z.object({
+  models: z.array(LlmModelRefSchema).max(40),
+}).strict();
+export type LlmVisionMarks = z.infer<typeof LlmVisionMarksSchema>;
+
+export const LlmRouteAssignmentSchema = z.object({
+  task: z.union([LlmTaskIdSchema, z.literal("default"), z.literal("vision")]),
+  provider: z.string().min(1).max(80),
+  model: z.string().min(1).max(200),
+}).strict();
+export type LlmRouteAssignment = z.infer<typeof LlmRouteAssignmentSchema>;
+
+export const LlmRouteAssignBodySchema = z.object({
+  scope: z.enum(["app", "project"]).default("app"),
+  projectId: z.string().uuid().optional(),
+  assignments: z.array(LlmRouteAssignmentSchema).min(1).max(40),
+}).strict().superRefine((value, ctx) => {
+  if (value.scope === "project" && !value.projectId) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Thiếu projectId.", path: ["projectId"] });
+  }
+});
+export type LlmRouteAssignBody = z.infer<typeof LlmRouteAssignBodySchema>;
+
+export const LlmRouteAssignResultSchema = z.object({
+  scope: z.enum(["app", "project"]),
+  projectId: z.string().uuid().optional(),
+  default: LlmRouteSchema.optional(),
+  tasks: z.partialRecord(LlmTaskIdSchema, LlmRouteSchema),
+  visionModels: z.array(LlmModelRefSchema),
+  markedNow: z.array(LlmModelRefSchema),
+}).strict();
+export type LlmRouteAssignResult = z.infer<typeof LlmRouteAssignResultSchema>;
 export const LlmSettingsInputSchema = z.preprocess(normalizeLlmSettings, z.object({
   default: LlmRouteSchema.optional(),
   tasks: z.partialRecord(LlmTaskIdSchema, LlmRouteSchema.nullable()).optional(),
@@ -182,6 +269,8 @@ export const ProfileLlmSettingsSchema = z.preprocess(normalizeLlmSettings, z.obj
   autoModel: z.boolean().default(true),
   quotaPolicy: z.enum(["wait", "paid_fallback"]).optional(),
   paidFallbackDailyUsd: z.number().nonnegative().max(10_000).optional(),
+  autoSwapOnQuota: z.boolean().optional(),
+  capabilityOverrides: z.record(z.string(), CapabilityOverrideSchema).optional(),
 }).strict());
 export type ProfileLlmSettings = z.infer<typeof ProfileLlmSettingsSchema>;
 
@@ -191,6 +280,8 @@ export const ProfileLlmSettingsInputSchema = z.preprocess(normalizeLlmSettings, 
   autoModel: z.boolean().optional(),
   quotaPolicy: z.enum(["wait", "paid_fallback"]).nullable().optional(),
   paidFallbackDailyUsd: z.number().nonnegative().max(10_000).nullable().optional(),
+  autoSwapOnQuota: z.boolean().nullable().optional(),
+  capabilityOverrides: z.record(z.string(), CapabilityOverrideSchema).optional(),
 }).strict());
 export type ProfileLlmSettingsInput = z.infer<typeof ProfileLlmSettingsInputSchema>;
 

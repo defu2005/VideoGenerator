@@ -1,0 +1,160 @@
+{
+  "id": "translation",
+  "titleVi": "Dịch và rút gọn",
+  "taskId": "translateScript",
+  "rubricVi": "Bản dịch có dấu và nằm trong cửa sổ độ dài.",
+  "cases": [
+    {
+      "id": "translation-1",
+      "taskId": "translateScript",
+      "input": {
+        "text": "Sentence 1",
+        "target": "vi"
+      },
+      "graders": [
+        {
+          "kind": "length",
+          "min": 10,
+          "max": 500
+        },
+        {
+          "kind": "vietnameseDiacritics",
+          "minRatio": 0.02
+        }
+      ]
+    },
+    {
+      "id": "translation-2",
+      "taskId": "translateScript",
+      "input": {
+        "text": "Sentence 2",
+        "target": "vi"
+      },
+      "graders": [
+        {
+          "kind": "length",
+          "min": 10,
+          "max": 500
+        },
+        {
+          "kind": "vietnameseDiacritics",
+          "minRatio": 0.02
+        }
+      ]
+    },
+    {
+      "id": "translation-3",
+      "taskId": "translateScript",
+      "input": {
+        "text": "Sentence 3",
+        "target": "vi"
+      },
+      "graders": [
+        {
+          "kind": "length",
+          "min": 10,
+          "max": 500
+        },
+        {
+          "kind": "vietnameseDiacritics",
+          "minRatio": 0.02
+        }
+      ]
+    },
+    {
+      "id": "translation-4",
+      "taskId": "translateScript",
+      "input": {
+        "text": "Sentence 4",
+        "target": "vi"
+      },
+      "graders": [
+        {
+          "kind": "length",
+          "min": 10,
+          "max": 500
+        },
+        {
+          "kind": "vietnameseDiacritics",
+          "minRatio": 0.02
+        }
+      ]
+    },
+    {
+      "id": "translation-5",
+      "taskId": "translateScript",
+      "input": {
+        "text": "Sentence 5",
+        "target": "vi"
+      },
+      "graders": [
+        {
+          "kind": "length",
+          "min": 10,
+          "max": 500
+        },
+        {
+          "kind": "vietnameseDiacritics",
+          "minRatio": 0.02
+        }
+      ]
+    },
+    {
+      "id": "translation-6",
+      "taskId": "translateScript",
+      "input": {
+        "text": "Sentence 6",
+        "target": "vi"
+      },
+      "graders": [
+        {
+          "kind": "length",
+          "min": 10,
+          "max": 500
+        },
+        {
+          "kind": "vietnameseDiacritics",
+          "minRatio": 0.02
+        }
+      ]
+    },
+    {
+      "id": "translation-7",
+      "taskId": "translateScript",
+      "input": {
+        "text": "Sentence 7",
+        "target": "vi"
+      },
+      "graders": [
+        {
+          "kind": "length",
+          "min": 10,
+          "max": 500
+        },
+        {
+          "kind": "vietnameseDiacritics",
+          "minRatio": 0.02
+        }
+      ]
+    },
+    {
+      "id": "translation-8",
+      "taskId": "translateScript",
+      "input": {
+        "text": "Sentence 8",
+        "target": "vi"
+      },
+      "graders": [
+        {
+          "kind": "length",
+          "min": 10,
+          "max": 500
+        },
+        {
+          "kind": "vietnameseDiacritics",
+          "minRatio": 0.02
+        }
+      ]
+    }
+  ]
+}

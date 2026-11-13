@@ -2,8 +2,10 @@ import type { MusicCandidate, MusicSettingsPatch, Project, ProjectMusic } from "
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { ErrorState } from "../../components/ErrorState";
+import { useToast } from "../../components/ui/Toast";
 import { Spinner } from "../../components/Spinner";
 import { pipelineKeys, usePipeline } from "../../hooks/usePipeline";
+import { stageBlocked } from "../pipeline/activeJobs";
 import { approvePipelineGate, runPipeline } from "../../services/pipelineApi";
 import {
   getProjectMusic,
@@ -49,6 +51,7 @@ function mixFrom(music: ProjectMusic | undefined): MixForm | null {
 
 export function MusicPanel({ project }: { project: Project }) {
   const queryClient = useQueryClient();
+  const toast = useToast();
   const [error, setError] = useState("");
   const [query, setQuery] = useState<string | null>(null);
   const [mix, setMix] = useState<MixForm | null>(null);
@@ -57,11 +60,16 @@ export function MusicPanel({ project }: { project: Project }) {
 
   useEffect(() => { setMix(mixFrom(music.data)); }, [music.data]);
 
+  const onError = (reason: unknown) => {
+    const message = reason instanceof Error ? reason.message : "Không thực hiện được yêu cầu";
+    setError(message);
+    toast.error(message);
+  };
   const onResult = (data: ProjectMusic) => {
     queryClient.setQueryData(musicKeys.project(project.id), data);
     void queryClient.invalidateQueries({ queryKey: pipelineKeys.detail(project.id) });
+    toast.success("Đã cập nhật nhạc");
   };
-  const onError = (reason: unknown) => setError(reason instanceof Error ? reason.message : "Không thực hiện được yêu cầu");
   const search = useMutation({ mutationFn: (text: string | null) => searchMusic(project.id, text), onSuccess: onResult, onError });
   const select = useMutation({ mutationFn: (candidateId: string) => selectMusic(project.id, candidateId), onSuccess: onResult, onError });
   const none = useMutation({ mutationFn: () => selectNoMusic(project.id), onSuccess: onResult, onError });
@@ -78,7 +86,7 @@ export function MusicPanel({ project }: { project: Project }) {
   const current = data.selectedCandidate;
   const searchStage = pipeline.data.stages.find((record) => record.stage === "MUSIC_SEARCH");
   const gate = pipeline.data.stages.find((record) => record.stage === "MUSIC_REVIEW");
-  const canRunStage = Boolean(searchStage) && !pipeline.data.activeJob && !pipeline.isMutating;
+  const canRunStage = Boolean(searchStage) && !stageBlocked("MUSIC_SEARCH", pipeline.data) && !pipeline.isMutating;
   const gateReady = selection?.status === "APPROVED" || selection?.status === "NONE" || !data.enabled;
   const queryValue = query ?? data.query;
 
@@ -93,6 +101,7 @@ export function MusicPanel({ project }: { project: Project }) {
       await runPipeline(project.id, "MUSIC_SEARCH");
       await queryClient.invalidateQueries({ queryKey: pipelineKeys.detail(project.id) });
       await music.refetch();
+      toast.success("Đã xếp bước chạy");
     } catch (reason) {
       onError(reason);
     }
@@ -103,6 +112,7 @@ export function MusicPanel({ project }: { project: Project }) {
     try {
       const next = await approvePipelineGate(project.id, "MUSIC_REVIEW");
       queryClient.setQueryData(pipelineKeys.detail(project.id), next);
+      toast.success("Đã duyệt cổng");
     } catch (reason) {
       onError(reason);
     }
@@ -132,7 +142,7 @@ export function MusicPanel({ project }: { project: Project }) {
         <div className="music-header-actions">
           <button className="button button-secondary" type="button" disabled={!canRunStage} onClick={() => void runStage()}>Chạy bước tìm nhạc</button>
           {gate?.state === "WAITING_USER" && (
-            <button className="button button-primary" type="button" disabled={!gateReady || Boolean(pipeline.data.activeJob)} title={gateReady ? undefined : "Chọn một bản nhạc hoặc 'Không dùng nhạc' trước"} onClick={() => void approveGate()}>
+            <button className="button button-primary" type="button" disabled={!gateReady || stageBlocked("MUSIC_REVIEW", pipeline.data)} title={gateReady ? undefined : "Chọn một bản nhạc hoặc 'Không dùng nhạc' trước"} onClick={() => void approveGate()}>
               Duyệt nhạc → tiếp tục
             </button>
           )}

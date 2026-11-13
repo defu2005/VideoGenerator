@@ -30,7 +30,7 @@ export const UsageCallSummarySchema = z.object({
   callCount: z.number().int().nonnegative(),
   cached: z.boolean(),
   fallback: z.boolean(),
-  fallbackReason: z.literal("quota").optional(),
+  fallbackReason: z.enum(["quota", "quota_swap"]).optional(),
   ok: z.boolean(),
   tokensUnknown: z.boolean(),
   costUsd: z.number().nonnegative(),

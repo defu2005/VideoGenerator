@@ -1,0 +1,1 @@
+ALTER TABLE `operator_events` ADD `detail` text;

@@ -4,6 +4,8 @@ import { setAutomationPaused } from "../services/automationSettings.js";
 import type { TelegramClient, TelegramPoller } from "../notifications/telegram.js";
 import { escapeHtml } from "../notifications/telegram.js";
 import type { AssistantService } from "./service.js";
+import { pauseByUser } from "../supervision/pause.js";
+import { formatHermesStatus } from "../supervision/snapshot.js";
 
 /** Wire Telegram poller to the LLM assistant (replaces TASK-031 placeholder). */
 export function installAssistantTelegramHandlers(
@@ -31,11 +33,16 @@ export function installAssistantTelegramHandlers(
           "<b>Video Agent — lệnh</b>",
           "/status — lượt operator, hàng đợi, lượt hôm nay",
           "/pause — tạm dừng mọi tự động hoá",
-          "/op — nhờ Cursor operator",
+          "/op — nhờ Agent operator",
           "/tl — hỏi trợ lý tích hợp",
           "/stop — dừng lượt operator",
           "/new — phiên operator mới",
           "/orders — lệnh thường trực",
+          "/autonomy — xem mức tự vận hành",
+          "/goal — lưu mục tiêu",
+          "/feedback — lưu quy tắc",
+          "/digest — bản tin hôm nay",
+          "/hermes — trạng thái Hermes giám sát",
           "/help — trợ giúp",
         ].join("\n"),
       );
@@ -45,6 +52,17 @@ export function installAssistantTelegramHandlers(
     if (options.operator) {
       const handled = await options.operator.handleTelegram(input);
       if (handled) return;
+    }
+
+    if (base === "/hermes") {
+      await client.sendMessage(input.chatId, formatHermesStatus(options.sqlite));
+      return;
+    }
+
+    if (base === "/stop") {
+      pauseByUser(options.sqlite);
+      await client.sendMessage(input.chatId, "Đã tạm dừng operator 1 giờ.");
+      return;
     }
 
     if (base === "/status") {

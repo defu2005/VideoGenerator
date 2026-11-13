@@ -1,5 +1,6 @@
+import type { KnowledgeService } from "../knowledge/service.js";
 import { META_GRAPH_VERSION, type TokenSet } from "@vg/shared";
-import { ANALYTICS_REQUIRED_SCOPES } from "./scopes.js";
+import { analyticsScopes } from "./scopes.js";
 import {
   AnalyticsHttpError,
   type AnalyticsLogger,
@@ -27,6 +28,7 @@ const IG_METRICS = Object.keys(IG_METRIC_MAP);
 const MS_METRICS = new Set(["ig_reels_avg_watch_time", "ig_reels_video_view_total_time"]);
 
 export type InstagramFetcherOptions = {
+  knowledge?: KnowledgeService;
   fetchImpl?: typeof fetch;
   logger?: AnalyticsLogger;
   now?: () => Date;
@@ -36,14 +38,14 @@ type InsightRow = { name?: string; values?: Array<{ value?: unknown }> };
 
 export class InstagramMetricsFetcher implements MetricsFetcher {
   readonly platform = "instagram_reels" as const;
-  readonly requiredScopes = [...ANALYTICS_REQUIRED_SCOPES.instagram_reels];
+  get requiredScopes() { return analyticsScopes(this.platform, this.options.knowledge); }
 
   private readonly fetchImpl: typeof fetch;
   private readonly logger?: AnalyticsLogger;
   private readonly now: () => Date;
   private loggedRejected = new Set<string>();
 
-  constructor(options: InstagramFetcherOptions = {}) {
+  constructor(private readonly options: InstagramFetcherOptions = {}) {
     this.fetchImpl = options.fetchImpl ?? fetch;
     this.logger = options.logger;
     this.now = options.now ?? (() => new Date());

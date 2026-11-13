@@ -1,3 +1,4 @@
+import { OpenAiCompatibleProvider } from "./openaiCompatible.js";
 import { readFileSync } from "node:fs";
 import { fetchLlmJson, asRecord, numeric } from "./http.js";
 import { LlmError, type LlmProvider, type LlmRequest, type LlmResponse } from "./types.js";
@@ -5,7 +6,7 @@ import { LlmError, type LlmProvider, type LlmRequest, type LlmResponse } from ".
 export class GeminiProvider implements LlmProvider {
   readonly id = "gemini";
   readonly label = "Google Gemini";
-  readonly capabilities = { vision: true, maxImagesPerCall: 10 } as const;
+  readonly capabilities = { embeddings: true, vision: true, maxImagesPerCall: 10 } as const;
 
   constructor(
     private readonly apiKey: string,
@@ -14,6 +15,9 @@ export class GeminiProvider implements LlmProvider {
     private readonly baseUrl = "https://generativelanguage.googleapis.com/v1beta",
   ) {}
 
+  async embed(req: { model: string; texts: string[] }, signal: AbortSignal) {
+    return new OpenAiCompatibleProvider("gemini",this.label,this.baseUrl+"/openai",this.apiKey,this.defaultModel,this.timeoutMs,true,{...this.capabilities}).embed(req,signal);
+  }
   async generate(req: LlmRequest, signal: AbortSignal) {
     const contents = buildGeminiContents(req);
     const result = await fetchLlmJson(

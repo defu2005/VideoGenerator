@@ -6,6 +6,14 @@ export type OperatorModelKind = z.infer<typeof OperatorModelKindSchema>;
 export const OperatorTelegramEngineSchema = z.enum(["assistant", "operator"]);
 export type OperatorTelegramEngine = z.infer<typeof OperatorTelegramEngineSchema>;
 
+const OperatorRuntimeIdSchema = z.string().trim().regex(/^[a-z][a-z0-9-]{0,79}$/);
+const OperatorRuntimeByChannelSchema = z.object({
+  web: OperatorRuntimeIdSchema.default("cursor"),
+  telegram: OperatorRuntimeIdSchema.default("cursor"),
+  schedule: OperatorRuntimeIdSchema.default("cursor"),
+}).strict();
+export type OperatorRuntimeChannel = keyof z.infer<typeof OperatorRuntimeByChannelSchema>;
+
 export const OperatorModelByKindSchema = z.object({
   chat: z.string().default(""),
   tick: z.string().default(""),
@@ -18,6 +26,7 @@ export const OperatorSettingsSchema = z.object({
   /** When true, the operator does not spawn at all. */
   killed: z.boolean().default(false),
   cursorPath: z.string().default(""),
+  runtimeByChannel: OperatorRuntimeByChannelSchema.default({ web: "cursor", telegram: "cursor", schedule: "cursor" }),
   modelByKind: OperatorModelByKindSchema.default({ chat: "", tick: "", research: "", eval: "" }),
   manualModels: z.array(z.string().min(1).max(120)).max(40).default([]),
   /** Null means the scheduled tick is off. */
@@ -37,6 +46,11 @@ export const SUGGESTED_TICK_CRON = "0 8 * * *";
 export const OperatorSettingsUpdateSchema = z.object({
   killed: z.boolean().optional(),
   cursorPath: z.string().max(500).optional(),
+  runtimeByChannel: z.object({
+    web: OperatorRuntimeIdSchema.optional(),
+    telegram: OperatorRuntimeIdSchema.optional(),
+    schedule: OperatorRuntimeIdSchema.optional(),
+  }).strict().optional(),
   modelByKind: OperatorModelByKindSchema.partial().optional(),
   manualModels: z.array(z.string().min(1).max(120)).max(40).optional(),
   tickCron: z.string().trim().min(1).max(80).nullable().optional(),

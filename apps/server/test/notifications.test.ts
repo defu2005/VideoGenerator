@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import type { NotificationSettingsStatus, PairingCodeResponse } from "@vg/shared";
 import { buildApp } from "../src/app.js";
+import { testActor } from "./testActor.js";
 import { parseConfig, type AppConfig } from "../src/lib/config.js";
 import { NotificationService } from "../src/notifications/notificationService.js";
 import {
@@ -78,7 +79,7 @@ beforeEach(() => {
     DATA_DIR: dataDir,
     DATABASE_PATH: join(dataDir, "app.db"),
   };
-  app = buildApp({ config });
+  app = buildApp({ testActor,  config });
 });
 
 afterEach(async () => {
@@ -635,6 +636,21 @@ describe("NotificationService", () => {
     await h.service.tick();
     expect(h.sent.length).toBe(afterFirst);
 
+    h.database.sqlite.close();
+    rmSync(h.dataDir, { recursive: true, force: true });
+  });
+
+  it("queues a warning at 23:30 and sends it at 07:00, while a pause goes out at once", async () => {
+    let nowMs = Date.parse("2026-11-09T16:30:00.000Z");
+    const h = makeService({ now: () => new Date(nowMs), quietHours: null });
+    await h.service.notify({ kind: "automation_warning", profile: "Kênh", message: "Cảnh báo thử" });
+    await h.service.notify({ kind: "automation_paused" });
+    expect(h.sent.some((text) => text.includes("Cảnh báo thử"))).toBe(false);
+    expect(h.sent.length).toBeGreaterThan(0);
+    expect(h.service.listLog().some((row) => row.error === "quiet_hours")).toBe(true);
+    nowMs = Date.parse("2026-11-10T00:00:00.000Z");
+    await h.service.tick();
+    expect(h.sent.some((text) => text.includes("Cảnh báo thử"))).toBe(true);
     h.database.sqlite.close();
     rmSync(h.dataDir, { recursive: true, force: true });
   });

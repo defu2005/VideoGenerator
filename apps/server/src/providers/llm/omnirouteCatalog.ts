@@ -1,6 +1,7 @@
 import {
   OMNIROUTE_SETUP_HINT,
   OmniRouteModelInfoSchema,
+  omnirouteModelSeesImages,
   type LlmGatewayMapping,
   type LlmGatewaySettings,
   type OmniRouteCatalog,
@@ -17,6 +18,8 @@ export function omniRouteBaseUrl(config: Pick<AppConfig, "OMNIROUTE_BASE_URL">):
 }
 
 const CATALOG_TTL_MS = 10 * 60_000;
+const CATALOG_SYNC_MS = 15 * 60_000;
+const CATALOG_BACKOFF_MS = 60 * 60_000;
 const HEALTH_TIMEOUT_MS = 3_000;
 const CLI_PROVIDERS = new Set(["claude-cli", "copilot-cli", "antigravity-cli"]);
 
@@ -101,6 +104,11 @@ export function shouldGatewayFallback(error: LlmError): boolean {
 export class OmniRouteCatalogService {
   private cache: CatalogCache | undefined;
   private lastError: string | null = null;
+  private failures = 0;
+  private backoffUntil = 0;
+  private refreshFlight: Promise<void> | null = null;
+  lastDiff: { added: string[]; removed: string[]; capabilityChanges: string[] } | null = null;
+  onDiff?: (diff: { added: string[]; removed: string[]; capabilityChanges: string[] }) => void;
 
   constructor(
     private readonly config: Pick<AppConfig, "OMNIROUTE_BASE_URL" | "OMNIROUTE_API_KEY">,
@@ -134,19 +142,59 @@ export class OmniRouteCatalogService {
   }
 
   async getModels(options: { forceRefresh?: boolean; fetchImpl?: typeof fetch } = {}): Promise<OmniRouteModelInfo[]> {
-    if (!options.forceRefresh && this.cache && this.cache.expiresAt > Date.now()) {
+    const fresh = Boolean(this.cache && this.cache.expiresAt > Date.now());
+    if (!options.forceRefresh && fresh) return this.cache!.models;
+    if (!options.forceRefresh && this.cache && Date.now() < this.backoffUntil) return this.cache.models;
+    if (!options.forceRefresh && this.cache?.models.length) {
+      this.kickRefresh(options.fetchImpl);
       return this.cache.models;
     }
+    return this.loadModels(options.fetchImpl);
+  }
+
+  /** Wait for a stale-while-revalidate refresh started by getModels. */
+  settleRefresh(): Promise<void> {
+    return this.refreshFlight ?? Promise.resolve();
+  }
+
+  private kickRefresh(fetchImpl?: typeof fetch): void {
+    if (this.refreshFlight) return;
+    this.refreshFlight = this.loadModels(fetchImpl).then(() => undefined).catch(() => undefined).finally(() => {
+      this.refreshFlight = null;
+    });
+  }
+
+  private async loadModels(fetchImpl?: typeof fetch): Promise<OmniRouteModelInfo[]> {
     try {
-      const models = await this.fetchModels(options.fetchImpl);
+      const models = await this.fetchModels(fetchImpl);
       this.rememberModels(models);
       this.lastError = null;
+      this.failures = 0;
+      this.backoffUntil = 0;
       return models;
     } catch (error) {
+      this.failures += 1;
+      if (this.failures >= 3) this.backoffUntil = Date.now() + CATALOG_BACKOFF_MS;
       this.lastError = error instanceof Error ? error.message : String(error);
       if (this.cache?.models.length) return this.cache.models;
       throw error;
     }
+  }
+
+  /** Refresh 30s after startup, then every 15 minutes. Skips a missing OmniRoute config. */
+  startBackgroundSync(): () => void {
+    if (!this.configured || process.env.VITEST) return () => undefined;
+    const run = () => {
+      void this.getModels({ forceRefresh: Date.now() >= this.backoffUntil }).catch(() => undefined);
+    };
+    const first = setTimeout(run, 30_000);
+    const timer = setInterval(run, CATALOG_SYNC_MS);
+    first.unref?.();
+    timer.unref?.();
+    return () => {
+      clearTimeout(first);
+      clearInterval(timer);
+    };
   }
 
   async health(fetchImpl: typeof fetch = this.fetchImpl): Promise<OmniRouteHealth> {
@@ -232,6 +280,21 @@ export class OmniRouteCatalogService {
   }
 
   private rememberModels(models: OmniRouteModelInfo[]): void {
+    const previousModels = this.cache?.models ?? [];
+    const previous = new Set(previousModels.map((item) => item.id));
+    const next = new Set(models.map((item) => item.id));
+    if (previous.size > 0) {
+      const added = [...next].filter((id) => !previous.has(id));
+      const removed = [...previous].filter((id) => !next.has(id));
+      const priorVision = new Map(previousModels.map((item) => [item.id, item.vision]));
+      const capabilityChanges = models
+        .filter((item) => priorVision.has(item.id) && priorVision.get(item.id) !== item.vision)
+        .map((item) => item.id);
+      this.lastDiff = { added, removed, capabilityChanges };
+      if (added.length || removed.length || capabilityChanges.length) {
+        this.onDiff?.({ added, removed, capabilityChanges });
+      }
+    }
     this.cache = {
       models,
       cachedAt: new Date().toISOString(),
@@ -300,6 +363,7 @@ function inferVision(item: Record<string, unknown>): boolean | undefined {
     : typeof item.modality === "string" ? item.modality.toLowerCase()
       : undefined;
   if (modality) return modality.includes("image") || modality.includes("vision");
+  if (typeof item.id === "string" && omnirouteModelSeesImages(item.id)) return true;
   return undefined;
 }
 

@@ -9,7 +9,9 @@ import {
   listProjectPublications,
 } from "../../services/publishApi";
 import { Spinner } from "../../components/Spinner";
+import { useToast } from "../../components/ui/Toast";
 import { ThumbnailCard } from "./ThumbnailCard";
+import { OriginalityCard } from "./OriginalityCard";
 
 const STATUS_LABEL: Record<string, string> = {
   QUEUED: "Đang chờ",
@@ -33,6 +35,7 @@ function toLocalInputValue(date: Date): string {
 
 export function PublishPanel({ project }: { project: Project }) {
   const queryClient = useQueryClient();
+  const toast = useToast();
   const visible = usePageVisible();
   const profileId = project.profileId;
   const profile = useQuery({
@@ -88,9 +91,12 @@ export function PublishPanel({ project }: { project: Project }) {
     onSuccess: async () => {
       setError("");
       await queryClient.invalidateQueries({ queryKey: ["publications", project.id] });
+      toast.success("Đã xếp lịch đăng");
     },
     onError: (err) => {
-      setError(err instanceof ApiRequestError || err instanceof Error ? err.message : "Đăng thất bại");
+      const message = err instanceof ApiRequestError || err instanceof Error ? err.message : "Đăng thất bại";
+      setError(message);
+      toast.error(message);
     },
   });
 
@@ -99,6 +105,7 @@ export function PublishPanel({ project }: { project: Project }) {
       <section className="panel" aria-label="Đăng">
         <h3>Đăng</h3>
         <ThumbnailCard project={project} />
+        <OriginalityCard projectId={project.id} />
         <p className="page-subtitle">Gán dự án vào một hồ sơ có tài khoản để đăng video.</p>
       </section>
     );
@@ -108,6 +115,7 @@ export function PublishPanel({ project }: { project: Project }) {
     <section className="panel publish-panel" aria-label="Đăng">
       <h3>Đăng</h3>
       <ThumbnailCard project={project} />
+      <OriginalityCard projectId={project.id} />
       {profile.isLoading || publications.isLoading ? <Spinner label="Đang tải…" /> : null}
       {profile.isError && <p className="request-error" role="alert">Không tải được tài khoản hồ sơ.</p>}
       {error && <p className="request-error" role="alert">{error}</p>}

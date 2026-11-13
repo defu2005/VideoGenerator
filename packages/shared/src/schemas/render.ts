@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { ComposeStatsSchema, ShotKindSchema } from "../compose/schema.js";
 
 export const RenderIssueCodeSchema = z.enum([
   "DURATION_MISMATCH",
@@ -11,6 +12,10 @@ export const RenderIssueCodeSchema = z.enum([
   "SUBTITLE_ILLEGIBLE",
   "RENDER_VISION_FAILED",
   "VERTICAL_TOO_LONG",
+  "GRAPHIC_SKIPPED",
+  "XFADE_UNAVAILABLE",
+  "DUPLICATE_VISUAL",
+  "COMPOSE_FALLBACK",
 ]);
 export type RenderIssueCode = z.infer<typeof RenderIssueCodeSchema>;
 
@@ -45,6 +50,38 @@ export const RenderReportSchema = z.object({
   clipsReused: z.number().int().nonnegative(),
   clipsRendered: z.number().int().nonnegative(),
   elapsedSec: z.number().nonnegative(),
+  meanVolumeDb: z.number().nullable().optional(),
+  maxVolumeDb: z.number().nullable().optional(),
+  subtitlesInSync: z.boolean().optional(),
+  freezeSegments: z.number().int().nonnegative().optional(),
+  blackSegments: z.number().int().nonnegative().optional(),
+  /** Start seconds of each freeze or black segment, so the repair loop can map them to scenes (TASK-121). */
+  freezeAtSec: z.array(z.number().nonnegative()).max(50).optional(),
+  blackAtSec: z.array(z.number().nonnegative()).max(50).optional(),
+  compose: z.object({
+    stats: ComposeStatsSchema,
+    licences: z.array(z.object({
+      provider: z.string(),
+      clipId: z.string(),
+      author: z.string(),
+      licenseName: z.string(),
+      pageUrl: z.string(),
+    }).strict()),
+    warnings: z.array(z.string()),
+    graphicsMode: z.enum(["off", "static", "animated"]).optional(),
+    graphicGrain: z.boolean().optional(),
+    graphicShots: z.array(z.object({
+      shotId: z.string(),
+      kind: ShotKindSchema,
+      renderPath: z.enum(["static", "animated", "reencoded"]),
+    }).strict()).optional(),
+    /** Pack used for this render, so an old video can be built again with the same look. */
+    style: z.object({
+      packId: z.string().nullable(),
+      packVersion: z.number().int().nullable(),
+      fingerprint: z.string(),
+    }).strict().optional(),
+  }).strict().optional(),
 }).strict();
 export type RenderReport = z.infer<typeof RenderReportSchema>;
 

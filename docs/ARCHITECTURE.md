@@ -1,238 +1,277 @@
-# AI Video Agent — MVP Architecture
+# AI Video Agent — Architecture
 
-> Status: v0.1 (2026-11-02). Source of truth cho Copilot. Mọi thay đổi kiến trúc phải cập nhật file này trước.
+> Status: **v0.2** (2026-11-06, Asia/Bangkok). Source of truth cho kiến trúc hệ thống.
+> Hành vi người dùng: `docs/user-guide/` và `packages/shared/src/features/featureMap.ts`.
+> Thứ tự task và quy tắc agent: `docs/cursor/README.md`. Khi guide của một task mâu thuẫn với đoạn cũ trong file này, guide thắng cho phạm vi task đó.
+> Mọi thay đổi kiến trúc phải cập nhật file này.
 
-## 1. Audit hiện trạng
+## 1. Runtime
 
-| Hạng mục | Kết quả |
+| Hạng mục | Quyết định |
 |---|---|
-| Repository | Trống, chưa `git init` |
-| Node.js | v24.19 + npm 11 |
-| Python | 3.15 (quá mới, nhiều wheel media/ML chưa hỗ trợ → không chọn làm runtime chính) |
-| FFmpeg | **Chưa cài** → dùng `FFMPEG_PATH` env, fallback package `ffmpeg-static` |
-| Docker | Có, nhưng MVP không cần |
-| Tái sử dụng | Không có code cũ. Xây mới toàn bộ |
+| Ngôn ngữ | TypeScript, monorepo npm workspaces |
+| Node | 24.x (OmniRoute bên ngoài yêu cầu Node 22.22+ hoặc 24+, không dùng Node 23) |
+| DB | SQLite (`better-sqlite3`) + Drizzle. Migration chỉ sinh bằng `npx drizzle-kit generate` trong `apps/server` |
+| File | `data/` (gitignored): `app.db`, `projects/<id>/`, secrets vault |
+| Job | Worker trong process, hàng đợi trong SQLite. Không Redis, không broker |
+| Progress | SSE + GET polling |
+| UI | React + Vite + React Router + TanStack Query. Chữ UI tiếng Việt |
+| Media | FFmpeg/ffprobe qua `ffmpeg-static` / `ffprobe-static` (hoặc `FFMPEG_PATH`) |
+| Test | Vitest + `fastify.inject`. Không mạng, không LLM/TTS thật |
+| MCP | `apps/mcp` nói HTTP với API local. Không mở SQLite |
 
-## 2. Quyết định công nghệ
+Không dùng: microservices, Kubernetes, ORM thứ hai. Zustand chỉ thêm khi thật cần.
 
-| Lớp | Lựa chọn | Lý do |
-|---|---|---|
-| Ngôn ngữ | TypeScript toàn bộ | Chia sẻ type/schema giữa UI và server, một toolchain |
-| Monorepo | npm workspaces | Không cần cài thêm pnpm/turbo |
-| Backend | Fastify 5 + zod | Nhẹ, validate bằng schema dùng chung |
-| DB | SQLite (better-sqlite3) + Drizzle ORM | Không cần server DB, file đơn, dễ backup |
-| File storage | Local FS `data/projects/<id>/` | Rẻ, đơn giản |
-| Job runner | In-process worker, job lưu trong SQLite | Không Redis/broker. Resume sau restart |
-| Progress | SSE + endpoint GET để fallback | Đơn giản hơn WebSocket, đủ cho 1 chiều server → UI |
-| Frontend | React + Vite + React Router + TanStack Query + Tailwind | Phổ biến, Copilot làm tốt |
-| Render | FFmpeg qua `child_process` | Không dùng AI video |
-| Test | Vitest + `fastify.inject` | Nhanh, không cần chạy server thật |
-
-Không dùng: microservices, message broker, Kubernetes, Redis, ORM thứ hai, state lib lớn (chỉ thêm Zustand nếu thật cần).
-
-## 3. Repository layout
+## 2. Repository layout
 
 ```
 videoGenerator/
-├── package.json                # workspaces
-├── tsconfig.base.json
-├── .env.example
-├── docs/                       # ARCHITECTURE.md, tasks/TASK-xxx.md
-├── packages/
-│   └── shared/                 # zod schemas, enums, API types (dùng chung)
-├── apps/
-│   ├── server/
-│   │   └── src/
-│   │       ├── api/            # routes Fastify
-│   │       ├── db/             # drizzle schema, migrations
-│   │       ├── services/       # nghiệp vụ theo entity
-│   │       ├── pipeline/       # state machine, invalidation, gates
-│   │       ├── jobs/           # job queue + worker
-│   │       ├── stages/         # research, script, scenes, visuals, voice,
-│   │       │                   # subtitle, music, timeline, render
-│   │       ├── providers/      # llm/, image/, tts/, music/ (interface + adapter)
-│   │       ├── storage/        # path helpers cho data/
-│   │       └── lib/            # config, logger, errors, hash, retry
-│   └── web/
-│       └── src/
-│           ├── pages/ components/ hooks/ services/ stores/ utils/
-│           └── features/       # projects, script, scenes, visuals, voice,
-│                               # music, timeline, render
-└── data/                       # gitignored: app.db, projects/<id>/...
+├── package.json                  # workspaces: packages/*, apps/*
+├── docs/
+│   ├── ARCHITECTURE.md           # file này
+│   ├── cursor/                   # guide từng task (thứ tự trong README)
+│   ├── tasks/                    # spec + report
+│   └── user-guide/               # hướng dẫn tiếng Việt
+├── packages/shared/src/          # zod + logic thuần, export từ index.ts (suffix .js)
+│   ├── schemas/  budget/  pipeline/  features/
+│   ├── edit/  formats/  motion/  render/  review/
+│   ├── providerIntel/  llmQuota/  publishing/  operator/
+│   └── scenes/ timeline/ subtitles/ thumbnails/ …
+├── apps/server/src/
+│   ├── api/                      # route Fastify, đăng ký trong app.ts
+│   ├── db/                       # schema + migrate
+│   ├── jobs/                     # queue, worker, SSE
+│   ├── pipeline/                 # orchestrator, stale, stage timeout plan
+│   ├── stages/                   # research, script, scenes, visuals, voice,
+│   │                             # subtitle, music, timeline, render, clip
+│   ├── services/                 # project, script, scene, visual, render, …
+│   ├── providers/                # llm/, images/, tts/, music/
+│   ├── review/  guidelines/  publishing/  operator/  assistant/
+│   ├── providerIntel/  learning/  finance/  analytics/
+│   ├── notifications/  comments/  trends/  translations/
+│   ├── edit/  formats/  media/  timeline/  registry/  storage/
+│   └── lib/                      # config, errors
+├── apps/web/src/features/        # dashboard, projects, pipeline, script, scenes,
+│                                 # visuals, voice, subtitles, music, timeline,
+│                                 # render, review, profiles, publish, settings,
+│                                 # operator, providers, finance, usage, help
+├── apps/mcp/                     # MCP video-agent (stdio → REST)
+├── provider-intelligence/        # hồ sơ nghiên cứu nhà cung cấp (file, không phải DB app)
+└── data/                         # gitignored
 ```
 
-## 4. Chế độ Hybrid (agent ↔ user) — chất lượng video trước, token sau
+Operator Cursor (TASK-047) dùng thư mục **ngoài** git root (`<data>/operator` hoặc `../.video-agent-operator`), không dùng `.cursor/` của repo này làm workspace operator.
 
-Mỗi project có `mode`, và mỗi stage có thể override `executor`.
+## 3. Hybrid: agent và người dùng
+
+Mỗi project có `mode`. Từng stage có thể override `executor` (`AGENT` | `USER`).
 
 | Mode | Hành vi |
 |---|---|
-| `AUTO` | Agent chạy hết. Ở review gate, tự chọn candidate có rank cao nhất (rule-based). Vẫn dừng ở `FINAL_APPROVAL` (1 click "Approve All") trừ khi bật `autoRender`. |
-| `ASSISTED` (mặc định) | Agent generate, dừng ở `VISUAL_REVIEW`, `MUSIC_REVIEW`, `FINAL_APPROVAL`. |
-| `MANUAL` | Agent chỉ chạy khi user bấm từng stage. |
+| `AUTO` | Chạy tiếp các gate khi còn được phép. `VISUAL_REVIEW` và `MUSIC_REVIEW` tự duyệt nếu không có lý do chặn (`autoBlock`: thiếu ảnh, `NEEDS_ATTENTION`, v.v.). `FINAL_APPROVAL` vẫn dừng trừ khi `autoRender`. Dừng bất ngờ thì báo attention, không coi là “chờ bạn duyệt” bình thường. |
+| `ASSISTED` (mặc định) | Agent sinh, dừng ở `VISUAL_REVIEW`, `MUSIC_REVIEW`, `FINAL_APPROVAL`. |
+| `MANUAL` | Chỉ chạy stage khi người dùng bấm. |
 
-`stageExecutors` override theo stage, ví dụ `visuals: "USER"`: agent chỉ sinh query + link tìm kiếm (Google Images, Wikimedia…) — **0 token, 0 API call** — user dán URL/upload. Đây là đường rẻ nhất cho việc "nhìn ảnh".
+`stageExecutors.visuals = USER`: agent chỉ gợi ý query, người dùng dán URL hoặc upload. 0 token tìm ảnh.
 
-### Cost tiers (luật: luôn dùng tier thấp nhất giải quyết được)
+### Cost tiers
 
 | Tier | Ví dụ | Chi phí |
 |---|---|---|
-| 0 — Code | **scene plan (tách scene, thời lượng)**, ranking ảnh, dedupe (perceptual hash), kích thước, aspect, watermark theo domain, tách câu subtitle, timeline, FFmpeg, ducking, xếp hạng nhạc theo mood/BPM/duration | Free |
-| 1 — API rẻ | Image search API (Wikimedia, Openverse, Pexels…), music API, TTS | Thấp |
-| 2 — LLM text | research, script, visual queries, music mood; ở chế độ cao hơn: review/sửa script, xếp hạng ảnh theo ngữ nghĩa (text metadata) | Theo **chế độ ngân sách** (bên dưới), cache theo input hash + provider/model |
-| 3 — LLM vision | Hiểu nội dung ảnh | **Tắt mặc định.** Chỉ ở QUALITY/CUSTOM khi user bật, hoặc user bấm trên 1 candidate; luôn báo chi phí trước |
+| 0 — Code | Tách scene, rank/dedupe ảnh, timeline, FFmpeg, timeout baseline, validate | Free |
+| 1 — API rẻ | Image search, music search, TTS | Thấp |
+| 2 — LLM text | Research, script, query, rerank text, metadata, review chat, advisor, assistant | Theo budget mode + cache |
+| 3 — LLM vision | Kiểm tra ảnh, đồng nhất scene, frame sau render, chọn thumbnail | Tắt mặc định. Bật ở MAX hoặc CUSTOM |
 
-Mọi LLM call ghi `usage` (tokens/requests, cost ước tính) vào job để UI hiển thị.
+Mỗi call ghi `usage` (task, provider, model, token, cost ước tính).
 
-### Chế độ ngân sách token (Budget mode) — user chọn theo project
-| Chế độ | Ý tưởng | LLM calls ước tính / video (Generate All) |
-|---|---|---|
-| `ECO` | Rẻ nhất: research + script gộp 1 call; chuẩn hóa bằng code, không gọi sửa, không trợ giúp ảnh/nhạc | 1 (tối đa 1) |
-| `BALANCED` (mặc định, ưu tiên chất lượng — TASK-004F) | Research sâu vừa + script tách riêng; review script 1 lượt; AI hỗ trợ từ khóa scene, xếp hạng ảnh, mood nhạc, metadata; repair 1 lần; headroom output 1.5× | ≈5 (tối đa ≈9) |
-| `QUALITY` | Research sâu; review + polish script 2 lượt; mọi trợ giúp AI; repair 2 lần; headroom 2×; vision vẫn opt-in | ≈7 (ước tính bảo thủ 6–15, tùy trợ giúp ảnh và repair) |
-| `MAX` (TASK-004G) | Không tiết kiệm token: mọi tính năng ở mức cao nhất + fact-check script, tìm ảnh rộng hơn, **AI vision kiểm tra top 5 ảnh mỗi scene** (tự tìm lại tối đa 2 vòng nếu < 7/10), kiểm tra đồng nhất giữa các scene, **kiểm tra video sau render** (ffprobe + vision trên frame giữa mỗi scene). Scene không đạt luôn bị gắn `NEEDS_ATTENTION`, không bao giờ bị bỏ qua âm thầm | ≈10 text + vision theo số scene (hiển thị trước khi chạy, không áp trần) |
-| `CUSTOM` | Dùng cấu hình BALANCED rồi áp dụng các feature override; ước tính theo cấu hình | tùy cấu hình |
+### Budget mode (theo project)
 
-**Định tuyến model theo tác vụ (TASK-004F):** mỗi tác vụ LLM (`research`, `script`, `scriptReview`, `sceneQueries`, `visualAltQueries`, `visualRerank`, `visionCheck`, `musicAssist`, `metadata`) có route riêng `{provider, model, maxOutputTokens?, fallback?}`. Thứ tự ưu tiên: dự án theo tác vụ → dự án mặc định → app theo tác vụ → app mặc định → ENV. Usage ghi từng call (task/provider/model).
+| Mode | Ý tưởng |
+|---|---|
+| `ECO` | Research + script gộp một call. Không review, không trợ ảnh/nhạc |
+| `BALANCED` | Research và script tách. Review 1 lượt. Trợ query, rerank, mood, metadata. Repair 1 |
+| `QUALITY` | Research sâu, review/polish 2 lượt, mọi trợ text, repair 2. Vision vẫn opt-in |
+| `MAX` | Mọi trợ ở mức cao + fact-check, tìm ảnh rộng, vision top ảnh, đồng nhất scene, kiểm tra frame sau render. Scene dưới ngưỡng → `NEEDS_ATTENTION` |
+| `CUSTOM` | Nền BALANCED + từng feature bật/tắt. Ước tính theo cấu hình |
 
-Ước tính hiện tại bao gồm route research/script/review/scene-query/visual-search; scene-query dùng một call batch cho mọi scene khi được bật, còn alternative query và rerank phụ thuộc kết quả tìm ảnh. Music assist và metadata đã có feature flag/task route nhưng thuộc các stage sau; vision luôn tắt trừ khi user chủ động bật trong CUSTOM.
+Preset và cờ nằm ở `packages/shared/src/budget/modes.ts`. Danh sách tác vụ LLM (`LLM_TASKS`) ở `packages/shared/src/schemas/llm.ts`.
 
-### Quy tắc LLM (bắt buộc cho mọi task)
-1. **Ở mọi chế độ, việc code làm tốt tương đương thì viết code**, không gọi LLM: tách câu/scene, tính thời lượng, lọc trùng, format, subtitle, timeline, render, validate, chuẩn hóa output.
-2. **Chỗ nào LLM làm video tốt hơn thì được gọi** (viết, biên tập, hiểu ngữ nghĩa, kiểm tra chính sách/định hướng kênh, góp ý trước render — quyết định của user 2026-11-04). Mỗi tính năng LLM khai báo **bật ở chế độ nào** và **số call**; ECO vẫn là lựa chọn tiết kiệm. Tác vụ do user chủ động bấm (chat góp ý) được phép ở mọi chế độ và hiện chi phí từng tin nhắn.
-3. Trước khi chạy, UI hiển thị **ước tính số call/token** theo chế độ đang chọn; không bao giờ vượt chế độ đã chọn một cách âm thầm.
-4. LLM vision luôn opt-in, báo chi phí trước; việc cần "mắt" vẫn có đường giao cho user ở review gate.
-5. Cache theo hash input; chạy lại không đổi input = 0 token. Pre-flight theo giới hạn provider.
-6. Mỗi spec có mục "LLM calls" theo từng chế độ; reviewer từ chối thiết kế gọi LLM cho việc deterministic.
-7. Luôn có đường 0 token cho stage text: user tự viết, hoặc Claude Desktop / Copilot Chat qua MCP.
+**Định tuyến:** mỗi task có `{provider, model, maxOutputTokens?, fallback?}`. Ưu tiên: project theo task → project mặc định → app theo task → app mặc định → ENV.
 
-## 5. Pipeline & state machine
+**Gateway OmniRoute** (chạy riêng, mặc định `http://127.0.0.1:20128/v1`): `off` | `prefer` (fallback khi mất kết nối/5xx) | `only`. Key endpoint trong `OMNIROUTE_API_KEY`. Token quản trị chỉ đọc (vault) dùng cho quota live và audit nhà cung cấp, không thay key gọi model.
+
+**Quota:** bộ đếm local + cool-down 429; số OmniRoute (nếu có token) ghi đè ước tính. Chính sách hết hạn mức miễn phí: chờ reset, hoặc model trả phí trong trần USD/ngày.
+
+### Quy tắc LLM
+
+1. Việc code làm tốt thì viết code: tách câu, thời lượng, lọc trùng, timeline, render, validate.
+2. LLM được gọi khi làm video tốt hơn (viết, biên tập, ngữ nghĩa, guideline, góp ý). ECO vẫn là lựa chọn tiết kiệm. Chat do người bấm được phép mọi mode và hiện chi phí từng tin.
+3. UI ước tính call/token trước khi chạy. Không vượt mode một cách âm thầm.
+4. Vision luôn opt-in trừ MAX/CUSTOM đã bật; vẫn có đường người duyệt ở gate.
+5. Cache theo hash input + provider/model. Pre-flight theo giới hạn provider.
+6. Timeout stage: một call LLM nhỏ (`stageTimeouts`) hoặc baseline code. Worker dùng plan đó, không một trần 10 phút chung.
+7. Đường 0 token: người tự viết, hoặc MCP `video-agent` qua API.
+
+## 4. Pipeline
+
+Thứ tự chính (`STAGE_ORDER`):
 
 ```
-TOPIC → RESEARCH → SCRIPT → SCENE_PLAN → VISUAL_SEARCH → [VISUAL_REVIEW]
-      → VOICE → SUBTITLE → MUSIC_SEARCH → [MUSIC_REVIEW] → TIMELINE
-      → [FINAL_APPROVAL] → RENDER → DONE
+RESEARCH → SCRIPT → SCENE_PLAN → VISUAL_SEARCH → [VISUAL_REVIEW]
+        → VOICE → SUBTITLE → MUSIC_SEARCH → [MUSIC_REVIEW] → TIMELINE
+        → [FINAL_APPROVAL] → RENDER
 ```
-`[...]` = review gate. Ở gate, project `status = REVIEW` (waiting for user).
 
-- `project.stage`: stage hiện tại (enum `PipelineStage`).
-- `project.status`: `DRAFT | GENERATING | REVIEW | RENDERING | COMPLETED | FAILED` (dùng cho Dashboard). Archive là cờ riêng `archivedAt`.
-- Mỗi stage chạy dưới dạng `Job` (QUEUED → RUNNING → SUCCEEDED/FAILED/CANCELLED), có `attempt`, `progress 0–100`, `error {code,message,retryable}`, timeout, retry với backoff cho lỗi retryable.
-- Restart server: job `RUNNING` → đặt lại `QUEUED` (resume). Output stage được lưu sau mỗi bước nên chạy lại là idempotent.
-- Fail không làm mất dữ liệu: chỉ job fail, project giữ nguyên các output đã có.
+`[...]` là gate. `project.status`: `DRAFT | GENERATING | REVIEW | RENDERING | COMPLETED | FAILED`. Archive là `archivedAt`.
 
-### Invalidation (sửa 1 chỗ không phải làm lại tất cả)
+Job: `QUEUED → RUNNING → SUCCEEDED | FAILED | CANCELLED`, progress, retry backoff. Job `RUNNING` lúc restart được đưa lại `QUEUED`. Output lưu sau mỗi bước.
 
-Mỗi output lưu `inputHash` = hash của các input nó phụ thuộc. Output bị `STALE` khi hash không khớp.
+**Side job** (không nằm trong `STAGE_ORDER`, không đẩy stage pipeline): `PUBLISH`, `CLIP`.
+
+Stage state: `PENDING | QUEUED | RUNNING | DONE | FAILED | STALE | WAITING_USER | SKIPPED`.
+
+### Invalidation
+
+Output lưu `inputHash`. Lệch hash → `STALE` từ stage đó trở đi (`markStaleFrom`).
 
 ```
 topic ─► script ─► scenes ─┬─► visualQueries ─► candidates ─► selection ─┐
                            ├─► narration ─► voice ─► subtitle ──────────┤
-                           └─► musicMood ─► musicCandidates ─► music ───┴─► timeline ─► render
+                           └─► musicMood ─► music ──────────────────────┴─► timeline ─► render
 ```
-- Sửa narration scene 3 → voice(scene 3), subtitle, timeline, render STALE. Visual không đổi.
-- Thay ảnh scene 12 → chỉ selection(scene 12), timeline, render STALE. Render cache clip theo scene nên chỉ render lại clip scene 12 + bước ghép.
 
-## 6. Data model
+Sửa narration một scene làm stale voice scene đó, subtitle, timeline, render. Đổi ảnh một scene chỉ stale selection đó, timeline, render (cache clip theo scene).
 
-`packages/shared` định nghĩa bằng zod; server lưu SQLite (JSON column cho object lồng nhau).
+Chat review áp proposal có cấu trúc thì stage liên quan thành `STALE`. Có revision token và undo (web, Telegram, MCP).
 
-| Entity | Trường chính |
+## 5. Data model (lõi)
+
+Schema Zod ở `packages/shared`. Cột lồng nhau là JSON trong SQLite. Chi tiết bảng: `apps/server/src/db/schema.ts`.
+
+| Nhóm | Thực thể chính |
 |---|---|
-| **VideoProject** | id, title, description, topic, language, targetDurationSec, aspectRatio, mode, stageExecutors, autoRender, status, stage, thumbnailPath, durationSec, version, createdAt, updatedAt, archivedAt |
-| **Script** | id, projectId, title, hook, researchNotes, sources[], inputHash, version |
-| **Scene** | id, projectId, order, label (Hook/Intro/…), narration, visualRequirement, estDurationSec, transitionNote, musicMood?, inputHash |
-| **VisualQuery** | sceneId, primary, alternatives[], origin (`AGENT`/`USER`), createdAt |
-| **VisualCandidate** | id, sceneId, origin (`SEARCH`/`CUSTOM_URL`/`UPLOAD`/`AI_GENERATED`), provider, query, previewUrl, imageUrl, sourceUrl, sourceSite, localPath?, width, height, aspectRatio, fileType, watermark (`NONE`/`SUSPECTED`/`UNKNOWN`), relevanceScore, license: LicenseMetadata, discardedAt? |
-| **VisualSelection** | id, sceneId, slot (cho phép nhiều ảnh/scene), candidateId, status: VisualStatus, motion {type: kenburns/pan/zoom, from, to}, durationSec?, reviewedAt |
-| **LicenseMetadata** | kind (`CC0`/`PUBLIC_DOMAIN`/`CC_BY`/`CC_BY_SA`/`CC_BY_NC`/`ROYALTY_FREE`/`ALL_RIGHTS_RESERVED`/`UNKNOWN`/`USER_PROVIDED`/`AI_GENERATED`), name, url, author, authorUrl, attributionRequired, attributionText, evidence (nguồn của thông tin: `api`/`page_meta`/`user`/`none`) |
-| **VoiceTrack** | id, sceneId, provider, voice, speed, audioPath, durationSec, inputHash |
-| **SubtitleTrack** | id, projectId, cues[{start,end,text,sceneId}], srtPath, assPath, inputHash |
-| **MusicTrack** | id, projectId, origin, title, artist, source, url, license, durationSec, bpm?, mood, energy, audioPath, (selection:) status, startSec, endSec, volume, fadeIn, fadeOut, duckingDb |
-| **Timeline** | id, projectId, items[{track: video/voice/music/subtitle, refId, start, end}], totalDurationSec, inputHash |
-| **RenderJob** | (là Job với stage=RENDER) + outputPath, resolution, fps, sizeBytes |
-| **Job** | id, projectId, stage, scope (vd: sceneId), status, progress, attempt, maxAttempts, error, usage {tokens, costUsd}, logs, startedAt, finishedAt |
-| **ProjectVersion** (phase 9) | id, projectId, version, reason, snapshot JSON, createdAt |
+| Dự án | VideoProject (brief, mode, budget, stageExecutors, autoRender, status, stage), Script, Scene |
+| Hình | VisualQuery, VisualCandidate, VisualSelection, LicenseMetadata |
+| Âm thanh | VoiceTrack, SubtitleTrack (cues + word timing khi provider có), MusicTrack |
+| Dựng | Timeline, edit plan, motion clips, Render output + version |
+| Việc | Job + usage.calls |
+| Ngoài pipeline | Profile, platform account, publication, schedule, comment, analytics snapshot, finance entry, notification, operator conversation, provider-intel rows, quota snapshot |
 
-**VisualCandidate vs VisualSelection**: search tạo nhiều candidate cho 1 scene; selection chỉ trỏ tới 1 candidate. Thay ảnh = đổi `candidateId` của selection, không search lại, không đụng stage khác.
+**Candidate và selection:** search tạo nhiều candidate. Selection trỏ một candidate. Đổi ảnh = đổi `candidateId`.
 
-**VisualStatus** (trên selection): `DISCOVERED` (agent vừa gán, chưa vào gate) → `REVIEW_REQUIRED` → `APPROVED` / `REJECTED`; `REPLACED` (user chọn candidate khác), `CUSTOM` (URL/upload của user), `AI_GENERATED`.
+**VisualStatus:** `DISCOVERED → REVIEW_REQUIRED → APPROVED | REJECTED`; thêm `REPLACED`, `CUSTOM`, `AI_GENERATED`.
 
-**Scene visual status** (suy ra, hiển thị trên Scene Board/Visual Review): `NO_VISUAL` → `SEARCHING` → `REVIEW_REQUIRED` → `APPROVED` → `READY_FOR_RENDER` (ảnh đã tải về local, kiểm tra đọc được, đúng kích thước).
+**Scene visual:** `NO_VISUAL → SEARCHING → REVIEW_REQUIRED → APPROVED → READY_FOR_RENDER`, cộng `NEEDS_ATTENTION`, `SKIPPED`.
 
-**Nguyên tắc ảnh:** AI đề xuất (mô tả hình + query) → tool tìm nhiều candidate → code lọc/rank → user duyệt/chọn → render chỉ dùng ảnh đã chọn. Đổi ảnh chỉ cập nhật selection, không chạy lại script/voice/music/scene khác. LLM không bao giờ tự đoán URL ảnh. Chế độ `AUTO` vẫn chọn ảnh rank cao nhất nhưng dừng ở `FINAL_APPROVAL`.
+LLM không bịa URL ảnh. License chỉ là metadata (`evidence`: `api | page_meta | user | none`). Không hard-block. Render xuất `credits.txt` khi `attributionRequired`.
 
-### Quy tắc license (không hard-block ở MVP)
-- Chỉ báo cáo dữ liệu tìm được, kèm `evidence`. Không bao giờ ghi "không có bản quyền" nếu không có dữ liệu.
-- UI badge: `CC0`/`PUBLIC_DOMAIN` → xanh; `CC_BY*` → "Attribution required"; `UNKNOWN` → "⚠️ Unknown — user review"; `ALL_RIGHTS_RESERVED` → cảnh báo đỏ. Không tự loại ảnh.
-- Render tạo `credits.txt` từ các selection có `attributionRequired`.
+## 6. Providers
 
-## 7. Providers (interface + adapter, cấu hình qua env)
+| Loại | Hiện có |
+|---|---|
+| LLM | anthropic, gemini, openai, ollama, remote-ollama, openrouter, deepseek, groq, omniroute, opencode, custom, claude-cli, copilot-cli, antigravity-cli, mock (test) |
+| Ảnh | wikimedia, openverse, pexels, pixabay, unsplash, nasa, met, loc, smithsonian, europeana, flickr. Thêm Brave + Gemini grounding + crawl khi bật web image search. Ảnh chưa rõ license không tự duyệt |
+| TTS | edge-tts (mặc định), google_cloud, gemini, elevenlabs, openai, fpt_ai, viettel_ai, piper, vieneu, mock |
+| Nhạc | openverse, thư viện local |
 
-| Loại | MVP | Sau |
+Cố vấn model, catalog OmniRoute, và scorecard provider intel chọn route. Chúng không tự ghi route hay combo OmniRoute cho đến khi người bấm.
+
+## 7. Render và sau render
+
+1. Edit plan (code + LLM khi bật): transition (`xfade`), emphasis, style phụ đề.
+2. Mỗi scene → clip (Ken Burns / motion đã chọn, đúng duration voice). Cache theo hash.
+3. Motion graphics: template HTML/GSAP (HyperFrames) → clip alpha, overlay.
+4. Ghép clip, voice, nhạc (volume, fade, ducking), burn phụ đề, xuất `.srt`.
+5. Biến thể khung (16:9 / 9:16 / 1:1) từ một project khi được yêu cầu.
+6. Output `data/projects/<id>/renders/` + `credits.txt`. Kiểm tra ffprobe. MAX: vision frame giữa scene.
+7. Thumbnail (frame + chữ), clip dọc (`CLIP`) đưa vào lịch, metadata (title, description, tags).
+8. Publish: vault mã hoá, OAuth, job lịch, YouTube (dài + Shorts), TikTok, Facebook Reels, Instagram Reels, publisher mock cho test.
+
+## 8. API (nhóm)
+
+Lỗi: `{ "error": { "code", "message", "details" } }`.
+
+| Nhóm | Việc |
+|---|---|
+| health, help | Sống, tìm hướng dẫn |
+| projects, recommendations, budget, stage-timeouts | CRUD dự án, brief, ước tính, trần thời gian |
+| pipeline, jobs, events | Chạy stage, duyệt gate, SSE |
+| script, scenes, visuals, voice, subtitles, music, timeline, motion, render | Dữ liệu từng stage |
+| review, guidelines, metadata, thumbnails, clips, auto-report | Góp ý, chính sách, xuất bản phụ |
+| llm, usage | Route, gateway, quota, usage |
+| profiles, automation, trends, translations | Hồ sơ, hàng đợi chủ đề, xu hướng, lồng tiếng |
+| oauth, publications | Kết nối kênh, đăng, lịch |
+| analytics, comments, finance, learning | Số liệu, hộp thư, doanh thu, bài học |
+| notifications, assistant, operator, registry | Telegram, trợ lý, operator, tool chung |
+| provider-intel | Hồ sơ nhà cung cấp, audit OmniRoute, combo (chỉ khi bấm) |
+
+## 9. Điều khiển ngoài UI
+
+Một registry tool (`assistant` | `mcp` | `operator` | `agent`). Nguồn `mcp` và `operator` biến việc `confirm` thành thao tác chờ. Nguồn `agent` (MCP Cursor với `VG_TOOL_SOURCE=agent`) chạy luôn các việc đó, kể cả xóa, đăng và bật lịch. Vẫn từ chối dự án được bảo vệ, đổi secret/thanh toán, bật fallback trả phí, và mọi công cụ tự duyệt thao tác chờ. MCP đăng ký tool sẵn, catalog registry, và `app_api` cho các route HTTP còn lại. `app_api` từ chối đường dẫn token, khóa TTS, khóa YouTube, app credentials và OAuth callback.
+
+- **Web chat và Telegram:** trợ lý gọi tool, hỏi trước khi sửa/đăng/render.
+- **Operator:** phiên Cursor CLI dài, không shell, chỉ MCP `video-agent` + ghi `notes/`. Handbook sinh lúc startup.
+- **MCP IDE:** `.cursor/mcp.json` trong repo (nếu có) là tiện ích Cursor. Workspace operator là file riêng, chỉ một server `video-agent`.
+
+### Hướng mở rộng cho agent vận hành
+
+TASK-051 tách vòng đời operator khỏi Cursor CLI. Adapter Cursor hỗ trợ MCP, nối phiên, streaming và dừng. MCP của agent chạy nền chỉ công bố catalog từ registry. Runtime model dùng lịch sử cấp app và đưa lệnh native function calling hoặc lệnh từ cầu JSON qua cùng registry với quyền operator. Lượt runtime model ghi mức dùng theo mã lượt. Chọn runtime riêng cho web, Telegram và lịch chạy. API registry trả `inputSchema` đầy đủ cùng bản mô tả ngắn cho các client hiện tại.
+
+Người dùng có hai lựa chọn độc lập. **Agent vận hành** nhận yêu cầu, lập kế hoạch, gọi công cụ và báo kết quả. **Model theo tác vụ** xử lý nội dung như nghiên cứu, viết kịch bản hoặc kiểm tra ảnh theo cấu hình và ngân sách của dự án. Ví dụ, Claude Desktop có thể vận hành qua MCP trong khi pipeline dùng model vision đã chọn cho dự án.
+
+| Môi trường | Đường vận hành hiện có |
+|---|---|
+| Web và Telegram | Trợ lý tích hợp hoặc Cursor operator. Cursor operator chạy trên máy chủ app và có lệnh thường trực. |
+| IDE hoặc desktop | Cursor, Claude Desktop và Copilot Chat có thể gọi MCP `video-agent` khi kết nối được với API. |
+| Tác vụ nội dung | Router chọn provider/model theo task. Claude Code CLI ở chế độ provider nhận prompt để sinh nội dung. |
+
+Khi thêm agent chạy nền, khai báo adapter theo khả năng của môi trường, gồm phát hiện runtime, mở hoặc nối phiên, nhận tiến độ và dừng. Chỉ hiện lựa chọn khả dụng và giữ lựa chọn của người dùng cho mỗi kênh. Mọi adapter chạy nền dùng cùng registry và nguồn `operator`; quyền cao hơn của MCP chủ máy phải được cấu hình riêng. Workflow và lịch chạy tiếp tục thuộc worker/SQLite. Agent đọc trạng thái job đã lưu trước khi quyết định thử lại một thao tác. Việc đăng công khai, bật lịch và thao tác có rủi ro đi theo bước duyệt của app.
+
+Để giảm token, tra cứu skill và dữ liệu dự án liên quan trước khi đưa ngữ cảnh vào prompt. Dùng truy vấn có cấu trúc cho trạng thái, quota và lịch sử. Khi cần RAG cho tài liệu dài, chỉ lấy đoạn liên quan kèm nguồn và phạm vi hồ sơ. Ghi nhớ quyết định có thể dùng lại trong ghi chú theo phạm vi, còn checkpoint và trạng thái công việc nằm trong dữ liệu của app. Các bước cơ học chạy bằng code. Với bước cần LLM, chọn theo khả năng, chất lượng quan sát được, quota và ngân sách; dùng cache và chỉ nâng model khi bước đó cần thêm năng lực. Đo token, tỷ lệ thành công, lỗi định dạng và điểm đánh giá đầu ra trên cùng bộ mẫu trước khi đổi route mặc định.
+
+Dùng scheduler và hook sự kiện hiện có cho tác vụ định kỳ và phản ứng theo sự kiện. Nhật ký lượt chạy, tool audit và usage cần cho phép đối chiếu agent, job, model và kết quả. Chỉ mở Computer Use cho tác vụ thực sự cần thao tác giao diện, với phạm vi và xác nhận theo loại thao tác. Phần mở rộng adapter, RAG theo hồ sơ và Computer Use là thiết kế tiếp theo.
+
+## 10. Việc đã có sau MVP
+
+Roadmap chi tiết và thứ tự: `docs/cursor/README.md`. File này không lặp từng TASK.
+
+Đã có trong code, ngoài pipeline MVP (research → render):
+
+- Guideline pack, review chat, metadata, version render, chế độ MAX, web image search, AUTO report
+- Hồ sơ kênh, biến thể khung hình, publish đa nền tảng, lịch tự động
+- OmniRoute gateway, cố vấn model, quota local + live
+- Thông báo Telegram, trợ lý, analytics, tài chính, learning, thumbnail, clip ngắn
+- Hộp bình luận, xu hướng, dịch kịch bản, nhiều TTS
+- Edit plan, motion graphics, format/treatment, revision + undo
+- Operator, provider intelligence, timeout theo stage
+- Hướng dẫn trong app (`featureMap` + `docs/user-guide/`)
+
+Việc còn vận hành thật (token OmniRoute, bấm áp route, phiên nghiên cứu trang nhà cung cấp) ghi ở `docs/tasks/CON-THIEU.md`, không phải lỗ hổng schema.
+
+## 11. Công cụ ngoài (một người, máy của họ)
+
+Một người chạy app trên máy của họ. Không có người dùng thứ hai, không bán app, không cho người khác đăng nhập. Điều kiện miễn phí của Remotion (cá nhân) và n8n Community Edition (tự host) **đã đúng với cách dùng này**. Binary FFmpeg GPL trong `ffmpeg-static` cũng vậy.
+
+Vẫn chỉ gắn công cụ khi pipeline chưa làm được việc đó. Không thêm runtime thứ hai cho cùng một việc. License ghi theo nguồn ngày 2026-11-06.
+
+| Công cụ | Trong app | Lý do |
 |---|---|---|
-| LLM | Đa provider: Anthropic, Gemini, OpenAI-compatible (OpenAI, Ollama, OpenRouter, DeepSeek, Groq, custom), CLI theo gói đăng ký (claude-cli, copilot-cli, antigravity-cli; gemini-cli đã bị Google ngừng cho tài khoản cá nhân); route provider/model theo từng task với thứ tự ưu tiên project → app → ENV và fallback; cache theo input hash + provider/model; user có thể tự viết script (0 token) | thêm provider khác |
-| Image search | Wikimedia Commons, Openverse (license metadata tốt, free); Pexels (API key) | web image search (Brave/SerpAPI), AI image gen |
-| TTS | 1 adapter giá rẻ, hỗ trợ tiếng Việt | local TTS |
-| Music | Thư viện local (`data/music/` + metadata JSON), Jamendo API | thêm nguồn |
+| **HyperFrames** | Đã gắn (`hyperframes@0.9.14`, Apache-2.0) | Đồ họa động HTML/GSAP → clip alpha. Giữ. |
+| **FFmpeg** | Đã gắn (`ffmpeg-static` GPL-3.0-or-later, gọi process) | Ken Burns, xfade, phụ đề, ducking, thumbnail. Một người chạy trên máy mình: đúng cách dùng. Không đổi bản binary hay bật codec khác. `ffprobe-static` đi cùng. |
+| **Motion Canvas** | Không gắn | Cùng vai trò với HyperFrames. Hai engine đồ họa cho một app cá nhân. |
+| **Remotion** | Không gắn | Điều kiện miễn phí cho một người đã đúng. Render React vẫn trùng HyperFrames + FFmpeg, nên không thêm. |
+| **PySceneDetect** | Không gắn | Cắt scene đã có: timeline theo voice + `CLIP` (LLM chọn đoạn, FFmpeg cắt). Thêm Python CLI không đổi chất lượng video đang render từ ảnh. |
+| **WhisperX** | Không gắn | Mốc từng từ lấy từ provider TTS khi provider có word timing. WhisperX cần GPU và model riêng. Không gọi trong test. |
+| **OpenMontage** | Không gắn | Chạy riêng trên máy mình thì AGPL không bắt app này phải đổi giấy phép. Repo chính `calesthio/OpenMontage` vẫn là **AGPL-3.0** (không phải MIT). Không gộp mã vào repo này, vì app đã có pipeline riêng và repo có thể được đẩy lên Git. |
+| **Postbase** | Không gắn | Self-host miễn phí nhưng cần Postgres/Supabase và API key từng mạng. App đã đăng YouTube, TikTok, Facebook Reels, Instagram Reels. Không thêm X/LinkedIn bằng một sản phẩm thứ hai. |
+| **n8n** | Không gắn | Một người tự host Community Edition thì Sustainable Use License cho phép. Lịch và job đã nằm trong SQLite, nên không nhúng n8n. |
+| **Mastra** | Không gắn | Trợ lý, registry tool, operator và MCP `video-agent` đã có. Core Mastra miễn phí, hạ tầng cloud của họ có thể tính phí. Không đổi framework agent. |
 
-Ranking ảnh (Tier 0): điểm = khớp từ khóa trong title/description + độ phân giải ≥ target + aspect gần target + license đã biết + không nghi watermark (domain stock có watermark) − trùng lặp (pHash).
+MCP trong repo (Cursor): `video-agent`, filesystem, fetch, git, playwright, duckduckgo-search. Xem `.cursor/mcp.json`. Không thêm MCP cho các công cụ ở bảng trên vì chúng không phải server MCP của app, và app không gọi chúng.
 
-## 8. Render (FFmpeg)
-1. Mỗi scene → clip MP4 (ảnh + `zoompan` Ken Burns, đúng duration theo voice). Cache theo hash(selection, motion, duration, resolution).
-2. Concat clips (+ transition đơn giản).
-3. Audio: voice nối theo timeline; music với volume/fade; ducking bằng `sidechaincompress` (voice làm sidechain).
-4. Subtitle: burn ASS + xuất `.srt` riêng.
-5. Output `data/projects/<id>/renders/v<version>.mp4` + `credits.txt`.
+Khi một task mới thật sự thiếu cắt scene trên video có sẵn hoặc căn lời khi TTS không có word timing, thêm adapter tùy chọn (binary trên PATH, test giả lập, không mạng). Không thêm dependency npm cho việc đó.
 
-## 9. API (tổng quan, chi tiết theo từng task)
-```
-GET  /api/health
-GET  /api/dashboard/stats
-CRUD /api/projects (+ /duplicate /archive /unarchive)
-POST /api/projects/:id/stages/:stage/run        # chạy 1 stage (hoặc "all")
-POST /api/projects/:id/gates/:gate/approve      # approve gate (Approve All)
-GET  /api/projects/:id/jobs                     # polling fallback
-GET  /api/projects/:id/events                   # SSE progress
-.../scenes, .../scenes/:sceneId/visuals (candidates, select, search, custom-url, upload)
-.../voice, .../music, .../timeline, .../renders
-```
-Lỗi luôn có dạng: `{ "error": { "code": "PROJECT_NOT_FOUND", "message": "...", "details": {} } }`.
+### Tri thức pipeline (TASK-057)
 
-## 10. Task roadmap
-
-| Task | Nội dung | Phụ thuộc | Phase |
-|---|---|---|---|
-| TASK-001 | Monorepo scaffold, shared enums/schemas, SQLite, Project CRUD API + dashboard stats, tests | — | 1 |
-| TASK-002 | Web shell: Dashboard, Project list (search/filter/sort), create/rename/duplicate/archive/delete | 001 | 1 |
-| TASK-003 | Job queue + worker + SSE + pipeline state machine + gates + modes (dùng stage giả để test) | 001 | 2 |
-| TASK-004 | LLM đa provider + Research/Script (gộp 1 call) + Script editor UI | 003 | 2 |
-| TASK-004B | MCP server cho Claude Desktop + provider claude-cli (dùng subscription) | 004 | 2 |
-| TASK-004D | ~~GitHub Models~~ (đã bị GitHub khai tử 30/7/2026) + GitHub Copilot (copilot-cli, MCP với Copilot Chat) + giới hạn token theo provider (pre-flight) + đếm số call/tháng (không áp trần) | 004B | 2 |
-| TASK-004C | Tham số video (topic bắt buộc, còn lại tùy chọn) + khuyến nghị tự động bằng luật, 0 LLM call; quick create | 004 | 2 |
-| TASK-004E | Chế độ ngân sách token ECO/BALANCED/QUALITY/CUSTOM + ước tính số call trước khi chạy + review & sửa script (QUALITY) | 004C | 2 |
-| TASK-004F | Định tuyến model LLM theo từng tác vụ (app + dự án, fallback) + nâng mức dùng LLM của BALANCED/QUALITY + usage theo từng call | 006 | 2 |
-| TASK-005 | Scene plan bằng code (tách câu, gom theo thời lượng scene, chia query/mood) + Scene Board (sửa/tách/gộp/sắp xếp); QUALITY +1 call gợi ý query theo scene | 004E | 3 |
-| TASK-006 | Image provider interface + Wikimedia/Openverse/Pexels + candidate store + ranking + dedupe | 005 | 4 |
-| TASK-007 | Visual Review UI: lưới candidate (top 8, xem thêm), panel metadata đầy đủ (nguồn, URL, tác giả, license, attribution, kích thước, tỉ lệ, file, watermark, điểm), approve/reject/replace/remove, sửa query + search again, custom URL, upload, Approve All; tải preview + ảnh được chọn về local (kiểm tra tải được/không hỏng/kích thước thật); scene visual status | 006 | 4 |
-| TASK-004H | Provider `antigravity-cli` (Antigravity CLI `agy`, tài khoản Google: Gemini 3.8, Claude Sonnet/Opus 4.6, GPT-OSS) — text + vision, `--mode plan`, `--json-schema`; thay cho gemini-cli đã bị Google ngừng | 004F | 2 |
-| TASK-004I | Xem token tiêu thụ theo video và theo quá trình (stage / tác vụ / model / từng lần chạy) + tổng toàn app; tổng hợp từ `jobs.usage.calls`, 0 LLM call | 004F | 2 |
-| TASK-004G | Chế độ MAX: vision cho provider (copilot-cli `--attachment`, claude-cli Read, API multimodal), kiểm tra ảnh bằng vision + vòng tìm lại, `NEEDS_ATTENTION`, hợp đồng kiểm tra render | 004F, 007 | 4 |
-| TASK-007B | Thêm nguồn ảnh/video: Pixabay, Unsplash, NASA, The Met, Library of Congress, Smithsonian, Europeana, Flickr (CC), Pexels/Pixabay Videos; chọn nguồn theo chủ đề bằng luật; phát hiện watermark nâng cao | 007 | 4 |
-| TASK-007C | "Nhờ AI tìm ảnh": LLM có web search (claude-cli `WebSearch/WebFetch`, anthropic `web_search`) trả link → app tải, kiểm tra, xác minh license; ảnh chưa xác minh license không bao giờ tự duyệt. Phần sau (007D): AI tạo ảnh (Gemini/OpenAI image API) | 007, 004F | 4 |
-| TASK-008 | TTS provider + Voice stage + Voice UI | 005 | 5 |
-| TASK-009 | Subtitle generation (từ voice duration, chia câu) | 008 | 5 |
-| TASK-010 | Music provider + search + ranking + Music Review UI | 005 | 6 |
-| TASK-011 | Timeline builder + Timeline view cơ bản | 007, 009, 010 | 7 |
-| TASK-012 | FFmpeg render (Ken Burns, concat, ducking, subtitle, credits) + progress UI + kiểm tra render (ffprobe, frame đen/đứng, sync phụ đề; MAX: vision trên frame mỗi scene, theo hợp đồng TASK-004G §6) | 011 | 8 |
-| TASK-013 | Versioning + history, export/download | 012 | 9 |
-| TASK-017 | Bộ nguyên tắc nội dung: chính sách nền tảng (YouTube/TikTok/Facebook) + định hướng kênh (drama, storytelling…) + luật riêng; REMIND (chèn vào prompt) / FILTER (kiểm tra bằng code + LLM `guidelineCheck`, finding MUST → NEEDS_ATTENTION, không chặn cứng) | 004F | 9 |
-| TASK-018 | Chat góp ý với LLM trước render (tùy chọn): context do code dựng, LLM trả lời + đề xuất sửa có cấu trúc, user bấm áp dụng → stage liên quan STALE; không chặn render; có đường MCP 0 token | 011, 017 | 9 |
-
-```
-001 ─┬─► 002
-     └─► 003 ─► 004 ─► 005 ─┬─► 006 ─► 007 ─┐
-                            ├─► 008 ─► 009 ─┼─► 011 ─► 012 ─► 013
-                            └─► 010 ────────┘
-```
-002 và 003 có thể làm song song. 006/008/010 có thể song song sau 005.
+retrieval_chunks là dữ liệu dẫn xuất theo hồ sơ (hoặc dự án không hồ sơ); retrieval_uses ghi đoạn thực dùng và retrieval_exclusions loại riêng cho một dự án. FTS5 external-content được tạo lúc chạy, đồng bộ bằng code, không trigger. Job retrieval_index độc lập pipeline, embedding tối đa 32 văn bản/call qua provider có khả năng; lỗi/quota dùng từ khoá. Ngữ cảnh được lọc lệnh, che secret và đặt trong khối untrusted_context_data trước khi hash cache. Không lập chỉ mục dự án được bảo vệ.

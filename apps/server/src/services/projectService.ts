@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { currentWorkspaceId, scopeCondition } from "../auth/requestContext.js";
 import { and, asc, count, desc, eq, inArray, isNotNull, isNull, sql } from "drizzle-orm";
 import {
   PROJECT_STATUSES,
@@ -241,6 +242,7 @@ export function createProjectService(
       if (derived) aspectRatio = derived;
     }
     const settings: ProjectSettings = {
+      ...(inputSettings.market ? { market: inputSettings.market } : {}),
       language: resolved.values.settings.language,
       targetDurationSec: resolved.values.settings.targetDurationSec,
       aspectRatio,
@@ -282,7 +284,7 @@ export function createProjectService(
       archivedAt: null,
     };
 
-    await db.insert(projects).values(project).run();
+    await db.insert(projects).values({ ...project, workspaceId: currentWorkspaceId(sqlite) }).run();
     try {
       createProjectDir(config.DATA_DIR, id);
     } catch (error) {
@@ -382,6 +384,8 @@ export function createProjectService(
     if (query.profileId) {
       conditions.push(eq(projects.profileId, query.profileId));
     }
+    const scoped = scopeCondition(projects.workspaceId, projects.profileId);
+    if (scoped) conditions.push(scoped);
     const where = conditions.length ? and(...conditions) : undefined;
     const sortColumn = query.sort === "title"
       ? sql`lower(${projects.title})`
@@ -461,22 +465,22 @@ export function createProjectService(
     const [statusCounts, archivedRow, recentRows, failedJobs] = await Promise.all([
       db.select({ status: projects.status, total: count() })
         .from(projects)
-        .where(isNull(projects.archivedAt))
+        .where(and(isNull(projects.archivedAt), scopeCondition(projects.workspaceId, projects.profileId)))
         .groupBy(projects.status)
         .all(),
       db.select({ total: count() })
         .from(projects)
-        .where(isNotNull(projects.archivedAt))
+        .where(and(isNotNull(projects.archivedAt), scopeCondition(projects.workspaceId, projects.profileId)))
         .get(),
       db.select()
         .from(projects)
-        .where(isNull(projects.archivedAt))
+        .where(and(isNull(projects.archivedAt), scopeCondition(projects.workspaceId, projects.profileId)))
         .orderBy(desc(projects.updatedAt), asc(projects.id))
         .limit(5)
         .all(),
       db.select({
         jobId: jobs.id,
-        projectId: jobs.projectId,
+        projectId: projects.id,
         projectTitle: projects.title,
         stage: jobs.stage,
         error: jobs.error,
@@ -484,7 +488,7 @@ export function createProjectService(
       })
         .from(jobs)
         .innerJoin(projects, eq(jobs.projectId, projects.id))
-        .where(eq(jobs.status, "FAILED"))
+        .where(and(eq(jobs.status, "FAILED"), scopeCondition(projects.workspaceId, projects.profileId)))
         .orderBy(desc(jobs.finishedAt), desc(jobs.createdAt))
         .limit(10)
         .all(),
@@ -497,6 +501,7 @@ export function createProjectService(
       RENDERING: 0,
       COMPLETED: 0,
       FAILED: 0,
+      SHELVED: 0,
     };
     for (const row of statusCounts) {
       const status = ProjectStatusSchema.safeParse(row.status);

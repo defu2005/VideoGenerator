@@ -253,7 +253,7 @@ export function AssistantPage() {
         </div>
         <div className="operator-engine-switch" role="group" aria-label="Chọn người trả lời">
           <button type="button" className="button button-secondary" aria-pressed={engine === "assistant"} onClick={() => setEngine("assistant")}>Trợ lý tích hợp</button>
-          <button type="button" className="button button-secondary" aria-pressed={engine === "operator"} onClick={() => setEngine("operator")}>Cursor operator</button>
+          <button type="button" className="button button-secondary" aria-pressed={engine === "operator"} onClick={() => setEngine("operator")}>Agent operator</button>
         </div>
         <button
           type="button"

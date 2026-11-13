@@ -1,0 +1,27 @@
+{
+  "id": "kinetic_word",
+  "version": 1,
+  "nameVi": "Chữ động",
+  "descriptionVi": "Một tới ba chữ lớn thay cho chú thích ASS.",
+  "kinds": [
+    "overlay"
+  ],
+  "minDurationSec": 0.8,
+  "maxDurationSec": 4,
+  "defaultDurationSec": 1.6,
+  "safeArea": "center",
+  "origin": "written for this app",
+  "variables": [
+    {
+      "name": "text",
+      "type": "string",
+      "maxLength": 24,
+      "default": ""
+    },
+    {
+      "name": "color",
+      "type": "color",
+      "default": "#F5C518"
+    }
+  ]
+}

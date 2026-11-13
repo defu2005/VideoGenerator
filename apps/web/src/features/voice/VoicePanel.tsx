@@ -2,8 +2,10 @@ import type { Project, VoiceTrack } from "@vg/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { ErrorState } from "../../components/ErrorState";
+import { useToast } from "../../components/ui/Toast";
 import { Spinner } from "../../components/Spinner";
 import { usePipeline, pipelineKeys } from "../../hooks/usePipeline";
+import { stageBlocked } from "../pipeline/activeJobs";
 import { useScenes } from "../../hooks/useScenes";
 import { runPipeline } from "../../services/pipelineApi";
 import { getProjectVoice, regenerateVoice, uploadVoice } from "../../services/voiceApi";
@@ -22,6 +24,7 @@ function audioUrl(projectId: string, track: VoiceTrack): string {
 
 export function VoicePanel({ project }: { project: Project }) {
   const queryClient = useQueryClient();
+  const toast = useToast();
   const [error, setError] = useState("");
   const scenes = useScenes(project.id);
   const pipeline = usePipeline(project.id);
@@ -32,17 +35,25 @@ export function VoicePanel({ project }: { project: Project }) {
   const refreshPipeline = () => queryClient.invalidateQueries({ queryKey: pipelineKeys.detail(project.id) });
   const regenerate = useMutation({
     mutationFn: (sceneId: string) => regenerateVoice(project.id, sceneId),
-    onSuccess: () => { void refreshVoice(); void refreshPipeline(); },
-    onError: (reason) => setError(reason instanceof Error ? reason.message : "Unable to regenerate voice"),
+    onSuccess: () => { void refreshVoice(); void refreshPipeline(); toast.success("Đã tạo lại giọng"); },
+    onError: (reason) => {
+      const message = reason instanceof Error ? reason.message : "Unable to regenerate voice";
+      setError(message);
+      toast.error(message);
+    },
   });
   const upload = useMutation({
     mutationFn: ({ sceneId, file }: { sceneId: string; file: File }) => uploadVoice(project.id, sceneId, file),
-    onSuccess: () => { void refreshVoice(); void refreshPipeline(); },
-    onError: (reason) => setError(reason instanceof Error ? reason.message : "Unable to upload voice"),
+    onSuccess: () => { void refreshVoice(); void refreshPipeline(); toast.success("Đã tải giọng lên"); },
+    onError: (reason) => {
+      const message = reason instanceof Error ? reason.message : "Unable to upload voice";
+      setError(message);
+      toast.error(message);
+    },
   });
-  const canRun = stage?.state !== undefined && !pipeline.data?.activeJob && !pipeline.isMutating;
+  const canRun = stage?.state !== undefined && !stageBlocked("VOICE", pipeline.data) && !pipeline.isMutating;
 
-  if (scenes.isPending || voice.isPending || pipeline.isPending) return <Spinner label="Loading voice tracks" />;
+  if (scenes.isPending || voice.isPending || pipeline.isPending) return <Spinner label="Đang tải giọng đọc" />;
   if (scenes.isError) return <ErrorState message={scenes.error.message} onRetry={() => void scenes.refetch()} />;
   if (voice.isError) return <ErrorState message={voice.error.message} onRetry={() => void voice.refetch()} />;
   if (pipeline.isError) return <ErrorState message={pipeline.error.message} onRetry={() => void pipeline.refetch()} />;
@@ -54,8 +65,11 @@ export function VoicePanel({ project }: { project: Project }) {
       await runPipeline(project.id, "VOICE");
       await refreshPipeline();
       await refreshVoice();
+      toast.success("Đã xếp bước chạy");
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "Unable to run the voice stage");
+      const message = reason instanceof Error ? reason.message : "Unable to run the voice stage";
+      setError(message);
+      toast.error(message);
     }
   }
 

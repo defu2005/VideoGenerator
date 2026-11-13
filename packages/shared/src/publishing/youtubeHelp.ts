@@ -1,3 +1,5 @@
+import { ApiContractSchema } from "../knowledge/schema.js";
+import { snapshotKnowledge } from "../knowledge/snapshot.js";
 /** Vietnamese setup help for YouTube OAuth (Google Cloud Console). Shown in the UI. */
 export const YOUTUBE_SETUP_HELP_VI = `Cách kết nối YouTube (dùng Google Cloud của bạn):
 
@@ -9,7 +11,7 @@ export const YOUTUBE_SETUP_HELP_VI = `Cách kết nối YouTube (dùng Google Cl
 
 Lưu ý:
 • Khi consent screen còn "Testing", refresh token hết hạn sau 7 ngày — cần "Kết nối lại" hàng tuần cho đến khi bạn publish consent screen.
-• Video tải lên từ project API chưa được Google xác minh có thể bị YouTube khóa ở chế độ riêng tư; ứng dụng ghi nhận đó là cảnh báo, không phải lỗi đăng.
+• Ứng dụng gửi rõ chế độ hiển thị đã chọn. Nếu YouTube trả về chế độ khác, hãy kiểm tra video trong YouTube Studio.
 • Nếu bạn đặt Playlist ID, lần Kết nối sẽ xin thêm quyền youtube (không chỉ youtube.readonly) để thêm video vào playlist.
 • Tài khoản đã kết nối trước khi bật thống kê cần "Kết nối lại để bật thống kê" để cấp quyền yt-analytics.readonly.
 • Doanh thu YouTube cần bật riêng ("Bật thống kê doanh thu YouTube") vì xin quyền xem số tiền; kênh chưa tham gia Partner Program sẽ hiện "Kênh chưa bật kiếm tiền".
@@ -34,13 +36,9 @@ export const YOUTUBE_FORCE_SSL_SCOPE = "https://www.googleapis.com/auth/youtube.
 /** Default category: Education. */
 export const YOUTUBE_DEFAULT_CATEGORY_ID = "27";
 
-/** Shorts: vertical videos at most 3 minutes. */
-export const YOUTUBE_SHORTS_MAX_SEC = 180;
-
-/**
- * Quota units charged per videos.insert (YouTube docs as of late 2025 / 2026:
- * ~100 units in the combined bucket; uploads also have a separate daily call cap).
- */
-export const YOUTUBE_UPLOAD_QUOTA_COST = 100;
-export const YOUTUBE_THUMBNAIL_QUOTA_COST = 50;
-export const YOUTUBE_PLAYLIST_ITEM_QUOTA_COST = 50;
+/** Snapshot defaults for callers without a server resolver. */
+export const YOUTUBE_SHORTS_MAX_SEC = (snapshotKnowledge("limit.youtube.shorts_max_sec")!.value as { value: number }).value;
+export const YOUTUBE_UPLOAD_QUOTA_COST = ApiContractSchema.parse(snapshotKnowledge("youtube.data.videos_insert")!.value).quotaCost!;
+const quotaCosts = ApiContractSchema.parse(snapshotKnowledge("youtube.data.quota")!.value).methodCosts!;
+export const YOUTUBE_THUMBNAIL_QUOTA_COST = quotaCosts["thumbnails.set"];
+export const YOUTUBE_PLAYLIST_ITEM_QUOTA_COST = quotaCosts["playlistItems.insert"];

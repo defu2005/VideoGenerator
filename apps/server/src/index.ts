@@ -1,6 +1,12 @@
 import { buildApp } from "./app.js";
 import { parseConfig } from "./lib/config.js";
 
+if (process.env.VG_ROLE === "worker") {
+  // Worker node: no database, no keys. It talks to the main machine with its node token only.
+  const { runWorkerAgent } = await import("./node/agent.js");
+  process.exit(await runWorkerAgent());
+}
+
 const config = parseConfig();
 const app = buildApp({ config });
 

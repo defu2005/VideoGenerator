@@ -1,23 +1,23 @@
 import { statSync } from "node:fs";
 import { open as openFile } from "node:fs/promises";
 import type Database from "better-sqlite3";
+import { noteExternalHttp } from "../knowledge/httpSignal.js";
 import {
   YOUTUBE_ANALYTICS_MONETARY_READONLY_SCOPE,
   YOUTUBE_ANALYTICS_READONLY_SCOPE,
   YOUTUBE_DEFAULT_CATEGORY_ID,
+  ApiContractSchema, PublisherCapabilitySchema, snapshotKnowledge,
   YOUTUBE_FORCE_SSL_SCOPE,
   YOUTUBE_FULL_SCOPE,
-  YOUTUBE_PLAYLIST_ITEM_QUOTA_COST,
   YOUTUBE_READONLY_SCOPE,
   YOUTUBE_SHORTS_MAX_SEC,
-  YOUTUBE_THUMBNAIL_QUOTA_COST,
-  YOUTUBE_UPLOAD_QUOTA_COST,
   YOUTUBE_UPLOAD_SCOPE,
   type PublishInput,
   type PublishResult,
   type PublishVisibility,
   type TokenSet,
 } from "@vg/shared";
+import type { KnowledgeService } from "../knowledge/service.js";
 import type { AppConfig } from "../lib/config.js";
 import type { TokenVault } from "./tokenVault.js";
 import type { Publisher, PublisherIdentity } from "./types.js";
@@ -32,9 +32,10 @@ const UPLOAD_BASE = "https://www.googleapis.com/upload/youtube/v3";
 /** 8 MiB — multiple of 256 KiB as required by the resumable protocol. */
 export const YOUTUBE_CHUNK_SIZE = 8 * 1024 * 1024;
 
-const TITLE_MAX = 100;
-const DESCRIPTION_MAX_BYTES = 5000;
-const TAGS_MAX_CHARS = 500;
+const publisherDefaults = PublisherCapabilitySchema.parse(
+  (snapshotKnowledge("limit.youtube.publisher")!.value as { value: unknown }).value,
+);
+const uploadDefaults = ApiContractSchema.parse(snapshotKnowledge("youtube.data.videos_insert")!.value);
 
 export type YoutubeFetch = typeof fetch;
 
@@ -56,6 +57,7 @@ export type YoutubePublisherOptions = {
   vault: TokenVault;
   sqlite: Database.Database;
   quota?: YoutubeQuotaTracker;
+  knowledge?: KnowledgeService;
   fetchImpl?: YoutubeFetch;
   chunkSize?: number;
   now?: () => Date;
@@ -65,13 +67,14 @@ type AccountCredRow = { id: string; profile_id: string; publish_settings: string
 
 export class YouTubePublisher implements Publisher {
   readonly platform = "youtube" as const;
-  readonly limits = {
-    maxDurationSec: 12 * 60 * 60,
-    maxTitleChars: TITLE_MAX,
-    maxDescriptionChars: DESCRIPTION_MAX_BYTES,
-    maxTags: 30,
-    supportsScheduledPublishAt: true,
-  };
+  get limits() {
+    return { ...this.capabilities(), maxTags: 30, supportsScheduledPublishAt: true };
+  }
+
+  private capabilities() {
+    const resolved = this.options.knowledge?.value<{ value?: unknown }>("limit.youtube.publisher", {});
+    return PublisherCapabilitySchema.safeParse(resolved?.value).data ?? publisherDefaults;
+  }
 
   readonly quota: YoutubeQuotaTracker;
   private readonly fetchImpl: YoutubeFetch;
@@ -80,7 +83,7 @@ export class YouTubePublisher implements Publisher {
 
   constructor(private readonly options: YoutubePublisherOptions) {
     this.quota = options.quota
-      ?? new YoutubeQuotaTracker(options.sqlite, options.config.YOUTUBE_DAILY_QUOTA, options.now);
+      ?? new YoutubeQuotaTracker(options.sqlite, options.config.YOUTUBE_DAILY_QUOTA, options.now, options.knowledge);
     this.fetchImpl = options.fetchImpl ?? fetch;
     this.chunkSize = options.chunkSize ?? YOUTUBE_CHUNK_SIZE;
     this.now = options.now ?? (() => new Date());
@@ -282,8 +285,7 @@ export class YouTubePublisher implements Publisher {
     tokens: TokenSet;
     signal: AbortSignal;
   }): Promise<void> {
-    const updateCost = 50;
-    if (this.quota.wouldExceed(updateCost)) {
+    if (!this.quota.charge("videos.list")) {
       throw new YoutubeQuotaExceededError(
         "Hết hạn mức YouTube trong ngày, chưa đổi được tiêu đề.",
         nextPacificMidnightIso(this.now()),
@@ -301,6 +303,9 @@ export class YouTubePublisher implements Publisher {
     if (!snippet) {
       throw Object.assign(new Error("Không tìm thấy video YouTube để đổi tiêu đề"), { status: 404, retryable: false });
     }
+    if (!this.quota.charge("videos.update")) {
+      throw new YoutubeQuotaExceededError("Hết hạn mức đổi tiêu đề YouTube.", nextPacificMidnightIso(this.now()));
+    }
     const updated = await this.fetchImpl(`${API_BASE}/videos?part=snippet`, {
       method: "PUT",
       headers: {
@@ -310,7 +315,7 @@ export class YouTubePublisher implements Publisher {
       body: JSON.stringify({
         id: input.videoId,
         snippet: {
-          title: input.title.slice(0, TITLE_MAX),
+          title: input.title.slice(0, this.capabilities().maxTitleChars),
           description: snippet.description ?? "",
           categoryId: snippet.categoryId ?? YOUTUBE_DEFAULT_CATEGORY_ID,
           ...(snippet.tags ? { tags: snippet.tags } : {}),
@@ -320,7 +325,6 @@ export class YouTubePublisher implements Publisher {
       signal: input.signal,
     });
     if (!updated.ok) throw mapYoutubeApiError(await safeJson(updated), updated.status);
-    this.quota.record(updateCost);
   }
 
   async updateTitle(accountId: string, videoId: string, title: string, signal: AbortSignal): Promise<void> {
@@ -345,19 +349,16 @@ export class YouTubePublisher implements Publisher {
     if (signal.aborted) throw Object.assign(new Error("aborted"), { status: 499, retryable: false });
 
     const warnings: string[] = [];
-    const uploadCost = YOUTUBE_UPLOAD_QUOTA_COST;
-    if (this.quota.wouldExceed(uploadCost)) {
-      throw new YoutubeQuotaExceededError(
-        `Hết hạn mức YouTube trong ngày (đã dùng ${this.quota.getState().used}/${this.quota.getLimit()} đơn vị). Sẽ thử lại sau khi quota reset (nửa đêm giờ Thái Bình Dương).`,
-        nextPacificMidnightIso(this.now()),
-      );
-    }
-
-    const { description, isShort, shortWarning } = buildDescription(input);
+    const knowledge = this.options.knowledge;
+    const capabilities = this.capabilities();
+    const shorts = knowledge?.value("limit.youtube.shorts_max_sec", { value: YOUTUBE_SHORTS_MAX_SEC });
+    const shortsMax = typeof shorts?.value === "number" && shorts.value > 0 ? shorts.value : YOUTUBE_SHORTS_MAX_SEC;
+    const upload = ApiContractSchema.safeParse(knowledge?.value("youtube.data.videos_insert", uploadDefaults)).data ?? uploadDefaults;
+    const { description, isShort, shortWarning } = buildDescription(input, shortsMax);
     if (shortWarning) warnings.push(shortWarning);
 
-    const title = input.title.slice(0, TITLE_MAX);
-    const tags = trimTagsByChars(input.tags, TAGS_MAX_CHARS);
+    const title = input.title.slice(0, capabilities.maxTitleChars);
+    const tags = trimTagsByChars(input.tags, capabilities.maxTagChars);
     const categoryId = input.categoryId?.trim() || YOUTUBE_DEFAULT_CATEGORY_ID;
     const language = normalizeLanguage(input.language);
 
@@ -374,7 +375,7 @@ export class YouTubePublisher implements Publisher {
     const metadata = {
       snippet: {
         title,
-        description: trimUtf8Bytes(description, DESCRIPTION_MAX_BYTES),
+        description: trimUtf8Bytes(description, capabilities.maxDescriptionChars),
         tags,
         categoryId,
         defaultLanguage: language,
@@ -387,6 +388,19 @@ export class YouTubePublisher implements Publisher {
     const fileSize = fileStat.size;
     onProgress(2);
 
+    if (!this.quota.charge("videos.insert", "videos.insert")) {
+      throw new YoutubeQuotaExceededError(
+        `Hết hạn mức tải YouTube trong ngày (${this.quota.getState("videos.insert").used}/${this.quota.getLimit("videos.insert")} lượt).`,
+        nextPacificMidnightIso(this.now()),
+      );
+    }
+    if (input.projectId && knowledge) {
+      const ids = ["youtube.data.videos_insert", "youtube.data.quota", "limit.youtube.publisher", "limit.youtube.shorts_max_sec"];
+      knowledge.recordProjectReads(input.projectId, Object.fromEntries(ids.flatMap((id) => {
+        const found = knowledge.get(id);
+        return found ? [[id, `${found.layer}:${found.revision}`]] : [];
+      })));
+    }
     const initResponse = await this.fetchImpl(
       `${UPLOAD_BASE}/videos?uploadType=resumable&part=snippet,status`,
       {
@@ -422,32 +436,35 @@ export class YouTubePublisher implements Publisher {
       onProgress,
     });
 
-    this.quota.record(uploadCost);
 
     const videoId = uploaded.id;
     if (!videoId) {
       throw Object.assign(new Error("YouTube không trả video id"), { status: 502, retryable: true });
     }
 
+    const rejection = uploaded.status?.rejectionReason;
+    if (uploaded.status?.uploadStatus === "rejected" && rejection && ["claim", "copyright", "trademark"].includes(rejection)) {
+      noteExternalHttp({ provider: "youtube", endpoint: "videos.insert", error: `rejection:${rejection}`, category: "B1" });
+      throw Object.assign(new Error(`YouTube từ chối video (${rejection}).`), { code: "YOUTUBE_CLAIM", reason: rejection });
+    }
     const returnedPrivacy = uploaded.status?.privacyStatus as PublishVisibility | undefined;
     const requestedPrivacy = (input.publishAt ? "private" : input.visibility) as PublishVisibility;
     let visibilityUsed: PublishVisibility | undefined;
     if (returnedPrivacy && returnedPrivacy !== requestedPrivacy) {
       warnings.push(
         `YouTube đã đặt video thành "${privacyLabelVi(returnedPrivacy)}" thay vì "${privacyLabelVi(requestedPrivacy)}" `
-        + "(thường gặp khi project API chưa được xác minh). Video đã đăng nhưng có thể bị khóa riêng tư cho đến khi Google duyệt project.",
+        + (upload.privacyMismatch ?? uploadDefaults.privacyMismatch),
       );
       visibilityUsed = returnedPrivacy;
     }
 
     // Shorts (vertical) cannot take a custom thumbnail through the API. Skip with no warning.
-    if (input.format === "landscape" && !isShort && input.thumbnailPath) {
+    if (input.format === "landscape" && !isShort && input.thumbnailPath && this.quota.charge("thumbnails.set")) {
       const thumbWarning = await this.setThumbnail(videoId, input.thumbnailPath, tokens.accessToken, signal);
       if (thumbWarning) warnings.push(thumbWarning);
-      else this.quota.record(YOUTUBE_THUMBNAIL_QUOTA_COST);
     }
 
-    if (input.playlistId?.trim()) {
+    if (input.playlistId?.trim() && this.quota.charge("playlistItems.insert")) {
       const playlistWarning = await this.addToPlaylist(
         videoId,
         input.playlistId.trim(),
@@ -455,7 +472,6 @@ export class YouTubePublisher implements Publisher {
         signal,
       );
       if (playlistWarning) warnings.push(playlistWarning);
-      else this.quota.record(YOUTUBE_PLAYLIST_ITEM_QUOTA_COST);
     }
 
     void isShort;
@@ -477,7 +493,7 @@ export class YouTubePublisher implements Publisher {
     onProgress: (progress: number) => void;
   }): Promise<{
     id?: string;
-    status?: { privacyStatus?: string };
+    status?: { privacyStatus?: string; uploadStatus?: string; rejectionReason?: string };
   }> {
     let offset = 0;
     let retries = 0;
@@ -659,7 +675,7 @@ export class YouTubePublisher implements Publisher {
   }
 }
 
-function buildDescription(input: PublishInput): {
+function buildDescription(input: PublishInput, shortsMax: number): {
   description: string;
   isShort: boolean;
   shortWarning?: string;
@@ -669,12 +685,12 @@ function buildDescription(input: PublishInput): {
     return { description, isShort: false };
   }
   const duration = input.durationSec ?? 0;
-  if (duration > YOUTUBE_SHORTS_MAX_SEC) {
+  if (duration > shortsMax) {
     return {
       description,
       isShort: false,
       shortWarning:
-        `Video dọc dài ${Math.round(duration)}s (trên ${YOUTUBE_SHORTS_MAX_SEC}s) nên không gắn #Shorts; YouTube sẽ coi đây là video thường.`,
+        `Video dọc dài ${Math.round(duration)}s (trên ${shortsMax}s) nên không gắn #Shorts; YouTube sẽ coi đây là video thường.`,
     };
   }
   if (!/(^|\s)#Shorts\b/i.test(description)) {
@@ -774,10 +790,12 @@ async function safeJson(response: Response): Promise<unknown> {
 function mapGoogleAuthError(body: unknown, status: number): Error {
   const error = (body as { error?: string; error_description?: string } | null)?.error;
   if (error === "invalid_grant" || error === "invalid_client" || status === 401) {
+    noteExternalHttp({ provider: "youtube", endpoint: "oauth.token", status: status === 401 ? 401 : undefined, error: error === "invalid_grant" ? "invalid_grant" : undefined, category: "E1" });
     return Object.assign(new Error("Thông tin đăng nhập YouTube không hợp lệ — cần Kết nối lại"), {
       status: 401,
       retryable: false,
       code: "invalidCredentials",
+      oauthCode: error ?? "invalid_client",
     });
   }
   return Object.assign(new Error("Xác thực Google thất bại"), {

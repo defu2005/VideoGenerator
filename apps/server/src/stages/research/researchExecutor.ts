@@ -1,3 +1,4 @@
+import { enqueueIndex } from "../../retrieval/service.js";
 import { MergedStorySchema, ResearchNotesSchema, type LlmCallUsage } from "@vg/shared";
 import type Database from "better-sqlite3";
 import type { AppConfig } from "../../lib/config.js";
@@ -12,11 +13,13 @@ import { preflight } from "../../providers/llm/preflight.js";
 import { resolveBudget, storyModeForProject } from "@vg/shared";
 import { checkScriptDuration, computeSectionDurations, maxOutputTokensForDuration, scriptTotalDuration, researchInputHash } from "../script/scriptUtils.js";
 import { researchPrompt } from "./prompt.js";
+import { deeperResearchDepth } from "../script/prompt.js";
 import { mergedStoryPrompt } from "../script/mergedStoryPrompt.js";
 import { z } from "zod";
 import { getAppLlmSettings } from "../../providers/llm/settings.js";
 import { GuidelineService } from "../../guidelines/service.js";
 import { getProfilePromptContext } from "../../services/profileService.js";
+import { readScriptRepairHint, scriptRepairHintDigest } from "../../operator/qualityGates.js";
 
 type ExistingScript = { data: string; version: number; input_hash: string; review_notes: string | null };
 
@@ -53,9 +56,10 @@ export class ResearchExecutor implements StageExecutor {
       const guidelines = new GuidelineService(this.sqlite);
       const promptContext = getProfilePromptContext(this.sqlite, project.profileId);
       const channelDirection = promptContext.direction;
+      const researchDepth = deeperResearchDepth(budget.researchDepth, project);
       let promptInput = mode === "merged"
-        ? mergedStoryPrompt(project, this.config.SPEECH_WORDS_PER_MINUTE, budget.researchDepth, guidelines.guidanceFor(project, ["script", "subtitles"]), channelDirection, promptContext.learnedNotes)
-        : researchPrompt(project, budget.researchDepth, guidelines.guidanceFor(project, ["script"]), channelDirection);
+        ? mergedStoryPrompt(project, this.config.SPEECH_WORDS_PER_MINUTE, researchDepth, guidelines.guidanceFor(project, ["script", "subtitles"]), channelDirection, promptContext.learnedNotes)
+        : researchPrompt(project, researchDepth, guidelines.guidanceFor(project, ["script"]), channelDirection);
       const desiredOutputTokens = Math.ceil(
         maxOutputTokensForDuration(project.settings.targetDurationSec, this.config.SPEECH_WORDS_PER_MINUTE)
           * budget.outputHeadroom,
@@ -74,7 +78,7 @@ export class ResearchExecutor implements StageExecutor {
         limitMessage = check.message;
         effectiveMode = "separate";
         usageFeature = "research";
-        promptInput = researchPrompt(project, budget.researchDepth, new GuidelineService(this.sqlite).guidanceFor(project, ["script"]), channelDirection);
+        promptInput = researchPrompt(project, researchDepth, new GuidelineService(this.sqlite).guidanceFor(project, ["script"]), channelDirection);
         check = preflight({
           provider: selected.provider,
           mode: "separate",
@@ -85,7 +89,12 @@ export class ResearchExecutor implements StageExecutor {
         });
         if (check.decision === "reject") throw check.error;
       }
-      const { system, prompt } = check.input;
+      const { system } = check.input;
+      const repairHint = readScriptRepairHint(this.sqlite, project.id);
+      const extraQueries = (repairHint?.extraQueries ?? []).filter((item) => item.trim());
+      const prompt = extraQueries.length
+        ? `${check.input.prompt} Kiểm chứng thêm các điểm sau và nêu nguồn: ${extraQueries.map((item) => `- ${item}`).join(" ")}`
+        : check.input.prompt;
       const mergedSchema = MergedStorySchema.superRefine(({ script }, ctx) => {
         const { reject } = checkScriptDuration(script, project.settings.targetDurationSec, this.config.SPEECH_WORDS_PER_MINUTE);
         if (reject) ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["script"], message: reject });
@@ -101,7 +110,7 @@ export class ResearchExecutor implements StageExecutor {
         repairAttempts,
         signal: context.signal,
         cache: this.cache,
-        cacheKeyExtra: inputHash,
+        cacheKeyExtra: extraQueries.length ? `${inputHash}:${scriptRepairHintDigest(repairHint!)}` : inputHash,
         logger: context.logger,
       };
       const generated = effectiveMode === "merged"
@@ -157,6 +166,8 @@ export class ResearchExecutor implements StageExecutor {
           );
         }
       }
+      enqueueIndex(this.sqlite,{scope:"source",kind:"research",sourceId:project.id});
+      enqueueIndex(this.sqlite,{scope:"source",kind:"script",sourceId:project.id});
       context.recordUsage({
         llmCalls: generated.usage.llmCalls,
         inputTokens: generated.usage.inputTokens,

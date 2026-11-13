@@ -31,6 +31,7 @@ const profile: ProfileDetail = {
   description: "",
   direction: "",
   language: "vi",
+  market: null,
   defaultBrief: {
     budget: { mode: "ECO" },
     platform: "youtube",

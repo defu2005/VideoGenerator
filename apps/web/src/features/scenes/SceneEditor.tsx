@@ -1,5 +1,7 @@
 import { splitSentences, type Scene, type ScenePatch } from "@vg/shared";
 import { useEffect, useState } from "react";
+import { ConfirmDialog } from "../../components/ConfirmDialog";
+import { useConfirm } from "../../components/useConfirm";
 
 export function SceneEditor({
   scene,
@@ -29,6 +31,8 @@ export function SceneEditor({
   const [draft, setDraft] = useState<Scene>(scene);
   const [dirty, setDirty] = useState(false);
   const [error, setError] = useState("");
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const { ask, dialog: discardDialog } = useConfirm();
   const sentences = splitSentences(draft.narration, language);
   const wordCount = draft.narration.trim().split(/\s+/u).filter(Boolean).length;
   const duration = Math.round(wordCount * 60 / wordsPerMinute * 10) / 10;
@@ -66,7 +70,12 @@ export function SceneEditor({
   }
 
   async function actStructural(action: () => Promise<void>) {
-    if (dirty && !window.confirm("Discard unsaved scene changes?")) return;
+    if (dirty && !await ask({
+      title: "Bỏ thay đổi chưa lưu?",
+      message: "Các sửa trên cảnh này sẽ mất.",
+      confirmLabel: "Bỏ thay đổi",
+      cancelLabel: "Ở lại",
+    })) return;
     await act(async () => {
       await action();
       setDirty(false);
@@ -95,11 +104,17 @@ export function SceneEditor({
     <aside className="scene-editor panel" aria-label={`Edit scene ${scene.order + 1}`}>
       <div className="scene-editor-heading">
         <div><p className="eyebrow">SCENE {scene.order + 1}</p><h2>Edit scene</h2></div>
-        <button className="icon-button" type="button" aria-label="Close scene editor" onClick={() => {
-          if (!dirty || window.confirm("Discard unsaved scene changes?")) {
+        <button className="icon-button" type="button" aria-label="Đóng trình sửa cảnh" onClick={() => {
+          void (async () => {
+            if (dirty && !await ask({
+              title: "Bỏ thay đổi chưa lưu?",
+              message: "Các sửa trên cảnh này sẽ mất.",
+              confirmLabel: "Bỏ thay đổi",
+              cancelLabel: "Ở lại",
+            })) return;
             onDirtyChange(false);
             onClose();
-          }
+          })();
         }}>×</button>
       </div>
       {error && <p className="request-error" role="alert">{error}</p>}
@@ -135,7 +150,7 @@ export function SceneEditor({
       </div>
       {draft.durationOverrideSec !== null && <button className="text-button" type="button" onClick={() => update({ durationOverrideSec: null })}>Reset duration to auto</button>}
       <label className="form-field"><span>Transition note</span><textarea rows={2} value={draft.transitionNote} onChange={(event) => update({ transitionNote: event.target.value })} /></label>
-      <section className="scene-sentence-list" aria-label="Split narration">
+      <section className="scene-sentence-list" aria-label="Cắt lời thoại">
         <h3>Split after a sentence</h3>
         {sentences.map((sentence, index) => (
           <div className="scene-sentence-row" key={`${index}-${sentence}`}>
@@ -147,10 +162,21 @@ export function SceneEditor({
       <div className="scene-editor-actions">
         <button className="button button-primary" type="button" disabled={disabled || !dirty} onClick={() => void act(save)}>Save changes</button>
         <button className="button button-secondary" type="button" disabled={disabled || !canMerge} onClick={() => void actStructural(onMerge)}>Merge with next</button>
-        <button className="button button-danger-outline" type="button" disabled={disabled} onClick={() => {
-          if (window.confirm("Delete this scene?")) void actStructural(onDelete);
-        }}>Delete scene</button>
+        <button className="button button-danger-outline" type="button" disabled={disabled} onClick={() => setConfirmDelete(true)}>Delete scene</button>
       </div>
+      <ConfirmDialog
+        open={confirmDelete}
+        title="Xóa cảnh?"
+        message="Cảnh này sẽ ra khỏi kịch bản. Các bước sau sẽ thành cũ."
+        confirmLabel="Xóa cảnh"
+        cancelLabel="Giữ lại"
+        onCancel={() => setConfirmDelete(false)}
+        onConfirm={() => {
+          setConfirmDelete(false);
+          void actStructural(onDelete);
+        }}
+      />
+      {discardDialog}
     </aside>
   );
 }

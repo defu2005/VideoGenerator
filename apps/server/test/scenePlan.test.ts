@@ -6,6 +6,7 @@ import Database from "better-sqlite3";
 import { afterAll, afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { Job, JobUsage, Project, Scene, Script } from "@vg/shared";
 import { buildApp } from "../src/app.js";
+import { testActor } from "./testActor.js";
 import { parseConfig, type AppConfig } from "../src/lib/config.js";
 import { LlmProviderRegistry } from "../src/providers/llm/registry.js";
 import { ScenePlanExecutor } from "../src/stages/scenes/scenePlanExecutor.js";
@@ -26,7 +27,7 @@ beforeEach(() => {
     LLM_DEFAULT_PROVIDER: "mock",
     LLM_ENABLE_MOCK: "true",
   });
-  app = buildApp({ config });
+  app = buildApp({ testActor,  config });
 });
 
 afterEach(async () => {

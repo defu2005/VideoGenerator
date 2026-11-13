@@ -134,6 +134,30 @@ export function orderChainForBudget<T extends { kind: LlmQuotaKind | null }>(ent
     .map((item) => item.entry);
 }
 
+/** At the 80% budget line, keep models that meet the stage minimum, then the cheapest. */
+export function preferCheapestQualified<T extends {
+  kind: LlmQuotaKind | null;
+  quality?: number | null;
+  costUsd?: number | null;
+}>(entries: readonly T[], minQuality: number): T[] {
+  const scored = entries.some((entry) => typeof entry.quality === "number");
+  const qualified = scored
+    ? entries.filter((entry) => entry.quality == null || entry.quality >= minQuality)
+    : [...entries];
+  const pool = qualified.length ? qualified : [...entries];
+  const cost = (entry: T) => {
+    if (typeof entry.costUsd === "number" && Number.isFinite(entry.costUsd)) return entry.costUsd;
+    return entry.kind === "paid" ? Number.POSITIVE_INFINITY : 0;
+  };
+  return pool
+    .map((entry, index) => ({ entry, index }))
+    .sort((a, b) => {
+      const delta = cost(a.entry) - cost(b.entry);
+      return delta !== 0 ? delta : a.index - b.index;
+    })
+    .map((item) => item.entry);
+}
+
 export function tightestWindow(limits: readonly LlmQuotaLimit[]): LlmQuotaWindow | undefined {
   return limits[0]?.window;
 }

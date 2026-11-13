@@ -1,0 +1,210 @@
+<!DOCTYPE html><html><head><meta charset="utf-8"><style>
+#stage{flex-direction:column}
+.title{flex:none;display:flex;font-weight:var(--vg-w-display);letter-spacing:var(--vg-track-display);text-transform:var(--vg-case-display)}
+.tag{letter-spacing:var(--vg-track-caps);text-transform:uppercase;white-space:nowrap}
+.grid{position:relative;flex:none;display:grid;align-content:center}
+.row{position:relative;display:flex}
+.bg,.hl{position:absolute;inset:0}
+.mk{position:relative;flex:none}
+.mk>div{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;border-radius:50%;font-weight:var(--vg-w-display);font-variant-numeric:tabular-nums}
+.it{position:relative;font-weight:var(--vg-w-display);letter-spacing:var(--vg-track-display);text-wrap:balance}
+.rail{position:absolute}
+</style><script src="gsap.min.js"></script><script src="common.js"></script></head><body>
+<div id="root" data-composition-id="main" data-start="0" data-duration="3" data-width="1920" data-height="1080" data-fps="30">
+<script>
+// Reference template for the style system (TASK-106, contract tokens-v1).
+// Colours, type, motion, spacing and shape come from VG.S (variables.style). The numbers left
+// in this file are layout ratios of this design, never sizes, colours, eases or durations.
+// Axes (manifest in packages/shared/src/style/axes.ts): layout, title, highlight, marker, entrance, background.
+const VG = window.VGInit();
+const { v, W, H, END, portrait, box, stage, tl, at, el, fitText, S: givenStyle, M, axis, alpha, C } = VG;
+// The server always sends variables.style. This default keeps a direct call (no style) from throwing.
+function fallbackListStyle() {
+  const root = document.getElementById("root");
+  if (root) {
+    root.style.setProperty("--vg-w-display", "700");
+    root.style.setProperty("--vg-w-body", "400");
+    root.style.setProperty("--vg-track-display", "-0.01em");
+    root.style.setProperty("--vg-track-caps", "0.08em");
+    root.style.setProperty("--vg-case-display", "none");
+  }
+  const short = Math.min(W, H);
+  const base = short * (portrait ? 0.04 : 0.042);
+  const step = (n) => Math.round(base * Math.pow(1.3, n));
+  return {
+    color: { mode: "dark", bg: C.bg, bgAlt: C.bgLight, bgDeep: C.bgDark, text: C.text, textMuted: C.muted || C.text, accent: C.accent, onAccent: C.bgDark, accent2: C.accent },
+    type: { xs: step(-1), sm: step(0), md: step(1), lg: step(2), xl: step(3), xxl: step(4), lineHeight: 1.3, lineHeightTight: 1.22, trackDisplay: -0.01, trackCaps: 0.08, caseDisplay: "none" },
+    layout: { family: "editorial", align: "start", density: 1, radius: 0.4, stroke: 1 },
+    space: Math.round(base),
+  };
+}
+const S = givenStyle || fallbackListStyle();
+const K = S.color, T = S.type, L = S.layout, SP = S.space;
+const m = Math.min(W, H);
+const items = (Array.isArray(v.items) ? v.items : []).map((x) => String(x || "").trim()).filter(Boolean).slice(0, 6);
+const n = items.length;
+const layout = axis("layout", ["rows", "cards", "rail"]);
+const titleLook = axis("title", ["bar", "underline", "tag"]);
+const highlight = axis("highlight", ["bar", "pop", "none"], v.highlight);
+const marker = axis("marker", ["number", "dot"], v.marker);
+const settle = v.settle !== false;
+const centred = L.align === "center";
+const flexAlign = centred ? "center" : "flex-start";
+const strokePx = (share, min) => Math.max(min, Math.round(m * share * L.stroke));
+
+const titleText = String(v.title || "").trim();
+const titleH = titleText ? Math.round(box.h * (portrait ? 0.13 : 0.17)) : 0;
+const gapH = titleText ? Math.round(box.h * 0.035 * L.density) : 0;
+stage.style.gap = gapH + "px";
+if (titleText) {
+  const title = el("div", "title", stage);
+  const markW = strokePx(0.011, 6);
+  const gap = Math.round(SP * 0.55);
+  title.style.cssText = `height:${titleH}px;gap:${gap}px;align-items:center;justify-content:${flexAlign}` + (titleLook === "underline" ? `;flex-direction:column;align-items:${flexAlign};justify-content:center;gap:${Math.round(gap * 0.5)}px` : "");
+  let mark = null;
+  let maxW = box.w;
+  let maxFs = portrait ? T.lg : T.lg;
+  if (titleLook === "bar") {
+    mark = el("div", "", title);
+    mark.style.cssText = `flex:none;width:${markW}px;height:62%;border-radius:${Math.round(markW * L.radius)}px;background:${K.accent}`;
+    maxW = box.w - markW - gap - 2;
+  }
+  const label = el("div", titleLook === "tag" ? "tag" : "", title, titleText);
+  if (titleLook === "tag") {
+    const padX = Math.round(SP * 0.8);
+    label.style.cssText = `padding:${Math.round(SP * 0.3)}px ${padX}px;border-radius:${Math.round(titleH * 0.5 * L.radius)}px;background:${K.accent};color:${K.onAccent}`;
+    maxW = box.w - 2 * padX;
+    maxFs = T.md;
+  }
+  if (centred) label.style.textAlign = "center";
+  if (titleLook === "underline") {
+    mark = el("div", "", title);
+    mark.style.cssText = `flex:none;width:${Math.round(box.w * 0.14)}px;height:${markW}px;border-radius:${Math.round(markW * L.radius)}px;background:${K.accent}`;
+  }
+  const labelH = titleLook === "underline" ? titleH - markW - gap : titleLook === "tag" ? titleH * 0.6 : titleH;
+  VG.layout(() => {
+    label.style.width = titleLook === "tag" ? "auto" : Math.floor(maxW) + "px";
+    fitText(label, { maxW, maxH: labelH, maxLines: titleLook === "tag" ? 1 : 2, maxFs, minFs: Math.round(T.xs * 0.5), lh: T.lineHeightTight });
+    if (titleLook !== "underline" || !centred) label.style.width = "auto";
+  });
+  label.style.lineHeight = String(T.lineHeightTight);
+  tl.from(label, { opacity: 0, yPercent: 30, duration: M.base, ease: M.move }, at(0, M.base));
+  if (mark) tl.from(mark, Object.assign({ duration: M.base, ease: M.enter }, titleLook === "bar" ? { scaleY: 0 } : { scaleX: 0, transformOrigin: centred ? "50% 50%" : "0% 50%" }), at(0, M.base));
+}
+
+// Geometry. rows and rail: one column, or two on 16:9 from five items up (read down the first
+// column, then the second). cards: a grid read row by row, the marker above the text when a card is narrow.
+const zoneH = box.h - titleH - gapH;
+const colGap = Math.round(SP * 1.2);
+const rowGap = Math.round(SP * (layout === "cards" ? 0.7 : 0.35));
+const cards = layout === "cards";
+const cols = cards ? (portrait ? (n >= 5 ? 2 : 1) : (n <= 3 ? Math.max(1, n) : Math.ceil(n / 2))) : (!portrait && n >= 5 ? 2 : 1);
+const perCol = Math.ceil(n / cols);
+const stacked = cards && (!portrait || cols === 2);
+const colW = Math.floor((box.w - colGap * (cols - 1)) / cols);
+const rowCap = stacked ? (portrait ? 0.24 : 0.5) : (portrait ? 0.27 : 0.2);
+const rowH = Math.floor(Math.min((zoneH - rowGap * (perCol - 1)) / Math.max(1, perCol), box.h * rowCap));
+const grid = el("div", "grid", stage);
+grid.style.cssText = `width:${box.w}px;height:${zoneH}px;grid-template-columns:repeat(${cols},${colW}px);grid-template-rows:repeat(${perCol},${rowH}px);grid-auto-flow:${cards ? "row" : "column"};column-gap:${colGap}px;row-gap:${rowGap}px`;
+if (portrait) grid.style.alignContent = "start"; // fill the tall frame from the title down
+const mkBase = stacked ? Math.min(rowH * 0.26, T.sm * 2.2) : Math.min(rowH * 0.62, T.sm * (portrait ? 2.7 : 2.1));
+const mk = Math.round(mkBase * (layout === "rail" ? 0.8 : 1));
+const padX = Math.round((stacked ? colW * 0.07 : rowH * 0.22) * L.density);
+const padY = stacked ? Math.round(rowH * 0.1 * L.density) : 0;
+const gapX = Math.round(mk * 0.42);
+const POP = 1.12;
+const textW = Math.floor((stacked ? colW - 2 * padX : colW - 2 * padX - mk - gapX) / (highlight === "pop" ? POP : 1));
+const textH = stacked ? rowH - 2 * padY - mk - gapX : rowH * 0.84;
+const radius = Math.round(rowH * (stacked ? 0.2 : 0.5) * L.radius);
+const rows = items.map((item, i) => {
+  const row = el("div", "row", grid);
+  row.style.cssText = `height:${rowH}px;padding:${padY}px ${padX}px;gap:${gapX}px;` + (stacked
+    ? `flex-direction:column;justify-content:center;align-items:${flexAlign};text-align:${centred ? "center" : "left"}`
+    : "align-items:center");
+  if (cards) {
+    const bg = el("div", "bg", row);
+    bg.style.cssText = `border-radius:${radius}px;background:${K.bgAlt};box-shadow:inset 0 0 0 ${strokePx(0.002, 2)}px ${alpha(K.text, 0x26)}`;
+  }
+  const hl = el("div", "hl", row);
+  hl.style.cssText = `border-radius:${radius}px;background:${alpha(K.accent, 0x26)};box-shadow:inset ` + (cards
+    ? `0 0 0 ${strokePx(0.004, 3)}px ${K.accent}`
+    : layout === "rail" ? `0 0 0 0 ${K.accent}` : `${strokePx(0.007, 5)}px 0 0 ${K.accent}`);
+  const mark = el("div", "mk", row);
+  mark.style.cssText = `width:${mk}px;height:${mk}px;font-size:${Math.round(mk * 0.5)}px`;
+  const dot = marker === "dot";
+  const inset = dot ? `;inset:${Math.round(mk * 0.3)}px` : "";
+  const ring = el("div", "", mark, dot ? "" : String(i + 1));
+  ring.style.cssText = `color:${K.accent};background:${layout === "rail" ? K.bg : "transparent"};box-shadow:inset 0 0 0 ${Math.max(2, Math.round(mk * 0.07 * L.stroke))}px ${K.accent}` + inset;
+  const fill = el("div", "", mark, dot ? "" : String(i + 1));
+  fill.style.cssText = `color:${K.onAccent};background:${K.accent}` + inset;
+  const text = el("div", "it", row, item);
+  text.style.width = textW + "px";
+  return { row, hl, fill, text, mark };
+});
+// rail: a line through the marker centres of each column, drawn as the items arrive.
+const rails = [];
+if (layout === "rail" && n > 1) {
+  const lineW = strokePx(0.003, 2);
+  for (let c = 0; c < cols; c += 1) {
+    const count = Math.min(perCol, n - c * perCol);
+    if (count < 2) continue;
+    const line = el("div", "rail", grid);
+    grid.insertBefore(line, grid.firstChild);
+    const top = (zoneH - (perCol * rowH + (perCol - 1) * rowGap)) / 2;
+    line.style.cssText = `left:${Math.round(c * (colW + colGap) + padX + mk / 2 - lineW / 2)}px;top:${Math.round((portrait ? 0 : top) + rowH / 2)}px;width:${lineW}px;height:${Math.round((count - 1) * (rowH + rowGap))}px;background:${alpha(K.text, 0x40)};transform-origin:50% 0%`;
+    rails.push({ line, first: c * perCol, last: c * perCol + count - 1 });
+  }
+}
+// One text size for the whole list.
+VG.layout(() => {
+  if (!n) return;
+  rows.forEach((r) => { r.text.style.lineHeight = String(T.lineHeightTight); });
+  const maxFs = Math.min(rowH * 0.46, portrait ? T.xl : T.lg);
+  const fitAll = (maxLines) => Math.min(...rows.map((r) => fitText(r.text, { maxW: textW, maxH: textH, maxLines, maxFs, minFs: Math.round(T.xs * 0.5), lh: T.lineHeightTight })));
+  // One line per item unless that costs too much size; two lines never fill the whole row.
+  const one = fitAll(1);
+  const two = fitAll(stacked ? 3 : 2);
+  const fs = one >= two * 0.74 ? one : two;
+  rows.forEach((r) => { r.text.style.fontSize = fs + "px"; });
+});
+
+// Motion: each item arrives on its time and holds the highlight until the next one.
+const times = VG.times(n, v.itemTimes, { from: titleText ? 0.35 : 0.1, spread: 0.7, enter: 0.75 });
+const settleAt = Math.max(0, END - 0.35);
+const popOrigin = stacked && centred ? "50% 50%" : "0% 50%";
+rails.forEach((rail) => {
+  const from = times[rail.first];
+  const span = Math.max(M.base, times[rail.last] - from);
+  tl.from(rail.line, { scaleY: 0, duration: span, ease: M.move }, at(from, span));
+});
+rows.forEach((r, i) => {
+  const t = times[i];
+  const next = i + 1 < n ? times[i + 1] : settleAt;
+  VG.enter(r.row, t);
+  if (highlight === "bar") tl.fromTo(r.hl, { opacity: 0, scaleX: 0.6, transformOrigin: "0% 50%" }, { opacity: 1, scaleX: 1, duration: M.base, ease: M.enter }, at(t, M.base));
+  else tl.set(r.hl, { opacity: 0 }, 0);
+  if (highlight === "none") return;
+  // pop: the item being read grows, turns to the accent colour and its marker bounces.
+  if (highlight === "pop") {
+    tl.fromTo(r.text, { scale: 1, color: K.text }, { scale: POP, color: K.accent, transformOrigin: popOrigin, duration: M.base, ease: M.emphasis, immediateRender: false }, at(t + 0.12, M.base));
+    tl.fromTo(r.mark, { scale: 0.4 }, { scale: 1.22, duration: M.base, ease: M.emphasis }, at(t, M.base));
+  }
+  // Hand over to the next item (or settle at the end): the highlight leaves, the text steps back.
+  const leave = i + 1 < n || settle;
+  if (!leave || next <= t + 0.45) return;
+  if (highlight === "bar") tl.to(r.hl, { opacity: 0, duration: M.fast }, at(next, M.fast));
+  if (highlight === "pop") {
+    tl.to(r.text, { scale: 1, color: K.text, duration: M.fast }, at(next, M.fast));
+    tl.to(r.mark, { scale: 1, duration: M.fast }, at(next, M.fast));
+  }
+  if (i + 1 < n) {
+    tl.to(r.text, { opacity: 0.62, duration: M.fast }, at(next, M.fast));
+    tl.to(r.fill, { opacity: 0, duration: M.fast }, at(next, M.fast));
+    if (settle && settleAt > next + 0.3) {
+      tl.to(r.text, { opacity: 1, duration: M.fast }, at(settleAt, M.fast));
+      tl.to(r.fill, { opacity: 1, duration: M.fast }, at(settleAt, M.fast));
+    }
+  }
+});
+VG.finish();
+</script></div></body></html>

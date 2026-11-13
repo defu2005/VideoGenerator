@@ -1,7 +1,3 @@
-import {
-  YOUTUBE_COMMENT_INSERT_UNITS,
-  YOUTUBE_COMMENT_LIST_UNITS,
-} from "@vg/shared";
 import type { YoutubeQuotaTracker } from "../publishing/youtubeQuota.js";
 import { CommentHttpError, throwIfBad } from "./http.js";
 import { pullUntilOld } from "./paging.js";
@@ -53,7 +49,7 @@ export class YoutubeCommentFetcher implements CommentPlatformClient {
     text: string;
     signal: AbortSignal;
   }): Promise<{ replyExternalId: string }> {
-    this.charge(YOUTUBE_COMMENT_INSERT_UNITS);
+    this.charge("comments.insert");
     const url = new URL(`${DATA_API}/comments`);
     url.searchParams.set("part", "snippet");
     const response = await this.fetchImpl(url.toString(), {
@@ -67,7 +63,6 @@ export class YoutubeCommentFetcher implements CommentPlatformClient {
         snippet: { parentId: input.externalId, textOriginal: input.text },
       }),
     });
-    this.quota?.record(YOUTUBE_COMMENT_INSERT_UNITS);
     await throwIfBad(response, "YouTube comments.insert");
     const body = (await response.json()) as { id?: string };
     if (!body.id) throw new CommentHttpError("YouTube comments.insert không trả id", 502, false);
@@ -94,7 +89,7 @@ export class YoutubeCommentFetcher implements CommentPlatformClient {
   }
 
   private async fetchPage(input: CommentPullInput, pageToken: string | null): Promise<CommentPage> {
-    this.charge(YOUTUBE_COMMENT_LIST_UNITS);
+    this.charge("commentThreads.list");
     const url = new URL(`${DATA_API}/commentThreads`);
     url.searchParams.set("part", "snippet,replies");
     url.searchParams.set("videoId", input.externalId);
@@ -105,7 +100,6 @@ export class YoutubeCommentFetcher implements CommentPlatformClient {
       signal: input.signal,
       headers: { Authorization: `Bearer ${input.accessToken}` },
     });
-    this.quota?.record(YOUTUBE_COMMENT_LIST_UNITS);
     await throwIfBad(response, "YouTube commentThreads.list");
     const body = (await response.json()) as { items?: YtThread[]; nextPageToken?: string };
     const comments: FetchedComment[] = [];
@@ -135,8 +129,8 @@ export class YoutubeCommentFetcher implements CommentPlatformClient {
     await throwIfBad(response, "YouTube comments.setModerationStatus");
   }
 
-  private charge(units: number): void {
-    if (this.quota?.wouldExceed(units)) {
+  private charge(method: string): void {
+    if (this.quota && !this.quota.charge(method)) {
       throw new CommentHttpError("Hết hạn mức YouTube Data API trong ngày", 429, true);
     }
   }

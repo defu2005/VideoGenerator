@@ -14,7 +14,7 @@ import type { ProjectService } from "../services/projectService.js";
 import { requireProject } from "../services/projectService.js";
 import { researchPrompt } from "../stages/research/prompt.js";
 import { mergedStoryPrompt } from "../stages/script/mergedStoryPrompt.js";
-import { scriptPrompt } from "../stages/script/prompt.js";
+import { deeperResearchDepth, scriptPrompt } from "../stages/script/prompt.js";
 import type { AppConfig } from "../lib/config.js";
 import type { GuidelineService } from "../guidelines/service.js";
 import { getProfilePromptContext } from "../services/profileService.js";
@@ -89,12 +89,13 @@ export function registerScriptRoutes(
     const promptContext = sqlite ? getProfilePromptContext(sqlite, project.profileId) : undefined;
     const channelDirection = promptContext?.direction;
     const learnedNotes = promptContext?.learnedNotes;
+    const researchDepth = deeperResearchDepth("standard", project);
     const prompt = stage === "STORY"
-      ? mergedStoryPrompt(project, config.SPEECH_WORDS_PER_MINUTE, "standard", storyGuidance, channelDirection, learnedNotes)
+      ? mergedStoryPrompt(project, config.SPEECH_WORDS_PER_MINUTE, researchDepth, storyGuidance, channelDirection, learnedNotes)
       : stage === "RESEARCH" && researchMode === "merged"
-        ? mergedStoryPrompt(project, config.SPEECH_WORDS_PER_MINUTE, "standard", storyGuidance, channelDirection, learnedNotes)
+        ? mergedStoryPrompt(project, config.SPEECH_WORDS_PER_MINUTE, researchDepth, storyGuidance, channelDirection, learnedNotes)
         : stage === "RESEARCH"
-          ? researchPrompt(project, "standard", guidelines.guidanceFor(project, ["script"]), channelDirection)
+          ? researchPrompt(project, researchDepth, guidelines.guidanceFor(project, ["script"]), channelDirection)
           : scriptPrompt(project, research, config.SPEECH_WORDS_PER_MINUTE, storyGuidance, channelDirection, learnedNotes);
     const schema = stage === "STORY"
       ? MergedStorySchema

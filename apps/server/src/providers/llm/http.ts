@@ -1,5 +1,6 @@
 import { LlmError } from "./types.js";
 import { isDailyQuotaMessage } from "@vg/shared";
+import { noteExternalHttp } from "../../knowledge/httpSignal.js";
 
 export async function fetchLlmJson(
   url: string,
@@ -17,6 +18,10 @@ export async function fetchLlmJson(
     let response: Response;
     try {
       response = await fetch(url, { ...init, signal: controller.signal });
+      noteExternalHttp({
+        provider: hostOf(url), endpoint: pathOf(url), status: response.status,
+        headers: headerNotes(response.headers), category: "D1",
+      });
     } catch {
       if (controller.signal.aborted) {
         throw new LlmError("LLM request timed out or was aborted", "LLM_TIMEOUT", true);
@@ -36,6 +41,7 @@ export async function fetchLlmJson(
         }
         throw new LlmError("LLM provider rate limit exceeded", "LLM_RATE_LIMIT", true, status, undefined, retryAfterMs);
       }
+      if (status === 402) throw new LlmError(body.slice(0, 300) || "LLM payment required (credit exhausted)", "LLM_QUOTA_EXHAUSTED", false, status, undefined, retryAfterMs);
       if (status === 400) throw new LlmError("LLM provider rejected the request", "LLM_BAD_REQUEST", false, status);
       if (status >= 500) throw new LlmError("LLM provider is unavailable", "LLM_UNAVAILABLE", true, status);
       throw new LlmError(`LLM provider request failed with status ${status}`, "LLM_BAD_REQUEST", false, status);
@@ -44,6 +50,7 @@ export async function fetchLlmJson(
     try {
       return await response.json() as unknown;
     } catch {
+      noteExternalHttp({ provider: hostOf(url), endpoint: pathOf(url), status: response.status, schemaOk: false, category: "D1" });
       if (controller.signal.aborted) {
         throw new LlmError("LLM request timed out or was aborted", "LLM_TIMEOUT", true);
       }
@@ -84,4 +91,21 @@ export function parseRetryAfterMs(headers: Headers, nowMs: number): number | und
 
 function isQuotaBody(body: string): boolean {
   return isDailyQuotaMessage(body) || /quota|resource_exhausted|exhausted/i.test(body);
+}
+
+function hostOf(url: string): string {
+  try { return new URL(url).host; } catch { return "llm"; }
+}
+
+function pathOf(url: string): string {
+  try { return new URL(url).pathname; } catch { return url; }
+}
+
+function headerNotes(headers: Headers): Record<string, string> {
+  const notes: Record<string, string> = {};
+  for (const name of ["deprecation", "sunset", "warning", "retry-after"]) {
+    const value = headers.get(name);
+    if (value) notes[name] = value;
+  }
+  return notes;
 }

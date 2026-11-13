@@ -12,6 +12,8 @@ export type LlmErrorCode =
   | "LLM_LIMIT_TOO_SMALL"
   | "LLM_QUOTA_EXHAUSTED"
   | "LLM_QUOTA_WAIT"
+  | "LLM_ALL_PROVIDERS_EXHAUSTED"
+  | "AUTONOMY_BUDGET_WAIT"
   | "VISION_PROVIDER_REQUIRED"
   | "FFMPEG_MISSING";
 
@@ -21,9 +23,15 @@ export type LlmProviderLimits = {
 };
 
 export type LlmProviderCapabilities = {
+  embeddings?: boolean;
+  nativeFunctions?: boolean;
   vision: boolean;
   maxImagesPerCall: number;
+  /** false = provider cannot do structured (JSON) output; failover skips it for structured calls. */
+  json?: boolean;
 };
+
+export type LlmFunction = { name: string; description: string; parameters: Record<string, unknown> };
 
 export type LlmImageAttachment = {
   path: string;
@@ -31,6 +39,7 @@ export type LlmImageAttachment = {
 };
 
 export type LlmRequest = {
+  functions?: LlmFunction[];
   schemaName?: string;
   jsonSchema?: Record<string, unknown>;
   model: string;
@@ -59,6 +68,7 @@ export interface LlmProvider {
   capabilities?: LlmProviderCapabilities;
   configured?: boolean;
   hint?: string;
+  embed?(req: { model: string; texts: string[] }, signal: AbortSignal): Promise<{ vectors: number[][]; usage?: { inputTokens: number } }>;
   generate(req: LlmRequest, signal: AbortSignal): Promise<LlmResponse>;
 }
 

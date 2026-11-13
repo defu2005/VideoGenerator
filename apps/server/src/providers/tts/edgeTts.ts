@@ -10,14 +10,37 @@ import type { TtsCue, TtsProvider, TtsVoice } from "./types.js";
 type EdgeTtsDependencies = {
   spawnProcess: typeof spawn;
   probeDuration: typeof probeDurationSec;
-  sleep: (ms: number) => Promise<void>;
+  sleep: (ms: number, signal?: AbortSignal) => Promise<void>;
 };
 
 const defaultDependencies: EdgeTtsDependencies = {
   spawnProcess: spawn,
   probeDuration: probeDurationSec,
-  sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
+  sleep: (ms, signal) => new Promise((resolve, reject) => {
+    const timer = setTimeout(() => {
+      signal?.removeEventListener("abort", onAbort);
+      resolve();
+    }, ms);
+    const onAbort = () => {
+      clearTimeout(timer);
+      reject(new DOMException("aborted", "AbortError"));
+    };
+    if (signal?.aborted) {
+      onAbort();
+      return;
+    }
+    signal?.addEventListener("abort", onAbort, { once: true });
+  }),
 };
+
+const NETWORK_BACKOFF_MS = [30_000, 30_000, 30_000] as const;
+
+export function isEdgeNetworkError(message: string): boolean {
+  if (/\b(401|403)\b/.test(message) && /handshake|websocket|wsserver/i.test(message)) return false;
+  if (/noaudioreceived|no audio received/i.test(message)) return false;
+  if (/chưa cài edge-tts|enoent/i.test(message)) return false;
+  return /getaddrinfo|enotfound|eai_again|name or service not known|temporary failure in name resolution|nodename nor servname|cannot connect to host|clientconnectorerror|serverdisconnectederror|clientoserror|econnreset|econnrefused|etimedout|enetunreach|ehostunreach|connection reset|timeouterror|timed out/i.test(message);
+}
 
 /** Backoff between the 6 NoAudioReceived attempts (5 waits). */
 const NO_AUDIO_BACKOFF_MS = [3000, 10000, 20000, 40000, 60000] as const;
@@ -120,6 +143,7 @@ export class EdgeTtsProvider implements TtsProvider {
     const srtPath = `${outPath}.srt`;
     writeFileSync(textPath, text, "utf8");
     try {
+      let networkAttempts = 0;
       for (let attempt = 0; attempt < MAX_NO_AUDIO_ATTEMPTS; attempt += 1) {
         if (signal?.aborted) throw new DOMException("aborted", "AbortError");
         rmSync(outPath, { force: true });
@@ -166,11 +190,27 @@ export class EdgeTtsProvider implements TtsProvider {
             throw new StageError("Chưa cài edge-tts — chạy: pip install edge-tts", "TTS_BINARY_MISSING", false);
           }
           const message = error instanceof Error ? error.message : String(error);
+          if (isEdgeNetworkError(message)) {
+            networkAttempts += 1;
+            if (networkAttempts >= 4) {
+              const retryAt = new Date(Date.now() + 5 * 60_000).toISOString();
+              throw new StageError(
+                "Không kết nối được dịch vụ giọng đọc Edge (lỗi mạng hoặc DNS). Đã thử 4 lần trong khoảng 90 giây. App sẽ tự chạy lại bước Giọng đọc sau 5 phút; nếu vẫn lỗi, kiểm tra mạng hoặc chọn nhà cung cấp giọng khác ở trang Giọng đọc (TTS).",
+                "TTS_NETWORK",
+                true,
+                retryAt,
+              );
+            }
+            console.warn(`[edge-tts] network retry file=${basename(outPath)} attempt=${networkAttempts + 1}/4 reason=${message.slice(0, 120)}`);
+            await this.dependencies.sleep(NETWORK_BACKOFF_MS[networkAttempts - 1] ?? 30_000, signal);
+            attempt -= 1;
+            continue;
+          }
           const noAudio = /noaudioreceived|no audio received/i.test(message);
           if (!noAudio) throw error;
         }
         if (attempt < MAX_NO_AUDIO_ATTEMPTS - 1) {
-          await this.dependencies.sleep(NO_AUDIO_BACKOFF_MS[attempt]);
+          await this.dependencies.sleep(NO_AUDIO_BACKOFF_MS[attempt], signal);
           if (signal?.aborted) throw new DOMException("aborted", "AbortError");
         }
       }
@@ -185,8 +225,9 @@ export class EdgeTtsProvider implements TtsProvider {
   }
 
   private async runCli(args: string[], signal?: AbortSignal): Promise<string> {
-    return new Promise((resolve, reject) => {
-      const child = this.dependencies.spawnProcess(this.binaryPath!, args, {
+    const isWin = process.platform === "win32";
+    const run = (bin: string, cliArgs: string[]) => new Promise<string>((resolve, reject) => {
+      const child = this.dependencies.spawnProcess(bin, cliArgs, {
         env: { ...process.env, PYTHONUTF8: "1", PYTHONIOENCODING: "utf-8" },
         shell: false,
         stdio: ["ignore", "pipe", "pipe"],
@@ -203,7 +244,7 @@ export class EdgeTtsProvider implements TtsProvider {
         clearTimeout(timer);
         signal?.removeEventListener("abort", onAbort);
         if (code === 0) resolve(`${stdout}\n${stderr}`.trim());
-        else reject(new Error(stderr || stdout || `edge-tts exited with code ${code}`));
+        else reject(new Error(stderr || stdout || `${bin} exited with code ${code}`));
       });
       child.on("error", (error) => {
         clearTimeout(timer);
@@ -211,5 +252,15 @@ export class EdgeTtsProvider implements TtsProvider {
         reject(error);
       });
     });
+
+    try {
+      return await run(this.binaryPath || "edge-tts", args);
+    } catch (err) {
+      const isBlocked = err instanceof Error && ("code" in err ? (err.code === "UNKNOWN" || err.code === "EACCES") : err.message.includes("spawn UNKNOWN"));
+      if (isWin && isBlocked) {
+        return await run("python", ["-m", "edge_tts", ...args]);
+      }
+      throw err;
+    }
   }
 }

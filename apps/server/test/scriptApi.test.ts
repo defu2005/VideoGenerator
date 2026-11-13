@@ -6,6 +6,7 @@ import Database from "better-sqlite3";
 import { afterAll, afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { Project } from "@vg/shared";
 import { buildApp } from "../src/app.js";
+import { testActor } from "./testActor.js";
 import { parseConfig, type AppConfig } from "../src/lib/config.js";
 import { MergedStorySchema, ResearchNotesSchema, activeGuidelines, guidelinePromptBlock } from "@vg/shared";
 import { mergedStoryPrompt } from "../src/stages/script/mergedStoryPrompt.js";
@@ -27,7 +28,7 @@ beforeEach(() => {
     LLM_DEFAULT_PROVIDER: "mock",
     ANTHROPIC_API_KEY: "never-return-this",
   });
-  app = buildApp({ config });
+  app = buildApp({ testActor,  config });
 });
 
 afterEach(async () => {
@@ -230,6 +231,34 @@ describe("script API", () => {
     }));
     expect(response.body).not.toContain("never-return-this");
     expect(response.json().find((provider: { id: string }) => provider.id === "ollama"))
-      .toMatchObject({ configured: false, hint: "Set OLLAMA_MODEL" });
+      .toMatchObject({ configured: false, hint: "Nhập model cho Ollama trong Kết nối → AI." });
+  });
+
+  it("resets the revise round when the user saves or regenerates the script", async () => {
+    const project = await createProject();
+    const saved = await app.inject({ method: "PUT", url: `/api/projects/${project.id}/script`, payload: userScript });
+    expect(saved.statusCode).toBe(200);
+    const sqlite = new Database(config.DATABASE_PATH);
+    sqlite.prepare("UPDATE scripts SET revise_round = 2 WHERE project_id = ?").run(project.id);
+    sqlite.close();
+    const edited = await app.inject({
+      method: "PUT",
+      url: `/api/projects/${project.id}/script`,
+      payload: { ...userScript, hook: "A changed hook." },
+    });
+    expect(edited.statusCode).toBe(200);
+    const afterSave = new Database(config.DATABASE_PATH);
+    expect(afterSave.prepare("SELECT revise_round FROM scripts WHERE project_id = ?").get(project.id)).toEqual({ revise_round: 0 });
+    afterSave.prepare("UPDATE scripts SET revise_round = 2 WHERE project_id = ?").run(project.id);
+    afterSave.close();
+    const rerun = await app.inject({
+      method: "POST",
+      url: `/api/projects/${project.id}/pipeline/run`,
+      payload: { stage: "SCRIPT" },
+    });
+    expect(rerun.statusCode).toBe(202);
+    const afterRun = new Database(config.DATABASE_PATH);
+    expect(afterRun.prepare("SELECT revise_round FROM scripts WHERE project_id = ?").get(project.id)).toEqual({ revise_round: 0 });
+    afterRun.close();
   });
 });

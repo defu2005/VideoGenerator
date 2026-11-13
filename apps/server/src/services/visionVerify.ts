@@ -7,6 +7,7 @@ import {
   type SceneVisionMeta,
   type VisionCheck,
   type VisionIssue,
+  normalizeVisionCheckBatch,
   VisionCheckBatchSchema,
   VisionConsistencySchema,
   VisionResearchSchema,
@@ -53,6 +54,8 @@ export type VisionSceneResult = {
   needsAttention: boolean;
   reason?: string;
   reSearchHistory: NonNullable<SceneVisionMeta["reSearchHistory"]>;
+  visionBatchFailures: number;
+  visionSkipped: number;
   usage: { llmCalls: number; inputTokens: number; outputTokens: number; calls: LlmCallUsage[] };
 };
 
@@ -81,7 +84,7 @@ export function requireVisionRoute(
   } catch (error) {
     if (error instanceof LlmError && error.code === "VISION_PROVIDER_REQUIRED") {
       throw new StageError(
-        "MAX cần route vision. Vào Cài đặt → Mô hình AI và chọn provider hỗ trợ ảnh (anthropic, gemini, claude-cli, copilot-cli, …).",
+        "MAX cần route vision. Vào Cài đặt → Mô hình AI và chọn provider hỗ trợ ảnh (anthropic, gemini, claude-cli, copilot-cli) hoặc model OmniRoute grok-cli/grok-4.7.",
         "VISION_PROVIDER_REQUIRED",
         false,
       );
@@ -106,51 +109,40 @@ export async function verifySceneVision(input: {
   const checks = new Map<string, VisionCheck>();
   const scores = new Map<string, number>();
   const reSearchHistory: NonNullable<SceneVisionMeta["reSearchHistory"]> = [];
+  let visionBatchFailures = 0;
+  let visionSkipped = 0;
   let candidates = [...input.scene.candidates];
   const threshold = input.budget.visionThreshold;
   const visionCacheDir = join(projectDir(input.config.DATA_DIR, input.project.id), "vision-cache");
   const appRouting = getAppLlmSettings(input.sqlite);
   const cache = new LlmCache(input.sqlite, input.config.LLM_CACHE_ENABLED);
 
-  const runCheck = async (batch: VisionCandidateInput[]) => {
-    const withLocal = batch.filter((candidate) => candidate.localPath);
-    if (!withLocal.length) return;
-    const route = input.registry.resolveTask("visionCheck", input.project, appRouting);
-    const prompt = buildVisionCheckPrompt({
-      narration: input.scene.narration,
-      visualDescription: input.scene.visualDescription,
-      aspectRatio: input.aspectRatio,
-      images: withLocal.map((candidate) => ({ label: candidate.label })),
-    });
-    const generated = await generateRoutedStructured({
-      registry: input.registry,
-      route,
-      task: "visionCheck",
-      system: prompt.system,
-      prompt: prompt.prompt,
-      schema: VisionCheckBatchSchema,
-      schemaName: "VisionCheck",
-      schemaVersion: "1",
-      maxOutputTokens: 2_000,
-      repairAttempts: 1,
-      signal: input.signal,
-      cache,
-      logger: input.logger,
-      images: withLocal.map((candidate) => ({ path: candidate.localPath!, label: candidate.label })),
-      visionCacheDir,
-    });
-    mergeUsage(usage, generated.usage);
-    const checkedAt = new Date().toISOString();
-    for (const image of generated.value.images) {
+  const visionNormalize = (raw: unknown) => {
+    const result = normalizeVisionCheckBatch(raw);
+    if (result.droppedIssues > 0) {
+      input.logger?.warn({ droppedIssues: result.droppedIssues, sceneId: input.scene.sceneId }, "Vision batch normalized unknown issue labels");
+    } else {
+      input.logger?.debug?.({ droppedIssues: 0, sceneId: input.scene.sceneId }, "Vision batch normalized");
+    }
+    return result.value;
+  };
+
+  const applyVisionResults = (
+    withLocal: VisionCandidateInput[],
+    images: Array<{ label: string; fit: number; depicts: string; issues: VisionIssue[]; cropOk: boolean }>,
+    model: string,
+    checkedAt: string,
+  ) => {
+    for (const image of images) {
       const candidate = withLocal.find((item) => item.label === image.label);
       if (!candidate) continue;
-      const fit = applyVisionIssueCap(image.fit, image.issues as VisionIssue[]);
+      const fit = applyVisionIssueCap(image.fit, image.issues);
       const check: VisionCheck = {
         fit,
         depicts: image.depicts,
-        issues: image.issues as VisionIssue[],
+        issues: image.issues,
         cropOk: image.cropOk,
-        model: generated.model,
+        model,
         checkedAt,
       };
       checks.set(candidate.id, check);
@@ -160,6 +152,77 @@ export async function verifySceneVision(input: {
         codeScore: candidate.relevanceScore,
       }));
     }
+  };
+
+  const callVisionBatch = async (candidates: VisionCandidateInput[]) => {
+    const route = input.registry.resolveTask("visionCheck", input.project, appRouting);
+    const prompt = buildVisionCheckPrompt({
+      narration: input.scene.narration,
+      visualDescription: input.scene.visualDescription,
+      aspectRatio: input.aspectRatio,
+      images: candidates.map((candidate) => ({ label: candidate.label })),
+    });
+    return generateRoutedStructured({
+      registry: input.registry,
+      route,
+      task: "visionCheck",
+      system: prompt.system,
+      prompt: prompt.prompt,
+      schema: VisionCheckBatchSchema,
+      schemaName: "VisionCheck",
+      schemaVersion: "2",
+      maxOutputTokens: 2_000,
+      repairAttempts: 1,
+      signal: input.signal,
+      cache,
+      logger: input.logger,
+      normalize: visionNormalize,
+      images: candidates.map((candidate) => ({ path: candidate.localPath!, label: candidate.label })),
+      visionCacheDir,
+    });
+  };
+
+  const runCheck = async (batch: VisionCandidateInput[]) => {
+    const withLocal = batch.filter((candidate) => candidate.localPath);
+    if (!withLocal.length) return;
+    const checkedAt = new Date().toISOString();
+    const isRecoverableVisionParseError = (error: unknown) =>
+      error instanceof LlmError
+      && (error.code === "LLM_INVALID_OUTPUT" || error.code === "LLM_OUTPUT_TRUNCATED");
+
+    try {
+      const generated = await callVisionBatch(withLocal);
+      mergeUsage(usage, generated.usage);
+      applyVisionResults(withLocal, generated.value.images, generated.model, checkedAt);
+      return;
+    } catch (error) {
+      if (error instanceof LlmError && error.usage) mergeUsage(usage, error.usage);
+      if (!isRecoverableVisionParseError(error)) throw error;
+    }
+
+    visionBatchFailures += 1;
+    let skipped = 0;
+    if (withLocal.length === 1) {
+      skipped = 1;
+    } else {
+      for (const candidate of withLocal) {
+        try {
+          const generated = await callVisionBatch([candidate]);
+          mergeUsage(usage, generated.usage);
+          applyVisionResults([candidate], generated.value.images, generated.model, checkedAt);
+        } catch (singleError) {
+          if (singleError instanceof LlmError && singleError.usage) mergeUsage(usage, singleError.usage);
+          if (!isRecoverableVisionParseError(singleError)) throw singleError;
+          skipped += 1;
+        }
+      }
+    }
+    visionSkipped += skipped;
+    input.logger?.warn({
+      sceneId: input.scene.sceneId,
+      batchSize: withLocal.length,
+      skipped,
+    }, "Vision batch parse failed; skipped images without vision result");
   };
 
   const topN = (list: VisionCandidateInput[]) =>
@@ -233,6 +296,8 @@ export async function verifySceneVision(input: {
       ? `Vision fit ${best.fit ?? 0}/10 dưới ngưỡng ${threshold}/10`
       : undefined,
     reSearchHistory,
+    visionBatchFailures,
+    visionSkipped,
     usage,
   };
 }

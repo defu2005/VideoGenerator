@@ -1,0 +1,6085 @@
+[
+  {
+    "id": "account.youtube.strikes",
+    "kind": "account_policy",
+    "scope": {
+      "platforms": [
+        "youtube"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "platform": "youtube",
+      "name": "Strike / cảnh báo",
+      "signal": "strikes",
+      "coverage": "manual",
+      "apiContractId": null,
+      "weeklyManualCheck": true,
+      "verification": "YouTube Studio → Dashboard → Channel violations; Account Status"
+    },
+    "evidence": [
+      {
+        "url": "https://support.google.com/youtube/answer/17014654",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://developers.google.com/youtube/data/reference/rest/v3/videos",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://support.google.com/youtube/answer/17014654",
+        "checkedAt": "2026-11-10",
+        "type": "inference"
+      }
+    ],
+    "confidence": "medium",
+    "volatility": "quarterly",
+    "watch": [
+      {
+        "url": "https://support.google.com/youtube/answer/17014654",
+        "kind": "policy_page"
+      },
+      {
+        "url": "https://developers.google.com/youtube/data/revision_history",
+        "kind": "api_revision"
+      }
+    ],
+    "status": "active",
+    "notes": "Không thấy API công khai trong phạm vi đã rà. Kết luận về độ phủ là suy luận từ tài liệu, không phải bằng chứng cấm truy cập."
+  },
+  {
+    "id": "account.youtube.suspension",
+    "kind": "account_policy",
+    "scope": {
+      "platforms": [
+        "youtube"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "platform": "youtube",
+      "name": "Đình chỉ / khóa",
+      "signal": "suspension",
+      "coverage": "manual",
+      "apiContractId": null,
+      "weeklyManualCheck": true,
+      "verification": "Email chính thức và YouTube Studio/Account Status. Video hoặc kênh biến mất không xác nhận termination."
+    },
+    "evidence": [
+      {
+        "url": "https://support.google.com/youtube/answer/2802168",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://developers.google.com/youtube/v3/docs/channels",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://support.google.com/youtube/answer/2802168",
+        "checkedAt": "2026-11-10",
+        "type": "inference"
+      }
+    ],
+    "confidence": "medium",
+    "volatility": "quarterly",
+    "watch": [
+      {
+        "url": "https://support.google.com/youtube/answer/2802168",
+        "kind": "policy_page"
+      },
+      {
+        "url": "https://developers.google.com/youtube/data/revision_history",
+        "kind": "api_revision"
+      }
+    ],
+    "status": "active",
+    "notes": "Không thấy API công khai trong phạm vi đã rà. Kết luận về độ phủ là suy luận từ tài liệu, không phải bằng chứng cấm truy cập."
+  },
+  {
+    "id": "account.youtube.channel_money",
+    "kind": "account_policy",
+    "scope": {
+      "platforms": [
+        "youtube"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "platform": "youtube",
+      "name": "Kiếm tiền cấp kênh",
+      "signal": "channel_money",
+      "coverage": "manual",
+      "apiContractId": null,
+      "weeklyManualCheck": true,
+      "verification": "Studio → Earn. estimatedRevenue không phải trạng thái YPP."
+    },
+    "evidence": [
+      {
+        "url": "https://support.google.com/youtube/answer/72851",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://developers.google.com/youtube/analytics/reference/reports/query",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://support.google.com/youtube/answer/72851",
+        "checkedAt": "2026-11-10",
+        "type": "inference"
+      }
+    ],
+    "confidence": "medium",
+    "volatility": "quarterly",
+    "watch": [
+      {
+        "url": "https://support.google.com/youtube/answer/72851",
+        "kind": "policy_page"
+      },
+      {
+        "url": "https://developers.google.com/youtube/data/revision_history",
+        "kind": "api_revision"
+      }
+    ],
+    "status": "active",
+    "notes": "Không thấy API công khai trong phạm vi đã rà. Kết luận về độ phủ là suy luận từ tài liệu, không phải bằng chứng cấm truy cập."
+  },
+  {
+    "id": "account.youtube.video_money",
+    "kind": "account_policy",
+    "scope": {
+      "platforms": [
+        "youtube"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "platform": "youtube",
+      "name": "Kiếm tiền cấp video",
+      "signal": "video_money",
+      "coverage": "manual",
+      "apiContractId": null,
+      "weeklyManualCheck": true,
+      "verification": "Studio → Content → Monetization. Doanh thu ước tính bằng 0 không chứng minh video tắt kiếm tiền."
+    },
+    "evidence": [
+      {
+        "url": "https://support.google.com/youtube/answer/9208564",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://developers.google.com/youtube/analytics/reference/reports/query",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://support.google.com/youtube/answer/9208564",
+        "checkedAt": "2026-11-10",
+        "type": "inference"
+      }
+    ],
+    "confidence": "medium",
+    "volatility": "quarterly",
+    "watch": [
+      {
+        "url": "https://support.google.com/youtube/answer/9208564",
+        "kind": "policy_page"
+      },
+      {
+        "url": "https://developers.google.com/youtube/data/revision_history",
+        "kind": "api_revision"
+      }
+    ],
+    "status": "active",
+    "notes": "Không thấy API công khai trong phạm vi đã rà. Kết luận về độ phủ là suy luận từ tài liệu, không phải bằng chứng cấm truy cập."
+  },
+  {
+    "id": "account.youtube.ads",
+    "kind": "account_policy",
+    "scope": {
+      "platforms": [
+        "youtube"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "platform": "youtube",
+      "name": "Phù hợp quảng cáo",
+      "signal": "ads",
+      "coverage": "manual",
+      "apiContractId": null,
+      "weeklyManualCheck": true,
+      "verification": "Studio → Content → biểu tượng Monetization và chi tiết review."
+    },
+    "evidence": [
+      {
+        "url": "https://support.google.com/youtube/answer/9208564",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://support.google.com/youtube/answer/9208564",
+        "checkedAt": "2026-11-10",
+        "type": "inference"
+      }
+    ],
+    "confidence": "medium",
+    "volatility": "quarterly",
+    "watch": [
+      {
+        "url": "https://support.google.com/youtube/answer/9208564",
+        "kind": "policy_page"
+      },
+      {
+        "url": "https://developers.google.com/youtube/data/revision_history",
+        "kind": "api_revision"
+      }
+    ],
+    "status": "active",
+    "notes": "Không thấy API công khai trong phạm vi đã rà. Kết luận về độ phủ là suy luận từ tài liệu, không phải bằng chứng cấm truy cập."
+  },
+  {
+    "id": "account.youtube.claims",
+    "kind": "account_policy",
+    "scope": {
+      "platforms": [
+        "youtube"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "platform": "youtube",
+      "name": "Khiếu nại bản quyền",
+      "signal": "claims",
+      "coverage": "manual",
+      "apiContractId": null,
+      "weeklyManualCheck": true,
+      "verification": "Studio → Content → Restrictions → Copyright. Content ID API chỉ cho content partner có quyền, không dùng cho OAuth creator thông thường. Quota/scope endpoint partner của app null."
+    },
+    "evidence": [
+      {
+        "url": "https://support.google.com/youtube/answer/6013276",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://developers.google.com/youtube/partner",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://support.google.com/youtube/answer/6013276",
+        "checkedAt": "2026-11-10",
+        "type": "inference"
+      }
+    ],
+    "confidence": "medium",
+    "volatility": "quarterly",
+    "watch": [
+      {
+        "url": "https://support.google.com/youtube/answer/6013276",
+        "kind": "policy_page"
+      },
+      {
+        "url": "https://developers.google.com/youtube/data/revision_history",
+        "kind": "api_revision"
+      }
+    ],
+    "status": "active",
+    "notes": "Không thấy API công khai trong phạm vi đã rà. Kết luận về độ phủ là suy luận từ tài liệu, không phải bằng chứng cấm truy cập."
+  },
+  {
+    "id": "account.youtube.removal",
+    "kind": "account_policy",
+    "scope": {
+      "platforms": [
+        "youtube"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "platform": "youtube",
+      "name": "Gỡ video",
+      "signal": "removal",
+      "coverage": "partial",
+      "apiContractId": "api.youtube.status.removal",
+      "weeklyManualCheck": true,
+      "verification": "Poll; kiểm Studio → Content → Restrictions hoặc email khi không rõ. WebSub không gửi event gỡ."
+    },
+    "evidence": [
+      {
+        "url": "https://developers.google.com/youtube/data/reference/rest/v3/videos",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://developers.google.com/youtube/data/reference/rest/v3/videos/list",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://developers.google.com/youtube/data/guides/push_notifications",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://support.google.com/youtube/answer/9668091",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://developers.google.com/youtube/data/reference/rest/v3/videos",
+        "checkedAt": "2026-11-10",
+        "type": "inference"
+      }
+    ],
+    "confidence": "medium",
+    "volatility": "quarterly",
+    "watch": [
+      {
+        "url": "https://developers.google.com/youtube/data/reference/rest/v3/videos",
+        "kind": "api_revision"
+      },
+      {
+        "url": "https://developers.google.com/youtube/data/revision_history",
+        "kind": "api_revision"
+      }
+    ],
+    "status": "active",
+    "notes": "Phân biệt trạng thái kết nối, vận hành publish và quyết định enforcement."
+  },
+  {
+    "id": "api.youtube.status.removal",
+    "kind": "api_contract",
+    "scope": {
+      "platforms": [
+        "youtube"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "platform": "youtube",
+      "name": "Gỡ video",
+      "endpoint": "GET /youtube/v3/videos?part=status",
+      "scopes": [
+        "https://www.googleapis.com/auth/youtube.readonly"
+      ],
+      "scopeNotes": "youtube.readonly",
+      "quotaCost": 1,
+      "quotaUnit": "Data API unit",
+      "quotaNotes": "1 unit/lần",
+      "rateLimit": null,
+      "details": "GET /youtube/v3/videos?part=status&id=… → status.uploadStatus=deleted nếu còn trả resource. items trống không phân biệt gỡ, xóa, private hoặc mất quyền.",
+      "delivery": "Poll; kiểm Studio → Content → Restrictions hoặc email khi không rõ. WebSub không gửi event gỡ."
+    },
+    "evidence": [
+      {
+        "url": "https://developers.google.com/youtube/data/reference/rest/v3/videos",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://developers.google.com/youtube/data/reference/rest/v3/videos/list",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://developers.google.com/youtube/data/guides/push_notifications",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://support.google.com/youtube/answer/9668091",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://developers.google.com/youtube/data/reference/rest/v3/videos",
+        "checkedAt": "2026-11-10",
+        "type": "inference"
+      }
+    ],
+    "confidence": "medium",
+    "volatility": "quarterly",
+    "watch": [
+      {
+        "url": "https://developers.google.com/youtube/data/reference/rest/v3/videos",
+        "kind": "api_revision"
+      },
+      {
+        "url": "https://developers.google.com/youtube/data/revision_history",
+        "kind": "api_revision"
+      }
+    ],
+    "status": "active",
+    "notes": "Với các flow hoặc endpoint khác nhau, xem scopeNotes. Danh sách scope không khẳng định cần xin toàn bộ quyền cùng lúc."
+  },
+  {
+    "id": "account.youtube.age",
+    "kind": "account_policy",
+    "scope": {
+      "platforms": [
+        "youtube"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "platform": "youtube",
+      "name": "Giới hạn tuổi",
+      "signal": "age",
+      "coverage": "partial",
+      "apiContractId": "api.youtube.status.age",
+      "weeklyManualCheck": true,
+      "verification": "Poll; Studio → Content → Restrictions."
+    },
+    "evidence": [
+      {
+        "url": "https://developers.google.com/youtube/data/reference/rest/v3/videos",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://developers.google.com/youtube/data/reference/rest/v3/videos/list",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://support.google.com/youtube/answer/9668091",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://developers.google.com/youtube/data/reference/rest/v3/videos",
+        "checkedAt": "2026-11-10",
+        "type": "inference"
+      }
+    ],
+    "confidence": "medium",
+    "volatility": "quarterly",
+    "watch": [
+      {
+        "url": "https://developers.google.com/youtube/data/reference/rest/v3/videos",
+        "kind": "api_revision"
+      },
+      {
+        "url": "https://developers.google.com/youtube/data/revision_history",
+        "kind": "api_revision"
+      }
+    ],
+    "status": "active",
+    "notes": "Phân biệt trạng thái kết nối, vận hành publish và quyết định enforcement."
+  },
+  {
+    "id": "api.youtube.status.age",
+    "kind": "api_contract",
+    "scope": {
+      "platforms": [
+        "youtube"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "platform": "youtube",
+      "name": "Giới hạn tuổi",
+      "endpoint": "GET /youtube/v3/videos?part=contentDetails",
+      "scopes": [
+        "https://www.googleapis.com/auth/youtube.readonly"
+      ],
+      "scopeNotes": "youtube.readonly",
+      "quotaCost": 1,
+      "quotaUnit": "Data API unit",
+      "quotaNotes": "1 unit/lần",
+      "rateLimit": null,
+      "details": "GET /youtube/v3/videos?part=contentDetails&id=… → contentDetails.contentRating.ytRating=ytAgeRestricted nếu hiện. Không có lý do moderation đầy đủ.",
+      "delivery": "Poll; Studio → Content → Restrictions."
+    },
+    "evidence": [
+      {
+        "url": "https://developers.google.com/youtube/data/reference/rest/v3/videos",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://developers.google.com/youtube/data/reference/rest/v3/videos/list",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://support.google.com/youtube/answer/9668091",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://developers.google.com/youtube/data/reference/rest/v3/videos",
+        "checkedAt": "2026-11-10",
+        "type": "inference"
+      }
+    ],
+    "confidence": "medium",
+    "volatility": "quarterly",
+    "watch": [
+      {
+        "url": "https://developers.google.com/youtube/data/reference/rest/v3/videos",
+        "kind": "api_revision"
+      },
+      {
+        "url": "https://developers.google.com/youtube/data/revision_history",
+        "kind": "api_revision"
+      }
+    ],
+    "status": "active",
+    "notes": "Với các flow hoặc endpoint khác nhau, xem scopeNotes. Danh sách scope không khẳng định cần xin toàn bộ quyền cùng lúc."
+  },
+  {
+    "id": "account.youtube.region",
+    "kind": "account_policy",
+    "scope": {
+      "platforms": [
+        "youtube"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "platform": "youtube",
+      "name": "Chặn theo vùng",
+      "signal": "region",
+      "coverage": "api",
+      "apiContractId": "api.youtube.status.region",
+      "weeklyManualCheck": false,
+      "verification": "Poll; xem chi tiết Copyright/Restrictions trong Studio khi cần nguyên nhân."
+    },
+    "evidence": [
+      {
+        "url": "https://developers.google.com/youtube/data/reference/rest/v3/videos",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://developers.google.com/youtube/data/reference/rest/v3/videos/list",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://support.google.com/youtube/answer/9668091",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      }
+    ],
+    "confidence": "high",
+    "volatility": "quarterly",
+    "watch": [
+      {
+        "url": "https://developers.google.com/youtube/data/reference/rest/v3/videos",
+        "kind": "api_revision"
+      },
+      {
+        "url": "https://developers.google.com/youtube/data/revision_history",
+        "kind": "api_revision"
+      }
+    ],
+    "status": "active",
+    "notes": "Phân biệt trạng thái kết nối, vận hành publish và quyết định enforcement."
+  },
+  {
+    "id": "api.youtube.status.region",
+    "kind": "api_contract",
+    "scope": {
+      "platforms": [
+        "youtube"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "platform": "youtube",
+      "name": "Chặn theo vùng",
+      "endpoint": "GET /youtube/v3/videos?part=contentDetails",
+      "scopes": [
+        "https://www.googleapis.com/auth/youtube.readonly"
+      ],
+      "scopeNotes": "youtube.readonly",
+      "quotaCost": 1,
+      "quotaUnit": "Data API unit",
+      "quotaNotes": "1 unit/lần",
+      "rateLimit": null,
+      "details": "GET /youtube/v3/videos?part=contentDetails&id=… → contentDetails.regionRestriction.allowed/blocked (ISO alpha-2) nếu trả trường. Không phải phép thử xem được trong mọi bối cảnh.",
+      "delivery": "Poll; xem chi tiết Copyright/Restrictions trong Studio khi cần nguyên nhân."
+    },
+    "evidence": [
+      {
+        "url": "https://developers.google.com/youtube/data/reference/rest/v3/videos",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://developers.google.com/youtube/data/reference/rest/v3/videos/list",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://support.google.com/youtube/answer/9668091",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      }
+    ],
+    "confidence": "high",
+    "volatility": "quarterly",
+    "watch": [
+      {
+        "url": "https://developers.google.com/youtube/data/reference/rest/v3/videos",
+        "kind": "api_revision"
+      },
+      {
+        "url": "https://developers.google.com/youtube/data/revision_history",
+        "kind": "api_revision"
+      }
+    ],
+    "status": "active",
+    "notes": "Với các flow hoặc endpoint khác nhau, xem scopeNotes. Danh sách scope không khẳng định cần xin toàn bộ quyền cùng lúc."
+  },
+  {
+    "id": "account.youtube.upload",
+    "kind": "account_policy",
+    "scope": {
+      "platforms": [
+        "youtube"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "platform": "youtube",
+      "name": "Từ chối upload / publish",
+      "signal": "upload",
+      "coverage": "api",
+      "apiContractId": "api.youtube.status.upload",
+      "weeklyManualCheck": false,
+      "verification": "Poll sau upload; xử lý lỗi videos.insert đồng thời. Studio → Content / thông báo xử lý."
+    },
+    "evidence": [
+      {
+        "url": "https://developers.google.com/youtube/data/reference/rest/v3/videos",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://developers.google.com/youtube/data/reference/rest/v3/videos/list",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://support.google.com/youtube/answer/9668091",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      }
+    ],
+    "confidence": "high",
+    "volatility": "quarterly",
+    "watch": [
+      {
+        "url": "https://developers.google.com/youtube/data/reference/rest/v3/videos",
+        "kind": "api_revision"
+      },
+      {
+        "url": "https://developers.google.com/youtube/data/revision_history",
+        "kind": "api_revision"
+      }
+    ],
+    "status": "active",
+    "notes": "Phân biệt trạng thái kết nối, vận hành publish và quyết định enforcement."
+  },
+  {
+    "id": "api.youtube.status.upload",
+    "kind": "api_contract",
+    "scope": {
+      "platforms": [
+        "youtube"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "platform": "youtube",
+      "name": "Từ chối upload / publish",
+      "endpoint": "GET /youtube/v3/videos?part=status,processingDetails",
+      "scopes": [
+        "https://www.googleapis.com/auth/youtube.readonly"
+      ],
+      "scopeNotes": "youtube.readonly",
+      "quotaCost": 1,
+      "quotaUnit": "Data API unit",
+      "quotaNotes": "1 unit/lần",
+      "rateLimit": null,
+      "details": "GET /youtube/v3/videos?part=status,processingDetails&id=… → status.uploadStatus, failureReason, rejectionReason; processingDetails dành cho owner.",
+      "delivery": "Poll sau upload; xử lý lỗi videos.insert đồng thời. Studio → Content / thông báo xử lý."
+    },
+    "evidence": [
+      {
+        "url": "https://developers.google.com/youtube/data/reference/rest/v3/videos",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://developers.google.com/youtube/data/reference/rest/v3/videos/list",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://support.google.com/youtube/answer/9668091",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      }
+    ],
+    "confidence": "high",
+    "volatility": "quarterly",
+    "watch": [
+      {
+        "url": "https://developers.google.com/youtube/data/reference/rest/v3/videos",
+        "kind": "api_revision"
+      },
+      {
+        "url": "https://developers.google.com/youtube/data/revision_history",
+        "kind": "api_revision"
+      }
+    ],
+    "status": "active",
+    "notes": "Với các flow hoặc endpoint khác nhau, xem scopeNotes. Danh sách scope không khẳng định cần xin toàn bộ quyền cùng lúc."
+  },
+  {
+    "id": "account.youtube.revoke",
+    "kind": "account_policy",
+    "scope": {
+      "platforms": [
+        "youtube"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "platform": "youtube",
+      "name": "Thu hồi quyền kết nối",
+      "signal": "revoke",
+      "coverage": "partial",
+      "apiContractId": "api.youtube.status.revoke",
+      "weeklyManualCheck": true,
+      "verification": "Phát hiện khi gọi/refresh; kiểm Google Account → Third-party connections. WebSub không có tín hiệu này."
+    },
+    "evidence": [
+      {
+        "url": "https://developers.google.com/identity/protocols/oauth2/web-server",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://developers.google.com/youtube/data/guides/push_notifications",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://developers.google.com/identity/protocols/oauth2/web-server",
+        "checkedAt": "2026-11-10",
+        "type": "inference"
+      }
+    ],
+    "confidence": "medium",
+    "volatility": "quarterly",
+    "watch": [
+      {
+        "url": "https://developers.google.com/identity/protocols/oauth2/web-server",
+        "kind": "api_revision"
+      },
+      {
+        "url": "https://developers.google.com/youtube/data/revision_history",
+        "kind": "api_revision"
+      }
+    ],
+    "status": "active",
+    "notes": "Phân biệt trạng thái kết nối, vận hành publish và quyết định enforcement."
+  },
+  {
+    "id": "api.youtube.status.revoke",
+    "kind": "api_contract",
+    "scope": {
+      "platforms": [
+        "youtube"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "platform": "youtube",
+      "name": "Thu hồi quyền kết nối",
+      "endpoint": "POST https://oauth2.googleapis.com/token",
+      "scopes": null,
+      "scopeNotes": "Grant OAuth hiện có; không cần scope đọc mới để refresh",
+      "quotaCost": null,
+      "quotaUnit": null,
+      "quotaNotes": "null; ngoài quota Data API",
+      "rateLimit": null,
+      "details": "OAuth token endpoint → invalid_grant khi refresh bị từ chối, tài nguyên có thể trả 401. Hết hạn, thu hồi hoặc nguyên nhân khác có thể trùng lỗi; không khẳng định user revoke.",
+      "delivery": "Phát hiện khi gọi/refresh; kiểm Google Account → Third-party connections. WebSub không có tín hiệu này."
+    },
+    "evidence": [
+      {
+        "url": "https://developers.google.com/identity/protocols/oauth2/web-server",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://developers.google.com/youtube/data/guides/push_notifications",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://developers.google.com/identity/protocols/oauth2/web-server",
+        "checkedAt": "2026-11-10",
+        "type": "inference"
+      }
+    ],
+    "confidence": "medium",
+    "volatility": "quarterly",
+    "watch": [
+      {
+        "url": "https://developers.google.com/identity/protocols/oauth2/web-server",
+        "kind": "api_revision"
+      },
+      {
+        "url": "https://developers.google.com/youtube/data/revision_history",
+        "kind": "api_revision"
+      }
+    ],
+    "status": "active",
+    "notes": "Với các flow hoặc endpoint khác nhau, xem scopeNotes. Danh sách scope không khẳng định cần xin toàn bộ quyền cùng lúc."
+  },
+  {
+    "id": "account.youtube.eligibility",
+    "kind": "account_policy",
+    "scope": {
+      "platforms": [
+        "youtube"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "platform": "youtube",
+      "name": "Số liệu eligibility",
+      "signal": "eligibility",
+      "coverage": "partial",
+      "apiContractId": "api.youtube.status.eligibility",
+      "weeklyManualCheck": true,
+      "verification": "Poll; Studio → Earn là nơi xác nhận eligibility, Analytics → Advanced mode để đối chiếu."
+    },
+    "evidence": [
+      {
+        "url": "https://developers.google.com/youtube/v3/docs/channels",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://developers.google.com/youtube/v3/docs/channels/list",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://developers.google.com/youtube/analytics/reference/reports/query",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://developers.google.com/youtube/analytics/channel_reports",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://developers.google.com/youtube/analytics/metrics",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://support.google.com/youtube/answer/72851",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://developers.google.com/youtube/v3/docs/channels",
+        "checkedAt": "2026-11-10",
+        "type": "inference"
+      }
+    ],
+    "confidence": "medium",
+    "volatility": "quarterly",
+    "watch": [
+      {
+        "url": "https://developers.google.com/youtube/v3/docs/channels",
+        "kind": "api_revision"
+      },
+      {
+        "url": "https://developers.google.com/youtube/data/revision_history",
+        "kind": "api_revision"
+      }
+    ],
+    "status": "active",
+    "notes": "Phân biệt trạng thái kết nối, vận hành publish và quyết định enforcement."
+  },
+  {
+    "id": "api.youtube.status.eligibility",
+    "kind": "api_contract",
+    "scope": {
+      "platforms": [
+        "youtube"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "platform": "youtube",
+      "name": "Số liệu eligibility",
+      "endpoint": "GET /youtube/v3/channels; GET /v2/reports",
+      "scopes": [
+        "https://www.googleapis.com/auth/youtube.readonly",
+        "https://www.googleapis.com/auth/yt-analytics.readonly"
+      ],
+      "scopeNotes": "youtube.readonly + yt-analytics.readonly cho reports; yt-analytics-monetary.readonly nếu đọc revenue",
+      "quotaCost": null,
+      "quotaUnit": null,
+      "quotaNotes": "channels.list 1 unit; reports quota per-call null",
+      "rateLimit": null,
+      "details": "GET /youtube/v3/channels?part=statistics&mine=true → subscriberCount (làm tròn), hiddenSubscriberCount. Analytics GET /v2/reports → views, engagedViews, estimatedMinutesWatched theo kỳ/hỗ trợ. Không thay valid public watch hours/qualified Shorts views trong Earn.",
+      "delivery": "Poll; Studio → Earn là nơi xác nhận eligibility, Analytics → Advanced mode để đối chiếu."
+    },
+    "evidence": [
+      {
+        "url": "https://developers.google.com/youtube/v3/docs/channels",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://developers.google.com/youtube/v3/docs/channels/list",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://developers.google.com/youtube/analytics/reference/reports/query",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://developers.google.com/youtube/analytics/channel_reports",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://developers.google.com/youtube/analytics/metrics",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://support.google.com/youtube/answer/72851",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://developers.google.com/youtube/v3/docs/channels",
+        "checkedAt": "2026-11-10",
+        "type": "inference"
+      }
+    ],
+    "confidence": "medium",
+    "volatility": "quarterly",
+    "watch": [
+      {
+        "url": "https://developers.google.com/youtube/v3/docs/channels",
+        "kind": "api_revision"
+      },
+      {
+        "url": "https://developers.google.com/youtube/data/revision_history",
+        "kind": "api_revision"
+      }
+    ],
+    "status": "active",
+    "notes": "Với các flow hoặc endpoint khác nhau, xem scopeNotes. Danh sách scope không khẳng định cần xin toàn bộ quyền cùng lúc."
+  },
+  {
+    "id": "account.tiktok.strikes",
+    "kind": "account_policy",
+    "scope": {
+      "platforms": [
+        "tiktok"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "platform": "tiktok",
+      "name": "Strike / cảnh báo",
+      "signal": "strikes",
+      "coverage": "manual",
+      "apiContractId": null,
+      "weeklyManualCheck": true,
+      "verification": "TikTok Studio → Account check; Safety Center → Account check; Inbox → System notifications."
+    },
+    "evidence": [
+      {
+        "url": "https://support.tiktok.com/en/safety-hc/account-and-user-safety/account-status",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://support.tiktok.com/en/safety-hc/account-and-user-safety/content-violations-and-bans",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://support.tiktok.com/en/safety-hc/account-and-user-safety/account-status",
+        "checkedAt": "2026-11-10",
+        "type": "inference"
+      }
+    ],
+    "confidence": "medium",
+    "volatility": "quarterly",
+    "watch": [
+      {
+        "url": "https://support.tiktok.com/en/safety-hc/account-and-user-safety/account-status",
+        "kind": "policy_page"
+      },
+      {
+        "url": "https://developers.tiktok.com/docs/en/changelog",
+        "kind": "api_revision"
+      }
+    ],
+    "status": "active",
+    "notes": "Không thấy API công khai trong phạm vi đã rà. Kết luận về độ phủ là suy luận từ tài liệu, không phải bằng chứng cấm truy cập."
+  },
+  {
+    "id": "account.tiktok.suspension",
+    "kind": "account_policy",
+    "scope": {
+      "platforms": [
+        "tiktok"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "platform": "tiktok",
+      "name": "Đình chỉ / khóa",
+      "signal": "suspension",
+      "coverage": "partial",
+      "apiContractId": "api.tiktok.status.suspension",
+      "weeklyManualCheck": true,
+      "verification": "Webhook; kiểm thông báo khi mở app/Account check. Không dùng reason=0 để suy diễn."
+    },
+    "evidence": [
+      {
+        "url": "https://developers.tiktok.com/docs/en/webhooks-events",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://support.tiktok.com/en/safety-hc/account-and-user-safety/account-status",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://support.tiktok.com/en/safety-hc/account-and-user-safety/content-violations-and-bans",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://developers.tiktok.com/docs/en/webhooks-events",
+        "checkedAt": "2026-11-10",
+        "type": "inference"
+      }
+    ],
+    "confidence": "medium",
+    "volatility": "quarterly",
+    "watch": [
+      {
+        "url": "https://developers.tiktok.com/docs/en/webhooks-events",
+        "kind": "api_revision"
+      },
+      {
+        "url": "https://developers.tiktok.com/docs/en/changelog",
+        "kind": "api_revision"
+      }
+    ],
+    "status": "active",
+    "notes": "Phân biệt trạng thái kết nối, vận hành publish và quyết định enforcement."
+  },
+  {
+    "id": "api.tiktok.status.suspension",
+    "kind": "api_contract",
+    "scope": {
+      "platforms": [
+        "tiktok"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "platform": "tiktok",
+      "name": "Đình chỉ / khóa",
+      "endpoint": null,
+      "scopes": null,
+      "scopeNotes": "Webhook của app cho người dùng đã cấp quyền; scope riêng null",
+      "quotaCost": null,
+      "quotaUnit": null,
+      "quotaNotes": "null",
+      "rateLimit": null,
+      "details": "Webhook authorization.removed với content.reason=4 báo tài khoản bị ban khi grant bị gỡ. Không có feed strike/suspension đầy đủ; reason=2 là xóa, không đồng nhất với ban.",
+      "delivery": "Webhook; kiểm thông báo khi mở app/Account check. Không dùng reason=0 để suy diễn."
+    },
+    "evidence": [
+      {
+        "url": "https://developers.tiktok.com/docs/en/webhooks-events",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://support.tiktok.com/en/safety-hc/account-and-user-safety/account-status",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://support.tiktok.com/en/safety-hc/account-and-user-safety/content-violations-and-bans",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://developers.tiktok.com/docs/en/webhooks-events",
+        "checkedAt": "2026-11-10",
+        "type": "inference"
+      }
+    ],
+    "confidence": "medium",
+    "volatility": "quarterly",
+    "watch": [
+      {
+        "url": "https://developers.tiktok.com/docs/en/webhooks-events",
+        "kind": "api_revision"
+      },
+      {
+        "url": "https://developers.tiktok.com/docs/en/changelog",
+        "kind": "api_revision"
+      }
+    ],
+    "status": "active",
+    "notes": "Với các flow hoặc endpoint khác nhau, xem scopeNotes. Danh sách scope không khẳng định cần xin toàn bộ quyền cùng lúc."
+  },
+  {
+    "id": "account.tiktok.channel_money",
+    "kind": "account_policy",
+    "scope": {
+      "platforms": [
+        "tiktok"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "platform": "tiktok",
+      "name": "Kiếm tiền cấp kênh",
+      "signal": "channel_money",
+      "coverage": "manual",
+      "apiContractId": null,
+      "weeklyManualCheck": true,
+      "verification": "TikTok Studio → Monetization → Creator Rewards Program; xem trạng thái từng chương trình."
+    },
+    "evidence": [
+      {
+        "url": "https://support.tiktok.com/en/business-and-creator/creator-rewards-program/creator-rewards-program",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://support.tiktok.com/en/business-and-creator/creator-rewards-program/creator-rewards-program",
+        "checkedAt": "2026-11-10",
+        "type": "inference"
+      }
+    ],
+    "confidence": "medium",
+    "volatility": "quarterly",
+    "watch": [
+      {
+        "url": "https://support.tiktok.com/en/business-and-creator/creator-rewards-program/creator-rewards-program",
+        "kind": "policy_page"
+      },
+      {
+        "url": "https://developers.tiktok.com/docs/en/changelog",
+        "kind": "api_revision"
+      }
+    ],
+    "status": "active",
+    "notes": "Không thấy API công khai trong phạm vi đã rà. Kết luận về độ phủ là suy luận từ tài liệu, không phải bằng chứng cấm truy cập."
+  },
+  {
+    "id": "account.tiktok.video_money",
+    "kind": "account_policy",
+    "scope": {
+      "platforms": [
+        "tiktok"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "platform": "tiktok",
+      "name": "Kiếm tiền cấp video",
+      "signal": "video_money",
+      "coverage": "manual",
+      "apiContractId": null,
+      "weeklyManualCheck": true,
+      "verification": "TikTok Studio → Creator Rewards dashboard → video đủ điều kiện hoặc bị loại. view_count từ Display là số lượt xem, không phải qualified views."
+    },
+    "evidence": [
+      {
+        "url": "https://support.tiktok.com/en/business-and-creator/creator-rewards-program/creator-rewards-program",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://developers.tiktok.com/docs/en/tiktok-api-v2-video-query",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://support.tiktok.com/en/business-and-creator/creator-rewards-program/creator-rewards-program",
+        "checkedAt": "2026-11-10",
+        "type": "inference"
+      }
+    ],
+    "confidence": "medium",
+    "volatility": "quarterly",
+    "watch": [
+      {
+        "url": "https://support.tiktok.com/en/business-and-creator/creator-rewards-program/creator-rewards-program",
+        "kind": "policy_page"
+      },
+      {
+        "url": "https://developers.tiktok.com/docs/en/changelog",
+        "kind": "api_revision"
+      }
+    ],
+    "status": "active",
+    "notes": "Không thấy API công khai trong phạm vi đã rà. Kết luận về độ phủ là suy luận từ tài liệu, không phải bằng chứng cấm truy cập."
+  },
+  {
+    "id": "account.tiktok.ads",
+    "kind": "account_policy",
+    "scope": {
+      "platforms": [
+        "tiktok"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "platform": "tiktok",
+      "name": "Phù hợp quảng cáo",
+      "signal": "ads",
+      "coverage": "manual",
+      "apiContractId": null,
+      "weeklyManualCheck": true,
+      "verification": "Kiểm Creator Rewards dashboard, thông báo về video và màn hình thương mại phù hợp. Trường phân loại organic ad suitability tương đương YouTube: null."
+    },
+    "evidence": [
+      {
+        "url": "https://support.tiktok.com/en/business-and-creator/creator-rewards-program/creator-rewards-program",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://support.tiktok.com/en/safety-hc/account-and-user-safety/account-status",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://support.tiktok.com/en/business-and-creator/creator-rewards-program/creator-rewards-program",
+        "checkedAt": "2026-11-10",
+        "type": "inference"
+      }
+    ],
+    "confidence": "medium",
+    "volatility": "quarterly",
+    "watch": [
+      {
+        "url": "https://support.tiktok.com/en/business-and-creator/creator-rewards-program/creator-rewards-program",
+        "kind": "policy_page"
+      },
+      {
+        "url": "https://developers.tiktok.com/docs/en/changelog",
+        "kind": "api_revision"
+      }
+    ],
+    "status": "active",
+    "notes": "Không thấy API công khai trong phạm vi đã rà. Kết luận về độ phủ là suy luận từ tài liệu, không phải bằng chứng cấm truy cập."
+  },
+  {
+    "id": "account.tiktok.claims",
+    "kind": "account_policy",
+    "scope": {
+      "platforms": [
+        "tiktok"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "platform": "tiktok",
+      "name": "Khiếu nại bản quyền",
+      "signal": "claims",
+      "coverage": "manual",
+      "apiContractId": null,
+      "weeklyManualCheck": true,
+      "verification": "Inbox → System notifications; thông báo video/audio bị gỡ hoặc tắt tiếng. Không có claim ledger trong Display/Posting đã rà."
+    },
+    "evidence": [
+      {
+        "url": "https://support.tiktok.com/en/safety-hc/account-and-user-safety/copyright",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://developers.tiktok.com/docs/en/tiktok-api-v2-video-query",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://developers.tiktok.com/docs/en/content-posting-api-reference-get-video-status",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://support.tiktok.com/en/safety-hc/account-and-user-safety/copyright",
+        "checkedAt": "2026-11-10",
+        "type": "inference"
+      }
+    ],
+    "confidence": "medium",
+    "volatility": "quarterly",
+    "watch": [
+      {
+        "url": "https://support.tiktok.com/en/safety-hc/account-and-user-safety/copyright",
+        "kind": "policy_page"
+      },
+      {
+        "url": "https://developers.tiktok.com/docs/en/changelog",
+        "kind": "api_revision"
+      }
+    ],
+    "status": "active",
+    "notes": "Không thấy API công khai trong phạm vi đã rà. Kết luận về độ phủ là suy luận từ tài liệu, không phải bằng chứng cấm truy cập."
+  },
+  {
+    "id": "account.tiktok.removal",
+    "kind": "account_policy",
+    "scope": {
+      "platforms": [
+        "tiktok"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "platform": "tiktok",
+      "name": "Gỡ video",
+      "signal": "removal",
+      "coverage": "partial",
+      "apiContractId": "api.tiktok.status.removal",
+      "weeklyManualCheck": true,
+      "verification": "Webhook cho bài qua Content Posting, poll bổ sung; xác nhận lý do trong Inbox hoặc Account check."
+    },
+    "evidence": [
+      {
+        "url": "https://developers.tiktok.com/docs/en/tiktok-api-v2-video-query",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://developers.tiktok.com/docs/en/tiktok-api-v2-rate-limit",
+        "checkedAt": "2026-11-10",
+        "sourceUpdatedAt": "2026-08-04",
+        "type": "official"
+      },
+      {
+        "url": "https://developers.tiktok.com/docs/en/webhooks-events",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://support.tiktok.com/en/safety-hc/account-and-user-safety/content-violations-and-bans",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://developers.tiktok.com/docs/en/content-posting-api-reference-get-video-status",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://developers.tiktok.com/docs/en/tiktok-api-v2-video-query",
+        "checkedAt": "2026-11-10",
+        "type": "inference"
+      }
+    ],
+    "confidence": "medium",
+    "volatility": "quarterly",
+    "watch": [
+      {
+        "url": "https://developers.tiktok.com/docs/en/tiktok-api-v2-video-query",
+        "kind": "api_revision"
+      },
+      {
+        "url": "https://developers.tiktok.com/docs/en/changelog",
+        "kind": "api_revision"
+      }
+    ],
+    "status": "active",
+    "notes": "Phân biệt trạng thái kết nối, vận hành publish và quyết định enforcement."
+  },
+  {
+    "id": "api.tiktok.status.removal",
+    "kind": "api_contract",
+    "scope": {
+      "platforms": [
+        "tiktok"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "platform": "tiktok",
+      "name": "Gỡ video",
+      "endpoint": "POST /v2/video/query/",
+      "scopes": [
+        "video.list"
+      ],
+      "scopeNotes": "video.list",
+      "quotaCost": null,
+      "quotaUnit": null,
+      "quotaNotes": "600 yêu cầu/phút theo endpoint, cửa sổ trượt",
+      "rateLimit": {
+        "requests": 600,
+        "windowSeconds": 60,
+        "per": "endpoint"
+      },
+      "details": "Webhook post.publish.no_longer_publicaly_available cho bài có publish_id báo mất public visibility, không nói lý do. POST /v2/video/query/ đối chiếu ID công khai của chủ sở hữu.",
+      "delivery": "Webhook cho bài qua Content Posting, poll bổ sung; xác nhận lý do trong Inbox hoặc Account check."
+    },
+    "evidence": [
+      {
+        "url": "https://developers.tiktok.com/docs/en/tiktok-api-v2-video-query",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://developers.tiktok.com/docs/en/tiktok-api-v2-rate-limit",
+        "checkedAt": "2026-11-10",
+        "sourceUpdatedAt": "2026-08-04",
+        "type": "official"
+      },
+      {
+        "url": "https://developers.tiktok.com/docs/en/webhooks-events",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://support.tiktok.com/en/safety-hc/account-and-user-safety/content-violations-and-bans",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://developers.tiktok.com/docs/en/content-posting-api-reference-get-video-status",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://developers.tiktok.com/docs/en/tiktok-api-v2-video-query",
+        "checkedAt": "2026-11-10",
+        "type": "inference"
+      }
+    ],
+    "confidence": "medium",
+    "volatility": "quarterly",
+    "watch": [
+      {
+        "url": "https://developers.tiktok.com/docs/en/tiktok-api-v2-video-query",
+        "kind": "api_revision"
+      },
+      {
+        "url": "https://developers.tiktok.com/docs/en/changelog",
+        "kind": "api_revision"
+      }
+    ],
+    "status": "active",
+    "notes": "Với các flow hoặc endpoint khác nhau, xem scopeNotes. Danh sách scope không khẳng định cần xin toàn bộ quyền cùng lúc."
+  },
+  {
+    "id": "account.tiktok.age",
+    "kind": "account_policy",
+    "scope": {
+      "platforms": [
+        "tiktok"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "platform": "tiktok",
+      "name": "Giới hạn tuổi",
+      "signal": "age",
+      "coverage": "manual",
+      "apiContractId": null,
+      "weeklyManualCheck": true,
+      "verification": "Thông báo bài / Analytics hoặc Account check; authorization.removed reason=3 là tuổi tài khoản, không phải giới hạn tuổi video."
+    },
+    "evidence": [
+      {
+        "url": "https://support.tiktok.com/en/safety-hc/account-and-user-safety/content-violations-and-bans",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://developers.tiktok.com/docs/en/webhooks-events",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://support.tiktok.com/en/safety-hc/account-and-user-safety/content-violations-and-bans",
+        "checkedAt": "2026-11-10",
+        "type": "inference"
+      }
+    ],
+    "confidence": "medium",
+    "volatility": "quarterly",
+    "watch": [
+      {
+        "url": "https://support.tiktok.com/en/safety-hc/account-and-user-safety/content-violations-and-bans",
+        "kind": "policy_page"
+      },
+      {
+        "url": "https://developers.tiktok.com/docs/en/changelog",
+        "kind": "api_revision"
+      }
+    ],
+    "status": "active",
+    "notes": "Không thấy API công khai trong phạm vi đã rà. Kết luận về độ phủ là suy luận từ tài liệu, không phải bằng chứng cấm truy cập."
+  },
+  {
+    "id": "account.tiktok.region",
+    "kind": "account_policy",
+    "scope": {
+      "platforms": [
+        "tiktok"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "platform": "tiktok",
+      "name": "Chặn theo vùng",
+      "signal": "region",
+      "coverage": "manual",
+      "apiContractId": null,
+      "weeklyManualCheck": true,
+      "verification": "Kiểm thông báo bài/Account check và hỗ trợ. Không tìm thấy bảng allow/block theo video trong API đã rà; vị trí UI hiển thị bảng như vậy null."
+    },
+    "evidence": [
+      {
+        "url": "https://developers.tiktok.com/docs/en/tiktok-api-v2-video-query",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://support.tiktok.com/en/safety-hc/account-and-user-safety/account-status",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://developers.tiktok.com/docs/en/tiktok-api-v2-video-query",
+        "checkedAt": "2026-11-10",
+        "type": "inference"
+      }
+    ],
+    "confidence": "medium",
+    "volatility": "quarterly",
+    "watch": [
+      {
+        "url": "https://developers.tiktok.com/docs/en/tiktok-api-v2-video-query",
+        "kind": "policy_page"
+      },
+      {
+        "url": "https://developers.tiktok.com/docs/en/changelog",
+        "kind": "api_revision"
+      }
+    ],
+    "status": "active",
+    "notes": "Không thấy API công khai trong phạm vi đã rà. Kết luận về độ phủ là suy luận từ tài liệu, không phải bằng chứng cấm truy cập."
+  },
+  {
+    "id": "account.tiktok.upload",
+    "kind": "account_policy",
+    "scope": {
+      "platforms": [
+        "tiktok"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "platform": "tiktok",
+      "name": "Từ chối upload / publish",
+      "signal": "upload",
+      "coverage": "api",
+      "apiContractId": "api.tiktok.status.upload",
+      "weeklyManualCheck": false,
+      "verification": "Webhook hoặc poll; kiểm hộp thư và trạng thái video trong TikTok Studio nếu cần."
+    },
+    "evidence": [
+      {
+        "url": "https://developers.tiktok.com/docs/en/content-posting-api-reference-get-video-status",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://developers.tiktok.com/docs/en/webhooks-events",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      }
+    ],
+    "confidence": "high",
+    "volatility": "quarterly",
+    "watch": [
+      {
+        "url": "https://developers.tiktok.com/docs/en/content-posting-api-reference-get-video-status",
+        "kind": "api_revision"
+      },
+      {
+        "url": "https://developers.tiktok.com/docs/en/changelog",
+        "kind": "api_revision"
+      }
+    ],
+    "status": "active",
+    "notes": "Phân biệt trạng thái kết nối, vận hành publish và quyết định enforcement."
+  },
+  {
+    "id": "api.tiktok.status.upload",
+    "kind": "api_contract",
+    "scope": {
+      "platforms": [
+        "tiktok"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "platform": "tiktok",
+      "name": "Từ chối upload / publish",
+      "endpoint": "POST /v2/post/publish/status/fetch/",
+      "scopes": [
+        "video.upload",
+        "video.publish"
+      ],
+      "scopeNotes": "video.upload hoặc video.publish",
+      "quotaCost": null,
+      "quotaUnit": null,
+      "quotaNotes": "30 yêu cầu/phút trên mỗi user access token",
+      "rateLimit": {
+        "requests": 30,
+        "windowSeconds": 60,
+        "per": "user_access_token"
+      },
+      "details": "POST /v2/post/publish/status/fetch/ → data.status, data.fail_reason, publicaly_available_post_id. Có event post.publish.failed và post.publish.complete; đọc cùng publish_id.",
+      "delivery": "Webhook hoặc poll; kiểm hộp thư và trạng thái video trong TikTok Studio nếu cần."
+    },
+    "evidence": [
+      {
+        "url": "https://developers.tiktok.com/docs/en/content-posting-api-reference-get-video-status",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://developers.tiktok.com/docs/en/webhooks-events",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      }
+    ],
+    "confidence": "high",
+    "volatility": "quarterly",
+    "watch": [
+      {
+        "url": "https://developers.tiktok.com/docs/en/content-posting-api-reference-get-video-status",
+        "kind": "api_revision"
+      },
+      {
+        "url": "https://developers.tiktok.com/docs/en/changelog",
+        "kind": "api_revision"
+      }
+    ],
+    "status": "active",
+    "notes": "Với các flow hoặc endpoint khác nhau, xem scopeNotes. Danh sách scope không khẳng định cần xin toàn bộ quyền cùng lúc."
+  },
+  {
+    "id": "account.tiktok.revoke",
+    "kind": "account_policy",
+    "scope": {
+      "platforms": [
+        "tiktok"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "platform": "tiktok",
+      "name": "Thu hồi quyền kết nối",
+      "signal": "revoke",
+      "coverage": "api",
+      "apiContractId": "api.tiktok.status.revoke",
+      "weeklyManualCheck": false,
+      "verification": "Webhook; đối chiếu lỗi refresh; TikTok → Settings and privacy → Security & permissions → Apps and services permissions."
+    },
+    "evidence": [
+      {
+        "url": "https://developers.tiktok.com/docs/en/webhooks-events",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://developers.tiktok.com/docs/en/login-kit-manage-user-access-tokens",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://developers.tiktok.com/docs/en/tiktok-api-v2-error-handling",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      }
+    ],
+    "confidence": "high",
+    "volatility": "quarterly",
+    "watch": [
+      {
+        "url": "https://developers.tiktok.com/docs/en/webhooks-events",
+        "kind": "api_revision"
+      },
+      {
+        "url": "https://developers.tiktok.com/docs/en/changelog",
+        "kind": "api_revision"
+      }
+    ],
+    "status": "active",
+    "notes": "Phân biệt trạng thái kết nối, vận hành publish và quyết định enforcement."
+  },
+  {
+    "id": "api.tiktok.status.revoke",
+    "kind": "api_contract",
+    "scope": {
+      "platforms": [
+        "tiktok"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "platform": "tiktok",
+      "name": "Thu hồi quyền kết nối",
+      "endpoint": "POST /v2/oauth/token/",
+      "scopes": null,
+      "scopeNotes": "Webhook grant hiện có; scope riêng null",
+      "quotaCost": null,
+      "quotaUnit": null,
+      "quotaNotes": "null",
+      "rateLimit": null,
+      "details": "Webhook authorization.removed → content.reason (1 user disconnect, 5 developer revoke, các mã khác có nghĩa riêng). Token endpoint/HTTP 401 cho lỗi xác thực, không thay lý do webhook.",
+      "delivery": "Webhook; đối chiếu lỗi refresh; TikTok → Settings and privacy → Security & permissions → Apps and services permissions."
+    },
+    "evidence": [
+      {
+        "url": "https://developers.tiktok.com/docs/en/webhooks-events",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://developers.tiktok.com/docs/en/login-kit-manage-user-access-tokens",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://developers.tiktok.com/docs/en/tiktok-api-v2-error-handling",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      }
+    ],
+    "confidence": "high",
+    "volatility": "quarterly",
+    "watch": [
+      {
+        "url": "https://developers.tiktok.com/docs/en/webhooks-events",
+        "kind": "api_revision"
+      },
+      {
+        "url": "https://developers.tiktok.com/docs/en/changelog",
+        "kind": "api_revision"
+      }
+    ],
+    "status": "active",
+    "notes": "Với các flow hoặc endpoint khác nhau, xem scopeNotes. Danh sách scope không khẳng định cần xin toàn bộ quyền cùng lúc."
+  },
+  {
+    "id": "account.tiktok.eligibility",
+    "kind": "account_policy",
+    "scope": {
+      "platforms": [
+        "tiktok"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "platform": "tiktok",
+      "name": "Số liệu eligibility",
+      "signal": "eligibility",
+      "coverage": "partial",
+      "apiContractId": "api.tiktok.status.eligibility",
+      "weeklyManualCheck": true,
+      "verification": "Poll; Creator Rewards dashboard xác nhận ngưỡng áp dụng và loại view."
+    },
+    "evidence": [
+      {
+        "url": "https://developers.tiktok.com/docs/en/tiktok-api-v2-get-user-info",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://developers.tiktok.com/docs/en/tiktok-api-v2-video-query",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://developers.tiktok.com/docs/en/tiktok-api-v2-rate-limit",
+        "checkedAt": "2026-11-10",
+        "sourceUpdatedAt": "2026-08-04",
+        "type": "official"
+      },
+      {
+        "url": "https://support.tiktok.com/en/business-and-creator/creator-rewards-program/creator-rewards-program",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://developers.tiktok.com/docs/en/tiktok-api-v2-get-user-info",
+        "checkedAt": "2026-11-10",
+        "type": "inference"
+      }
+    ],
+    "confidence": "medium",
+    "volatility": "quarterly",
+    "watch": [
+      {
+        "url": "https://developers.tiktok.com/docs/en/tiktok-api-v2-get-user-info",
+        "kind": "api_revision"
+      },
+      {
+        "url": "https://developers.tiktok.com/docs/en/changelog",
+        "kind": "api_revision"
+      }
+    ],
+    "status": "active",
+    "notes": "Phân biệt trạng thái kết nối, vận hành publish và quyết định enforcement."
+  },
+  {
+    "id": "api.tiktok.status.eligibility",
+    "kind": "api_contract",
+    "scope": {
+      "platforms": [
+        "tiktok"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "platform": "tiktok",
+      "name": "Số liệu eligibility",
+      "endpoint": "GET /v2/user/info/; POST /v2/video/query/",
+      "scopes": [
+        "user.info.stats",
+        "video.list"
+      ],
+      "scopeNotes": "user.info.stats + video.list",
+      "quotaCost": null,
+      "quotaUnit": null,
+      "quotaNotes": "600 yêu cầu/phút cho từng endpoint nói trên",
+      "rateLimit": {
+        "requests": 600,
+        "windowSeconds": 60,
+        "per": "endpoint"
+      },
+      "details": "GET /v2/user/info/?fields=follower_count → data.user.follower_count; POST /v2/video/query/ → view_count tích lũy. Snapshot hiệu số không bảo đảm giống 30 ngày qualified hoặc official eligibility.",
+      "delivery": "Poll; Creator Rewards dashboard xác nhận ngưỡng áp dụng và loại view."
+    },
+    "evidence": [
+      {
+        "url": "https://developers.tiktok.com/docs/en/tiktok-api-v2-get-user-info",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://developers.tiktok.com/docs/en/tiktok-api-v2-video-query",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://developers.tiktok.com/docs/en/tiktok-api-v2-rate-limit",
+        "checkedAt": "2026-11-10",
+        "sourceUpdatedAt": "2026-08-04",
+        "type": "official"
+      },
+      {
+        "url": "https://support.tiktok.com/en/business-and-creator/creator-rewards-program/creator-rewards-program",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://developers.tiktok.com/docs/en/tiktok-api-v2-get-user-info",
+        "checkedAt": "2026-11-10",
+        "type": "inference"
+      }
+    ],
+    "confidence": "medium",
+    "volatility": "quarterly",
+    "watch": [
+      {
+        "url": "https://developers.tiktok.com/docs/en/tiktok-api-v2-get-user-info",
+        "kind": "api_revision"
+      },
+      {
+        "url": "https://developers.tiktok.com/docs/en/changelog",
+        "kind": "api_revision"
+      }
+    ],
+    "status": "active",
+    "notes": "Với các flow hoặc endpoint khác nhau, xem scopeNotes. Danh sách scope không khẳng định cần xin toàn bộ quyền cùng lúc."
+  },
+  {
+    "id": "account.facebook.strikes",
+    "kind": "account_policy",
+    "scope": {
+      "platforms": [
+        "facebook"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "platform": "facebook",
+      "name": "Strike / cảnh báo",
+      "signal": "strikes",
+      "coverage": "manual",
+      "apiContractId": null,
+      "weeklyManualCheck": true,
+      "verification": "Page Status / Account Status và Support Inbox. Tách restriction quảng cáo của business khỏi strike organic."
+    },
+    "evidence": [
+      {
+        "url": "https://www.facebook.com/help/1392616391875085",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://about.fb.com/news/2026/03/creator-fast-track-grow-your-audience-earn-money-on-facebook/",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://www.facebook.com/help/1392616391875085",
+        "checkedAt": "2026-11-10",
+        "type": "inference"
+      }
+    ],
+    "confidence": "medium",
+    "volatility": "quarterly",
+    "watch": [
+      {
+        "url": "https://www.facebook.com/help/1392616391875085",
+        "kind": "policy_page"
+      },
+      {
+        "url": "https://developers.facebook.com/blog/feed/",
+        "kind": "rss"
+      }
+    ],
+    "status": "active",
+    "notes": "Không thấy API công khai trong phạm vi đã rà. Kết luận về độ phủ là suy luận từ tài liệu, không phải bằng chứng cấm truy cập."
+  },
+  {
+    "id": "account.facebook.suspension",
+    "kind": "account_policy",
+    "scope": {
+      "platforms": [
+        "facebook"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "platform": "facebook",
+      "name": "Đình chỉ / khóa",
+      "signal": "suspension",
+      "coverage": "manual",
+      "apiContractId": null,
+      "weeklyManualCheck": true,
+      "verification": "Account Status / Page Status và Support Inbox. Token hoặc Page không còn trong danh sách không đủ kết luận."
+    },
+    "evidence": [
+      {
+        "url": "https://www.facebook.com/help/1392616391875085",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://developers.facebook.com/docs/facebook-login/guides/access-tokens/debugging-and-error-handling/",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://www.facebook.com/help/1392616391875085",
+        "checkedAt": "2026-11-10",
+        "type": "inference"
+      }
+    ],
+    "confidence": "medium",
+    "volatility": "quarterly",
+    "watch": [
+      {
+        "url": "https://www.facebook.com/help/1392616391875085",
+        "kind": "policy_page"
+      },
+      {
+        "url": "https://developers.facebook.com/blog/feed/",
+        "kind": "rss"
+      }
+    ],
+    "status": "active",
+    "notes": "Không thấy API công khai trong phạm vi đã rà. Kết luận về độ phủ là suy luận từ tài liệu, không phải bằng chứng cấm truy cập."
+  },
+  {
+    "id": "account.facebook.channel_money",
+    "kind": "account_policy",
+    "scope": {
+      "platforms": [
+        "facebook"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "platform": "facebook",
+      "name": "Kiếm tiền cấp kênh",
+      "signal": "channel_money",
+      "coverage": "manual",
+      "apiContractId": null,
+      "weeklyManualCheck": true,
+      "verification": "Professional Dashboard → Monetization, hoặc Meta Business Suite → Monetization."
+    },
+    "evidence": [
+      {
+        "url": "https://about.fb.com/news/2026/03/creator-fast-track-grow-your-audience-earn-money-on-facebook/",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://about.fb.com/news/2026/03/creator-fast-track-grow-your-audience-earn-money-on-facebook/",
+        "checkedAt": "2026-11-10",
+        "type": "inference"
+      }
+    ],
+    "confidence": "medium",
+    "volatility": "quarterly",
+    "watch": [
+      {
+        "url": "https://about.fb.com/news/2026/03/creator-fast-track-grow-your-audience-earn-money-on-facebook/",
+        "kind": "policy_page"
+      },
+      {
+        "url": "https://developers.facebook.com/blog/feed/",
+        "kind": "rss"
+      }
+    ],
+    "status": "active",
+    "notes": "Không thấy API công khai trong phạm vi đã rà. Kết luận về độ phủ là suy luận từ tài liệu, không phải bằng chứng cấm truy cập."
+  },
+  {
+    "id": "account.facebook.video_money",
+    "kind": "account_policy",
+    "scope": {
+      "platforms": [
+        "facebook"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "platform": "facebook",
+      "name": "Kiếm tiền cấp video",
+      "signal": "video_money",
+      "coverage": "manual",
+      "apiContractId": null,
+      "weeklyManualCheck": true,
+      "verification": "Professional Dashboard → Monetization và chi tiết bài. Không suy từ video_insights."
+    },
+    "evidence": [
+      {
+        "url": "https://about.fb.com/news/2026/03/creator-fast-track-grow-your-audience-earn-money-on-facebook/",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://developers.facebook.com/docs/graph-api/reference/video/video_insights/",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://about.fb.com/news/2026/03/creator-fast-track-grow-your-audience-earn-money-on-facebook/",
+        "checkedAt": "2026-11-10",
+        "type": "inference"
+      }
+    ],
+    "confidence": "medium",
+    "volatility": "quarterly",
+    "watch": [
+      {
+        "url": "https://about.fb.com/news/2026/03/creator-fast-track-grow-your-audience-earn-money-on-facebook/",
+        "kind": "policy_page"
+      },
+      {
+        "url": "https://developers.facebook.com/blog/feed/",
+        "kind": "rss"
+      }
+    ],
+    "status": "active",
+    "notes": "Không thấy API công khai trong phạm vi đã rà. Kết luận về độ phủ là suy luận từ tài liệu, không phải bằng chứng cấm truy cập."
+  },
+  {
+    "id": "account.facebook.ads",
+    "kind": "account_policy",
+    "scope": {
+      "platforms": [
+        "facebook"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "platform": "facebook",
+      "name": "Phù hợp quảng cáo",
+      "signal": "ads",
+      "coverage": "manual",
+      "apiContractId": null,
+      "weeklyManualCheck": true,
+      "verification": "Monetization → Policy issues và chi tiết nội dung nếu được mở. Ads API delivery không phải organic ad suitability."
+    },
+    "evidence": [
+      {
+        "url": "https://about.fb.com/news/2026/03/creator-fast-track-grow-your-audience-earn-money-on-facebook/",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://about.fb.com/news/2026/03/creator-fast-track-grow-your-audience-earn-money-on-facebook/",
+        "checkedAt": "2026-11-10",
+        "type": "inference"
+      }
+    ],
+    "confidence": "medium",
+    "volatility": "quarterly",
+    "watch": [
+      {
+        "url": "https://about.fb.com/news/2026/03/creator-fast-track-grow-your-audience-earn-money-on-facebook/",
+        "kind": "policy_page"
+      },
+      {
+        "url": "https://developers.facebook.com/blog/feed/",
+        "kind": "rss"
+      }
+    ],
+    "status": "active",
+    "notes": "Không thấy API công khai trong phạm vi đã rà. Kết luận về độ phủ là suy luận từ tài liệu, không phải bằng chứng cấm truy cập."
+  },
+  {
+    "id": "account.facebook.claims",
+    "kind": "account_policy",
+    "scope": {
+      "platforms": [
+        "facebook"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "platform": "facebook",
+      "name": "Khiếu nại bản quyền",
+      "signal": "claims",
+      "coverage": "manual",
+      "apiContractId": null,
+      "weeklyManualCheck": true,
+      "verification": "Thông báo bản quyền / Support Inbox, hoặc Rights Manager nếu có quyền. Không có claim ledger cho Page thông thường trong API đã rà."
+    },
+    "evidence": [
+      {
+        "url": "https://www.facebook.com/business/help/182431789449722",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://developers.facebook.com/docs/graph-api/reference/video/",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://www.facebook.com/business/help/182431789449722",
+        "checkedAt": "2026-11-10",
+        "type": "inference"
+      }
+    ],
+    "confidence": "medium",
+    "volatility": "quarterly",
+    "watch": [
+      {
+        "url": "https://www.facebook.com/business/help/182431789449722",
+        "kind": "policy_page"
+      },
+      {
+        "url": "https://developers.facebook.com/blog/feed/",
+        "kind": "rss"
+      }
+    ],
+    "status": "active",
+    "notes": "Không thấy API công khai trong phạm vi đã rà. Kết luận về độ phủ là suy luận từ tài liệu, không phải bằng chứng cấm truy cập."
+  },
+  {
+    "id": "account.facebook.removal",
+    "kind": "account_policy",
+    "scope": {
+      "platforms": [
+        "facebook"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "platform": "facebook",
+      "name": "Gỡ video",
+      "signal": "removal",
+      "coverage": "partial",
+      "apiContractId": "api.facebook.status.removal",
+      "weeklyManualCheck": true,
+      "verification": "Poll. Page feed webhook nếu đủ quyền chỉ là tín hiệu thay đổi, kiểm Page Status và Inbox."
+    },
+    "evidence": [
+      {
+        "url": "https://developers.facebook.com/docs/graph-api/reference/video/",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://developers.facebook.com/docs/graph-api/overview/rate-limiting/",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://developers.facebook.com/docs/graph-api/webhooks/reference/page/",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://www.facebook.com/help/1392616391875085",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://developers.facebook.com/docs/graph-api/reference/video/",
+        "checkedAt": "2026-11-10",
+        "type": "inference"
+      }
+    ],
+    "confidence": "medium",
+    "volatility": "quarterly",
+    "watch": [
+      {
+        "url": "https://developers.facebook.com/docs/graph-api/reference/video/",
+        "kind": "api_revision"
+      },
+      {
+        "url": "https://developers.facebook.com/blog/feed/",
+        "kind": "rss"
+      }
+    ],
+    "status": "active",
+    "notes": "Phân biệt trạng thái kết nối, vận hành publish và quyết định enforcement."
+  },
+  {
+    "id": "api.facebook.status.removal",
+    "kind": "api_contract",
+    "scope": {
+      "platforms": [
+        "facebook"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "platform": "facebook",
+      "name": "Gỡ video",
+      "endpoint": "GET /{video-id}?fields=status",
+      "scopes": [
+        "pages_read_engagement"
+      ],
+      "scopeNotes": "Page token, pages_read_engagement theo asset/App Review; scope cho lý do gỡ null",
+      "quotaCost": null,
+      "quotaUnit": null,
+      "quotaNotes": "BUC/app limit theo trường hợp, số cố định null",
+      "rateLimit": null,
+      "details": "GET /{video-id}?fields=status với Page token đối chiếu video đã lưu. Không trả resource / lỗi Graph không chứng minh enforcement.",
+      "delivery": "Poll. Page feed webhook nếu đủ quyền chỉ là tín hiệu thay đổi, kiểm Page Status và Inbox."
+    },
+    "evidence": [
+      {
+        "url": "https://developers.facebook.com/docs/graph-api/reference/video/",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://developers.facebook.com/docs/graph-api/overview/rate-limiting/",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://developers.facebook.com/docs/graph-api/webhooks/reference/page/",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://www.facebook.com/help/1392616391875085",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://developers.facebook.com/docs/graph-api/reference/video/",
+        "checkedAt": "2026-11-10",
+        "type": "inference"
+      }
+    ],
+    "confidence": "medium",
+    "volatility": "quarterly",
+    "watch": [
+      {
+        "url": "https://developers.facebook.com/docs/graph-api/reference/video/",
+        "kind": "api_revision"
+      },
+      {
+        "url": "https://developers.facebook.com/blog/feed/",
+        "kind": "rss"
+      }
+    ],
+    "status": "active",
+    "notes": "Với các flow hoặc endpoint khác nhau, xem scopeNotes. Danh sách scope không khẳng định cần xin toàn bộ quyền cùng lúc."
+  },
+  {
+    "id": "account.facebook.age",
+    "kind": "account_policy",
+    "scope": {
+      "platforms": [
+        "facebook"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "platform": "facebook",
+      "name": "Giới hạn tuổi",
+      "signal": "age",
+      "coverage": "manual",
+      "apiContractId": null,
+      "weeklyManualCheck": true,
+      "verification": "Page Status hoặc chi tiết bài/thông báo. Thiết lập age gating chủ động không đại diện quyết định moderation per-video."
+    },
+    "evidence": [
+      {
+        "url": "https://www.facebook.com/help/1392616391875085",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://developers.facebook.com/docs/graph-api/reference/video/",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://www.facebook.com/help/1392616391875085",
+        "checkedAt": "2026-11-10",
+        "type": "inference"
+      }
+    ],
+    "confidence": "medium",
+    "volatility": "quarterly",
+    "watch": [
+      {
+        "url": "https://www.facebook.com/help/1392616391875085",
+        "kind": "policy_page"
+      },
+      {
+        "url": "https://developers.facebook.com/blog/feed/",
+        "kind": "rss"
+      }
+    ],
+    "status": "active",
+    "notes": "Không thấy API công khai trong phạm vi đã rà. Kết luận về độ phủ là suy luận từ tài liệu, không phải bằng chứng cấm truy cập."
+  },
+  {
+    "id": "account.facebook.region",
+    "kind": "account_policy",
+    "scope": {
+      "platforms": [
+        "facebook"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "platform": "facebook",
+      "name": "Chặn theo vùng",
+      "signal": "region",
+      "coverage": "manual",
+      "apiContractId": null,
+      "weeklyManualCheck": true,
+      "verification": "Chi tiết thông báo và Rights Manager nếu có quyền. Không thấy danh sách vùng enforcement per-video cho Page token phổ thông."
+    },
+    "evidence": [
+      {
+        "url": "https://www.facebook.com/help/1392616391875085",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://www.facebook.com/business/help/182431789449722",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://developers.facebook.com/docs/graph-api/reference/video/",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://www.facebook.com/help/1392616391875085",
+        "checkedAt": "2026-11-10",
+        "type": "inference"
+      }
+    ],
+    "confidence": "medium",
+    "volatility": "quarterly",
+    "watch": [
+      {
+        "url": "https://www.facebook.com/help/1392616391875085",
+        "kind": "policy_page"
+      },
+      {
+        "url": "https://developers.facebook.com/blog/feed/",
+        "kind": "rss"
+      }
+    ],
+    "status": "active",
+    "notes": "Không thấy API công khai trong phạm vi đã rà. Kết luận về độ phủ là suy luận từ tài liệu, không phải bằng chứng cấm truy cập."
+  },
+  {
+    "id": "account.facebook.upload",
+    "kind": "account_policy",
+    "scope": {
+      "platforms": [
+        "facebook"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "platform": "facebook",
+      "name": "Từ chối upload / publish",
+      "signal": "upload",
+      "coverage": "api",
+      "apiContractId": "api.facebook.status.upload",
+      "weeklyManualCheck": false,
+      "verification": "Poll session. Page video library / Meta Business Suite xác nhận khi cần."
+    },
+    "evidence": [
+      {
+        "url": "https://www.postman.com/meta/facebook/request/dtugkus/3-optional-get-upload-session-status",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://developers.facebook.com/docs/video-api/guides/reels-publishing/",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://developers.facebook.com/docs/graph-api/reference/video/",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://developers.facebook.com/docs/graph-api/overview/rate-limiting/",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      }
+    ],
+    "confidence": "high",
+    "volatility": "quarterly",
+    "watch": [
+      {
+        "url": "https://www.postman.com/meta/facebook/request/dtugkus/3-optional-get-upload-session-status",
+        "kind": "api_revision"
+      },
+      {
+        "url": "https://developers.facebook.com/blog/feed/",
+        "kind": "rss"
+      }
+    ],
+    "status": "active",
+    "notes": "Phân biệt trạng thái kết nối, vận hành publish và quyết định enforcement."
+  },
+  {
+    "id": "api.facebook.status.upload",
+    "kind": "api_contract",
+    "scope": {
+      "platforms": [
+        "facebook"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "platform": "facebook",
+      "name": "Từ chối upload / publish",
+      "endpoint": "GET /{video-id}?fields=status",
+      "scopes": [
+        "pages_manage_posts",
+        "pages_read_engagement"
+      ],
+      "scopeNotes": "Page token; pages_manage_posts cho publish, pages_read_engagement cho đọc theo cấp quyền",
+      "quotaCost": null,
+      "quotaUnit": null,
+      "quotaNotes": "BUC/app limit; số cố định null",
+      "rateLimit": null,
+      "details": "GET /{video-id}?fields=status → status.video_status và các phase upload/processing/publishing khi API trả. Đọc cả lỗi init/upload/finish; không ánh xạ phase error thành strike.",
+      "delivery": "Poll session. Page video library / Meta Business Suite xác nhận khi cần."
+    },
+    "evidence": [
+      {
+        "url": "https://www.postman.com/meta/facebook/request/dtugkus/3-optional-get-upload-session-status",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://developers.facebook.com/docs/video-api/guides/reels-publishing/",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://developers.facebook.com/docs/graph-api/reference/video/",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://developers.facebook.com/docs/graph-api/overview/rate-limiting/",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      }
+    ],
+    "confidence": "high",
+    "volatility": "quarterly",
+    "watch": [
+      {
+        "url": "https://www.postman.com/meta/facebook/request/dtugkus/3-optional-get-upload-session-status",
+        "kind": "api_revision"
+      },
+      {
+        "url": "https://developers.facebook.com/blog/feed/",
+        "kind": "rss"
+      }
+    ],
+    "status": "active",
+    "notes": "Với các flow hoặc endpoint khác nhau, xem scopeNotes. Danh sách scope không khẳng định cần xin toàn bộ quyền cùng lúc."
+  },
+  {
+    "id": "account.facebook.revoke",
+    "kind": "account_policy",
+    "scope": {
+      "platforms": [
+        "facebook"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "platform": "facebook",
+      "name": "Thu hồi quyền kết nối",
+      "signal": "revoke",
+      "coverage": "partial",
+      "apiContractId": "api.facebook.status.revoke",
+      "weeklyManualCheck": true,
+      "verification": "Callback và poll lỗi; Business Integrations / Apps and Websites để xác nhận."
+    },
+    "evidence": [
+      {
+        "url": "https://developers.facebook.com/docs/facebook-login/guides/access-tokens/debugging-and-error-handling/",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://developers.facebook.com/docs/facebook-login/guides/advanced/manual-flow/",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://developers.facebook.com/docs/graph-api/guides/error-handling/",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://developers.facebook.com/docs/facebook-login/guides/access-tokens/debugging-and-error-handling/",
+        "checkedAt": "2026-11-10",
+        "type": "inference"
+      }
+    ],
+    "confidence": "medium",
+    "volatility": "quarterly",
+    "watch": [
+      {
+        "url": "https://developers.facebook.com/docs/facebook-login/guides/access-tokens/debugging-and-error-handling/",
+        "kind": "api_revision"
+      },
+      {
+        "url": "https://developers.facebook.com/blog/feed/",
+        "kind": "rss"
+      }
+    ],
+    "status": "active",
+    "notes": "Phân biệt trạng thái kết nối, vận hành publish và quyết định enforcement."
+  },
+  {
+    "id": "api.facebook.status.revoke",
+    "kind": "api_contract",
+    "scope": {
+      "platforms": [
+        "facebook"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "platform": "facebook",
+      "name": "Thu hồi quyền kết nối",
+      "endpoint": "GET /debug_token",
+      "scopes": null,
+      "scopeNotes": "App access token để debug, hoặc token hợp lệ của developer theo tài liệu; callback không yêu cầu scope đọc Page mới",
+      "quotaCost": null,
+      "quotaUnit": null,
+      "quotaNotes": "null",
+      "rateLimit": null,
+      "details": "GET /debug_token → data.is_valid, expires_at, scopes; Graph code 190/subcode. Facebook Login có deauthorize callback cho app đã cấu hình; không đồng nhất Page role loss với user revoke.",
+      "delivery": "Callback và poll lỗi; Business Integrations / Apps and Websites để xác nhận."
+    },
+    "evidence": [
+      {
+        "url": "https://developers.facebook.com/docs/facebook-login/guides/access-tokens/debugging-and-error-handling/",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://developers.facebook.com/docs/facebook-login/guides/advanced/manual-flow/",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://developers.facebook.com/docs/graph-api/guides/error-handling/",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://developers.facebook.com/docs/facebook-login/guides/access-tokens/debugging-and-error-handling/",
+        "checkedAt": "2026-11-10",
+        "type": "inference"
+      }
+    ],
+    "confidence": "medium",
+    "volatility": "quarterly",
+    "watch": [
+      {
+        "url": "https://developers.facebook.com/docs/facebook-login/guides/access-tokens/debugging-and-error-handling/",
+        "kind": "api_revision"
+      },
+      {
+        "url": "https://developers.facebook.com/blog/feed/",
+        "kind": "rss"
+      }
+    ],
+    "status": "active",
+    "notes": "Với các flow hoặc endpoint khác nhau, xem scopeNotes. Danh sách scope không khẳng định cần xin toàn bộ quyền cùng lúc."
+  },
+  {
+    "id": "account.facebook.eligibility",
+    "kind": "account_policy",
+    "scope": {
+      "platforms": [
+        "facebook"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "platform": "facebook",
+      "name": "Số liệu eligibility",
+      "signal": "eligibility",
+      "coverage": "partial",
+      "apiContractId": "api.facebook.status.eligibility",
+      "weeklyManualCheck": true,
+      "verification": "Poll có version; đối chiếu Professional Dashboard → Monetization/Insights."
+    },
+    "evidence": [
+      {
+        "url": "https://developers.facebook.com/docs/graph-api/reference/page/",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://developers.facebook.com/docs/graph-api/reference/video/video_insights/",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://developers.facebook.com/docs/graph-api/overview/rate-limiting/",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://about.fb.com/news/2026/03/creator-fast-track-grow-your-audience-earn-money-on-facebook/",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://developers.facebook.com/docs/graph-api/reference/page/",
+        "checkedAt": "2026-11-10",
+        "type": "inference"
+      }
+    ],
+    "confidence": "medium",
+    "volatility": "quarterly",
+    "watch": [
+      {
+        "url": "https://developers.facebook.com/docs/graph-api/reference/page/",
+        "kind": "api_revision"
+      },
+      {
+        "url": "https://developers.facebook.com/blog/feed/",
+        "kind": "rss"
+      }
+    ],
+    "status": "active",
+    "notes": "Phân biệt trạng thái kết nối, vận hành publish và quyết định enforcement."
+  },
+  {
+    "id": "api.facebook.status.eligibility",
+    "kind": "api_contract",
+    "scope": {
+      "platforms": [
+        "facebook"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "platform": "facebook",
+      "name": "Số liệu eligibility",
+      "endpoint": "GET /{page-id}?fields=followers_count; GET /{video-id}/video_insights",
+      "scopes": [
+        "pages_read_engagement",
+        "read_insights"
+      ],
+      "scopeNotes": "Page access token, pages_read_engagement; read_insights cho Insights theo endpoint",
+      "quotaCost": null,
+      "quotaUnit": null,
+      "quotaNotes": "BUC/app limit; số cố định null",
+      "rateLimit": null,
+      "details": "GET /{page-id}?fields=followers_count nếu được hỗ trợ ở phiên bản đó; GET /{video-id}/video_insights cho metric còn hiệu lực. Không suy qualified views hay lời mời từ raw counts.",
+      "delivery": "Poll có version; đối chiếu Professional Dashboard → Monetization/Insights."
+    },
+    "evidence": [
+      {
+        "url": "https://developers.facebook.com/docs/graph-api/reference/page/",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://developers.facebook.com/docs/graph-api/reference/video/video_insights/",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://developers.facebook.com/docs/graph-api/overview/rate-limiting/",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://about.fb.com/news/2026/03/creator-fast-track-grow-your-audience-earn-money-on-facebook/",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://developers.facebook.com/docs/graph-api/reference/page/",
+        "checkedAt": "2026-11-10",
+        "type": "inference"
+      }
+    ],
+    "confidence": "medium",
+    "volatility": "quarterly",
+    "watch": [
+      {
+        "url": "https://developers.facebook.com/docs/graph-api/reference/page/",
+        "kind": "api_revision"
+      },
+      {
+        "url": "https://developers.facebook.com/blog/feed/",
+        "kind": "rss"
+      }
+    ],
+    "status": "active",
+    "notes": "Với các flow hoặc endpoint khác nhau, xem scopeNotes. Danh sách scope không khẳng định cần xin toàn bộ quyền cùng lúc."
+  },
+  {
+    "id": "account.instagram.strikes",
+    "kind": "account_policy",
+    "scope": {
+      "platforms": [
+        "instagram"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "platform": "instagram",
+      "name": "Strike / cảnh báo",
+      "signal": "strikes",
+      "coverage": "manual",
+      "apiContractId": null,
+      "weeklyManualCheck": true,
+      "verification": "Settings and activity → Account Status → removed content, tính năng không dùng được."
+    },
+    "evidence": [
+      {
+        "url": "https://help.instagram.com/338481628002750",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://help.instagram.com/338481628002750",
+        "checkedAt": "2026-11-10",
+        "type": "inference"
+      }
+    ],
+    "confidence": "medium",
+    "volatility": "quarterly",
+    "watch": [
+      {
+        "url": "https://help.instagram.com/338481628002750",
+        "kind": "policy_page"
+      },
+      {
+        "url": "https://developers.facebook.com/blog/feed/",
+        "kind": "rss"
+      }
+    ],
+    "status": "active",
+    "notes": "Không thấy API công khai trong phạm vi đã rà. Kết luận về độ phủ là suy luận từ tài liệu, không phải bằng chứng cấm truy cập."
+  },
+  {
+    "id": "account.instagram.suspension",
+    "kind": "account_policy",
+    "scope": {
+      "platforms": [
+        "instagram"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "platform": "instagram",
+      "name": "Đình chỉ / khóa",
+      "signal": "suspension",
+      "coverage": "manual",
+      "apiContractId": null,
+      "weeklyManualCheck": true,
+      "verification": "Account Status, thông báo trong app/email và quy trình appeal. Graph lỗi không xác nhận suspension."
+    },
+    "evidence": [
+      {
+        "url": "https://help.instagram.com/338481628002750",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://www.postman.com/meta/instagram/documentation/6yqw8pt/instagram-api",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://help.instagram.com/338481628002750",
+        "checkedAt": "2026-11-10",
+        "type": "inference"
+      }
+    ],
+    "confidence": "medium",
+    "volatility": "quarterly",
+    "watch": [
+      {
+        "url": "https://help.instagram.com/338481628002750",
+        "kind": "policy_page"
+      },
+      {
+        "url": "https://developers.facebook.com/blog/feed/",
+        "kind": "rss"
+      }
+    ],
+    "status": "active",
+    "notes": "Không thấy API công khai trong phạm vi đã rà. Kết luận về độ phủ là suy luận từ tài liệu, không phải bằng chứng cấm truy cập."
+  },
+  {
+    "id": "account.instagram.channel_money",
+    "kind": "account_policy",
+    "scope": {
+      "platforms": [
+        "instagram"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "platform": "instagram",
+      "name": "Kiếm tiền cấp kênh",
+      "signal": "channel_money",
+      "coverage": "manual",
+      "apiContractId": null,
+      "weeklyManualCheck": true,
+      "verification": "Professional Dashboard → Monetization status nếu có; đọc theo từng tính năng (Gifts, Subscriptions…)."
+    },
+    "evidence": [
+      {
+        "url": "https://help.instagram.com/2635536099905516",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://help.instagram.com/2635536099905516",
+        "checkedAt": "2026-11-10",
+        "type": "inference"
+      }
+    ],
+    "confidence": "medium",
+    "volatility": "quarterly",
+    "watch": [
+      {
+        "url": "https://help.instagram.com/2635536099905516",
+        "kind": "policy_page"
+      },
+      {
+        "url": "https://developers.facebook.com/blog/feed/",
+        "kind": "rss"
+      }
+    ],
+    "status": "active",
+    "notes": "Không thấy API công khai trong phạm vi đã rà. Kết luận về độ phủ là suy luận từ tài liệu, không phải bằng chứng cấm truy cập."
+  },
+  {
+    "id": "account.instagram.video_money",
+    "kind": "account_policy",
+    "scope": {
+      "platforms": [
+        "instagram"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "platform": "instagram",
+      "name": "Kiếm tiền cấp video",
+      "signal": "video_money",
+      "coverage": "manual",
+      "apiContractId": null,
+      "weeklyManualCheck": true,
+      "verification": "Professional Dashboard và chi tiết bài/chương trình. IG Media Insights không có cờ organic monetization phổ quát đã xác nhận."
+    },
+    "evidence": [
+      {
+        "url": "https://help.instagram.com/2635536099905516",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://developers.facebook.com/docs/instagram-platform/instagram-api-with-instagram-login/insights/",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://help.instagram.com/2635536099905516",
+        "checkedAt": "2026-11-10",
+        "type": "inference"
+      }
+    ],
+    "confidence": "medium",
+    "volatility": "quarterly",
+    "watch": [
+      {
+        "url": "https://help.instagram.com/2635536099905516",
+        "kind": "policy_page"
+      },
+      {
+        "url": "https://developers.facebook.com/blog/feed/",
+        "kind": "rss"
+      }
+    ],
+    "status": "active",
+    "notes": "Không thấy API công khai trong phạm vi đã rà. Kết luận về độ phủ là suy luận từ tài liệu, không phải bằng chứng cấm truy cập."
+  },
+  {
+    "id": "account.instagram.ads",
+    "kind": "account_policy",
+    "scope": {
+      "platforms": [
+        "instagram"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "platform": "instagram",
+      "name": "Phù hợp quảng cáo",
+      "signal": "ads",
+      "coverage": "manual",
+      "apiContractId": null,
+      "weeklyManualCheck": true,
+      "verification": "Monetization status và thông báo nội dung; không suy từ partnership/boost eligibility."
+    },
+    "evidence": [
+      {
+        "url": "https://help.instagram.com/2635536099905516",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://help.instagram.com/338481628002750",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://help.instagram.com/2635536099905516",
+        "checkedAt": "2026-11-10",
+        "type": "inference"
+      }
+    ],
+    "confidence": "medium",
+    "volatility": "quarterly",
+    "watch": [
+      {
+        "url": "https://help.instagram.com/2635536099905516",
+        "kind": "policy_page"
+      },
+      {
+        "url": "https://developers.facebook.com/blog/feed/",
+        "kind": "rss"
+      }
+    ],
+    "status": "active",
+    "notes": "Không thấy API công khai trong phạm vi đã rà. Kết luận về độ phủ là suy luận từ tài liệu, không phải bằng chứng cấm truy cập."
+  },
+  {
+    "id": "account.instagram.claims",
+    "kind": "account_policy",
+    "scope": {
+      "platforms": [
+        "instagram"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "platform": "instagram",
+      "name": "Khiếu nại bản quyền",
+      "signal": "claims",
+      "coverage": "manual",
+      "apiContractId": null,
+      "weeklyManualCheck": true,
+      "verification": "Thông báo bản quyền, Support Requests/Account Status. Không thấy claim ledger ở IG Media API đã rà."
+    },
+    "evidence": [
+      {
+        "url": "https://help.instagram.com/126382350847838",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://help.instagram.com/338481628002750",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://www.postman.com/meta/instagram/documentation/6yqw8pt/instagram-api",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://help.instagram.com/126382350847838",
+        "checkedAt": "2026-11-10",
+        "type": "inference"
+      }
+    ],
+    "confidence": "medium",
+    "volatility": "quarterly",
+    "watch": [
+      {
+        "url": "https://help.instagram.com/126382350847838",
+        "kind": "policy_page"
+      },
+      {
+        "url": "https://developers.facebook.com/blog/feed/",
+        "kind": "rss"
+      }
+    ],
+    "status": "active",
+    "notes": "Không thấy API công khai trong phạm vi đã rà. Kết luận về độ phủ là suy luận từ tài liệu, không phải bằng chứng cấm truy cập."
+  },
+  {
+    "id": "account.instagram.removal",
+    "kind": "account_policy",
+    "scope": {
+      "platforms": [
+        "instagram"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "platform": "instagram",
+      "name": "Gỡ video",
+      "signal": "removal",
+      "coverage": "partial",
+      "apiContractId": "api.instagram.status.removal",
+      "weeklyManualCheck": true,
+      "verification": "Poll; xác nhận Account Status và Support Requests."
+    },
+    "evidence": [
+      {
+        "url": "https://www.postman.com/meta/instagram/documentation/6yqw8pt/instagram-api",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://developers.facebook.com/docs/instagram-platform/instagram-api-with-instagram-login/content-publishing/",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://developers.facebook.com/docs/graph-api/overview/rate-limiting/",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://help.instagram.com/338481628002750",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://www.postman.com/meta/instagram/documentation/6yqw8pt/instagram-api",
+        "checkedAt": "2026-11-10",
+        "type": "inference"
+      }
+    ],
+    "confidence": "medium",
+    "volatility": "quarterly",
+    "watch": [
+      {
+        "url": "https://www.postman.com/meta/instagram/documentation/6yqw8pt/instagram-api",
+        "kind": "api_revision"
+      },
+      {
+        "url": "https://developers.facebook.com/blog/feed/",
+        "kind": "rss"
+      }
+    ],
+    "status": "active",
+    "notes": "Phân biệt trạng thái kết nối, vận hành publish và quyết định enforcement."
+  },
+  {
+    "id": "api.instagram.status.removal",
+    "kind": "api_contract",
+    "scope": {
+      "platforms": [
+        "instagram"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "platform": "instagram",
+      "name": "Gỡ video",
+      "endpoint": "GET /{ig-media-id}; GET /{ig-user-id}/media",
+      "scopes": [
+        "instagram_business_basic",
+        "instagram_basic"
+      ],
+      "scopeNotes": "Instagram Login: instagram_business_basic; Facebook Login: instagram_basic và Page quyền liên quan",
+      "quotaCost": null,
+      "quotaUnit": null,
+      "quotaNotes": "Graph giới hạn theo app/use case; số cố định null",
+      "rateLimit": null,
+      "details": "GET /{ig-media-id} hoặc /{ig-user-id}/media để đối chiếu ID; thiếu ID không phân biệt xóa, restriction, quyền hoặc lỗi. Container EXPIRED không nói bài đã gỡ.",
+      "delivery": "Poll; xác nhận Account Status và Support Requests."
+    },
+    "evidence": [
+      {
+        "url": "https://www.postman.com/meta/instagram/documentation/6yqw8pt/instagram-api",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://developers.facebook.com/docs/instagram-platform/instagram-api-with-instagram-login/content-publishing/",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://developers.facebook.com/docs/graph-api/overview/rate-limiting/",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://help.instagram.com/338481628002750",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://www.postman.com/meta/instagram/documentation/6yqw8pt/instagram-api",
+        "checkedAt": "2026-11-10",
+        "type": "inference"
+      }
+    ],
+    "confidence": "medium",
+    "volatility": "quarterly",
+    "watch": [
+      {
+        "url": "https://www.postman.com/meta/instagram/documentation/6yqw8pt/instagram-api",
+        "kind": "api_revision"
+      },
+      {
+        "url": "https://developers.facebook.com/blog/feed/",
+        "kind": "rss"
+      }
+    ],
+    "status": "active",
+    "notes": "Với các flow hoặc endpoint khác nhau, xem scopeNotes. Danh sách scope không khẳng định cần xin toàn bộ quyền cùng lúc."
+  },
+  {
+    "id": "account.instagram.age",
+    "kind": "account_policy",
+    "scope": {
+      "platforms": [
+        "instagram"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "platform": "instagram",
+      "name": "Giới hạn tuổi",
+      "signal": "age",
+      "coverage": "manual",
+      "apiContractId": null,
+      "weeklyManualCheck": true,
+      "verification": "Account Status hoặc thông báo bài. Thiết lập minimum age của account không phải age restriction của video."
+    },
+    "evidence": [
+      {
+        "url": "https://help.instagram.com/338481628002750",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://www.postman.com/meta/instagram/documentation/6yqw8pt/instagram-api",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://help.instagram.com/338481628002750",
+        "checkedAt": "2026-11-10",
+        "type": "inference"
+      }
+    ],
+    "confidence": "medium",
+    "volatility": "quarterly",
+    "watch": [
+      {
+        "url": "https://help.instagram.com/338481628002750",
+        "kind": "policy_page"
+      },
+      {
+        "url": "https://developers.facebook.com/blog/feed/",
+        "kind": "rss"
+      }
+    ],
+    "status": "active",
+    "notes": "Không thấy API công khai trong phạm vi đã rà. Kết luận về độ phủ là suy luận từ tài liệu, không phải bằng chứng cấm truy cập."
+  },
+  {
+    "id": "account.instagram.region",
+    "kind": "account_policy",
+    "scope": {
+      "platforms": [
+        "instagram"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "platform": "instagram",
+      "name": "Chặn theo vùng",
+      "signal": "region",
+      "coverage": "manual",
+      "apiContractId": null,
+      "weeklyManualCheck": true,
+      "verification": "Thông báo nội dung hoặc bản quyền. UI danh sách quốc gia bị chặn theo từng bài: null trong nguồn công khai."
+    },
+    "evidence": [
+      {
+        "url": "https://help.instagram.com/338481628002750",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://help.instagram.com/126382350847838",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://help.instagram.com/338481628002750",
+        "checkedAt": "2026-11-10",
+        "type": "inference"
+      }
+    ],
+    "confidence": "medium",
+    "volatility": "quarterly",
+    "watch": [
+      {
+        "url": "https://help.instagram.com/338481628002750",
+        "kind": "policy_page"
+      },
+      {
+        "url": "https://developers.facebook.com/blog/feed/",
+        "kind": "rss"
+      }
+    ],
+    "status": "active",
+    "notes": "Không thấy API công khai trong phạm vi đã rà. Kết luận về độ phủ là suy luận từ tài liệu, không phải bằng chứng cấm truy cập."
+  },
+  {
+    "id": "account.instagram.upload",
+    "kind": "account_policy",
+    "scope": {
+      "platforms": [
+        "instagram"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "platform": "instagram",
+      "name": "Từ chối upload / publish",
+      "signal": "upload",
+      "coverage": "api",
+      "apiContractId": "api.instagram.status.upload",
+      "weeklyManualCheck": false,
+      "verification": "Poll container; đối chiếu lỗi media_publish, xem nội dung trong app."
+    },
+    "evidence": [
+      {
+        "url": "https://www.postman.com/meta/instagram/documentation/6yqw8pt/instagram-api",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://developers.facebook.com/docs/instagram-platform/instagram-api-with-instagram-login/content-publishing/",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://developers.facebook.com/docs/instagram-platform/instagram-api-with-facebook-login/content-publishing/",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://developers.facebook.com/docs/graph-api/overview/rate-limiting/",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      }
+    ],
+    "confidence": "high",
+    "volatility": "quarterly",
+    "watch": [
+      {
+        "url": "https://www.postman.com/meta/instagram/documentation/6yqw8pt/instagram-api",
+        "kind": "api_revision"
+      },
+      {
+        "url": "https://developers.facebook.com/blog/feed/",
+        "kind": "rss"
+      }
+    ],
+    "status": "active",
+    "notes": "Phân biệt trạng thái kết nối, vận hành publish và quyết định enforcement."
+  },
+  {
+    "id": "api.instagram.status.upload",
+    "kind": "api_contract",
+    "scope": {
+      "platforms": [
+        "instagram"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "platform": "instagram",
+      "name": "Từ chối upload / publish",
+      "endpoint": "GET /{ig-container-id}?fields=status_code,status",
+      "scopes": [
+        "instagram_business_basic",
+        "instagram_business_content_publish",
+        "instagram_basic",
+        "instagram_content_publish"
+      ],
+      "scopeNotes": "Instagram Login: instagram_business_basic + instagram_business_content_publish. Facebook Login: instagram_basic + instagram_content_publish, Page access theo flow",
+      "quotaCost": null,
+      "quotaUnit": null,
+      "quotaNotes": "Graph số cố định null; publishing cap là giới hạn khác",
+      "rateLimit": null,
+      "details": "GET /{ig-container-id}?fields=status_code,status → IN_PROGRESS, FINISHED, ERROR, EXPIRED, PUBLISHED. Phân biệt container fail và media đã publish.",
+      "delivery": "Poll container; đối chiếu lỗi media_publish, xem nội dung trong app."
+    },
+    "evidence": [
+      {
+        "url": "https://www.postman.com/meta/instagram/documentation/6yqw8pt/instagram-api",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://developers.facebook.com/docs/instagram-platform/instagram-api-with-instagram-login/content-publishing/",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://developers.facebook.com/docs/instagram-platform/instagram-api-with-facebook-login/content-publishing/",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://developers.facebook.com/docs/graph-api/overview/rate-limiting/",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      }
+    ],
+    "confidence": "high",
+    "volatility": "quarterly",
+    "watch": [
+      {
+        "url": "https://www.postman.com/meta/instagram/documentation/6yqw8pt/instagram-api",
+        "kind": "api_revision"
+      },
+      {
+        "url": "https://developers.facebook.com/blog/feed/",
+        "kind": "rss"
+      }
+    ],
+    "status": "active",
+    "notes": "Với các flow hoặc endpoint khác nhau, xem scopeNotes. Danh sách scope không khẳng định cần xin toàn bộ quyền cùng lúc."
+  },
+  {
+    "id": "account.instagram.revoke",
+    "kind": "account_policy",
+    "scope": {
+      "platforms": [
+        "instagram"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "platform": "instagram",
+      "name": "Thu hồi quyền kết nối",
+      "signal": "revoke",
+      "coverage": "partial",
+      "apiContractId": "api.instagram.status.revoke",
+      "weeklyManualCheck": true,
+      "verification": "Phát hiện lúc gọi hoặc refresh; Apps and Websites / Website permissions trong Instagram."
+    },
+    "evidence": [
+      {
+        "url": "https://www.postman.com/meta/instagram/documentation/6yqw8pt/instagram-api",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://developers.facebook.com/docs/facebook-login/guides/access-tokens/debugging-and-error-handling/",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://developers.facebook.com/docs/facebook-login/guides/advanced/manual-flow/",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://developers.facebook.com/docs/graph-api/guides/error-handling/",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://www.postman.com/meta/instagram/documentation/6yqw8pt/instagram-api",
+        "checkedAt": "2026-11-10",
+        "type": "inference"
+      }
+    ],
+    "confidence": "medium",
+    "volatility": "quarterly",
+    "watch": [
+      {
+        "url": "https://www.postman.com/meta/instagram/documentation/6yqw8pt/instagram-api",
+        "kind": "api_revision"
+      },
+      {
+        "url": "https://developers.facebook.com/blog/feed/",
+        "kind": "rss"
+      }
+    ],
+    "status": "active",
+    "notes": "Phân biệt trạng thái kết nối, vận hành publish và quyết định enforcement."
+  },
+  {
+    "id": "api.instagram.status.revoke",
+    "kind": "api_contract",
+    "scope": {
+      "platforms": [
+        "instagram"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "platform": "instagram",
+      "name": "Thu hồi quyền kết nối",
+      "endpoint": "GET /debug_token (Facebook Login)",
+      "scopes": null,
+      "scopeNotes": "App access token để debug Facebook Login; không dùng chéo host/flow",
+      "quotaCost": null,
+      "quotaUnit": null,
+      "quotaNotes": "null",
+      "rateLimit": null,
+      "details": "Facebook Login: Graph code 190, debug_token và deauthorize callback của Facebook Login. Instagram Login: token không hợp lệ/expired; chưa xác nhận callback tương đương cho mọi flow, lý do null.",
+      "delivery": "Phát hiện lúc gọi hoặc refresh; Apps and Websites / Website permissions trong Instagram."
+    },
+    "evidence": [
+      {
+        "url": "https://www.postman.com/meta/instagram/documentation/6yqw8pt/instagram-api",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://developers.facebook.com/docs/facebook-login/guides/access-tokens/debugging-and-error-handling/",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://developers.facebook.com/docs/facebook-login/guides/advanced/manual-flow/",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://developers.facebook.com/docs/graph-api/guides/error-handling/",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://www.postman.com/meta/instagram/documentation/6yqw8pt/instagram-api",
+        "checkedAt": "2026-11-10",
+        "type": "inference"
+      }
+    ],
+    "confidence": "medium",
+    "volatility": "quarterly",
+    "watch": [
+      {
+        "url": "https://www.postman.com/meta/instagram/documentation/6yqw8pt/instagram-api",
+        "kind": "api_revision"
+      },
+      {
+        "url": "https://developers.facebook.com/blog/feed/",
+        "kind": "rss"
+      }
+    ],
+    "status": "active",
+    "notes": "Với các flow hoặc endpoint khác nhau, xem scopeNotes. Danh sách scope không khẳng định cần xin toàn bộ quyền cùng lúc."
+  },
+  {
+    "id": "account.instagram.eligibility",
+    "kind": "account_policy",
+    "scope": {
+      "platforms": [
+        "instagram"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "platform": "instagram",
+      "name": "Số liệu eligibility",
+      "signal": "eligibility",
+      "coverage": "partial",
+      "apiContractId": "api.instagram.status.eligibility",
+      "weeklyManualCheck": true,
+      "verification": "Poll; đối chiếu Professional Dashboard. Phân biệt followers_count field và follower_count insight."
+    },
+    "evidence": [
+      {
+        "url": "https://www.postman.com/meta/instagram/documentation/6yqw8pt/instagram-api",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://developers.facebook.com/docs/instagram-platform/instagram-api-with-instagram-login/insights/",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://developers.facebook.com/docs/instagram-platform/instagram-api-with-facebook-login/insights/",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://developers.facebook.com/docs/graph-api/overview/rate-limiting/",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://help.instagram.com/2635536099905516",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://www.postman.com/meta/instagram/documentation/6yqw8pt/instagram-api",
+        "checkedAt": "2026-11-10",
+        "type": "inference"
+      }
+    ],
+    "confidence": "medium",
+    "volatility": "quarterly",
+    "watch": [
+      {
+        "url": "https://www.postman.com/meta/instagram/documentation/6yqw8pt/instagram-api",
+        "kind": "api_revision"
+      },
+      {
+        "url": "https://developers.facebook.com/blog/feed/",
+        "kind": "rss"
+      }
+    ],
+    "status": "active",
+    "notes": "Phân biệt trạng thái kết nối, vận hành publish và quyết định enforcement."
+  },
+  {
+    "id": "api.instagram.status.eligibility",
+    "kind": "api_contract",
+    "scope": {
+      "platforms": [
+        "instagram"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "platform": "instagram",
+      "name": "Số liệu eligibility",
+      "endpoint": "GET /{ig-user-id}; GET /{ig-user-id}/insights; GET /{ig-media-id}/insights",
+      "scopes": [
+        "instagram_business_basic",
+        "instagram_business_manage_insights",
+        "instagram_basic",
+        "instagram_manage_insights"
+      ],
+      "scopeNotes": "Instagram Login: instagram_business_basic, instagram_business_manage_insights. Facebook Login: instagram_basic, instagram_manage_insights và Page permissions theo asset",
+      "quotaCost": null,
+      "quotaUnit": null,
+      "quotaNotes": "Graph số cố định null",
+      "rateLimit": null,
+      "details": "GET /{ig-user-id}?fields=followers_count và /{ig-user-id}/insights, /{ig-media-id}/insights cho metric views khi hỗ trợ. Không dùng thay eligibility/gifts/bonus qualified metrics.",
+      "delivery": "Poll; đối chiếu Professional Dashboard. Phân biệt followers_count field và follower_count insight."
+    },
+    "evidence": [
+      {
+        "url": "https://www.postman.com/meta/instagram/documentation/6yqw8pt/instagram-api",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://developers.facebook.com/docs/instagram-platform/instagram-api-with-instagram-login/insights/",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://developers.facebook.com/docs/instagram-platform/instagram-api-with-facebook-login/insights/",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://developers.facebook.com/docs/graph-api/overview/rate-limiting/",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://help.instagram.com/2635536099905516",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://www.postman.com/meta/instagram/documentation/6yqw8pt/instagram-api",
+        "checkedAt": "2026-11-10",
+        "type": "inference"
+      }
+    ],
+    "confidence": "medium",
+    "volatility": "quarterly",
+    "watch": [
+      {
+        "url": "https://www.postman.com/meta/instagram/documentation/6yqw8pt/instagram-api",
+        "kind": "api_revision"
+      },
+      {
+        "url": "https://developers.facebook.com/blog/feed/",
+        "kind": "rss"
+      }
+    ],
+    "status": "active",
+    "notes": "Với các flow hoặc endpoint khác nhau, xem scopeNotes. Danh sách scope không khẳng định cần xin toàn bộ quyền cùng lúc."
+  },
+  {
+    "id": "api.youtube.data.lifecycle",
+    "kind": "api_contract",
+    "scope": {
+      "platforms": [
+        "youtube"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "name": "YouTube Data API",
+      "endpoint": "/youtube/v3",
+      "scopes": null,
+      "quotaCost": null,
+      "versioning": "v3; thay đổi theo revision, một số mốc có báo trước riêng. Hạn tối thiểu chung null.",
+      "headers": "null",
+      "errors": "Quota 403 quotaExceeded; quyền 403 forbidden/insufficientPermissions; auth 401; tách 429/quota project theo lỗi Google.",
+      "history": "30/04/2024 ngừng API thảo luận cấp kênh; 31/03/2025 view Shorts bắt đầu tính khi phát/phát lại; 21/07/2025 mostPopular đổi từ Trending Now sang Music/Movies/Gaming; 04/12/2025 docs hạ quota videos.insert khoảng 1600→100; 01/06/2026 tách bucket search.list và videos.insert; 02/11/2026 đảo quy định upload mặc định private với dự án chưa audit.",
+      "feed": null
+    },
+    "evidence": [
+      {
+        "url": "https://developers.google.com/youtube/data/revision_history",
+        "checkedAt": "2026-11-11",
+        "type": "official"
+      },
+      {
+        "url": "https://developers.google.com/youtube/v3/docs/errors",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://developers.google.com/youtube/v3/determine_quota_cost",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://developers.google.com/youtube/v3/guides/quota_and_compliance_audits",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      }
+    ],
+    "confidence": "high",
+    "volatility": "monthly",
+    "watch": [
+      {
+        "url": "https://developers.google.com/youtube/data/revision_history",
+        "kind": "api_revision"
+      }
+    ],
+    "status": "active",
+    "notes": "Endpoint là bề mặt nhà cung cấp công bố, không khẳng định mọi route đang bật. Khi lifecycle record không gắn một operation, scopes và quotaCost giữ null."
+  },
+  {
+    "id": "api.youtube.analytics.lifecycle",
+    "kind": "api_contract",
+    "scope": {
+      "platforms": [
+        "youtube"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "name": "YouTube Analytics API / Reporting",
+      "endpoint": "/v2/reports",
+      "scopes": null,
+      "quotaCost": null,
+      "versioning": "Analytics v2, Reporting có phiên bản report type. Dùng lịch theo từng loại report, hạn tối thiểu chung null.",
+      "headers": "null",
+      "errors": "OAuth 401/403; scope thiếu phải phân biệt quota. Quota per-query và mã quota riêng của Analytics null.",
+      "history": "30/06/2025 report bulk đổi theo Shorts; Claims report a1/a2 hết 30/09/2025, các report cũ khác nêu trong thông báo kéo đến 31/10/2025. 27/08/2026 công bố thay đổi public views và giữ định nghĩa engaged; kiểm ngày triển khai theo nguồn. 09/09/2026 tài liệu nêu độ trễ 48–72 giờ và cắt end date về ngày đã xử lý đủ.",
+      "feed": null
+    },
+    "evidence": [
+      {
+        "url": "https://developers.google.com/youtube/analytics/revision_history",
+        "checkedAt": "2026-11-11",
+        "sourceUpdatedAt": "2026-11-09",
+        "type": "official"
+      },
+      {
+        "url": "https://developers.google.com/youtube/analytics/reference/reports/query",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://developers.google.com/youtube/reporting/v1/reports",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      }
+    ],
+    "confidence": "high",
+    "volatility": "monthly",
+    "watch": [
+      {
+        "url": "https://developers.google.com/youtube/analytics/revision_history",
+        "kind": "api_revision"
+      }
+    ],
+    "status": "active",
+    "notes": "Endpoint là bề mặt nhà cung cấp công bố, không khẳng định mọi route đang bật. Khi lifecycle record không gắn một operation, scopes và quotaCost giữ null."
+  },
+  {
+    "id": "api.tiktok.content_posting.lifecycle",
+    "kind": "api_contract",
+    "scope": {
+      "platforms": [
+        "tiktok"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "name": "TikTok Content Posting",
+      "endpoint": "/v2/post/publish/",
+      "scopes": null,
+      "quotaCost": null,
+      "versioning": "v2; lịch từng tính năng qua changelog, notice tối thiểu chung null.",
+      "headers": "null",
+      "errors": "401 access_token_invalid; 429 rate_limit_exceeded; fail_reason của publish là kênh riêng; spam/cap/unaudited và URL ownership có lỗi riêng tùy endpoint.",
+      "history": "Đã rà changelog 3 năm. Mốc loại endpoint v2 Posting đang dùng null; thay đổi bổ sung không tự tính là breaking. Dùng status enum và webhook schema làm chuẩn hiện hành.",
+      "feed": null
+    },
+    "evidence": [
+      {
+        "url": "https://developers.tiktok.com/docs/en/changelog",
+        "checkedAt": "2026-11-10",
+        "sourceUpdatedAt": "2026-08-26",
+        "type": "official"
+      },
+      {
+        "url": "https://developers.tiktok.com/docs/en/content-posting-api-reference-get-video-status",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://developers.tiktok.com/docs/en/content-posting-api-reference-direct-post",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://developers.tiktok.com/docs/en/tiktok-api-v2-error-handling",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      }
+    ],
+    "confidence": "medium",
+    "volatility": "monthly",
+    "watch": [
+      {
+        "url": "https://developers.tiktok.com/docs/en/changelog",
+        "kind": "api_revision"
+      }
+    ],
+    "status": "active",
+    "notes": "Endpoint là bề mặt nhà cung cấp công bố, không khẳng định mọi route đang bật. Khi lifecycle record không gắn một operation, scopes và quotaCost giữ null."
+  },
+  {
+    "id": "api.tiktok.display.lifecycle",
+    "kind": "api_contract",
+    "scope": {
+      "platforms": [
+        "tiktok"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "name": "TikTok Display",
+      "endpoint": "/v2/user/info/; /v2/video/list/; /v2/video/query/",
+      "scopes": null,
+      "quotaCost": null,
+      "versioning": "v2; bulletin riêng khi đổi scope; notice tối thiểu chung null.",
+      "headers": "null",
+      "errors": "401 access_token_invalid; 403 scope_not_authorized; 429 rate_limit_exceeded; user/info, video/list và video/query mỗi endpoint 600/phút mặc định.",
+      "history": "29/02/2024 hạn chuyển scope User Info: cần user cấp lại scope mới và access token mới để đọc field đúng. Đây là thay đổi consent, không chỉ đổi URL.",
+      "feed": null
+    },
+    "evidence": [
+      {
+        "url": "https://developers.tiktok.com/docs/en/changelog",
+        "checkedAt": "2026-11-10",
+        "sourceUpdatedAt": "2026-08-26",
+        "type": "official"
+      },
+      {
+        "url": "https://developers.tiktok.com/bulletin/user-info-scope-migration",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://developers.tiktok.com/docs/en/tiktok-api-v2-rate-limit",
+        "checkedAt": "2026-11-10",
+        "sourceUpdatedAt": "2026-08-04",
+        "type": "official"
+      },
+      {
+        "url": "https://developers.tiktok.com/docs/en/tiktok-api-v2-error-handling",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      }
+    ],
+    "confidence": "high",
+    "volatility": "monthly",
+    "watch": [
+      {
+        "url": "https://developers.tiktok.com/docs/en/changelog",
+        "kind": "api_revision"
+      }
+    ],
+    "status": "active",
+    "notes": "Endpoint là bề mặt nhà cung cấp công bố, không khẳng định mọi route đang bật. Khi lifecycle record không gắn một operation, scopes và quotaCost giữ null."
+  },
+  {
+    "id": "api.facebook.graph.lifecycle",
+    "kind": "api_contract",
+    "scope": {
+      "platforms": [
+        "facebook"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "name": "Meta Graph / Facebook",
+      "endpoint": "https://graph.facebook.com/{version}/",
+      "scopes": null,
+      "quotaCost": null,
+      "versioning": "Graph /vN.N; lifecycle theo bảng versions và ngoại lệ theo sản phẩm. Không dùng Marketing API schedule thay Graph. Hạn tối thiểu chưa xác nhận từ trang accessible.",
+      "headers": "null; facebook-api-version và X-App-Usage/X-Business-Use-Case-Usage chỉ là version/usage",
+      "errors": "Graph error.code 190 auth; 4/17/32/613 rate tùy phạm vi; kiểm error_subcode/is_transient và HTTP, không chờ mỗi 429.",
+      "history": "22/04/2024 Groups API bị bỏ trên mọi version theo v19.0 (không khẳng định app dùng Groups). 09/10/2026 Meta thông báo bỏ Access Verification riêng cho Tech Provider onboarding, không phải bỏ App Review. 04/11/2026 công bố v27.0, changelog ghi đầu 11/2026 video_insights không còn trả total_video_consumption_rate trên mọi version. Ngày rollout chính xác null.",
+      "feed": "https://developers.facebook.com/blog/feed/"
+    },
+    "evidence": [
+      {
+        "url": "https://developers.facebook.com/blog/feed/",
+        "checkedAt": "2026-11-11",
+        "type": "official"
+      },
+      {
+        "url": "https://developers.facebook.com/docs/graph-api/overview/rate-limiting/",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://developers.facebook.com/docs/graph-api/guides/error-handling/",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://developers.facebook.com/blog/post/2026/10/09/retiring-access-verification-for-tech-provider-apps/",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://developers.facebook.com/blog/post/2026/11/04/introducing-graph-api-v27-and-marketing-api-v27/",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://developers.facebook.com/documentation/development/graph-api/changelog",
+        "checkedAt": "2026-11-11",
+        "type": "official"
+      },
+      {
+        "url": "https://developers.facebook.com/documentation/development/graph-api/changelog/version19.0",
+        "checkedAt": "2026-11-11",
+        "type": "official"
+      },
+      {
+        "url": "https://developers.facebook.com/documentation/development/graph-api/changelog/version27.0",
+        "checkedAt": "2026-11-11",
+        "type": "official"
+      }
+    ],
+    "confidence": "medium",
+    "volatility": "monthly",
+    "watch": [
+      {
+        "url": "https://developers.facebook.com/documentation/development/graph-api/changelog",
+        "kind": "api_revision"
+      },
+      {
+        "url": "https://developers.facebook.com/blog/feed/",
+        "kind": "rss"
+      }
+    ],
+    "status": "active",
+    "notes": "Endpoint là bề mặt nhà cung cấp công bố, không khẳng định mọi route đang bật. Khi lifecycle record không gắn một operation, scopes và quotaCost giữ null."
+  },
+  {
+    "id": "api.instagram.graph.lifecycle",
+    "kind": "api_contract",
+    "scope": {
+      "platforms": [
+        "instagram"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "name": "Meta Graph / Instagram",
+      "endpoint": "https://graph.instagram.com/{version}/; https://graph.facebook.com/{version}/",
+      "scopes": null,
+      "quotaCost": null,
+      "versioning": "Graph version và hai flow Instagram Login/Facebook Login; yêu cầu professional account tùy API. Notice tối thiểu null.",
+      "headers": "null; usage headers không phải lịch sunset",
+      "errors": "Code 190 cho access token, rate tùy use case Graph, lỗi publish phải đọc JSON và container status.",
+      "history": "04/09/2024 Meta thông báo Basic Display kết thúc 04/12/2024. Bản web tìm kiếm đôi khi không trích được, GET công khai trả bài gốc. 27/01/2025 mốc legacy scope Instagram Login được thay bằng instagram_business_* theo báo cáo maintainer SDK. Kiểm lại từng app trước re-consent.",
+      "feed": "https://developers.facebook.com/blog/feed/"
+    },
+    "evidence": [
+      {
+        "url": "https://developers.facebook.com/docs/instagram-platform/changelog/",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://developers.facebook.com/blog/post/2024/09/04/update-on-instagram-basic-display-api/",
+        "checkedAt": "2026-11-11",
+        "type": "official"
+      },
+      {
+        "url": "https://www.postman.com/meta/instagram/documentation/6yqw8pt/instagram-api",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://github.com/restfb/restfb/issues/1483",
+        "checkedAt": "2026-11-10",
+        "type": "industry"
+      },
+      {
+        "url": "https://help.zapier.com/hc/en-us/articles/32429170578317-Instagram-app-deprecation-on-Dec-4-2024",
+        "checkedAt": "2026-11-10",
+        "type": "industry"
+      },
+      {
+        "url": "https://developers.facebook.com/blog/feed/",
+        "checkedAt": "2026-11-11",
+        "type": "official"
+      }
+    ],
+    "confidence": "medium",
+    "volatility": "monthly",
+    "watch": [
+      {
+        "url": "https://developers.facebook.com/docs/instagram-platform/changelog/",
+        "kind": "api_revision"
+      },
+      {
+        "url": "https://developers.facebook.com/blog/feed/",
+        "kind": "rss"
+      }
+    ],
+    "status": "active",
+    "notes": "Endpoint là bề mặt nhà cung cấp công bố, không khẳng định mọi route đang bật. Khi lifecycle record không gắn một operation, scopes và quotaCost giữ null."
+  },
+  {
+    "id": "api.anthropic.messages.lifecycle",
+    "kind": "api_contract",
+    "scope": {
+      "platforms": [
+        "*"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "name": "Anthropic Claude API",
+      "endpoint": "POST /v1/messages",
+      "scopes": null,
+      "quotaCost": null,
+      "versioning": "anthropic-version và model ID tách riêng. Model public đang dùng: email/docs, ít nhất 60 ngày theo chính sách hiện hành, không áp cho Bedrock/Vertex tự vận hành.",
+      "headers": "null; usage/reset headers không phải sunset",
+      "errors": "401 authentication_error; 403 permission_error; 429 rate_limit_error; 529 overloaded_error, tách quá tải khỏi rate.",
+      "history": "28/10/2025 Claude 3.5 Sonnet IDs 20240620 và 20241022 nghỉ theo lịch model.",
+      "feed": null
+    },
+    "evidence": [
+      {
+        "url": "https://docs.anthropic.com/en/docs/about-claude/model-deprecations",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://platform.claude.com/docs/en/api/errors",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://platform.claude.com/docs/en/api/versioning",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      }
+    ],
+    "confidence": "medium",
+    "volatility": "monthly",
+    "watch": [
+      {
+        "url": "https://docs.anthropic.com/en/docs/about-claude/model-deprecations",
+        "kind": "api_revision"
+      }
+    ],
+    "status": "active",
+    "notes": "Endpoint là bề mặt nhà cung cấp công bố, không khẳng định mọi route đang bật. Khi lifecycle record không gắn một operation, scopes và quotaCost giữ null."
+  },
+  {
+    "id": "api.gemini.api.lifecycle",
+    "kind": "api_contract",
+    "scope": {
+      "platforms": [
+        "*"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "name": "Gemini API / Gemini TTS",
+      "endpoint": "POST /v1beta/models/{model}:generateContent",
+      "scopes": null,
+      "quotaCost": null,
+      "versioning": "v1/v1beta và lifecycle model; stable/preview/experimental khác nhau. Dùng lịch từng model; notice tối thiểu chung null.",
+      "headers": "null",
+      "errors": "429 RESOURCE_EXHAUSTED; 403 PERMISSION_DENIED; 400 INVALID_ARGUMENT có thể do key/request theo docs; tách 503 UNAVAILABLE.",
+      "history": "29/09/2025 Gemini 1.5 Pro/Flash stable bị tắt theo lịch deprecation đã công bố. Không áp mốc Gemini CLI cho Gemini API/TTS.",
+      "feed": null
+    },
+    "evidence": [
+      {
+        "url": "https://ai.google.dev/gemini-api/docs/changelog",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://ai.google.dev/gemini-api/docs/deprecations",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://ai.google.dev/gemini-api/docs/troubleshooting",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://ai.google.dev/gemini-api/docs/speech-generation",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      }
+    ],
+    "confidence": "medium",
+    "volatility": "monthly",
+    "watch": [
+      {
+        "url": "https://ai.google.dev/gemini-api/docs/changelog",
+        "kind": "api_revision"
+      }
+    ],
+    "status": "active",
+    "notes": "Endpoint là bề mặt nhà cung cấp công bố, không khẳng định mọi route đang bật. Khi lifecycle record không gắn một operation, scopes và quotaCost giữ null."
+  },
+  {
+    "id": "api.openai.api.lifecycle",
+    "kind": "api_contract",
+    "scope": {
+      "platforms": [
+        "*"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "name": "OpenAI API / OpenAI TTS",
+      "endpoint": "/v1/chat/completions; /v1/audio/speech",
+      "scopes": null,
+      "quotaCost": null,
+      "versioning": "v1, snapshot/alias theo model. Thông báo deprecation có ngày theo từng mục; không suy cùng notice cho mọi API.",
+      "headers": "null; OpenAI-Beta là request header, x-ratelimit-* là usage",
+      "errors": "401 auth; 429 rate_limit hoặc insufficient_quota theo body; 403 permission; 5xx tách khỏi quota.",
+      "history": "18/12/2024 Assistants beta v1 tắt; 28/07/2025 o1-preview tắt; 26/08/2026 Assistants API tắt, migration Responses/Conversations. Mốc riêng API speech app gọi null nếu không có mục tương ứng.",
+      "feed": null
+    },
+    "evidence": [
+      {
+        "url": "https://developers.openai.com/api/docs/deprecations",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://developers.openai.com/api/docs/changelog",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://developers.openai.com/api/docs/guides/error-codes",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://developers.openai.com/api/reference/resources/audio/subresources/speech/methods/create",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      }
+    ],
+    "confidence": "medium",
+    "volatility": "monthly",
+    "watch": [
+      {
+        "url": "https://developers.openai.com/api/docs/deprecations",
+        "kind": "api_revision"
+      }
+    ],
+    "status": "active",
+    "notes": "Endpoint là bề mặt nhà cung cấp công bố, không khẳng định mọi route đang bật. Khi lifecycle record không gắn một operation, scopes và quotaCost giữ null."
+  },
+  {
+    "id": "api.ollama.local_remote.lifecycle",
+    "kind": "api_contract",
+    "scope": {
+      "platforms": [
+        "*"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "name": "Ollama / remote-ollama",
+      "endpoint": "/api; /v1",
+      "scopes": null,
+      "quotaCost": null,
+      "versioning": "Native /api và OpenAI-compatible /v1 không đồng nhất. API không strict versioning, deprecation qua release notes; notice tối thiểu null.",
+      "headers": "null",
+      "errors": "Native dùng HTTP status và error field; local auth/quota phụ thuộc reverse proxy hoặc cloud. Stream có thể báo lỗi sau khi đã 200.",
+      "history": "Breaking cụ thể cho endpoint được chọn trong registry null; ghi phiên bản runtime và kiểm cả native lẫn compatibility nếu được cấu hình.",
+      "feed": "https://github.com/ollama/ollama/releases.atom"
+    },
+    "evidence": [
+      {
+        "url": "https://github.com/ollama/ollama/releases",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://docs.ollama.com/api/introduction",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://docs.ollama.com/api/errors",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://docs.ollama.com/api/openai-compatibility",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://github.com/ollama/ollama/releases.atom",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      }
+    ],
+    "confidence": "medium",
+    "volatility": "monthly",
+    "watch": [
+      {
+        "url": "https://github.com/ollama/ollama/releases",
+        "kind": "changelog"
+      },
+      {
+        "url": "https://github.com/ollama/ollama/releases.atom",
+        "kind": "rss"
+      }
+    ],
+    "status": "active",
+    "notes": "Endpoint là bề mặt nhà cung cấp công bố, không khẳng định mọi route đang bật. Khi lifecycle record không gắn một operation, scopes và quotaCost giữ null."
+  },
+  {
+    "id": "api.openrouter.api.lifecycle",
+    "kind": "api_contract",
+    "scope": {
+      "platforms": [
+        "*"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "name": "OpenRouter",
+      "endpoint": "/api/v1",
+      "scopes": null,
+      "quotaCost": null,
+      "versioning": "v1 và API versioning; model/provider có vòng đời riêng, notice tối thiểu chung null. Theo dõi /models và changelog docs.",
+      "headers": "null; Retry-After nếu có dùng cho backoff, không phải deprecation",
+      "errors": "401 invalid credentials, 402 credits, 429 rate hoặc in-flight budget, 503 không có provider phù hợp; lỗi có thể nằm trong SSE sau 200.",
+      "history": "Mốc tắt endpoint v1 app dùng null; đổi model/route phải xem model catalog và upstream, không suy theo một status incident.",
+      "feed": null
+    },
+    "evidence": [
+      {
+        "url": "https://openrouter.ai/docs/api/reference/errors-and-debugging",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://openrouter.ai/docs/api/reference/versioning",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://openrouter.ai/models",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://github.com/OpenRouterTeam/docs",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      }
+    ],
+    "confidence": "medium",
+    "volatility": "monthly",
+    "watch": [
+      {
+        "url": "https://openrouter.ai/docs/api/reference/errors-and-debugging",
+        "kind": "api_revision"
+      }
+    ],
+    "status": "active",
+    "notes": "Endpoint là bề mặt nhà cung cấp công bố, không khẳng định mọi route đang bật. Khi lifecycle record không gắn một operation, scopes và quotaCost giữ null."
+  },
+  {
+    "id": "api.deepseek.api.lifecycle",
+    "kind": "api_contract",
+    "scope": {
+      "platforms": [
+        "*"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "name": "DeepSeek API",
+      "endpoint": "/v1",
+      "scopes": null,
+      "quotaCost": null,
+      "versioning": "OpenAI-compatible; version URL và alias model tách riêng. Notice tối thiểu null.",
+      "headers": "null",
+      "errors": "401 sai key; 402 thiếu số dư; 429 concurrency/QPS; 503 overload.",
+      "history": "10/09/2026 changelog V4.1 Flash ghi tắt model thế hệ V4 Flash/Flash Vision Exp và tạm route ID cũ sang model mới. Tín hiệu là alias drift kể cả HTTP 200.",
+      "feed": null
+    },
+    "evidence": [
+      {
+        "url": "https://api-docs.deepseek.com/updates/",
+        "checkedAt": "2026-11-11",
+        "type": "official"
+      },
+      {
+        "url": "https://api-docs.deepseek.com/quick_start/error_codes/",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://api-docs.deepseek.com/quick_start/rate_limit/",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      }
+    ],
+    "confidence": "medium",
+    "volatility": "monthly",
+    "watch": [
+      {
+        "url": "https://api-docs.deepseek.com/updates/",
+        "kind": "api_revision"
+      }
+    ],
+    "status": "active",
+    "notes": "Endpoint là bề mặt nhà cung cấp công bố, không khẳng định mọi route đang bật. Khi lifecycle record không gắn một operation, scopes và quotaCost giữ null."
+  },
+  {
+    "id": "api.groq.api.lifecycle",
+    "kind": "api_contract",
+    "scope": {
+      "platforms": [
+        "*"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "name": "Groq API",
+      "endpoint": "/openai/v1",
+      "scopes": null,
+      "quotaCost": null,
+      "versioning": "OpenAI-compatible v1. Production và preview có lifecycle khác; email/docs và lịch shutdown từng model.",
+      "headers": "null; retry-after và x-ratelimit-* là rate",
+      "errors": "401 auth; 429 rate; 498 Flex capacity nếu dùng Flex. Billing/quota theo tài khoản và model.",
+      "history": "24/01/2025 các ID Llama 3.1 70B nêu trong lịch bắt đầu trả lỗi sau giai đoạn route sang 3.3; 10/10/2025 tắt kimi-k2-instruct cũ.",
+      "feed": null
+    },
+    "evidence": [
+      {
+        "url": "https://console.groq.com/docs/deprecations",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://console.groq.com/docs/errors",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://console.groq.com/docs/rate-limits",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      }
+    ],
+    "confidence": "medium",
+    "volatility": "monthly",
+    "watch": [
+      {
+        "url": "https://console.groq.com/docs/deprecations",
+        "kind": "api_revision"
+      }
+    ],
+    "status": "active",
+    "notes": "Endpoint là bề mặt nhà cung cấp công bố, không khẳng định mọi route đang bật. Khi lifecycle record không gắn một operation, scopes và quotaCost giữ null."
+  },
+  {
+    "id": "api.omniroute.gateway.lifecycle",
+    "kind": "api_contract",
+    "scope": {
+      "platforms": [
+        "*"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "name": "OmniRoute",
+      "endpoint": null,
+      "scopes": null,
+      "quotaCost": null,
+      "versioning": "Gateway tự host, release của gateway và lifecycle provider bên dưới tách riêng; notice tối thiểu null.",
+      "headers": "null",
+      "errors": "Quota/auth/rate có thể do gateway hoặc upstream; xem error body và cấu hình, mã chung chuẩn hóa null.",
+      "history": "Mốc breaking đúng endpoint đang dùng null; dùng release feed và pin release để phân biệt thay đổi upstream.",
+      "feed": "https://github.com/cheaper-inference/OmniRoute/releases.atom"
+    },
+    "evidence": [
+      {
+        "url": "https://github.com/cheaper-inference/OmniRoute/releases",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://github.com/cheaper-inference/OmniRoute",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://github.com/cheaper-inference/OmniRoute/releases.atom",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      }
+    ],
+    "confidence": "medium",
+    "volatility": "monthly",
+    "watch": [
+      {
+        "url": "https://github.com/cheaper-inference/OmniRoute/releases",
+        "kind": "changelog"
+      },
+      {
+        "url": "https://github.com/cheaper-inference/OmniRoute/releases.atom",
+        "kind": "rss"
+      }
+    ],
+    "status": "active",
+    "notes": "Endpoint là bề mặt nhà cung cấp công bố, không khẳng định mọi route đang bật. Khi lifecycle record không gắn một operation, scopes và quotaCost giữ null."
+  },
+  {
+    "id": "api.opencode.zen.lifecycle",
+    "kind": "api_contract",
+    "scope": {
+      "platforms": [
+        "*"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "name": "OpenCode Zen",
+      "endpoint": null,
+      "scopes": null,
+      "quotaCost": null,
+      "versioning": "API Console/Zen theo model và protocol; model list có mục deprecated. Notice tối thiểu null. Feed của OpenCode client không phải lịch Zen.",
+      "headers": "null",
+      "errors": "Auth/quota/rate contract chuẩn chung null theo model/route chưa xác minh.",
+      "history": "Ngày tắt model/endpoint phù hợp app trong cửa sổ null. Theo dõi mục Deprecated models và catalog.",
+      "feed": null
+    },
+    "evidence": [
+      {
+        "url": "https://opencode.ai/docs/console/models/",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://opencode.ai/docs/zen/",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://github.com/anomalyco/opencode/releases",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      }
+    ],
+    "confidence": "medium",
+    "volatility": "monthly",
+    "watch": [
+      {
+        "url": "https://opencode.ai/docs/console/models/",
+        "kind": "api_revision"
+      }
+    ],
+    "status": "active",
+    "notes": "Endpoint là bề mặt nhà cung cấp công bố, không khẳng định mọi route đang bật. Khi lifecycle record không gắn một operation, scopes và quotaCost giữ null."
+  },
+  {
+    "id": "api.claude_code.cli.lifecycle",
+    "kind": "api_contract",
+    "scope": {
+      "platforms": [
+        "*"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "name": "Claude Code CLI",
+      "endpoint": null,
+      "scopes": null,
+      "quotaCost": null,
+      "versioning": "Version executable; notice tối thiểu null, phân biệt auth của CLI và Claude API.",
+      "headers": "null; không HTTP ở ranh giới app→CLI",
+      "errors": "Mã exit theo case, mã ổn định cho quota/auth/rate null. Dựa output có cấu trúc nếu bản CLI tài liệu hỗ trợ.",
+      "history": "Mốc breaking cụ thể với mode app đang gọi null vì brief chỉ cho đọc tên provider, xem release trước nâng.",
+      "feed": "https://github.com/anthropics/claude-code/releases.atom"
+    },
+    "evidence": [
+      {
+        "url": "https://github.com/anthropics/claude-code/releases",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://code.claude.com/docs/en/cli-reference",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://github.com/anthropics/claude-code/releases.atom",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      }
+    ],
+    "confidence": "medium",
+    "volatility": "monthly",
+    "watch": [
+      {
+        "url": "https://github.com/anthropics/claude-code/releases",
+        "kind": "changelog"
+      },
+      {
+        "url": "https://github.com/anthropics/claude-code/releases.atom",
+        "kind": "rss"
+      }
+    ],
+    "status": "active",
+    "notes": "Endpoint là bề mặt nhà cung cấp công bố, không khẳng định mọi route đang bật. Khi lifecycle record không gắn một operation, scopes và quotaCost giữ null."
+  },
+  {
+    "id": "api.github_copilot.cli.lifecycle",
+    "kind": "api_contract",
+    "scope": {
+      "platforms": [
+        "*"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "name": "GitHub Copilot CLI",
+      "endpoint": null,
+      "scopes": null,
+      "quotaCost": null,
+      "versioning": "Version CLI và entitlement Copilot. Thông báo qua GitHub Changelog, notice tối thiểu chung null.",
+      "headers": "null; ranh giới CLI",
+      "errors": "Exit/quota/auth contract máy đọc chung null; tách CLI lỗi đăng nhập với model quota.",
+      "history": "25/10/2025 gh-copilot extension cũ ngừng, GitHub Copilot CLI mới là sản phẩm thay thế; công bố 25/09/2025.",
+      "feed": "https://github.com/github/copilot-cli/releases.atom"
+    },
+    "evidence": [
+      {
+        "url": "https://github.com/github/copilot-cli/releases",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://github.blog/changelog/2025-09-25-upcoming-deprecation-of-gh-copilot-cli-extension/",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://docs.github.com/en/copilot/reference/copilot-cli-reference/cli-command-reference",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://github.com/github/copilot-cli/releases.atom",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      }
+    ],
+    "confidence": "medium",
+    "volatility": "monthly",
+    "watch": [
+      {
+        "url": "https://github.com/github/copilot-cli/releases",
+        "kind": "changelog"
+      },
+      {
+        "url": "https://github.com/github/copilot-cli/releases.atom",
+        "kind": "rss"
+      }
+    ],
+    "status": "active",
+    "notes": "Endpoint là bề mặt nhà cung cấp công bố, không khẳng định mọi route đang bật. Khi lifecycle record không gắn một operation, scopes và quotaCost giữ null."
+  },
+  {
+    "id": "api.antigravity.cli.lifecycle",
+    "kind": "api_contract",
+    "scope": {
+      "platforms": [
+        "*"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "name": "Antigravity CLI / Gemini CLI tiền nhiệm",
+      "endpoint": null,
+      "scopes": null,
+      "quotaCost": null,
+      "versioning": "CLI version và account tier; Gemini Code Assist consumer khác API key và Standard/Enterprise. Notice tối thiểu chung null.",
+      "headers": "null; ranh giới CLI",
+      "errors": "Exit code ổn định cho auth/rate/quota null; tách lỗi entitlement với hết quota hoặc outage.",
+      "history": "18/06/2026 Gemini CLI dừng Login with Google cho individuals/AI Pro/AI Ultra trong scope công bố, chuyển sang Antigravity CLI. Không nói mọi chế độ Gemini CLI đều bị đóng.",
+      "feed": "https://github.com/google-antigravity/antigravity-cli/releases.atom"
+    },
+    "evidence": [
+      {
+        "url": "https://antigravity.google/docs/changelog?tab=cli",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://developers.google.com/gemini-code-assist/docs/deprecations/code-assist-individuals",
+        "checkedAt": "2026-11-11",
+        "sourceUpdatedAt": "2026-10-09",
+        "type": "official"
+      },
+      {
+        "url": "https://github.com/google-antigravity/antigravity-cli/releases",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://github.com/google-antigravity/antigravity-cli/releases.atom",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      }
+    ],
+    "confidence": "medium",
+    "volatility": "monthly",
+    "watch": [
+      {
+        "url": "https://antigravity.google/docs/changelog?tab=cli",
+        "kind": "api_revision"
+      },
+      {
+        "url": "https://github.com/google-antigravity/antigravity-cli/releases.atom",
+        "kind": "rss"
+      }
+    ],
+    "status": "active",
+    "notes": "Endpoint là bề mặt nhà cung cấp công bố, không khẳng định mọi route đang bật. Khi lifecycle record không gắn một operation, scopes và quotaCost giữ null."
+  },
+  {
+    "id": "api.google_cloud.tts.lifecycle",
+    "kind": "api_contract",
+    "scope": {
+      "platforms": [
+        "*"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "name": "Google Cloud Text-to-Speech",
+      "endpoint": "POST /v1/text:synthesize",
+      "scopes": null,
+      "quotaCost": null,
+      "versioning": "REST v1/v1beta1; Google Cloud deprecation theo dịch vụ/điều khoản, ngoại lệ pre-GA; thời gian bảo đảm cho từng voice null.",
+      "headers": "null",
+      "errors": "401 UNAUTHENTICATED, 403 PERMISSION_DENIED, 429 RESOURCE_EXHAUSTED theo Google RPC mapping; kiểm quota theo project và voice.",
+      "history": "Mốc loại voice/endpoint đúng cấu hình app null. Các release thêm voice không tính breaking.",
+      "feed": "https://docs.cloud.google.com/feeds/tts-release-notes.xml"
+    },
+    "evidence": [
+      {
+        "url": "https://docs.cloud.google.com/text-to-speech/docs/release-notes",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://docs.cloud.google.com/text-to-speech/quotas",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://cloud.google.com/apis/design/errors",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://cloud.google.com/terms",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://docs.cloud.google.com/feeds/tts-release-notes.xml",
+        "checkedAt": "2026-11-11",
+        "type": "official"
+      }
+    ],
+    "confidence": "medium",
+    "volatility": "monthly",
+    "watch": [
+      {
+        "url": "https://docs.cloud.google.com/text-to-speech/docs/release-notes",
+        "kind": "api_revision"
+      },
+      {
+        "url": "https://docs.cloud.google.com/feeds/tts-release-notes.xml",
+        "kind": "rss"
+      }
+    ],
+    "status": "active",
+    "notes": "Endpoint là bề mặt nhà cung cấp công bố, không khẳng định mọi route đang bật. Khi lifecycle record không gắn một operation, scopes và quotaCost giữ null."
+  },
+  {
+    "id": "api.elevenlabs.api.lifecycle",
+    "kind": "api_contract",
+    "scope": {
+      "platforms": [
+        "*"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "name": "ElevenLabs",
+      "endpoint": "/v1/text-to-speech/{voice_id}",
+      "scopes": null,
+      "quotaCost": null,
+      "versioning": "v1; model và version voice thay riêng. Notice tối thiểu chung null.",
+      "headers": "null",
+      "errors": "401 auth/key, 429 concurrency hoặc hệ thống bận tùy error detail; quota tín dụng phân biệt theo body, không mặc định 429.",
+      "history": "02/11/2026 công bố deprecation SFX v2 với hạn 01/03/2027 (ngoài cửa sổ và không phải TTS); breaking TTS phù hợp registry chưa xác nhận.",
+      "feed": null
+    },
+    "evidence": [
+      {
+        "url": "https://elevenlabs.io/docs/changelog",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://elevenlabs.io/docs/eleven-api/resources/errors",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://elevenlabs.io/docs/help-center/technical/api-error-code-429",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      }
+    ],
+    "confidence": "medium",
+    "volatility": "monthly",
+    "watch": [
+      {
+        "url": "https://elevenlabs.io/docs/changelog",
+        "kind": "api_revision"
+      }
+    ],
+    "status": "active",
+    "notes": "Endpoint là bề mặt nhà cung cấp công bố, không khẳng định mọi route đang bật. Khi lifecycle record không gắn một operation, scopes và quotaCost giữ null."
+  },
+  {
+    "id": "api.edge_tts.cli.lifecycle",
+    "kind": "api_contract",
+    "scope": {
+      "platforms": [
+        "*"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "name": "Edge TTS",
+      "endpoint": null,
+      "scopes": null,
+      "quotaCost": null,
+      "versioning": "Version client cộng giao thức Read Aloud upstream; không thấy SLA/version API consumer chính thức cho client này.",
+      "headers": "null",
+      "errors": "WebSocket handshake 403 có thể do upstream hoặc client. Mã quota/rate ổn định null.",
+      "history": "Có issue và release ghi thay đổi handshake/403. Mốc đổi được Microsoft công bố null, không lấy ngày post của người dùng làm ngày shutdown.",
+      "feed": "https://github.com/rany2/edge-tts/releases.atom"
+    },
+    "evidence": [
+      {
+        "url": "https://github.com/rany2/edge-tts/releases",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://github.com/rany2/edge-tts/issues/401",
+        "checkedAt": "2026-11-10",
+        "type": "anecdote"
+      },
+      {
+        "url": "https://github.com/rany2/edge-tts/issues/440",
+        "checkedAt": "2026-11-10",
+        "type": "anecdote"
+      },
+      {
+        "url": "https://github.com/rany2/edge-tts/releases.atom",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      }
+    ],
+    "confidence": "medium",
+    "volatility": "monthly",
+    "watch": [
+      {
+        "url": "https://github.com/rany2/edge-tts/releases",
+        "kind": "changelog"
+      },
+      {
+        "url": "https://github.com/rany2/edge-tts/releases.atom",
+        "kind": "rss"
+      }
+    ],
+    "status": "active",
+    "notes": "Endpoint là bề mặt nhà cung cấp công bố, không khẳng định mọi route đang bật. Khi lifecycle record không gắn một operation, scopes và quotaCost giữ null."
+  },
+  {
+    "id": "api.fpt_ai.speech.lifecycle",
+    "kind": "api_contract",
+    "scope": {
+      "platforms": [
+        "*"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "name": "FPT.AI Speech",
+      "endpoint": "POST https://api.fpt.ai/hmi/tts/v5",
+      "scopes": null,
+      "quotaCost": null,
+      "versioning": "TTS v5 trong tài liệu. Changelog/versioning notice tối thiểu null.",
+      "headers": "null",
+      "errors": "Phản hồi có error/error_message; mã quota/auth/rate ổn định ngoài nguồn đã công bố null.",
+      "history": "Mốc breaking 3 năm null.",
+      "feed": null
+    },
+    "evidence": [
+      {
+        "url": "https://docs.fpt.ai/docs/en/speech/api/text-to-speech/",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://docs.fpt.ai/docs/en/console/documentation/console/",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      }
+    ],
+    "confidence": "medium",
+    "volatility": "monthly",
+    "watch": [
+      {
+        "url": "https://docs.fpt.ai/docs/en/speech/api/text-to-speech/",
+        "kind": "api_revision"
+      }
+    ],
+    "status": "active",
+    "notes": "Endpoint là bề mặt nhà cung cấp công bố, không khẳng định mọi route đang bật. Khi lifecycle record không gắn một operation, scopes và quotaCost giữ null."
+  },
+  {
+    "id": "api.viettel_ai.tts.lifecycle",
+    "kind": "api_contract",
+    "scope": {
+      "platforms": [
+        "*"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "name": "Viettel AI TTS",
+      "endpoint": null,
+      "scopes": null,
+      "quotaCost": null,
+      "versioning": "Theo tài liệu TTS của Viettel AI. Changelog/notice tối thiểu null.",
+      "headers": "null",
+      "errors": "Mã auth/quota/rate chính thức chưa xác nhận công khai, null.",
+      "history": "Mốc breaking 3 năm null.",
+      "feed": null
+    },
+    "evidence": [
+      {
+        "url": "https://viettelai.vn/en/tai-lieu",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      }
+    ],
+    "confidence": "medium",
+    "volatility": "monthly",
+    "watch": [
+      {
+        "url": "https://viettelai.vn/en/tai-lieu",
+        "kind": "api_revision"
+      }
+    ],
+    "status": "active",
+    "notes": "Endpoint là bề mặt nhà cung cấp công bố, không khẳng định mọi route đang bật. Khi lifecycle record không gắn một operation, scopes và quotaCost giữ null."
+  },
+  {
+    "id": "api.piper.cli.lifecycle",
+    "kind": "api_contract",
+    "scope": {
+      "platforms": [
+        "*"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "name": "Piper",
+      "endpoint": null,
+      "scopes": null,
+      "quotaCost": null,
+      "versioning": "CLI local, pin repo/fork, version runtime và voice/model card. Không HTTP auth/quota.",
+      "headers": "Không áp dụng",
+      "errors": "Exit/stderr, lỗi file/model, version; mã quota/auth/rate không áp dụng.",
+      "history": "Dòng rhasspy cũ đã archive và trỏ sang OHF, ghi mốc archive/chuyển cụ thể null nếu không xác minh ngày trong lịch. Cần phân biệt fork/giấy phép.",
+      "feed": "https://github.com/OHF-Voice/piper1-gpl/releases.atom"
+    },
+    "evidence": [
+      {
+        "url": "https://github.com/OHF-Voice/piper1-gpl/releases",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://github.com/rhasspy/piper",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://github.com/OHF-Voice/piper1-gpl/blob/main/CHANGELOG.md",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://github.com/OHF-Voice/piper1-gpl/releases.atom",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      }
+    ],
+    "confidence": "medium",
+    "volatility": "monthly",
+    "watch": [
+      {
+        "url": "https://github.com/OHF-Voice/piper1-gpl/releases",
+        "kind": "changelog"
+      },
+      {
+        "url": "https://github.com/OHF-Voice/piper1-gpl/releases.atom",
+        "kind": "rss"
+      }
+    ],
+    "status": "active",
+    "notes": "Endpoint là bề mặt nhà cung cấp công bố, không khẳng định mọi route đang bật. Khi lifecycle record không gắn một operation, scopes và quotaCost giữ null."
+  },
+  {
+    "id": "api.vieneu.tts.lifecycle",
+    "kind": "api_contract",
+    "scope": {
+      "platforms": [
+        "*"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "name": "VieNeu TTS",
+      "endpoint": null,
+      "scopes": null,
+      "quotaCost": null,
+      "versioning": "Local CLI/package; Cloud API có tài liệu riêng nhưng registry chỉ xác nhận tên, không suy app gọi cloud. Notice tối thiểu null.",
+      "headers": "Không áp dụng cho local",
+      "errors": "Exit/model file cho local; mã HTTP cloud chỉ áp nếu xác nhận connector cloud.",
+      "history": "Mốc breaking đúng backend app dùng null.",
+      "feed": "https://github.com/pnnbao97/VieNeu-TTS/releases.atom"
+    },
+    "evidence": [
+      {
+        "url": "https://github.com/pnnbao97/VieNeu-TTS/releases",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://pypi.org/project/vieneu/",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://docs.vieneu.io/docs/cloud-api/errors/",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://github.com/pnnbao97/VieNeu-TTS/releases.atom",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      }
+    ],
+    "confidence": "medium",
+    "volatility": "monthly",
+    "watch": [
+      {
+        "url": "https://github.com/pnnbao97/VieNeu-TTS/releases",
+        "kind": "changelog"
+      },
+      {
+        "url": "https://github.com/pnnbao97/VieNeu-TTS/releases.atom",
+        "kind": "rss"
+      }
+    ],
+    "status": "active",
+    "notes": "Endpoint là bề mặt nhà cung cấp công bố, không khẳng định mọi route đang bật. Khi lifecycle record không gắn một operation, scopes và quotaCost giữ null."
+  },
+  {
+    "id": "api.pexels.media.lifecycle",
+    "kind": "api_contract",
+    "scope": {
+      "platforms": [
+        "*"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "name": "Pexels (ảnh và footage)",
+      "endpoint": "/v1/search; /videos/search",
+      "scopes": null,
+      "quotaCost": null,
+      "versioning": "Hai nhóm endpoint ảnh/video và key chung theo chính sách. Không thấy deprecation SLA. Theo dõi Help Center.",
+      "headers": "null; X-Ratelimit-Limit/Remaining/Reset là quota, không có Reset trên 429 theo Help",
+      "errors": "429 hết quota/rate; key/auth theo tài liệu endpoint. Paused issuance là trạng thái cấp mới, không suy từ lỗi key cũ.",
+      "history": "10/11/2026 Help cập nhật ghi cấp API key mới đang tạm dừng. Ngày bắt đầu thực tế null.",
+      "feed": null
+    },
+    "evidence": [
+      {
+        "url": "https://help.pexels.com/hc/en-us/articles/900004904026-How-do-I-get-an-API-key",
+        "checkedAt": "2026-11-11",
+        "sourceUpdatedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://www.pexels.com/api/documentation/",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://help.pexels.com/hc/en-us/articles/900005368726-How-do-I-see-how-many-requests-I-have-remaining",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      }
+    ],
+    "confidence": "medium",
+    "volatility": "weekly",
+    "watch": [
+      {
+        "url": "https://help.pexels.com/hc/en-us/articles/900004904026-How-do-I-get-an-API-key",
+        "kind": "api_revision"
+      }
+    ],
+    "status": "active",
+    "notes": "Endpoint là bề mặt nhà cung cấp công bố, không khẳng định mọi route đang bật. Khi lifecycle record không gắn một operation, scopes và quotaCost giữ null."
+  },
+  {
+    "id": "api.pixabay.media.lifecycle",
+    "kind": "api_contract",
+    "scope": {
+      "platforms": [
+        "*"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "name": "Pixabay (ảnh và footage)",
+      "endpoint": "/api/; /api/videos/",
+      "scopes": null,
+      "quotaCost": null,
+      "versioning": "Endpoint ảnh/video theo docs, API changelog/feed/notice chính thức null.",
+      "headers": "null; X-RateLimit-* là usage",
+      "errors": "Docs 429 vượt rate mặc định 100/60 giây, key bắt buộc. Mã auth chuẩn riêng null.",
+      "history": "Mốc breaking 3 năm null.",
+      "feed": null
+    },
+    "evidence": [
+      {
+        "url": "https://pixabay.com/api/docs/",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      }
+    ],
+    "confidence": "medium",
+    "volatility": "monthly",
+    "watch": [
+      {
+        "url": "https://pixabay.com/api/docs/",
+        "kind": "api_revision"
+      }
+    ],
+    "status": "active",
+    "notes": "Endpoint là bề mặt nhà cung cấp công bố, không khẳng định mọi route đang bật. Khi lifecycle record không gắn một operation, scopes và quotaCost giữ null."
+  },
+  {
+    "id": "api.unsplash.photos.lifecycle",
+    "kind": "api_contract",
+    "scope": {
+      "platforms": [
+        "*"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "name": "Unsplash",
+      "endpoint": "/search/photos",
+      "scopes": null,
+      "quotaCost": null,
+      "versioning": "v1, Accept-Version. Ít nhất 3 tuần báo trước với thay đổi không tương thích trên field/endpoint được tài liệu hóa.",
+      "headers": "Warning khi endpoint deprecated. Deprecation/Sunset null. X-Ratelimit-* là usage",
+      "errors": "401/403 lỗi quyền, 429 rate; theo docs đối chiếu demo/prod và các header quota.",
+      "history": "11/06/2024 bắt đầu final sunset Unsplash Source, tách khỏi API v1. Ngày ngừng chính xác của endpoint v1 tìm ảnh đang khảo sát null.",
+      "feed": null
+    },
+    "evidence": [
+      {
+        "url": "https://unsplash.com/documentation/changelog",
+        "checkedAt": "2026-11-11",
+        "type": "official"
+      },
+      {
+        "url": "https://unsplash.com/documentation",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      }
+    ],
+    "confidence": "high",
+    "volatility": "monthly",
+    "watch": [
+      {
+        "url": "https://unsplash.com/documentation/changelog",
+        "kind": "api_revision"
+      }
+    ],
+    "status": "active",
+    "notes": "Endpoint là bề mặt nhà cung cấp công bố, không khẳng định mọi route đang bật. Khi lifecycle record không gắn một operation, scopes và quotaCost giữ null."
+  },
+  {
+    "id": "api.wikimedia.api.lifecycle",
+    "kind": "api_contract",
+    "scope": {
+      "platforms": [
+        "*"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "name": "Wikimedia",
+      "endpoint": null,
+      "scopes": null,
+      "quotaCost": null,
+      "versioning": "Action API, MediaWiki REST, Wikimedia REST và API Portal có lifecycle khác nhau; notice theo API, không áp lịch API Enterprise.",
+      "headers": "null cho Deprecation/Sunset; body warnings có thể khác theo API",
+      "errors": "429 rate; quota theo identity, user-agent, class. Các endpoint công khai không nhất thiết có OAuth; không áp lỗi key cho mọi route.",
+      "history": "11/2025 XSLT Action API bị bỏ; 01/05/2026 là ngày ngừng format=php theo changelog; 06/2026 API Portal đóng. Tách Portal/credentials khỏi endpoint trên wiki.",
+      "feed": null
+    },
+    "evidence": [
+      {
+        "url": "https://www.mediawiki.org/wiki/Wikimedia_APIs/Changelog",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://www.mediawiki.org/wiki/Wikimedia_APIs/Rate_limits",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://www.mediawiki.org/wiki/API/Deprecation",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://wikitech.wikimedia.org/wiki/API_Portal/Deprecation",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      }
+    ],
+    "confidence": "medium",
+    "volatility": "monthly",
+    "watch": [
+      {
+        "url": "https://www.mediawiki.org/wiki/Wikimedia_APIs/Changelog",
+        "kind": "api_revision"
+      }
+    ],
+    "status": "active",
+    "notes": "Endpoint là bề mặt nhà cung cấp công bố, không khẳng định mọi route đang bật. Khi lifecycle record không gắn một operation, scopes và quotaCost giữ null."
+  },
+  {
+    "id": "api.openverse.media.lifecycle",
+    "kind": "api_contract",
+    "scope": {
+      "platforms": [
+        "*"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "name": "Openverse (ảnh và nhạc)",
+      "endpoint": "/v1/images/; /v1/audio/",
+      "scopes": null,
+      "quotaCost": null,
+      "versioning": "API v1, OAuth2 client nếu đăng ký; throttling khác anonymous/authenticated. Không thấy notice tối thiểu chung.",
+      "headers": "null",
+      "errors": "401 auth khi token không hợp lệ, 429 throttle, xem endpoint và quota auth mode.",
+      "history": "Mốc breaking đúng image/audio search app gọi null. Theo dõi release notes API và schema.",
+      "feed": "https://github.com/WordPress/openverse/releases.atom"
+    },
+    "evidence": [
+      {
+        "url": "https://github.com/WordPress/openverse/releases",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://api.openverse.org/v1/",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://github.com/WordPress/openverse/blob/main/documentation/api/reference/authentication_and_throttling.md",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://github.com/WordPress/openverse/releases.atom",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      }
+    ],
+    "confidence": "medium",
+    "volatility": "monthly",
+    "watch": [
+      {
+        "url": "https://github.com/WordPress/openverse/releases",
+        "kind": "changelog"
+      },
+      {
+        "url": "https://github.com/WordPress/openverse/releases.atom",
+        "kind": "rss"
+      }
+    ],
+    "status": "active",
+    "notes": "Endpoint là bề mặt nhà cung cấp công bố, không khẳng định mọi route đang bật. Khi lifecycle record không gắn một operation, scopes và quotaCost giữ null."
+  },
+  {
+    "id": "api.nasa.open_apis.lifecycle",
+    "kind": "api_contract",
+    "scope": {
+      "platforms": [
+        "*"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "name": "NASA Open APIs",
+      "endpoint": null,
+      "scopes": null,
+      "quotaCost": null,
+      "versioning": "Nhiều API, không có API-wide version/notice. Nếu route qua api.data.gov đọc quota của gateway; images.nasa.gov là dịch vụ khác.",
+      "headers": "null; X-RateLimit-* usage của gateway, không áp mọi host",
+      "errors": "api.data.gov 403 API_KEY_MISSING/INVALID/DISABLED, 429 OVER_RATE_LIMIT; contract riêng NASA Images null nếu registry chỉ có tên.",
+      "history": "Mốc breaking liên quan chính xác API hình ảnh app dùng null.",
+      "feed": null
+    },
+    "evidence": [
+      {
+        "url": "https://api.nasa.gov/",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://api.data.gov/docs/errors/",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://images.nasa.gov/docs/images.nasa.gov_api_docs.pdf",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      }
+    ],
+    "confidence": "medium",
+    "volatility": "monthly",
+    "watch": [
+      {
+        "url": "https://api.nasa.gov/",
+        "kind": "api_revision"
+      }
+    ],
+    "status": "active",
+    "notes": "Endpoint là bề mặt nhà cung cấp công bố, không khẳng định mọi route đang bật. Khi lifecycle record không gắn một operation, scopes và quotaCost giữ null."
+  },
+  {
+    "id": "api.met.collection.lifecycle",
+    "kind": "api_contract",
+    "scope": {
+      "platforms": [
+        "*"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "name": "Met Collection API",
+      "endpoint": "/public/collection/v1",
+      "scopes": null,
+      "quotaCost": null,
+      "versioning": "Collection API public và path version theo docs; changelog/notice SLA null.",
+      "headers": "null",
+      "errors": "Không yêu cầu API key theo docs. Giới hạn và mã rate/auth cụ thể chỉ ghi nếu tài liệu endpoint công bố.",
+      "history": "Mốc breaking 3 năm null.",
+      "feed": null
+    },
+    "evidence": [
+      {
+        "url": "https://metmuseum.github.io/",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://github.com/metmuseum/openaccess",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      }
+    ],
+    "confidence": "medium",
+    "volatility": "monthly",
+    "watch": [
+      {
+        "url": "https://metmuseum.github.io/",
+        "kind": "api_revision"
+      }
+    ],
+    "status": "active",
+    "notes": "Endpoint là bề mặt nhà cung cấp công bố, không khẳng định mọi route đang bật. Khi lifecycle record không gắn một operation, scopes và quotaCost giữ null."
+  },
+  {
+    "id": "api.loc.json.lifecycle",
+    "kind": "api_contract",
+    "scope": {
+      "platforms": [
+        "*"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "name": "Library of Congress JSON/YAML",
+      "endpoint": null,
+      "scopes": null,
+      "quotaCost": null,
+      "versioning": "Public formats và hướng dẫn hạn mức, version/notice SLA null.",
+      "headers": "null",
+      "errors": "429 theo Working Within Limits. Auth/quota account không áp cho endpoint public; các bulk dịch vụ có thể khác.",
+      "history": "Mốc breaking 3 năm null.",
+      "feed": null
+    },
+    "evidence": [
+      {
+        "url": "https://www.loc.gov/apis/json-and-yaml/",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://www.loc.gov/apis/json-and-yaml/working-within-limits/",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      }
+    ],
+    "confidence": "medium",
+    "volatility": "monthly",
+    "watch": [
+      {
+        "url": "https://www.loc.gov/apis/json-and-yaml/",
+        "kind": "api_revision"
+      }
+    ],
+    "status": "active",
+    "notes": "Endpoint là bề mặt nhà cung cấp công bố, không khẳng định mọi route đang bật. Khi lifecycle record không gắn một operation, scopes và quotaCost giữ null."
+  },
+  {
+    "id": "api.smithsonian.open_access.lifecycle",
+    "kind": "api_contract",
+    "scope": {
+      "platforms": [
+        "*"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "name": "Smithsonian Open Access",
+      "endpoint": null,
+      "scopes": null,
+      "quotaCost": null,
+      "versioning": "Open Access và gateway api.data.gov cho API key; không thấy notice tối thiểu hay changelog phiên bản endpoint công khai.",
+      "headers": "null; gateway quota headers nếu route qua api.data.gov",
+      "errors": "403 API_KEY_* và 429 OVER_RATE_LIMIT của gateway. Không nhầm kho bulk với API gateway.",
+      "history": "Mốc breaking 3 năm null.",
+      "feed": null
+    },
+    "evidence": [
+      {
+        "url": "https://www.si.edu/openaccess/devtools",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://github.com/Smithsonian/smithsonian-openaccess",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://api.data.gov/docs/errors/",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      }
+    ],
+    "confidence": "medium",
+    "volatility": "monthly",
+    "watch": [
+      {
+        "url": "https://www.si.edu/openaccess/devtools",
+        "kind": "api_revision"
+      }
+    ],
+    "status": "active",
+    "notes": "Endpoint là bề mặt nhà cung cấp công bố, không khẳng định mọi route đang bật. Khi lifecycle record không gắn một operation, scopes và quotaCost giữ null."
+  },
+  {
+    "id": "api.europeana.api.lifecycle",
+    "kind": "api_contract",
+    "scope": {
+      "platforms": [
+        "*"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "name": "Europeana",
+      "endpoint": null,
+      "scopes": null,
+      "quotaCost": null,
+      "versioning": "API Search/Record khác nhau, key và giới hạn theo tài liệu API. Lịch notice tối thiểu null.",
+      "headers": "null",
+      "errors": "Phải có key cho route bảo vệ; mã auth/quota/rate cụ thể theo API, null nếu chưa xác nhận.",
+      "history": "Mốc breaking đúng endpoint 3 năm null.",
+      "feed": null
+    },
+    "evidence": [
+      {
+        "url": "https://pro.europeana.eu/page/apis",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://europeana.atlassian.net/wiki/spaces/EF/pages/2462351393",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      }
+    ],
+    "confidence": "medium",
+    "volatility": "monthly",
+    "watch": [
+      {
+        "url": "https://pro.europeana.eu/page/apis",
+        "kind": "api_revision"
+      }
+    ],
+    "status": "active",
+    "notes": "Endpoint là bề mặt nhà cung cấp công bố, không khẳng định mọi route đang bật. Khi lifecycle record không gắn một operation, scopes và quotaCost giữ null."
+  },
+  {
+    "id": "api.flickr.api.lifecycle",
+    "kind": "api_contract",
+    "scope": {
+      "platforms": [
+        "*"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "name": "Flickr",
+      "endpoint": "/services/rest/",
+      "scopes": null,
+      "quotaCost": null,
+      "versioning": "API method catalog và OAuth; notice tối thiểu null. Flickr Help cho eligibility cấp key.",
+      "headers": "null",
+      "errors": "API có stat=fail/code; 98 login invalid, 100 invalid API key theo lỗi chung của method; rate code thống nhất null.",
+      "history": "Help hiện quy định eligibility tạo API key, chưa xác minh ngày đổi trong 3 năm từ nguồn chính thức, giữ null.",
+      "feed": null
+    },
+    "evidence": [
+      {
+        "url": "https://www.flickr.com/services/developer/api/",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://www.flickrhelp.com/hc/en-us/articles/4404070036884-Flickr-API",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      },
+      {
+        "url": "https://www.flickr.com/services/api/flickr.photos.search.html",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      }
+    ],
+    "confidence": "medium",
+    "volatility": "monthly",
+    "watch": [
+      {
+        "url": "https://www.flickr.com/services/developer/api/",
+        "kind": "api_revision"
+      }
+    ],
+    "status": "active",
+    "notes": "Endpoint là bề mặt nhà cung cấp công bố, không khẳng định mọi route đang bật. Khi lifecycle record không gắn một operation, scopes và quotaCost giữ null."
+  },
+  {
+    "id": "api.youtube.data.most_popular",
+    "kind": "api_contract",
+    "scope": {
+      "platforms": [
+        "youtube"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "name": "youtube.data.most_popular",
+      "endpoint": "GET /youtube/v3/videos?chart=mostPopular",
+      "scopes": null,
+      "quotaCost": 1,
+      "details": "21/07/2025 mostPopular thay Trending Now bằng nhóm Music, Movies, Gaming."
+    },
+    "evidence": [
+      {
+        "url": "https://developers.google.com/youtube/data/revision_history",
+        "checkedAt": "2026-11-11",
+        "type": "official"
+      }
+    ],
+    "confidence": "high",
+    "volatility": "quarterly",
+    "watch": [
+      {
+        "url": "https://developers.google.com/youtube/data/revision_history",
+        "kind": "api_revision"
+      }
+    ],
+    "status": "active",
+    "validFrom": "2025-07-21"
+  },
+  {
+    "id": "api.youtube.data.upload_privacy_default",
+    "kind": "api_contract",
+    "scope": {
+      "platforms": [
+        "youtube"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "name": "youtube.data.upload_privacy_default",
+      "endpoint": "POST /youtube/v3/videos",
+      "scopes": null,
+      "quotaCost": null,
+      "details": "Bỏ giới hạn private áp trên dự án chưa audit trong bản công bố cũ. Chỉ định rõ privacyStatus khi gửi để không phụ thuộc mặc định."
+    },
+    "evidence": [
+      {
+        "url": "https://developers.google.com/youtube/data/revision_history",
+        "checkedAt": "2026-11-11",
+        "type": "official"
+      }
+    ],
+    "confidence": "high",
+    "volatility": "quarterly",
+    "watch": [
+      {
+        "url": "https://developers.google.com/youtube/data/revision_history",
+        "kind": "api_revision"
+      }
+    ],
+    "status": "active",
+    "validFrom": "2026-11-02"
+  },
+  {
+    "id": "api.tiktok.display.user_info_scope_migration",
+    "kind": "api_contract",
+    "scope": {
+      "platforms": [
+        "tiktok"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "name": "tiktok.display.user_info_scope_migration",
+      "endpoint": "GET /v2/user/info/",
+      "scopes": null,
+      "quotaCost": null,
+      "details": "User Info cần consent mới cho field đã chuyển scope."
+    },
+    "evidence": [
+      {
+        "url": "https://developers.tiktok.com/bulletin/user-info-scope-migration",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      }
+    ],
+    "confidence": "high",
+    "volatility": "quarterly",
+    "watch": [
+      {
+        "url": "https://developers.tiktok.com/bulletin/user-info-scope-migration",
+        "kind": "api_revision"
+      }
+    ],
+    "status": "active",
+    "validFrom": "2024-02-29"
+  },
+  {
+    "id": "api.instagram.basic_display",
+    "kind": "api_contract",
+    "scope": {
+      "platforms": [
+        "instagram"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "name": "instagram.basic_display",
+      "endpoint": "Instagram Basic Display API",
+      "scopes": null,
+      "quotaCost": null,
+      "details": "Instagram Basic Display API cũ kết thúc."
+    },
+    "evidence": [
+      {
+        "url": "https://developers.facebook.com/blog/post/2024/09/04/update-on-instagram-basic-display-api/",
+        "checkedAt": "2026-11-11",
+        "type": "official"
+      }
+    ],
+    "confidence": "high",
+    "volatility": "quarterly",
+    "watch": [
+      {
+        "url": "https://developers.facebook.com/blog/post/2024/09/04/update-on-instagram-basic-display-api/",
+        "kind": "api_revision"
+      }
+    ],
+    "status": "deprecated",
+    "validUntil": "2024-12-04"
+  },
+  {
+    "id": "api.pexels.keys.issuance_pause",
+    "kind": "api_contract",
+    "scope": {
+      "platforms": [
+        "*"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "name": "pexels.keys.issuance_pause",
+      "endpoint": "Pexels API key issuance",
+      "scopes": null,
+      "quotaCost": null,
+      "details": "Pexels Help ghi tạm dừng cấp API key mới. Ngày bắt đầu và mở lại null."
+    },
+    "evidence": [
+      {
+        "url": "https://help.pexels.com/hc/en-us/articles/900004904026-How-do-I-get-an-API-key",
+        "checkedAt": "2026-11-11",
+        "sourceUpdatedAt": "2026-11-10",
+        "type": "official"
+      }
+    ],
+    "confidence": "high",
+    "volatility": "weekly",
+    "watch": [
+      {
+        "url": "https://help.pexels.com/hc/en-us/articles/900004904026-How-do-I-get-an-API-key",
+        "kind": "api_revision"
+      }
+    ],
+    "status": "active"
+  },
+  {
+    "id": "api.gemini_cli.consumer_google_login",
+    "kind": "api_contract",
+    "scope": {
+      "platforms": [
+        "*"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "name": "gemini_cli.consumer_google_login",
+      "endpoint": "Gemini CLI Login with Google",
+      "scopes": null,
+      "quotaCost": null,
+      "details": "Login with Google cho Gemini CLI consumer thuộc scope công bố kết thúc. Lịch Standard/Enterprise riêng."
+    },
+    "evidence": [
+      {
+        "url": "https://developers.google.com/gemini-code-assist/docs/deprecations/code-assist-individuals",
+        "checkedAt": "2026-11-11",
+        "sourceUpdatedAt": "2026-10-09",
+        "type": "official"
+      }
+    ],
+    "confidence": "high",
+    "volatility": "quarterly",
+    "watch": [
+      {
+        "url": "https://developers.google.com/gemini-code-assist/docs/deprecations/code-assist-individuals",
+        "kind": "api_revision"
+      }
+    ],
+    "status": "deprecated",
+    "validUntil": "2026-06-18"
+  },
+  {
+    "id": "api.deepseek.flash_alias_remap",
+    "kind": "api_contract",
+    "scope": {
+      "platforms": [
+        "*"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "name": "deepseek.flash_alias_remap",
+      "endpoint": "POST /v1/chat/completions",
+      "scopes": null,
+      "quotaCost": null,
+      "details": "V4 Flash và Flash Vision Exp retire, ID cũ tạm chuyển sang V4.1 Flash."
+    },
+    "evidence": [
+      {
+        "url": "https://api-docs.deepseek.com/updates/",
+        "checkedAt": "2026-11-11",
+        "type": "official"
+      }
+    ],
+    "confidence": "high",
+    "volatility": "quarterly",
+    "watch": [
+      {
+        "url": "https://api-docs.deepseek.com/updates/",
+        "kind": "api_revision"
+      }
+    ],
+    "status": "active",
+    "validFrom": "2026-09-10"
+  },
+  {
+    "id": "api.unsplash.endpoint_warning",
+    "kind": "api_contract",
+    "scope": {
+      "platforms": [
+        "*"
+      ],
+      "markets": [
+        "*"
+      ]
+    },
+    "value": {
+      "name": "unsplash.endpoint_warning",
+      "endpoint": "Unsplash v1",
+      "scopes": null,
+      "quotaCost": null,
+      "details": "Endpoint deprecated trả Warning trong thời gian deprecation. Docs cam kết tối thiểu ba tuần notice cho thay đổi không tương thích của bề mặt đã công bố."
+    },
+    "evidence": [
+      {
+        "url": "https://unsplash.com/documentation",
+        "checkedAt": "2026-11-10",
+        "type": "official"
+      }
+    ],
+    "confidence": "high",
+    "volatility": "quarterly",
+    "watch": [
+      {
+        "url": "https://unsplash.com/documentation",
+        "kind": "api_revision"
+      }
+    ],
+    "status": "active"
+  }
+]

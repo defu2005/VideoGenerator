@@ -1,0 +1,72 @@
+name: vg
+
+services:
+  web:
+    image: ${VG_IMAGE:-vg:dev}
+    user: "0:0"
+    restart: "no"
+    entrypoint: ["sh", "-c", "test -f /app/apps/web/dist/index.html && mkdir -p /srv && cp -a /app/apps/web/dist/. /srv/"]
+    volumes:
+      - web-dist:/srv
+
+  vg:
+    image: ${VG_IMAGE:-vg:dev}
+    env_file:
+      - .env
+    environment:
+      VG_ROLE: control
+      HOST: "0.0.0.0"
+      PORT: "3001"
+      DATA_DIR: /data
+      DATABASE_PATH: /data/app.db
+    volumes:
+      - ${VG_DATA_DIR:-vg-data}:/data
+    shm_size: "1gb"
+    init: true
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    restart: unless-stopped
+    depends_on:
+      web:
+        condition: service_completed_successfully
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    depends_on:
+      web:
+        condition: service_completed_successfully
+      vg:
+        condition: service_healthy
+    ports:
+      - "${VG_HTTP_PORT:-80}:80"
+      - "${VG_HTTPS_PORT:-443}:443"
+    environment:
+      DOMAIN: ${DOMAIN:-:80}
+    volumes:
+      - web-dist:/srv:ro
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+
+  litestream:
+    image: litestream/litestream:0.3.13
+    profiles: ["litestream"]
+    restart: unless-stopped
+    command: ["replicate", "-config", "/etc/litestream.yml"]
+    environment:
+      LITESTREAM_REPLICA_URL: ${LITESTREAM_REPLICA_URL:-}
+      LITESTREAM_ACCESS_KEY_ID: ${LITESTREAM_ACCESS_KEY_ID:-}
+      LITESTREAM_SECRET_ACCESS_KEY: ${LITESTREAM_SECRET_ACCESS_KEY:-}
+    volumes:
+      - ${VG_DATA_DIR:-vg-data}:/data
+      - ./litestream.yml:/etc/litestream.yml:ro
+    depends_on:
+      vg:
+        condition: service_healthy
+
+volumes:
+  vg-data:
+  web-dist:
+  caddy-data:
+  caddy-config:

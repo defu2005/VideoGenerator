@@ -1,4 +1,6 @@
+import { ProfileKnowledgeTab } from "./ProfileKnowledgeTab";
 import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { ConfirmDialog } from "../../components/ConfirmDialog";
 import { Link, Navigate, useParams } from "react-router-dom";
 import {
   META_RECONNECT_SOON_VI,
@@ -7,6 +9,7 @@ import {
   TIKTOK_SETUP_HELP_VI,
   YOUTUBE_PLAYLIST_SCOPE_NOTE_VI,
   YOUTUBE_SETUP_HELP_VI,
+  MOTION_TEMPLATES,
   recommendBrief,
   TTS_CATALOG,
   type AccountConnectionDetail,
@@ -41,6 +44,7 @@ import {
   selectMetaTarget,
 } from "../../services/publishApi";
 import { BriefFields } from "../projects/BriefFields";
+import { EditStyleFields } from "../projects/EditStyleFields";
 import { ModelAdvisorPanel } from "../settings/ModelAdvisorPanel";
 import {
   GuidelineFieldset,
@@ -53,12 +57,19 @@ import { InsightsTab } from "./InsightsTab";
 import { CommentSettingsForm } from "../comments/CommentSettingsForm";
 import { setYoutubeCommentSync } from "../../services/commentsApi";
 import { TopicsTab } from "./TopicsTab";
+import { ProfileMemoryTab } from "./ProfileMemoryTab";
+import { StyleTab } from "./StyleTab";
+import { AutonomySettingsPanel } from "../operator/AutonomySettingsPanel";
 const TABS = [
   { id: "direction", label: "Định hướng" },
   { id: "brief", label: "Brief mặc định" },
+  { id: "style", label: "Phong cách" },
   { id: "topics", label: "Chủ đề" },
   { id: "automation", label: "Tự động" },
+  { id: "autonomy", label: "Tự vận hành" },
   { id: "insights", label: "Bài học" },
+  { id: "knowledge", label: "Tri thức" },
+  { id: "memory", label: "Ghi nhớ" },
   { id: "accounts", label: "Tài khoản" },
   { id: "comments", label: "Bình luận" },
   { id: "projects", label: "Dự án" },
@@ -125,9 +136,9 @@ function DirectionTab({ profile }: { profile: ProfileDetail }) {
     setName(profile.name);
     setDescription(profile.description);
     setDirection(profile.direction);
-    setLanguage(profile.language);
     setColor(profile.color);
-  }, [profile]);
+  }, [profile.name, profile.description, profile.direction, profile.color]);
+  useEffect(() => setLanguage(profile.language), [profile.language]);
 
   async function save(event: FormEvent) {
     event.preventDefault();
@@ -292,6 +303,179 @@ function BriefTab({ profile }: { profile: ProfileDetail }) {
       {error && <p className="request-error" role="alert">{error}</p>}
       {message && <p className="field-hint">{message}</p>}
       <BriefFields topic={profile.name} settings={brief} onChange={changeBrief} onReset={resetBrief} />
+      <fieldset className="form-row">
+        <legend>Phong cách dựng</legend>
+        <label className="form-field">
+          <span>Preset</span>
+          <select
+            aria-label="Phong cách dựng"
+            value={brief.edit?.preset ?? "story"}
+            onChange={(event) => setBrief((current) => ({
+              ...current,
+              edit: { ...current.edit, preset: event.target.value as "calm" | "energetic" | "news" | "story" },
+            }))}
+          >
+            <option value="calm">Điềm tĩnh</option>
+            <option value="energetic">Nhanh</option>
+            <option value="news">Tin tức</option>
+            <option value="story">Kể chuyện</option>
+          </select>
+        </label>
+        <label className="checkbox-field">
+          <input
+            type="checkbox"
+            aria-label="Hiệu ứng âm thanh"
+            checked={brief.edit?.sfx ?? true}
+            onChange={(event) => setBrief((current) => ({ ...current, edit: { ...current.edit, sfx: event.target.checked } }))}
+          />
+          Hiệu ứng âm thanh
+        </label>
+        <EditStyleFields
+          idPrefix="Hồ sơ"
+          edit={brief.edit}
+          onChange={(edit) => setBrief((current) => ({ ...current, edit }))}
+        />
+        <div style={{ gridColumn: "1 / -1", display: "grid", gap: 14 }}>
+          <label className="checkbox-field">
+            <input
+              type="checkbox"
+              aria-label="Bật đồ họa động"
+              checked={brief.motionGraphics?.enabled ?? false}
+              onChange={(event) => setBrief((current) => ({
+                ...current,
+                motionGraphics: {
+                  enabled: event.target.checked,
+                  templates: current.motionGraphics?.templates ?? ["title_card", "kinetic_word", "end_card"],
+                  brandColor: current.motionGraphics?.brandColor ?? "#0F172A",
+                  accentColor: current.motionGraphics?.accentColor ?? "#F5C518",
+                  font: current.motionGraphics?.font ?? "be-vietnam-pro",
+                  endCard: current.motionGraphics?.endCard ?? true,
+                },
+              }))}
+            />
+            Bật đồ họa động
+          </label>
+          <div className="format-cards" aria-label="Mẫu đồ họa được phép">
+            {MOTION_TEMPLATES.map((spec) => {
+              const selected = brief.motionGraphics?.templates?.includes(spec.id) ?? false;
+              return (
+                <label key={spec.id}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, width: "100%" }}>
+                    <input
+                      type="checkbox"
+                      aria-label={spec.nameVi}
+                      checked={selected}
+                      onChange={(event) => setBrief((current) => {
+                        const currentTemplates = current.motionGraphics?.templates ?? [];
+                        const templates = event.target.checked
+                          ? [...currentTemplates, spec.id]
+                          : currentTemplates.filter((id) => id !== spec.id);
+                        return {
+                          ...current,
+                          motionGraphics: {
+                            enabled: current.motionGraphics?.enabled ?? false,
+                            templates,
+                            brandColor: current.motionGraphics?.brandColor ?? "#0F172A",
+                            accentColor: current.motionGraphics?.accentColor ?? "#F5C518",
+                            font: current.motionGraphics?.font ?? "be-vietnam-pro",
+                            endCard: current.motionGraphics?.endCard ?? true,
+                          },
+                        };
+                      })}
+                    />
+                    <strong>{spec.nameVi}</strong>
+                  </div>
+                  <iframe title={spec.nameVi} sandbox="allow-scripts" src={`/api/motion/preview?template=${spec.id}`} />
+                </label>
+              );
+            })}
+          </div>
+        </div>
+        <label className="form-field">
+          <span>Màu nền</span>
+          <input aria-label="Màu nền đồ họa" type="color" value={brief.motionGraphics?.brandColor ?? "#0F172A"} onChange={(event) => setBrief((current) => ({
+            ...current,
+            motionGraphics: {
+              enabled: current.motionGraphics?.enabled ?? false,
+              templates: current.motionGraphics?.templates ?? [],
+              brandColor: event.target.value,
+              accentColor: current.motionGraphics?.accentColor ?? "#F5C518",
+              font: current.motionGraphics?.font ?? "be-vietnam-pro",
+              endCard: current.motionGraphics?.endCard ?? true,
+            },
+          }))} />
+        </label>
+        <label className="form-field">
+          <span>Màu nhấn</span>
+          <input aria-label="Màu nhấn đồ họa" type="color" value={brief.motionGraphics?.accentColor ?? "#F5C518"} onChange={(event) => setBrief((current) => ({
+            ...current,
+            motionGraphics: {
+              enabled: current.motionGraphics?.enabled ?? false,
+              templates: current.motionGraphics?.templates ?? [],
+              brandColor: current.motionGraphics?.brandColor ?? "#0F172A",
+              accentColor: event.target.value,
+              font: current.motionGraphics?.font ?? "be-vietnam-pro",
+              endCard: current.motionGraphics?.endCard ?? true,
+            },
+          }))} />
+        </label>
+        <label className="form-field">
+          <span>Tên kênh trên thẻ kết</span>
+          <input
+            aria-label="Tên kênh trên thẻ kết"
+            maxLength={32}
+            value={brief.motionGraphics?.channelName ?? ""}
+            onChange={(event) => setBrief((current) => ({
+              ...current,
+              motionGraphics: {
+                enabled: current.motionGraphics?.enabled ?? false,
+                templates: current.motionGraphics?.templates ?? [],
+                brandColor: current.motionGraphics?.brandColor ?? "#0F172A",
+                accentColor: current.motionGraphics?.accentColor ?? "#F5C518",
+                font: current.motionGraphics?.font ?? "be-vietnam-pro",
+                endCard: current.motionGraphics?.endCard ?? true,
+                channelName: event.target.value,
+              },
+            }))}
+          />
+        </label>
+        <label className="form-field">
+          <span>Phông</span>
+          <select aria-label="Phông đồ họa" value={brief.motionGraphics?.font ?? "be-vietnam-pro"} onChange={(event) => setBrief((current) => ({
+            ...current,
+            motionGraphics: {
+              enabled: current.motionGraphics?.enabled ?? false,
+              templates: current.motionGraphics?.templates ?? [],
+              brandColor: current.motionGraphics?.brandColor ?? "#0F172A",
+              accentColor: current.motionGraphics?.accentColor ?? "#F5C518",
+              font: event.target.value === "system" ? "system" : "be-vietnam-pro",
+              endCard: current.motionGraphics?.endCard ?? true,
+            },
+          }))}>
+            <option value="be-vietnam-pro">Be Vietnam Pro</option>
+            <option value="system">Phông hệ thống</option>
+          </select>
+        </label>
+        <label className="checkbox-field">
+          <input
+            type="checkbox"
+            aria-label="Thẻ kết"
+            checked={brief.motionGraphics?.endCard ?? true}
+            onChange={(event) => setBrief((current) => ({
+              ...current,
+              motionGraphics: {
+                enabled: current.motionGraphics?.enabled ?? false,
+                templates: current.motionGraphics?.templates ?? [],
+                brandColor: current.motionGraphics?.brandColor ?? "#0F172A",
+                accentColor: current.motionGraphics?.accentColor ?? "#F5C518",
+                font: current.motionGraphics?.font ?? "be-vietnam-pro",
+                endCard: event.target.checked,
+              },
+            }))}
+          />
+          Thẻ kết
+        </label>
+      </fieldset>
       <div className="form-row">
         <label className="form-field">
           <span>Mode mặc định</span>
@@ -301,19 +485,23 @@ function BriefTab({ profile }: { profile: ProfileDetail }) {
             <option value="MANUAL">MANUAL</option>
           </select>
         </label>
-        <label className="checkbox-field" style={{ alignSelf: "end", marginBottom: 12 }}>
-          <input type="checkbox" checked={autoRender} onChange={(event) => setAutoRender(event.target.checked)} />
-          Tự render
-        </label>
-        <label className="checkbox-field" style={{ alignSelf: "end", marginBottom: 12 }}>
-          <input
-            type="checkbox"
-            aria-label="Tự chọn model"
-            checked={autoModel}
-            onChange={(event) => setAutoModel(event.target.checked)}
-          />
-          Tự chọn model
-        </label>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 16, alignItems: "center", minHeight: 38, marginTop: 18 }}>
+          <label className="checkbox-field">
+            <input type="checkbox" checked={autoRender} onChange={(event) => setAutoRender(event.target.checked)} />
+            Tự render
+          </label>
+          <label className="checkbox-field">
+            <input
+              type="checkbox"
+              aria-label="Tự chọn model"
+              checked={autoModel}
+              onChange={(event) => setAutoModel(event.target.checked)}
+            />
+            Tự chọn model
+          </label>
+        </div>
+        <CopyrightStillsSelect profileId={profile.id} />
+        <VisualQualitySelect profileId={profile.id} />
         <label className="form-field">
           <span>Khi hết quota miễn phí</span>
           <select aria-label="Chính sách quota của hồ sơ" value={quotaPolicy} onChange={(event) => setQuotaPolicy(event.target.value as typeof quotaPolicy)}>
@@ -387,6 +575,9 @@ function AccountCard({
   const [checkMessage, setCheckMessage] = useState("");
   const [busy, setBusy] = useState<"disconnect" | "check" | "saveCreds" | "deleteCreds" | "metaTarget" | null>(null);
   const [selectedMetaTargetId, setSelectedMetaTargetId] = useState("");
+  const [confirmAccount, setConfirmAccount] = useState(false);
+  const [confirmDisconnect, setConfirmDisconnect] = useState(false);
+  const [confirmCreds, setConfirmCreds] = useState(false);
 
   const connectionQuery = useQuery({
     queryKey: accountConnectionKeys.detail(profileId, account.id),
@@ -426,7 +617,7 @@ function AccountCard({
   }
 
   async function onDisconnect() {
-    if (!window.confirm("Ngắt kết nối tài khoản này? Token đã lưu sẽ bị xóa.")) return;
+    setConfirmDisconnect(false);
     setBusy("disconnect");
     onError("");
     try {
@@ -481,7 +672,7 @@ function AccountCard({
   }
 
   async function onDeleteCredentials() {
-    if (!window.confirm("Xóa thông tin ứng dụng đã lưu cho tài khoản này?")) return;
+    setConfirmCreds(false);
     setBusy("deleteCreds");
     setCredMessage("");
     onError("");
@@ -532,6 +723,10 @@ function AccountCard({
               {detail?.connectionError ?? account.connectionError}
             </p>
           )}
+          {account.platform === "youtube" && connection === "EXPIRED" ? (
+            <p>Ở chế độ Testing, quyền có thể hết hạn sau 7 ngày. Kiểm tra trạng thái Publish app trên Google Cloud.</p>
+          ) : null}
+          {detail?.marketWarning && <p role="status">{detail.marketWarning}</p>}
           {detail && (
             <div className="page-subtitle" style={{ margin: "0.45rem 0 0", display: "grid", gap: 4 }}>
               {detail.tokenExpiresAt && (
@@ -730,7 +925,7 @@ function AccountCard({
                 className="button button-secondary"
                 type="button"
                 disabled={busy === "disconnect"}
-                onClick={() => void onDisconnect()}
+                onClick={() => setConfirmDisconnect(true)}
               >
                 Ngắt kết nối
               </button>
@@ -756,9 +951,7 @@ function AccountCard({
             className="button button-secondary"
             type="button"
             disabled={remove.isPending}
-            onClick={() => void remove.mutateAsync({ profileId, accountId: account.id }).then(onDeleted).catch((err) => {
-              onError(err instanceof Error ? err.message : "Xóa thất bại");
-            })}
+            onClick={() => setConfirmAccount(true)}
           >
             Xóa
           </button>
@@ -804,7 +997,7 @@ function AccountCard({
                   className="button button-secondary"
                   type="button"
                   disabled={busy === "deleteCreds"}
-                  onClick={() => void onDeleteCredentials()}
+                  onClick={() => setConfirmCreds(true)}
                 >
                   Xóa thông tin ứng dụng
                 </button>
@@ -814,6 +1007,43 @@ function AccountCard({
           </form>
         </section>
       )}
+      <ConfirmDialog
+        open={confirmAccount}
+        title="Xóa tài khoản?"
+        message={`Tài khoản ${displayName} sẽ rời khỏi hồ sơ. Video đã đăng không bị xóa trên nền tảng.`}
+        confirmLabel="Xóa tài khoản"
+        cancelLabel="Giữ lại"
+        busy={remove.isPending}
+        onCancel={() => setConfirmAccount(false)}
+        onConfirm={() => {
+          void remove.mutateAsync({ profileId, accountId: account.id }).then(() => {
+            setConfirmAccount(false);
+            onDeleted();
+          }).catch((err) => {
+            onError(err instanceof Error ? err.message : "Xóa thất bại");
+          });
+        }}
+      />
+      <ConfirmDialog
+        open={confirmDisconnect}
+        title="Ngắt kết nối?"
+        message="Token đã lưu của tài khoản này sẽ bị xóa. Bạn có thể kết nối lại sau."
+        confirmLabel="Ngắt kết nối"
+        cancelLabel="Giữ kết nối"
+        busy={busy === "disconnect"}
+        onCancel={() => setConfirmDisconnect(false)}
+        onConfirm={() => { void onDisconnect(); }}
+      />
+      <ConfirmDialog
+        open={confirmCreds}
+        title="Xóa thông tin ứng dụng?"
+        message="Mã ứng dụng đã lưu cho tài khoản này sẽ bị xóa. Kết nối sau đó dùng giá trị trong .env nếu có."
+        confirmLabel="Xóa thông tin"
+        cancelLabel="Giữ lại"
+        busy={busy === "deleteCreds"}
+        onCancel={() => setConfirmCreds(false)}
+        onConfirm={() => { void onDeleteCredentials(); }}
+      />
     </li>
   );
 }
@@ -937,6 +1167,7 @@ function AccountsTab({ profile }: { profile: ProfileDetail }) {
         )}
         <label className="form-field">
           <span>Tên hiển thị</span>
+          {displayName.includes("@") ? <small>Tên gợi nhớ, không phải email đăng nhập</small> : null}
           <input value={displayName} required maxLength={200} onChange={(event) => setDisplayName(event.target.value)} />
         </label>
         <label className="form-field">
@@ -1060,6 +1291,79 @@ function ProjectsTab({ profile }: { profile: ProfileDetail }) {
   );
 }
 
+function VisualQualitySelect({ profileId }: { profileId: string }) {
+  const [quality, setQuality] = useState<"budget" | "best">("budget");
+  const [notice, setNotice] = useState("");
+  useEffect(() => {
+    void fetch(`/api/profiles/${profileId}/visual-quality`).then(async (response) => {
+      if (!response.ok) return;
+      const body = await response.json() as { quality?: string };
+      if (body.quality === "best") setQuality("best");
+    }).catch(() => undefined);
+  }, [profileId]);
+  return (
+    <label className="form-field">
+      <span>Chất lượng ảnh</span>
+      <select aria-label="Chất lượng ảnh" value={quality} onChange={(event) => {
+        const next = event.target.value === "best" ? "best" : "budget";
+        setQuality(next);
+        void fetch(`/api/profiles/${profileId}/visual-quality`, {
+          method: "PUT",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ quality: next }),
+        });
+      }}>
+        <option value="budget">Tiết kiệm — theo ngân sách</option>
+        <option value="best">Tốt nhất — tìm rộng hơn, tốn thêm lượt tìm và vision</option>
+      </select>
+      <button
+        type="button"
+        className="button button-secondary"
+        style={{ marginTop: 6, width: "fit-content", minHeight: 28, padding: "0 10px", fontSize: 11 }}
+        onClick={() => {
+        void fetch("/api/profiles/visual-quality", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ quality: "best" }),
+        }).then(() => {
+          setQuality("best");
+          setNotice("Đã bật Tốt nhất cho mọi hồ sơ.");
+        }).catch(() => setNotice("Chưa đổi được các hồ sơ."));
+      }}>Dùng chế độ Tốt nhất cho mọi hồ sơ</button>
+      {notice ? <small>{notice}</small> : <small>Hồ sơ mới mặc định Tốt nhất. Hồ sơ cũ giữ Tiết kiệm cho đến khi bạn đổi.</small>}
+    </label>
+  );
+}
+
+function CopyrightStillsSelect({ profileId }: { profileId: string }) {
+  const [mode, setMode] = useState<"off" | "commentary">("off");
+  useEffect(() => {
+    void fetch(`/api/profiles/${profileId}/visual-copyright`).then(async (response) => {
+      if (!response.ok) return;
+      const body = await response.json() as { allowCopyrightedStills?: string };
+      if (body.allowCopyrightedStills === "commentary") setMode("commentary");
+    }).catch(() => undefined);
+  }, [profileId]);
+  return (
+    <label className="form-field">
+      <span>Ảnh có bản quyền</span>
+      <select aria-label="Ảnh có bản quyền" value={mode} onChange={(event) => {
+        const allowCopyrightedStills = event.target.value === "commentary" ? "commentary" : "off";
+        setMode(allowCopyrightedStills);
+        void fetch(`/api/profiles/${profileId}/visual-copyright`, {
+          method: "PUT",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ allowCopyrightedStills }),
+        });
+      }}>
+        <option value="off">Tắt — ưu tiên ảnh có giấy phép</option>
+        <option value="commentary">Bình luận — tối đa 4 giây, có rủi ro Content ID</option>
+      </select>
+      <small>Bật bình luận thì video có thể bị Content ID, mất tiền quảng cáo hoặc bị gỡ. Chỉ bạn đổi được mục này.</small>
+    </label>
+  );
+}
+
 export function ProfileDetailPage() {
   const { id = "", tab = "direction" } = useParams();
   const profile = useProfile(id);
@@ -1082,7 +1386,7 @@ export function ProfileDetailPage() {
           </h1>
         </div>
       </div>
-      <nav className="tab-bar" aria-label="Profile tabs">
+      <nav className="tab-bar" aria-label="Tab hồ sơ">
         {TABS.map((item) => (
           <Link
             key={item.id}
@@ -1100,15 +1404,26 @@ export function ProfileDetailPage() {
       ) : !profile.data ? (
         <section className="state-card"><h2>Không tìm thấy hồ sơ</h2><Link to="/profiles">Quay lại danh sách</Link></section>
       ) : activeTab === "direction" ? (
-        <DirectionTab profile={profile.data} />
+        <>
+          <MarketSettings key={`market:${profile.data.id}`} profile={profile.data} />
+          <DirectionTab key={`direction:${profile.data.id}`} profile={profile.data} />
+        </>
       ) : activeTab === "brief" ? (
         <BriefTab profile={profile.data} />
+      ) : activeTab === "style" ? (
+        <StyleTab key={profile.data.id} profileId={profile.data.id} />
       ) : activeTab === "topics" ? (
         <TopicsTab profile={profile.data} />
       ) : activeTab === "automation" ? (
         <AutomationTab profile={profile.data} />
+      ) : activeTab === "autonomy" ? (
+        <AutonomySettingsPanel key={profile.data.id} profileId={profile.data.id} />
       ) : activeTab === "insights" ? (
         <InsightsTab profile={profile.data} />
+      ) : activeTab === "knowledge" ? (
+        <ProfileKnowledgeTab key={profile.data.id} profileId={profile.data.id} />
+      ) : activeTab === "memory" ? (
+        <ProfileMemoryTab key={profile.data.id} profileId={profile.data.id} />
       ) : activeTab === "accounts" ? (
         <AccountsTab profile={profile.data} />
       ) : activeTab === "comments" ? (
@@ -1119,3 +1434,4 @@ export function ProfileDetailPage() {
     </div>
   );
 }
+import { MarketSettings } from "./MarketSettings";

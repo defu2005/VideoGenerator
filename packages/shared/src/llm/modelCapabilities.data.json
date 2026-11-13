@@ -1,0 +1,9 @@
+{
+  "_meta": {
+    "source": "https://github.com/BerriAI/litellm/blob/main/model_prices_and_context_window.json",
+    "copied": "2026-11-10",
+    "license": "MIT"
+  },
+  "gemini-2.5-flash": { "supports_vision": true, "supports_function_calling": true, "supports_response_schema": true },
+  "gpt-4o-mini": { "supports_vision": true, "supports_function_calling": true, "supports_response_schema": true }
+}

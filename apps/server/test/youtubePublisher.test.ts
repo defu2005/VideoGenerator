@@ -6,7 +6,6 @@ import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from "vites
 import {
   YOUTUBE_FULL_SCOPE,
   YOUTUBE_READONLY_SCOPE,
-  YOUTUBE_UPLOAD_QUOTA_COST,
   YOUTUBE_UPLOAD_SCOPE,
   type PublishInput,
   type TokenSet,
@@ -258,7 +257,8 @@ describe("YouTubePublisher upload", () => {
     expect(result.externalUrl).toContain("vid123");
     expect(progress[0]).toBe(2);
     expect(progress.at(-1)).toBe(100);
-    expect(publisher.quota.getState().used).toBe(YOUTUBE_UPLOAD_QUOTA_COST);
+    expect(publisher.quota.getState("videos.insert").used).toBe(1);
+    expect(publisher.quota.getState().used).toBe(0);
 
     const initBody = JSON.parse(String(fetchMock.mock.calls[0]![1]?.body)) as {
       status: { privacyStatus: string; containsSyntheticMedia: boolean; publishAt?: string };
@@ -458,7 +458,7 @@ describe("YouTubePublisher upload", () => {
   });
 
   it("throws YoutubeQuotaExceededError before upload when budget is exhausted", async () => {
-    publisher.quota.setUsed(9950);
+    publisher.quota.setUsed(publisher.quota.getLimit("videos.insert"), undefined, "videos.insert");
     await expect(
       publisher.upload(baseInput(), tokens, AbortSignal.timeout(5_000), () => {}),
     ).rejects.toBeInstanceOf(YoutubeQuotaExceededError);

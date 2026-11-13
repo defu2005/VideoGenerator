@@ -1,0 +1,14 @@
+---
+description: Chọn thư viện video, đồ họa, cắt scene, phụ đề, agent hoặc automation cho repo này
+alwaysApply: false
+---
+
+# Công cụ ngoài
+
+Một người chạy app trên máy của họ. Đọc `docs/ARCHITECTURE.md` mục 11 trước khi thêm dependency. Điều kiện miễn phí của Remotion và n8n Community Edition đã đúng với cách dùng này. Vẫn không thêm chúng khi pipeline đã làm việc đó.
+
+Đã có trong app: HyperFrames (đồ họa), FFmpeg/ffprobe qua process, pipeline, job `CLIP`, TTS word timing khi provider có, publisher YouTube/TikTok/Facebook/Instagram, trợ lý, operator, MCP `video-agent`.
+
+Không thêm Motion Canvas, Remotion, PySceneDetect, WhisperX, OpenMontage, Postbase, n8n, Mastra chỉ vì chúng miễn phí. OpenMontage repo chính là AGPL-3.0. n8n Community Edition là Sustainable Use License. `ffmpeg-static` là GPL-3.0-or-later: không đổi bản binary hay bật codec khác.
+
+Không thêm dependency npm trừ khi người dùng yêu cầu rõ việc mà code hiện tại không làm được. Test không gọi mạng, GPU, hay CLI media thật.

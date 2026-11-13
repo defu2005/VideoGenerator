@@ -20,7 +20,10 @@ export function buildVisionCheckPrompt(input: {
     system: [
       "You are a vision model checking whether candidate images fit a video scene.",
       "Score each labelled image from 0–10 for fit to the narration and visual description.",
-      "Flag issues: watermark, text_overlay, wrong_subject, wrong_era, low_quality, collage, nsfw, logo_only.",
+      "For issues use only: watermark, text_overlay, wrong_subject, wrong_era, low_quality, collage, nsfw, logo_only.",
+      "Return only schema fields (label, fit, depicts, issues, cropOk, optional subject). No other keys.",
+      "Put other problems in depicts as a short phrase.",
+      "When you can see the main subject, add subject as fractions of the image: x, y, width, height.",
       "Return JSON only matching the schema.",
     ].join(" "),
     prompt: JSON.stringify({

@@ -8,6 +8,7 @@ import { TtsAppSettingsInputSchema, TtsPreviewInputSchema, TtsSecretInputSchema,
 import type { AppConfig } from "../lib/config.js";
 import type { TokenVault } from "../publishing/tokenVault.js";
 import type { TtsProviderRegistry } from "../providers/tts/registry.js";
+import { touchFromOwner } from "../operator/autopilot.js";
 import { describeTtsProviders, readTtsSettings, saveTtsSettings, ttsSecretKey } from "../settings/tts.js";
 
 const SampleParams = z.object({ hash: z.string().regex(/^[a-f0-9]{64}$/) }).strict();
@@ -35,6 +36,7 @@ export function registerTtsSettingsRoutes(
 
   app.put("/api/settings/tts", async (request) => {
     const patch = TtsAppSettingsInputSchema.parse(request.body ?? {});
+    touchFromOwner(request.headers, sqlite, "tts:settings");
     const settings = saveTtsSettings(sqlite, config.TTS_PROVIDER, patch);
     return {
       settings,

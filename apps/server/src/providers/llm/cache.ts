@@ -4,7 +4,7 @@ import type Database from "better-sqlite3";
 export type LlmCacheEntry = { responseText: string };
 
 export class LlmCache {
-  constructor(private readonly sqlite: Database.Database, private readonly enabled: boolean) {}
+  constructor(readonly sqlite: Database.Database, private readonly enabled: boolean) {}
 
   get(key: string): LlmCacheEntry | undefined {
     if (!this.enabled) return undefined;

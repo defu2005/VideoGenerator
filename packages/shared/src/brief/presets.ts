@@ -102,4 +102,7 @@ export type BriefSettings = Pick<ProjectSettings,
   | "subtitles"
   | "music"
   | "userSet"
+  | "edit"
+  | "motionGraphics"
+  | "format"
 >;

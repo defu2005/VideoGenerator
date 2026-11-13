@@ -1,0 +1,22 @@
+# Build context for deploy/docker/Dockerfile. The image runs npm ci itself
+# so the host node_modules (Windows) never enter the Linux image.
+node_modules
+**/node_modules
+data
+**/data
+tmp
+**/tmp
+artifacts
+**/artifacts
+.git
+.claude
+coverage
+**/coverage
+**/*.log
+docs/compose/samples
+.env
+.env.*
+**/.env
+**/.env.*
+!.env.example
+!**/.env.example

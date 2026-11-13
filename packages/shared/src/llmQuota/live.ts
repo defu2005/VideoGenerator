@@ -308,7 +308,9 @@ export function callTargetsOmniProvider(provider: string, model: string, omniPro
     const slash = model.indexOf("/");
     if (slash <= 0) return false;
     const prefix = model.slice(0, slash).toLowerCase();
-    return prefix === wanted || appProviderForOmniroute(prefix) === appProviderForOmniroute(wanted);
+    const appPrefix = appProviderForOmniroute(prefix);
+    const appWanted = appProviderForOmniroute(wanted);
+    return prefix === wanted || (appPrefix !== null && appWanted !== null && appPrefix === appWanted);
   }
   return omnirouteProvidersForApp(provider).includes(wanted);
 }

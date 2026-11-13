@@ -11,6 +11,7 @@ import {
   type NotificationLogStatus,
   type NotificationSettings,
 } from "@vg/shared";
+import { alertWaitsForMorning } from "../operator/autopilot.js";
 import type { TokenVault } from "../publishing/tokenVault.js";
 import type { AppConfig } from "../lib/config.js";
 import type { UsageService } from "../services/usageService.js";
@@ -156,7 +157,8 @@ export class NotificationService {
         return `❌ Stage <b>${escapeHtml(event.stage)}</b> thất bại: ${escapeHtml(event.project)}\n${escapeHtml(event.error)}\n${escapeHtml(`${this.webBaseUrl()}/projects/${event.projectId}`)}`;
       case "waiting_approval":
         if (event.unexpectedAutoStop) {
-          return `⚠️ Dự án tự động bị dừng ở <b>${escapeHtml(event.gate)}</b>: ${escapeHtml(event.project)}\n${escapeHtml(event.link)}`;
+          const detail = event.detail ? `\n${escapeHtml(event.detail)}` : "";
+          return `⚠️ Dự án tự động bị dừng ở <b>${escapeHtml(event.gate)}</b>: ${escapeHtml(event.project)}${detail}\n${escapeHtml(event.link)}`;
         }
         return `⚠️ Chờ duyệt <b>${escapeHtml(event.gate)}</b>: ${escapeHtml(event.project)}\n${escapeHtml(event.link)}`;
       case "token_expiring":
@@ -198,6 +200,14 @@ export class NotificationService {
     this.pruneOld();
 
     if (this.wasSentRecently(subjectKey)) return;
+
+    if (event.kind === "automation_warning" && alertWaitsForMorning("warn", this.now())) {
+      const queue = getQuietQueue(this.deps.sqlite);
+      queue.push(event);
+      saveQuietQueue(this.deps.sqlite, queue);
+      this.insertLog({ kind: event.kind, subjectKey, status: "skipped", message, error: "quiet_hours" });
+      return;
+    }
 
     // Quiet hours: queue published + dailySummary (+ monthly_report); attention still goes through.
     if (
@@ -371,6 +381,17 @@ export class NotificationService {
          AND scheduled_for >= ? AND scheduled_for < ?`,
     ).get(this.now().toISOString(), nextDay) as { count: number };
     lines.push(`<b>Lịch đăng 24h tới</b>: ${scheduled.count}`);
+    try {
+      const changes = this.deps.sqlite.prepare(
+        `SELECT summary FROM change_events WHERE in_digest = 1 AND created_at >= ? AND created_at < ? ORDER BY created_at DESC LIMIT 8`,
+      ).all(startIso, endIso) as Array<{ summary: string }>;
+      if (changes.length > 0) {
+        lines.push("<b>Thay đổi bên ngoài</b>");
+        for (const row of changes) lines.push(`• ${escapeHtml(row.summary)}`);
+      }
+    } catch {
+      // Older fixtures have no change inbox.
+    }
 
     const topics = this.deps.sqlite.prepare(
       `SELECT p.name AS profile, COUNT(*) AS count
@@ -379,6 +400,18 @@ export class NotificationService {
        WHERE t.status IN ('PENDING', 'APPROVED')
        GROUP BY p.name ORDER BY p.name`,
     ).all() as Array<{ profile: string; count: number }>;
+    const treatments = this.deps.sqlite.prepare(
+      `SELECT title, json_extract(settings, '$.treatment.formatNameVi') AS format
+       FROM projects
+       WHERE updated_at >= ? AND updated_at < ?
+         AND json_extract(settings, '$.treatment.formatNameVi') IS NOT NULL
+       ORDER BY updated_at DESC LIMIT 8`,
+    ).all(startIso, endIso) as Array<{ title: string; format: string }>;
+    if (treatments.length > 0) {
+      lines.push("<b>Bản đề xuất</b>");
+      for (const row of treatments) lines.push(`• ${escapeHtml(row.title)}: ${escapeHtml(row.format)}`);
+    }
+
     lines.push("<b>Chủ đề còn trong hàng đợi</b>");
     if (topics.length === 0) lines.push("— trống");
     else for (const row of topics) lines.push(`• ${escapeHtml(row.profile)}: ${row.count}`);

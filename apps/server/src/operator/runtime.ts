@@ -12,10 +12,10 @@ export type Spawned = {
   on: (event: string, listener: (...args: any[]) => void) => void;
 };
 
-export type SpawnFn = (command: string, args: string[], options: { cwd: string }) => Spawned;
+export type SpawnFn = (command: string, args: string[], options: { cwd: string; env?: NodeJS.ProcessEnv }) => Spawned;
 
 export const defaultSpawn: SpawnFn = (command, args, options) => {
-  const child = spawn(command, args, { cwd: options.cwd, windowsHide: true });
+  const child = spawn(command, args, { ...options, windowsHide: true });
   return child as unknown as Spawned;
 };
 
@@ -34,6 +34,7 @@ export async function runCursorProcess(input: {
   command: string;
   args: string[];
   cwd: string;
+  env?: NodeJS.ProcessEnv;
   timeoutMs: number;
   spawnImpl?: SpawnFn;
   onDelta?: (text: string) => void;
@@ -42,7 +43,7 @@ export async function runCursorProcess(input: {
 }): Promise<CursorRunResult> {
   const spawnImpl = input.spawnImpl ?? defaultSpawn;
   const before = snapshotOutsideNotes(input.cwd);
-  const child = spawnImpl(input.command, input.args, { cwd: input.cwd });
+  const child = spawnImpl(input.command, input.args, { cwd: input.cwd, env: input.env });
   let text = "";
   const tools: string[] = [];
   let chatId: string | null = null;
@@ -58,7 +59,10 @@ export async function runCursorProcess(input: {
       resolve({ code });
     };
     child.on("exit", ((code: number | null) => finish(code)) as (...args: any[]) => void);
-    child.on("error", (() => finish(1)) as (...args: any[]) => void);
+    child.on("error", ((error: Error) => {
+      stderr += `${error.message}\n`;
+      finish(1);
+    }) as (...args: any[]) => void);
     const timer = setTimeout(() => {
       timedOut = true;
       killProcessTree(child.pid);
@@ -100,8 +104,17 @@ export async function runCursorProcess(input: {
   });
 
   const exit = await done;
-  child.stdout?.destroy();
-  child.stderr?.destroy();
+  // stderr often arrives just after exit ("Authentication required…").
+  // Destroying immediately drops it. A killed mock may never end its pipes,
+  // so close those after a short wait.
+  if (!streamSettled(child.stdout) || !streamSettled(child.stderr)) {
+    await Promise.race([
+      Promise.all([stdoutDone, stderrDone]),
+      new Promise((resolve) => setTimeout(resolve, 100)),
+    ]);
+  }
+  if (!streamSettled(child.stdout)) child.stdout?.destroy();
+  if (!streamSettled(child.stderr)) child.stderr?.destroy();
   await Promise.all([stdoutDone, stderrDone]);
   const writeViolations = restoreOutsideNotes(input.cwd, before);
   const combined = `${text}\n${stderr}`;
@@ -115,6 +128,11 @@ export async function runCursorProcess(input: {
     writeViolations,
     stderr,
   };
+}
+
+function streamSettled(stream: Readable | null): boolean {
+  if (!stream) return true;
+  return stream.readableEnded || stream.destroyed;
 }
 
 function collect(stream: Readable | null, onLine: (line: string) => void): Promise<void> {

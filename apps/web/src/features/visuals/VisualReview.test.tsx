@@ -134,7 +134,7 @@ describe("VisualReview", () => {
     setup(true);
     await screen.findByText("A broad river beneath a sunrise.");
     fireEvent.click(screen.getByRole("button", { name: /^Duyệt$/ }));
-    expect(await screen.findByRole("alert")).toHaveTextContent("Image download failed");
+    expect((await screen.findAllByRole("alert")).some((item) => item.textContent === "Image download failed")).toBe(true);
     expect(screen.getAllByText("Cần xem").length).toBeGreaterThan(0);
   });
 
