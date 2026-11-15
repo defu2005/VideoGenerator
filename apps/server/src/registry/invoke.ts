@@ -67,6 +67,7 @@ export async function invokeRegistryTool(input: {
     return { kind: "refused", message: blocked, risk };
   }
   if (!tool) {
+    logToolAudit(input.ctx.sqlite, { ...auditBase, args: input.args, decision: "refused", summary: `Công cụ không tồn tại: ${input.name}`, reason: "unknown_tool" });
     throw new AppError(400, "UNKNOWN_TOOL", `Công cụ không tồn tại: ${input.name}`);
   }
   const rawArgs = input.args && typeof input.args === "object" && !Array.isArray(input.args)
@@ -101,11 +102,22 @@ export async function invokeRegistryTool(input: {
       return { kind: "refused", message, risk };
     }
   }
+  // Authorize before acquiring/preempting any lease. Refused calls cannot change a foreign resource.
+  const needed = TOOL_ACTIONS[input.name];
+  const resource = toolResource(input.ctx.sqlite, parsed);
+  const decision = needed
+    ? can(input.actor, needed, resource)
+    : { ok: false as const, status: 403 as const, reason: FORBIDDEN_MESSAGE };
+  if (!decision.ok) {
+    const message = decision.status === 404 ? "Không tìm thấy." : FORBIDDEN_MESSAGE;
+    logToolAudit(input.ctx.sqlite, { ...auditBase, args: parsed, decision: "refused", summary: message });
+    return { kind: "refused", message, risk };
+  }
   if (risk !== "read") {
     const ref = resourceOf(input.name, parsed);
     if (ref) {
       if (input.source === "assistant" || input.origin === "user" || input.actor.kind === "user") {
-        userBreakLease(input.ctx.sqlite, ref);
+        if (ref.kind !== "project" || resource.workspaceId !== null || input.actor.ownsUnassigned) userBreakLease(input.ctx.sqlite, ref);
       } else {
         const agentKind = input.ctx.agent?.kind ?? (input.source === "operator" ? "operator" : "other");
         const onDuty = input.ctx.agent?.canSupervise ? isOnDuty(input.ctx.sqlite, callerInstance) : false;
@@ -132,15 +144,6 @@ export async function invokeRegistryTool(input: {
         }
       }
     }
-  }
-  const needed = TOOL_ACTIONS[input.name];
-  const decision = needed
-    ? can(input.actor, needed, toolResource(input.ctx.sqlite, parsed))
-    : { ok: false as const, status: 403 as const, reason: FORBIDDEN_MESSAGE };
-  if (!decision.ok) {
-    const message = decision.status === 404 ? "Không tìm thấy." : FORBIDDEN_MESSAGE;
-    logToolAudit(input.ctx.sqlite, { ...auditBase, args: parsed, decision: "refused", summary: message });
-    return { kind: "refused", message, risk };
   }
   if (input.eventScope && (getAutomationPaused(input.ctx.sqlite) || !EVENT_READ_TOOLS.has(input.name) || risk !== "read"
       || (parsed as { projectId?: string } | null)?.projectId !== input.eventScope.projectId

@@ -485,8 +485,8 @@ describe("assistant API — mock LLM loop", () => {
     const catalog = getToolCatalogForPrompt();
     const text = JSON.stringify(catalog);
     expect(text).not.toContain("$schema");
-    // Grows with each new tool; the guard is mainly against $schema bloat.
-    expect(text.length).toBeLessThan(30_000);
+    // TASK-128 adds eight compact stage/visual tools; keep guarding against raw-schema bloat.
+    expect(text.length).toBeLessThan(37_000);
     const deleteProject = catalog.find((entry) => entry.name === "delete_project");
     expect(deleteProject?.args).toHaveProperty("projectId", "string");
   });

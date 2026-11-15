@@ -4,11 +4,15 @@ import {
   STAGE_TIMEOUT_LABELS_VI,
   baselineStageTimeouts,
   clampStageTimeoutMs,
+  historyBucket,
+  stageTimeoutHash,
   stageTimeoutInputHash,
   type PlannedTimeoutStage,
   type StageTimeoutBrief,
   type StageTimeoutPlan,
 } from "./stageTimeouts.js";
+
+export { historyBucket, stageTimeoutHash };
 
 /**
  * TASK-125. Estimate how long a stage takes from the runs that really happened on this install.
@@ -103,15 +107,6 @@ export function percentile(sorted: number[], p: number): number {
 function ms(value: number): string {
   if (value >= 90_000) return `${Math.round(value / 60_000)} phút`;
   return `${Math.max(1, Math.round(value / 1000))} giây`;
-}
-
-/** Bucket the history the plan depends on, so a stored plan refreshes as the data grows. */
-export function historyBucket(estimates: Partial<Record<string, Pick<StageEstimate, "samples" | "confidence">>>): string {
-  return PLANNED_TIMEOUT_STAGES.map((stage) => {
-    const e = estimates[stage];
-    if (!e) return "0";
-    return `${Math.floor(e.samples / 5) * 5}${e.confidence === "high" ? "h" : "l"}`;
-  }).join(",");
 }
 
 export function estimateStageMs(
@@ -294,7 +289,7 @@ export function planFromEstimates(
     : seen.has("agent") || seen.has("user") ? "mixed" : "baseline";
   return {
     source,
-    inputHash: stageTimeoutInputHash({ ...brief, historyBucket: historyBucket(estimates) }),
+    inputHash: stageTimeoutHash(brief, estimates),
     summary: agent?.summary?.slice(0, 400)
       || (seen.has("history") ? "Một phần ước lượng từ lịch sử chạy thật." : "Ước lượng theo brief, không gọi AI."),
     stages,

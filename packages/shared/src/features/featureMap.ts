@@ -18,6 +18,8 @@ export type FeatureEntry = {
 
 /** Whitelist of guide file stems. `GET /api/help/:page` serves only these. */
 export const GUIDE_PAGES = [
+  "agent-nhan-stage",
+  "tu-cai-tien",
   "tri-thuc-va-thay-doi",
   "README",
   "an-toan",
@@ -42,6 +44,7 @@ export const GUIDE_PAGES = [
   "dang-nhap",
   "khong-gian-va-quyen",
   "may-worker",
+  "tai-nguyen-may",
 ] as const;
 
 export type GuidePageId = (typeof GUIDE_PAGES)[number];
@@ -89,6 +92,7 @@ export function featureForPathname(pathname: string): FeatureEntry | undefined {
 }
 
 export const featureMap: readonly FeatureEntry[] = [
+  { key: "hermes-fleet", nameVi: "Đồng bộ đội Hermes", areaVi: "Cài đặt", summaryVi: "Cùng bộ công cụ qua MCP HTTP, gói kỹ năng và bài học chung; theo dõi máy lệch phiên bản, cấu hình model và chỉ tự dùng skill chỉ đọc khi chủ app cho phép.", webRoutes: ["/settings/hermes-fleet"], docPage: "docs/user-guide/tu-van-hanh.md", docAnchor: "dong-bo-hermes", sinceTask: "TASK-123", settingsKeys: ["fleet.settings"] },
   { key: "account-video-health", nameVi: "Kiểm tra tài khoản và video", areaVi: "Cài đặt", summaryVi: "Checklist theo độ phủ API, webhook TikTok, mốc số liệu kiếm tiền và theo dõi lệch chỉ số có nguồn dashboard.", webRoutes: ["/settings/knowledge"], docPage: "docs/user-guide/tri-thuc-va-thay-doi.md", docAnchor: "tai-khoan-video", sinceTask: "TASK-073c", settingsKeys: ["change.offline", "change.eco", "change.webhookUrl", "change.drift.minSamples"] },
   { key: "external-knowledge", nameVi: "Tri thức và thay đổi bên ngoài", areaVi: "Cài đặt", summaryVi: "Xem nguồn, nhập dữ kiện, duyệt phiên bản và xử lý tab Thay đổi.", webRoutes: ["/settings/knowledge"], docPage: "docs/user-guide/tri-thuc-va-thay-doi.md", docAnchor: "tri-thuc-ben-ngoai", sinceTask: "TASK-073a", settingsKeys: ["knowledge.autoApplyMedium"] },
   { key: "profile-style", nameVi: "Phong cách kênh", areaVi: "Hồ sơ", summaryVi: "Xem và tạo phong cách (màu, phông, nhịp) của kênh từ mẫu, lựa chọn nhanh, màu thương hiệu hoặc AI gợi ý; chỉnh chi tiết, xem thử 3 khung và quay lại bản cũ.", webRoutes: ["/profiles/:id/style"], docPage: "docs/user-guide/ho-so.md", docAnchor: "phong-cach", sinceTask: "TASK-111" },
@@ -699,7 +703,7 @@ export const featureMap: readonly FeatureEntry[] = [
     key: "originality",
     nameVi: "Nguồn và tính nguyên bản",
     areaVi: "Đăng bài",
-    summaryVi: "Xem bản kê nguồn, phần tự làm và video giống trong cùng hồ sơ trước khi đăng công khai. Lỗi lập bản kê không dừng timeline hay render.",
+    summaryVi: "Xem bản kê nguồn, phần tự làm, độ giống hình ảnh và video giống trong cùng hồ sơ trước khi đăng công khai. Lỗi lập bản kê không dừng timeline hay render.",
     webRoutes: ["/projects/:id/render", "/settings/guidelines"],
     docPage: "docs/user-guide/dang-bai.md",
     docAnchor: "nguon-va-tinh-nguyen-ban",
@@ -902,4 +906,31 @@ export const featureMap: readonly FeatureEntry[] = [
     sinceTask: "TASK-118",
     settingsKeys: ["nodes.remoteRender", "nodes.targetVersion", "nodes.remoteStages", "nodes.localOnlyKeys"],
   },
+  {
+    key: "resource-governor",
+    nameVi: "Tài nguyên máy",
+    areaVi: "Cài đặt",
+    summaryVi: "Bộ điều tiết đo CPU, RAM, ổ đĩa và GPU mỗi 5 giây, tự tăng giảm số việc cùng lúc cho từng nhóm; đọc thẻ Tài nguyên cần quyền xem cài đặt, sửa giới hạn cần quyền sửa cài đặt.",
+    webRoutes: ["/settings/render"],
+    docPage: "docs/user-guide/tai-nguyen-may.md",
+    docAnchor: "tai-nguyen",
+    sinceTask: "TASK-129b",
+    settingsKeys: ["governor.settings"],
+  },
+  {
+    key: "workspace-api-keys",
+    nameVi: "Khóa API theo không gian",
+    areaVi: "Tài khoản",
+    summaryVi: "Khóa API mới gắn với không gian hiện tại; khóa cũ chỉ dùng trong không gian mặc định và có thể gắn một lần. Dữ liệu tri thức, agent và doanh thu được tách theo không gian.",
+    webRoutes: ["/account"],
+    docPage: "docs/user-guide/khong-gian-va-quyen.md",
+    docAnchor: "khoa-api-theo-khong-gian",
+    sinceTask: "TASK-132",
+  },
+  {
+    key: "self-improvement-research", nameVi: "Tự cải tiến", areaVi: "Vận hành",
+    summaryVi: "Nghiên cứu nguồn công khai theo ngân sách, kiểm quote, tạo đề xuất tri thức và xem nhật ký; người dùng duyệt thay đổi rủi ro vừa/cao.",
+    webRoutes: ["/self-improvement"], docPage: "docs/user-guide/tu-cai-tien.md", docAnchor: "nghien-cuu", sinceTask: "TASK-074a",
+  },
+  { key: "agent-stage-handoff", nameVi: "Agent nhận stage", areaVi: "Dự án", summaryVi: "Giao bước tìm ảnh cho agent ngoài, giữ các cảnh đã xong, kiểm tra ảnh theo hash và lấy lại việc cho app.", webRoutes: ["/projects/:id/overview", "/projects/:id/visuals", "/profiles/:id/brief"], docPage: "docs/user-guide/agent-nhan-stage.md", docAnchor: "agent-nhan-stage", sinceTask: "TASK-128a", settingsKeys: ["stageExecution.VISUAL_SEARCH", "agentWaitMinutes"] },
 ];

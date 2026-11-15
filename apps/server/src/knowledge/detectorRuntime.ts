@@ -13,6 +13,7 @@ import { DetectorScheduler, type DetectorScheduleDeps } from "./detectorSchedule
 export function createDetectorRuntime(db: Database.Database, options: {
   signal: AbortSignal; health: () => Promise<void>; drift: () => Promise<void>;
   audit: DetectorScheduleDeps["audit"]; llm?: DetectorScheduleDeps["llm"];
+  research?: DetectorScheduleDeps["research"];
 }) {
   const inbox = new ChangeInbox(db), cache = new Map<string, { at: number; page: Awaited<ReturnType<typeof fetchOfficialPage>> }>();
   let connectivity: { at: number; online: boolean } | undefined;
@@ -41,6 +42,7 @@ export function createDetectorRuntime(db: Database.Database, options: {
     },
     npm: command => runReadOnlyNpm(command, options.signal), audit: options.audit, llm: options.llm,
     health: options.health, drift: options.drift,
+    research: options.research,
   });
 }
 

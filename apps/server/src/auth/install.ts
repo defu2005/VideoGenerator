@@ -43,7 +43,7 @@ export function installAuth(server: FastifyInstance, input: {
   });
   registerAccountHooks(server, { auth, sqlite: input.sqlite });
   registerAcceptInviteRoutes(server, { auth, sqlite: input.sqlite });
-  registerAuthHandler(server, auth);
+  registerAuthHandler(server, auth, input.sqlite, origins);
   server.addHook("onRequest", (_request, _reply, done) => runInRequestContext(done));
   registerAuthGuard(server, { auth, sqlite: input.sqlite, testActor: input.testActor });
   const permissions = registerPermissionHook(server, input.sqlite);

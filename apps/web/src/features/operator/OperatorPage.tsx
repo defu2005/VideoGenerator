@@ -17,6 +17,8 @@ import { SkillVersions } from "./SkillVersions";
 import { OperatorEvents } from "./OperatorEvents";
 import { ComputerUsePanel } from "./ComputerUsePanel";
 import { AutonomySettingsPanel } from "./AutonomySettingsPanel";
+import { HermesTab } from "./HermesTab";
+import { FleetTab } from "./FleetTab";
 
 export function OperatorPage() {
   const queryClient = useQueryClient();
@@ -28,6 +30,7 @@ export function OperatorPage() {
   });
   const [copied, setCopied] = useState("");
   const [pendingOrderId, setPendingOrderId] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState<"operator" | "hermes" | "fleet">("operator");
   const save = useMutation({
     mutationFn: saveOperatorSettings,
     onSuccess: async () => {
@@ -74,7 +77,28 @@ export function OperatorPage() {
           <p>{cli} Hôm nay {data.usage.today}/{data.usage.cap}, tháng này {data.usage.month}.</p>
         </div>
       </header>
-      <AutonomySettingsPanel />
+      <nav className="tab-bar" aria-label="Tab operator">
+        <button
+          type="button"
+          className={`tab-btn ${activeTab === "operator" ? "active" : ""}`}
+          onClick={() => setActiveTab("operator")}
+        >
+          Operator
+        </button>
+        <button
+          type="button"
+          className={`tab-btn ${activeTab === "hermes" ? "active" : ""}`}
+          onClick={() => setActiveTab("hermes")}
+        >
+          Hermes
+        </button>
+        <button type="button" className={`tab-btn ${activeTab === "fleet" ? "active" : ""}`} onClick={() => setActiveTab("fleet")}>Fleet</button>
+      </nav>
+      {activeTab === "fleet" ? <FleetTab /> : activeTab === "hermes" ? (
+        <HermesTab />
+      ) : (
+        <>
+          <AutonomySettingsPanel />
       <section className="panel">
         <h2>Trạng thái</h2>
         <p>{data.killed ? "Operator đang tắt." : "Operator đang bật."}</p>
@@ -206,6 +230,8 @@ export function OperatorPage() {
           </details>
         ))}
       </section>
+        </>
+      )}
     </section>
   );
 }

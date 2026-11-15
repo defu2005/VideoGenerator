@@ -14,7 +14,7 @@ import {
 } from "../src/operator/autopilot.js";
 import { invokeRegistryTool } from "../src/registry/invoke.js";
 import { autonomyDecision, hardBlockMessage, shouldCreatePending } from "../src/registry/policy.js";
-import { flagUntrustedText, notePublicationClaim, publishGateCheck, recordHeld, renderGateInputs, scriptGateInputs } from "../src/operator/qualityGates.js";
+import { flagUntrustedText, notePublicationClaim, preRenderSceneCheck, publishGateCheck, recordHeld, renderGateInputs, scriptGateInputs } from "../src/operator/qualityGates.js";
 import {
   AUTONOMY_PRESETS, AutonomySettingsSchema, PROTECTED_PROJECT_ID, TOOL_GRANTS, localDateString, scriptGateDecision,
 } from "@vg/shared";
@@ -76,6 +76,29 @@ describe("quality gates", () => {
     const fresh = raiseCode(opened.sqlite, () => later);
     expect(consumeRaiseCode(opened.sqlite, fresh, () => later)).toBe(true);
     expect(consumeRaiseCode(opened.sqlite, fresh, () => later)).toBe(false);
+    opened.sqlite.close();
+  });
+
+  it("pre-render check flags two neighbouring scenes with the same sentence, as a warning only", () => {
+    const opened = database();
+    const s1 = "11111111-1111-4111-8111-111111111111";
+    const s2 = "22222222-2222-4222-8222-222222222222";
+    const s3 = "33333333-3333-4333-8333-333333333333";
+    const now = new Date().toISOString();
+    opened.sqlite.prepare(`INSERT INTO scenes (id, project_id, "order", kind, label, narration, visual_notes, visual_queries, music_mood, energy, est_duration_sec, start_sec, transition_note, origin, edited, input_hash, created_at, updated_at)
+      VALUES (?, ?, 0, 'hook', 'Hook', 'Liệu một phàm nhân có thể vung kiếm chém đứt định mệnh?', '', '{}', '', 'medium', 5, 0, '', 'AGENT', 0, 'h', ?, ?)`).run(s1, projectId, now, now);
+    opened.sqlite.prepare(`INSERT INTO scenes (id, project_id, "order", kind, label, narration, visual_notes, visual_queries, music_mood, energy, est_duration_sec, start_sec, transition_note, origin, edited, input_hash, created_at, updated_at)
+      VALUES (?, ?, 1, 'section', 'P1', 'Liệu một phàm nhân có thể vung kiếm chém đứt định mệnh? Berserk chính là câu trả lời.', '', '{}', '', 'medium', 5, 5, '', 'AGENT', 0, 'h', ?, ?)`).run(s2, projectId, now, now);
+    opened.sqlite.prepare(`INSERT INTO scenes (id, project_id, "order", kind, label, narration, visual_notes, visual_queries, music_mood, energy, est_duration_sec, start_sec, transition_note, origin, edited, input_hash, created_at, updated_at)
+      VALUES (?, ?, 2, 'section', 'P2', 'Nội dung tiếp theo không bị lặp.', '', '{}', '', 'medium', 5, 10, '', 'AGENT', 0, 'h', ?, ?)`).run(s3, projectId, now, now);
+
+    const warnings = preRenderSceneCheck(opened.sqlite, projectId, "vi");
+    expect(warnings.length).toBe(1);
+    expect(warnings[0]!.severity).toBe("WARN");
+    expect(warnings[0]!.sceneId).toBe(s1);
+    expect(warnings[0]!.nextSceneId).toBe(s2);
+    expect(warnings[0]!.sentence).toContain("Liệu một phàm nhân");
+
     opened.sqlite.close();
   });
 });

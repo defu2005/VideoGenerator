@@ -56,6 +56,13 @@ function jsonResponse(value: unknown, status = 200): Response {
 }
 
 describe("Video Agent MCP tools", () => {
+  it("returns stored candidate previews as native MCP image content", async () => {
+    const image = { type: "image", mimeType: "image/png", data: Buffer.from("stored-preview").toString("base64") };
+    const fetchImpl = vi.fn(async () => jsonResponse({ result: { content: [image], sha256: "a".repeat(64) } }));
+    const client = await connect(fetchImpl, [{ name: "visual_get_candidate_image", description: "Stored image", properties: { candidateId: "uuid", "maxSide?": "number" } }]);
+    const result = await client.callTool({ name: "visual_get_candidate_image", arguments: { candidateId: projectId, maxSide: 768 } });
+    expect(result.content).toEqual([image, { type: "text", text: `SHA256 ảnh gốc: ${"a".repeat(64)}` }]);
+  });
   it("registers all specified tools and three writing prompts", async () => {
     const client = await connect();
     const tools = await client.listTools();

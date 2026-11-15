@@ -14,6 +14,8 @@ export type AgentRunInput = {
   shouldStop?: () => boolean;
   onDelta?: (text: string) => void;
   onTool?: (name: string) => void;
+  /** Web research adapters call this before each model request, including retries. */
+  beforeLlmCall?: () => void;
 };
 
 export type AgentRunResult = {
@@ -36,7 +38,7 @@ export type AgentRunResult = {
 export type AgentRuntime = {
   id: string;
   version: string | null;
-  capabilities: { mcp: boolean; resume: boolean; streaming: boolean; cancel: boolean };
+  capabilities: { mcp: boolean; resume: boolean; streaming: boolean; cancel: boolean; web?: boolean };
   run(input: AgentRunInput): Promise<AgentRunResult>;
   resumeCommand?(sessionId?: string | null): string;
 };

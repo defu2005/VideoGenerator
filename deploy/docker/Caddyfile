@@ -1,6 +1,18 @@
 # DOMAIN is a hostname (automatic HTTPS) or :80 for a LAN-only install.
 # flush_interval -1 keeps SSE (/api/.../events) from being buffered.
 {$DOMAIN::80} {
+	handle /mcp {
+		request_body {
+			max_size 1MB
+		}
+		reverse_proxy mcp:3002 {
+			flush_interval -1
+			stream_timeout 10m
+			transport http {
+				read_header_timeout 15s
+			}
+		}
+	}
 	handle /api/* {
 		reverse_proxy vg:3001 {
 			flush_interval -1

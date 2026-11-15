@@ -1,3 +1,4 @@
+import { apiKeyWorkspace } from "./keyWorkspace.js";
 import { randomUUID } from "node:crypto";
 import type Database from "better-sqlite3";
 import type { FastifyInstance, FastifyRequest } from "fastify";
@@ -7,7 +8,7 @@ import type { AuthActor } from "./actor.js";
 import { writeAudit } from "./auditLog.js";
 import { LOCAL_SERVICE_KEY_NAME } from "./localKey.js";
 import { WORKSPACE_ROLES, type WorkspaceRole } from "./roles.js";
-import { parseFlags, roleOf } from "./workspaces.js";
+import { parseFlags, roleOf, membershipsOf } from "./workspaces.js";
 
 /** Invitation links stay valid for 7 days (the plugin default is 48 hours, too short for a link that is pasted by hand). */
 export const INVITE_TTL_MS = 7 * 24 * 3600_000;
@@ -315,17 +316,18 @@ export function registerTeamRoutes(server: FastifyInstance, sqlite: Database.Dat
   server.get("/api/workspace/service-keys", async (request) => {
     const actor = need(request);
     const rows = sqlite.prepare(
-      `SELECT k.id, k.reference_id AS holderId, k.name, k.start, k.prefix, k.enabled, k.created_at AS createdAt, k.last_request AS lastRequest,
+      `SELECT k.id, k.metadata, k.reference_id AS holderId, k.name, k.start, k.prefix, k.enabled, k.created_at AS createdAt, k.last_request AS lastRequest,
               k.expires_at AS expiresAt, u.name AS ownerName
          FROM apikey k JOIN member m ON m.user_id = k.reference_id AND m.organization_id = ?
          JOIN user u ON u.id = k.reference_id
         WHERE m.role LIKE '%owner%' OR m.role LIKE '%admin%' ORDER BY k.created_at DESC`,
     ).all(actor.workspaceId) as Array<{
       id: string; holderId: string; name: string | null; start: string | null; prefix: string | null; enabled: number | null;
-      createdAt: number; lastRequest: number | null; expiresAt: number | null; ownerName: string;
+      createdAt: number; lastRequest: number | null; expiresAt: number | null; ownerName: string; metadata: string | null;
     }>;
     return {
-      keys: rows.map((row) => ({
+      keys: rows.filter((row) => (apiKeyWorkspace(row.metadata) ?? membershipsOf(sqlite, row.holderId)[0]?.workspaceId) === actor.workspaceId).map((row) => ({
+        workspaceId: apiKeyWorkspace(row.metadata) ?? null,
         id: row.id, name: row.name ?? "", preview: `${row.prefix ?? ""}${row.start ?? ""}…`, ownerName: row.ownerName,
         enabled: row.enabled !== 0, isLocalService: row.name === LOCAL_SERVICE_KEY_NAME,
         canRevoke: canRevokeKey(actor, row.holderId, row.name),
@@ -340,10 +342,11 @@ export function registerTeamRoutes(server: FastifyInstance, sqlite: Database.Dat
     const actor = need(request);
     const { id } = request.params as { id: string };
     const row = sqlite.prepare(
-      `SELECT k.name, k.reference_id AS holderId FROM apikey k JOIN member m ON m.user_id = k.reference_id AND m.organization_id = ?
+      `SELECT k.name, k.metadata, k.reference_id AS holderId FROM apikey k JOIN member m ON m.user_id = k.reference_id AND m.organization_id = ?
         WHERE k.id = ? AND (m.role LIKE '%owner%' OR m.role LIKE '%admin%')`,
-    ).get(actor.workspaceId, id) as { name: string | null; holderId: string } | undefined;
+    ).get(actor.workspaceId, id) as { name: string | null; holderId: string; metadata: string | null } | undefined;
     if (!row) throw new AppError(404, "NOT_FOUND", "Không tìm thấy khoá.");
+    if ((apiKeyWorkspace(row.metadata) ?? membershipsOf(sqlite, row.holderId)[0]?.workspaceId) !== actor.workspaceId) throw new AppError(404, "NOT_FOUND", "Không tìm thấy khóa.");
     if (!canRevokeKey(actor, row.holderId, row.name)) {
       const local = row.name === LOCAL_SERVICE_KEY_NAME;
       auditTeam(sqlite, actor, request, {

@@ -2,12 +2,33 @@ import { createHash } from "node:crypto";
 import { copyFileSync, existsSync, mkdirSync, readFileSync, renameSync, rmSync, statSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { z } from "zod";
-import type { Job, MediaBundle } from "@vg/shared";
+import type Database from "better-sqlite3";
+import type { Job, MediaBundle, Project } from "@vg/shared";
 import type { JobRepository } from "../jobs/jobRepository.js";
 import type { StageContext, StageExecutor } from "../pipeline/stageExecutor.js";
 import { ensureFootage, FOOTAGE_MAX_BYTES } from "../providers/footage/download.js";
 import type { FootageHit } from "../providers/footage/types.js";
 import { buildMediaBundle, mediaTargetName, type MediaItemInput } from "./remoteBundle.js";
+
+/** Check if media.prefetch setting is on (TASK-131, default true). */
+export function mediaPrefetchEnabled(sqlite?: Database.Database | null, project?: Project | null): boolean {
+  if (project?.settings && (project.settings as { media?: { prefetch?: boolean } }).media?.prefetch === false) {
+    return false;
+  }
+  if (!sqlite) return true;
+  try {
+    const row = sqlite.prepare("SELECT value FROM app_settings WHERE key = 'media.prefetch'").get() as { value: string } | undefined;
+    if (!row) return true;
+    try {
+      const parsed = JSON.parse(row.value);
+      return parsed !== false;
+    } catch {
+      return row.value !== "false";
+    }
+  } catch {
+    return true;
+  }
+}
 
 /**
  * MEDIA_FETCH (TASK-120): download stock footage into `data/footage/`, here or on a worker node.
@@ -89,6 +110,33 @@ export class MediaFetchService {
   /** Items the cache does not hold yet. A remote job only asks for these. */
   missing(scope: MediaFetchScope): MediaItemInput[] {
     return scope.items.filter((item) => !existsSync(footageTargetPath(this.dataDir, mediaTargetName(item))));
+  }
+
+  /**
+   * Enqueue a prefetch job for missing footage items ahead of render (TASK-131).
+   * Returns the enqueued job, or null if nothing missing, prefetch disabled, no items, or job already queued/running.
+   */
+  maybePrefetch(
+    projectId: string,
+    items: MediaItemInput[],
+    targetShortSide: number,
+    options?: { sqlite?: Database.Database | null; project?: Project | null; enabled?: boolean },
+  ): Job | null {
+    const enabled = options?.enabled ?? mediaPrefetchEnabled(options?.sqlite, options?.project);
+    if (!enabled) return null;
+    if (!items.length) return null;
+
+    // Create no job when a MEDIA_FETCH job for the same project is already queued or running
+    const existing = this.jobs.listJobs(projectId, 50);
+    const active = existing.some(
+      (job) => job.stage === "MEDIA_FETCH" && (job.status === "QUEUED" || job.status === "RUNNING"),
+    );
+    if (active) return null;
+
+    const missingItems = this.missing({ targetShortSide, items });
+    if (!missingItems.length) return null;
+
+    return this.enqueue(projectId, missingItems, targetShortSide);
   }
 
   /**

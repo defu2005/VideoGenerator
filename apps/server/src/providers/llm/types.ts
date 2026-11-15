@@ -23,6 +23,7 @@ export type LlmProviderLimits = {
 };
 
 export type LlmProviderCapabilities = {
+  nativeSearch?: boolean;
   embeddings?: boolean;
   nativeFunctions?: boolean;
   vision: boolean;
@@ -39,6 +40,7 @@ export type LlmImageAttachment = {
 };
 
 export type LlmRequest = {
+  nativeSearch?: boolean;
   functions?: LlmFunction[];
   schemaName?: string;
   jsonSchema?: Record<string, unknown>;
@@ -53,6 +55,7 @@ export type LlmRequest = {
 };
 
 export type LlmResponse = {
+  sources?: Array<{ url: string; title: string }>;
   text: string;
   usage: { inputTokens: number; outputTokens: number; tokensUnknown?: boolean };
   model: string;

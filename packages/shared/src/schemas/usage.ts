@@ -2,6 +2,7 @@ import { z } from "zod";
 import { JobStatusSchema, PipelineStageSchema } from "../enums.js";
 
 export const UsageTotalsSchema = z.object({
+  callsUnknown: z.boolean().optional(),
   llmCalls: z.number().int().nonnegative(),
   inputTokens: z.number().int().nonnegative(),
   outputTokens: z.number().int().nonnegative(),
@@ -11,6 +12,7 @@ export const UsageTotalsSchema = z.object({
   premiumRequests: z.number().int().nonnegative(),
   tokensUnknown: z.boolean(),
   costUsd: z.number().nonnegative(),
+  costUnknown: z.boolean().optional(),
 }).strict();
 export type UsageTotals = z.infer<typeof UsageTotalsSchema>;
 
@@ -34,6 +36,7 @@ export const UsageCallSummarySchema = z.object({
   ok: z.boolean(),
   tokensUnknown: z.boolean(),
   costUsd: z.number().nonnegative(),
+  costUnknown: z.boolean().optional(),
   characters: z.number().int().nonnegative().optional(),
 }).strict();
 export type UsageCallSummary = z.infer<typeof UsageCallSummarySchema>;

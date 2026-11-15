@@ -95,6 +95,7 @@ export function EditProjectDialog({
 
   function changeBrief(path: string, value: string | number | boolean) {
     setBriefSettings((current) => {
+      if (path === "stageExecution.VISUAL_SEARCH") return { ...current, stageExecution: { ...current.stageExecution, VISUAL_SEARCH: value as NonNullable<ProjectSettings["stageExecution"]>["VISUAL_SEARCH"] } };
       if (path === "subtitles.enabled") return { ...current, subtitles: { ...current.subtitles, enabled: Boolean(value) } };
       if (path === "subtitles.maxCharsPerLine") return { ...current, subtitles: { ...current.subtitles, maxCharsPerLine: Number(value) } };
       if (path === "music.enabled") return { ...current, music: { ...current.music, enabled: Boolean(value) } };
@@ -115,6 +116,8 @@ export function EditProjectDialog({
     const userSet = briefUserSet.filter((field) => field !== path);
     const resolved = recommendBrief({ topic: draft.topic, settings: { ...briefSettings, userSet } }).values.settings;
     setBriefSettings((current) => {
+      if (path === "stageExecution.VISUAL_SEARCH") return { ...current, stageExecution: undefined };
+      if (path === "agentWaitMinutes") return { ...current, agentWaitMinutes: undefined };
       if (path === "subtitles.enabled") return { ...current, subtitles: { ...current.subtitles, enabled: resolved.subtitles.enabled } };
       if (path === "subtitles.maxCharsPerLine") return { ...current, subtitles: { ...current.subtitles, maxCharsPerLine: resolved.subtitles.maxCharsPerLine } };
       if (path === "music.enabled") return { ...current, music: { ...current.music, enabled: resolved.music.enabled } };
@@ -144,7 +147,9 @@ export function EditProjectDialog({
     }
     const settings: Record<string, unknown> = {};
     for (const path of briefChanges) {
-      if (path === "subtitles.enabled") {
+      if (path === "stageExecution.VISUAL_SEARCH") {
+        settings.stageExecution = { VISUAL_SEARCH: briefSettings.stageExecution?.VISUAL_SEARCH };
+      } else if (path === "subtitles.enabled") {
         settings.subtitles = { ...(settings.subtitles as object | undefined), enabled: briefSettings.subtitles.enabled };
       } else if (path === "subtitles.maxCharsPerLine") {
         settings.subtitles = { ...(settings.subtitles as object | undefined), maxCharsPerLine: briefSettings.subtitles.maxCharsPerLine };

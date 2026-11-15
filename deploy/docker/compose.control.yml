@@ -19,6 +19,7 @@ services:
       PORT: "3001"
       DATA_DIR: /data
       DATABASE_PATH: /data/app.db
+      VG_MCP_HEALTH_URL: http://mcp:3002/health
     volumes:
       - ${VG_DATA_DIR:-vg-data}:/data
     shm_size: "1gb"
@@ -30,6 +31,26 @@ services:
       web:
         condition: service_completed_successfully
 
+  mcp:
+    image: ${VG_IMAGE:-vg:dev}
+    user: "10001:10001"
+    command: ["node", "apps/mcp/dist/index.js"]
+    environment:
+      VG_API_URL: http://vg:3001
+      VG_MCP_HTTP_PORT: "3002"
+      VG_MCP_HTTP_HOST: "0.0.0.0"
+    expose: ["3002"]
+    init: true
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3002/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+    depends_on:
+      vg:
+        condition: service_healthy
+
   caddy:
     image: caddy:2-alpine
     restart: unless-stopped
@@ -38,6 +59,8 @@ services:
         condition: service_completed_successfully
       vg:
         condition: service_healthy
+      mcp:
+        condition: service_started
     ports:
       - "${VG_HTTP_PORT:-80}:80"
       - "${VG_HTTPS_PORT:-443}:443"

@@ -6,6 +6,7 @@ import {
   builtInGuidelinePack, GuidelinePackSchema,
   checkScriptGuidelines,
   checkTimelineGuidelines,
+  checkNeighbouringSceneDuplicates,
   guidelinePromptBlock,
   resolveGuidelineStrictness,
   type ActiveGuidelines,
@@ -170,6 +171,20 @@ export class GuidelineService {
     const timeline = this.readTimeline(project.id);
     if (!timeline) return [];
     const drafts = checkTimelineGuidelines(active, timeline, { aspectRatio: project.settings.aspectRatio });
+    const scenes = this.sqlite.prepare(
+      'SELECT id, narration, "order" FROM scenes WHERE project_id = ? ORDER BY "order" ASC',
+    ).all(project.id) as Array<{ id: string; narration: string; order: number }>;
+    const seamWarnings = checkNeighbouringSceneDuplicates(scenes, project.settings.language);
+    for (const warn of seamWarnings) {
+      drafts.push({
+        ruleId: "timeline.duplicate_narration",
+        severity: "SHOULD",
+        sceneId: warn.sceneId,
+        text: `Hai cảnh liền nhau có câu trùng lặp: "${warn.sentence}"`,
+        quote: warn.sentence,
+        suggestion: "Sửa hoặc xoá câu bị lặp ở một trong hai cảnh.",
+      });
+    }
     this.replaceFindings(project.id, "TIMELINE", "CODE", drafts);
     recheckOriginalitySafely(this.sqlite, project.id);
     return drafts;

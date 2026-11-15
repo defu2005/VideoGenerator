@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Link } from "react-router-dom";
 import { AccountHealthPanel } from "./AccountHealthPanel";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
@@ -10,13 +11,14 @@ type Resolved = { entry: KnowledgeEntry; freshness: KnowledgeFreshness; reviewAf
 type Proposal = {
   id: string; entryId: string; proposed: KnowledgeEntry; patch: JsonPatchOperation[];
   risk: "low" | "medium" | "high"; consumers: string[];
+  researchRunId?: string;
 };
 type History = { revision: number; after: KnowledgeEntry | null; createdAt: string; actor: string; reason: string };
 type Details = { current: Resolved | null; history: History[]; consumers: string[] };
 type ImportResult = { index: number; entryId?: string; status: string; errors?: string[] };
 type ChangeEvent = {
   id: string; summary: string; severity: string; status: string; detector: string; seenCount: number;
-  reaction: { proposalId?: string };
+  reaction: { proposalId?: string; researchRunIds?: string[] };
 };
 
 function query(filter: { status: string; severity: string }): string {
@@ -147,6 +149,7 @@ export function ExternalKnowledgePage() {
               <h2 className="font-semibold">{event.summary}</h2>
               <p>{severityText[event.severity] ?? event.severity} · {statusText[event.status] ?? event.status} · {event.detector} · thấy {event.seenCount} lần</p>
               {event.reaction.proposalId && <p><a className="underline" href="/settings/knowledge?tab=pending">Mở đề xuất</a></p>}
+              {event.reaction.researchRunIds?.map((id) => <p key={id}><Link to={`/self-improvement?run=${encodeURIComponent(id)}`}>Báo cáo nghiên cứu</Link></p>)}
               <div className="flex gap-4">
                 <button disabled={mutation.isPending || event.status !== "open"} onClick={() => mutation.mutate({ path: `/knowledge/changes/${event.id}/continue`, body: {} })}>Tiếp tục</button>
                 <button disabled={mutation.isPending || event.status === "resolved"} onClick={() => mutation.mutate({ path: `/knowledge/changes/${event.id}/resolve`, body: {} })}>Đóng</button>
@@ -166,6 +169,7 @@ export function ExternalKnowledgePage() {
                 <code>{op.op} {op.path || "/"}</code>{"value" in op && <pre className="max-h-40 overflow-auto whitespace-pre-wrap">{JSON.stringify(op.value, null, 2)}</pre>}
               </li>)}</ul>
               <Sources evidence={proposal.proposed.evidence} />
+              {proposal.researchRunId && <p><Link to={`/self-improvement?run=${encodeURIComponent(proposal.researchRunId)}`}>Báo cáo nghiên cứu</Link></p>}
               <div className="flex gap-4">
                 <button disabled={mutation.isPending} onClick={() => mutation.mutate({ path: `/knowledge/proposals/${proposal.id}/accept`, body: {} })}>Duyệt</button>
                 <button disabled={mutation.isPending} onClick={() => mutation.mutate({ path: `/knowledge/proposals/${proposal.id}/reject`, body: {} })}>Bỏ qua</button>
@@ -190,6 +194,7 @@ export function ExternalKnowledgePage() {
             <button className="text-left underline" onClick={() => setSelected(row.entry.id)}>{row.entry.id}</button>{" "}
             <span className="rounded border px-2">{freshnessText[row.freshness]}</span>
             <span className="ml-2 text-sm">Rà lại từ {row.reviewAfter}</span>
+            <p><Link to={`/self-improvement?knowledgeId=${encodeURIComponent(row.entry.id)}`}>Tìm hiểu lại</Link></p>
             <Sources evidence={row.entry.evidence} />
           </div>)}
         </div>

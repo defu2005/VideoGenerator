@@ -47,10 +47,10 @@ Nếu lượt tải lên bị gián đoạn và app báo **Chưa rõ bài đã �
 Dùng để xem video được ghép từ đâu và phần app tự làm. Tab **Render**, trong mục **Đăng**, thẻ **Nguồn & tính nguyên bản**.
 
 1. Khi đã có timeline, app lập bản kê: nguồn nghiên cứu, số từ lời dẫn, giọng đọc, từng ảnh hoặc footage kèm giấy phép và link.
-2. App so kịch bản, tiêu đề và ảnh với các video đã render của cùng hồ sơ.
-3. Nếu kịch bản quá giống, ảnh dùng lại nhiều, phần tự làm thấp, hoặc thiếu lời dẫn, nguồn nghiên cứu hay giấy phép, thẻ hiện **Cần bạn kiểm tra**. Lượt đăng công khai tự chuyển sang riêng tư. Sửa nội dung rồi bấm **Kiểm tra lại tính nguyên bản**, hoặc ghi lý do và bấm **Đã tự duyệt, bỏ qua kèm lý do**.
+2. App so kịch bản, tiêu đề, ảnh và độ giống hình ảnh (visual sameness: tổ hợp biến thể, khung hình, tỉ lệ cảnh quay và bộ phong cách) với các video đã render của cùng hồ sơ và giữa các kênh trong cùng không gian làm việc.
+3. Nếu kịch bản quá giống, ảnh dùng lại nhiều, phần tự làm thấp, độ giống hình ảnh vượt ngưỡng chặn (mức `block`), hoặc thiếu lời dẫn, nguồn nghiên cứu hay giấy phép, thẻ hiện **Cần bạn kiểm tra**. Lượt đăng công khai tự chuyển sang riêng tư. Sửa nội dung rồi bấm **Kiểm tra lại tính nguyên bản**, hoặc ghi lý do và bấm **Đã tự duyệt, bỏ qua kèm lý do**. Độ giống hình ảnh ở mức cảnh báo (`warn`) chỉ hiển thị nhắc nhở trong báo cáo kèm yếu tố chi phối (như tổ hợp biến thể) và gợi ý đổi biến thể hoặc pack trong tab Phong cách mà không chặn đăng.
 4. Checklist YouTube, TikTok, Facebook và Instagram chỉ là lời nhắc, mỗi dòng có link chính sách. App giữ lý do bỏ qua trong lịch sử của bản kê.
 
-Ngưỡng độ giống kịch bản, số ảnh dùng lại, phần tự làm và số video đem so là ngưỡng an toàn của app. Sửa theo hồ sơ ở menu **Định hướng nội dung**. Dashboard mục **Cần bạn xử lý** hiện yêu cầu khi còn cảnh báo mở. Trợ lý đọc báo cáo bằng công cụ `get_originality_report`.
+Ngưỡng độ giống kịch bản, số ảnh dùng lại, phần tự làm, độ giống hình ảnh (`visualSameness`: ngưỡng cùng kênh, khác kênh, cửa sổ so sánh và mức cảnh báo/chặn) và số video đem so là ngưỡng an toàn của app. Sửa theo hồ sơ ở menu **Định hướng nội dung** (hoặc cài đặt nguyên bản). Dashboard mục **Cần bạn xử lý** hiện yêu cầu khi còn cảnh báo mở. Trợ lý đọc báo cáo bằng công cụ `get_originality_report`.
 
-Nếu lần lập bản kê bị lỗi, timeline và render vẫn chạy xong; app chỉ ghi một cảnh báo. Nút **Kiểm tra lại tính nguyên bản** và cổng trước khi đăng vẫn báo lỗi khi lần kiểm tra đó không chạy được. Đồ họa toàn màn hình của timeline là lớp trong suốt, nên thời gian ảnh bên dưới vẫn tính vào giấy phép.
+Nếu lần lập bản kê hoặc tính độ giống hình ảnh bị lỗi, timeline và render vẫn chạy xong; app chỉ ghi một cảnh báo. Nút **Kiểm tra lại tính nguyên bản** và cổng trước khi đăng vẫn báo lỗi khi lần kiểm tra đó không chạy được. Đồ họa toàn màn hình của timeline là lớp trong suốt, nên thời gian ảnh bên dưới vẫn tính vào giấy phép.

@@ -45,6 +45,8 @@ export type SafeFetchDependencies = {
   maxBytes?: number;
   userAgent?: string;
   signal?: AbortSignal;
+  /** Additional policy (for example HTTPS/robots), applied before every redirect hop. */
+  beforeRequest?: (url: URL) => Promise<void>;
 };
 
 export class WebCrawlError extends Error {
@@ -183,6 +185,15 @@ export async function followRedirectsSafely(
   initialUrl: string,
   dependencies: SafeFetchDependencies & { method?: "HEAD" | "GET" } = {},
 ): Promise<string> {
+  const { url, response } = await fetchResponseSafely(initialUrl, { ...dependencies, allowHttpErrors: true });
+  await response.body?.cancel();
+  return url;
+}
+
+/** Shared redirect/SSRF engine for image discovery and robots-aware knowledge research. */
+export async function fetchResponseSafely(initialUrl: string,
+  dependencies: SafeFetchDependencies & { method?: "HEAD" | "GET"; allowHttpErrors?: boolean } = {},
+): Promise<{ url: string; response: Response }> {
   const fetchImpl = dependencies.fetchImpl ?? fetch;
   const resolveHost = dependencies.resolveHost ?? defaultResolveHost;
   const maxRedirects = dependencies.maxRedirects ?? WEB_CRAWL_MAX_REDIRECTS;
@@ -192,6 +203,7 @@ export async function followRedirectsSafely(
 
   for (let redirect = 0; redirect <= maxRedirects; redirect += 1) {
     const parsed = await validatePublicHttpUrl(current, resolveHost);
+    await dependencies.beforeRequest?.(parsed);
     if (dependencies.hostRateLimiter) {
       await dependencies.hostRateLimiter.acquire(parsed.hostname, dependencies.signal);
     }
@@ -212,14 +224,11 @@ export async function followRedirectsSafely(
       current = resolveRedirectUrl(parsed, location);
       continue;
     }
-    await response.body?.cancel();
-    if (!response.ok && response.status !== 405 && response.status !== 501) {
-      // Some hosts reject HEAD; caller may retry with GET. Still return the validated URL.
-      if (dependencies.method === "HEAD" && (response.status === 405 || response.status === 501)) {
-        return parsed.toString();
-      }
+    if (!response.ok && !dependencies.allowHttpErrors) {
+      await response.body?.cancel();
+      throw new WebCrawlError(`Page returned HTTP ${response.status}.`, "HTTP");
     }
-    return parsed.toString();
+    return { url: parsed.toString(), response };
   }
   throw new WebCrawlError("Exceeded maximum redirects.", "REDIRECT");
 }
@@ -247,49 +256,15 @@ export async function fetchHtmlSafe(
   initialUrl: string,
   dependencies: SafeFetchDependencies = {},
 ): Promise<{ url: string; html: string }> {
-  const fetchImpl = dependencies.fetchImpl ?? fetch;
-  const resolveHost = dependencies.resolveHost ?? defaultResolveHost;
-  const maxRedirects = dependencies.maxRedirects ?? WEB_CRAWL_MAX_REDIRECTS;
   const maxBytes = dependencies.maxBytes ?? WEB_CRAWL_MAX_HTML_BYTES;
-  const userAgent = dependencies.userAgent ?? WEB_CRAWL_USER_AGENT;
-  const timeoutMs = dependencies.timeoutMs ?? WEB_CRAWL_TIMEOUT_MS;
-  let current = initialUrl;
-
-  for (let redirect = 0; redirect <= maxRedirects; redirect += 1) {
-    const parsed = await validatePublicHttpUrl(current, resolveHost);
-    if (dependencies.hostRateLimiter) {
-      await dependencies.hostRateLimiter.acquire(parsed.hostname, dependencies.signal);
-    }
-    const response = await fetchImpl(parsed, {
-      method: "GET",
-      headers: { "User-Agent": userAgent, Accept: "text/html,application/xhtml+xml,*/*;q=0.8" },
-      redirect: "manual",
-      signal: AbortSignal.any([
-        AbortSignal.timeout(timeoutMs),
-        ...(dependencies.signal ? [dependencies.signal] : []),
-      ]),
-    });
-    if (response.status >= 300 && response.status < 400) {
-      const location = response.headers.get("location");
-      await response.body?.cancel();
-      if (!location) throw new WebCrawlError("Redirect missing Location header.", "REDIRECT");
-      if (redirect === maxRedirects) throw new WebCrawlError("Exceeded maximum redirects.", "REDIRECT");
-      current = resolveRedirectUrl(parsed, location);
-      continue;
-    }
-    if (!response.ok) {
-      await response.body?.cancel();
-      throw new WebCrawlError(`Page returned HTTP ${response.status}.`, "HTTP");
-    }
+  const { url, response } = await fetchResponseSafely(initialUrl, { ...dependencies, method: "GET" });
     const declared = Number(response.headers.get("content-length"));
     if (Number.isFinite(declared) && declared > maxBytes) {
       await response.body?.cancel();
       throw new WebCrawlError("HTML exceeds the 2 MB download limit.", "TOO_LARGE");
     }
     const html = await readBoundedText(response, maxBytes);
-    return { url: parsed.toString(), html };
-  }
-  throw new WebCrawlError("Exceeded maximum redirects.", "REDIRECT");
+    return { url, html };
 }
 
 export class RobotsCache {

@@ -39,7 +39,7 @@ export function compareOriginality(script: string, title: string, assets: Source
     const old = earlier.find((project) => project.assets.some((image) => valid(image.pHash) && hashesMatch(asset.pHash!, image.pHash)));
     if (old) imageMatches.push({ assetId: asset.assetId, projectId: old.projectId, title: old.title });
   }
-  return { script: scriptMatch, title: titleMatch, reusedImages: imageMatches.length, imageMatches, comparedProjects: earlier.length };
+  return { script: scriptMatch, title: titleMatch, reusedImages: imageMatches.length, imageMatches, comparedProjects: earlier.length, visualSameness: null };
 }
 
 export type ScreenSpan = { startSec: number; screenSeconds: number };

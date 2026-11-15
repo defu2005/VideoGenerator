@@ -39,6 +39,7 @@ const ISSUE_LABEL: Record<RenderIssueCode, string> = {
   GRAPHIC_SKIPPED: "Bỏ đồ họa",
   XFADE_UNAVAILABLE: "Không có chuyển cảnh xfade",
   DUPLICATE_VISUAL: "Ảnh trùng giữa các cảnh",
+  DUPLICATE_NARRATION: "Lời dẫn trùng lặp giữa các cảnh",
   COMPOSE_FALLBACK: "Cảnh quay lùi về ảnh tĩnh",
 };
 

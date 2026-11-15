@@ -48,7 +48,7 @@ Khối **Tự sửa chất lượng** chỉ hiện khi agent đã sửa video n�
 
 Mỗi bước có mức thời gian **dự kiến**, lấy theo thứ tự: số bạn đặt, lịch sử các lần chạy trước (tin cậy cao thì không tốn lượt gọi mô hình), một lần agent ước lượng cho cả kế hoạch, rồi ước lượng thô. Nhãn cạnh số cho biết nguồn: *từ lịch sử*, *agent ước lượng*, *ước lượng thô*, *bạn đặt*.
 
-Quá mức dự kiến, bước **không bị dừng**. Thẻ bước hiện **Quá dự kiến**, lần kiểm tra gần nhất và lịch sử kiểm tra (cách nhau 2, 5, 10, 20, 30 phút). Bạn chọn **Chờ thêm**, **Dừng và thử lại** hoặc **Dừng hẳn**. Cài đặt **Khi quá thời gian** có ba giá trị: `Kiểm tra` (mặc định), `Dừng ngay`, `Chỉ báo`.
+Quá mức dự kiến, bước **không bị dừng**. Trong khi bước đang chạy dưới mức thời gian dự kiến, thẻ và dòng tiến trình hiển thị ước lượng \"dự kiến còn ~X phút\"; khi vượt quá thì chuyển sang \"quá dự kiến X phút\". Thẻ bước hiện **Quá dự kiến**, lần kiểm tra gần nhất và lịch sử kiểm tra (cách nhau 2, 5, 10, 20, 30 phút). Bạn chọn **Chờ thêm**, **Dừng và thử lại** hoặc **Dừng hẳn**. Cài đặt **Khi quá thời gian** có ba giá trị: `Kiểm tra` (mặc định), `Dừng ngay`, `Chỉ báo`.
 
 ## Chế độ chạy {#che-do-chay}
 

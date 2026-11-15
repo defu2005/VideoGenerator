@@ -338,6 +338,8 @@ export function createProfileService(db: AppDatabase, onKnowledgeChange: (id:str
       updates.defaultBrief = ProfileDefaultBriefSchema.parse({
         ...current.defaultBrief,
         ...input.defaultBrief,
+        ...(input.defaultBrief.stageExecution === null ? { stageExecution: undefined } : {}),
+        ...(input.defaultBrief.agentWaitMinutes === null ? { agentWaitMinutes: undefined } : {}),
         subtitles: { ...current.defaultBrief.subtitles, ...input.defaultBrief.subtitles },
         music: { ...current.defaultBrief.music, ...input.defaultBrief.music },
         budget: {

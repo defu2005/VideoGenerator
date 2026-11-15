@@ -64,6 +64,7 @@ export function deriveProjectStatus(input: {
 export class PipelineOrchestrator {
   private abortJob: (jobId: string) => void = () => undefined;
   private wakeWorker: () => void = () => undefined;
+  private routeQueuedJob: (job: Job) => void = () => undefined;
   private notifications: NotificationService | null = null;
 
   constructor(
@@ -81,6 +82,11 @@ export class PipelineOrchestrator {
 
   setWakeHandler(handler: () => void): void {
     this.wakeWorker = handler;
+  }
+
+  /** Route external execution before waking local workers, including control-plane-only apps. */
+  setQueuedJobHandler(handler: (job: Job) => void): void {
+    this.routeQueuedJob = handler;
   }
 
   setNotificationService(service: NotificationService | null): void {
@@ -462,6 +468,7 @@ export class PipelineOrchestrator {
           inputTokens: previous.inputTokens + (usage.inputTokens ?? 0),
           outputTokens: previous.outputTokens + (usage.outputTokens ?? 0),
           costUsd: previous.costUsd + (usage.costUsd ?? 0),
+          ...(usage.costUnknown || previous.costUnknown ? { costUnknown: true } : {}),
           ...(usage.provider ?? previous.provider ? { provider: usage.provider ?? previous.provider } : {}),
           ...(usage.model ?? previous.model ? { model: usage.model ?? previous.model } : {}),
           ...(usage.tokensUnknown || previous.tokensUnknown ? { tokensUnknown: true } : {}),
@@ -520,7 +527,9 @@ export class PipelineOrchestrator {
   failJob(jobId: string, error: JobError): void {
     this.repository.atomic(() => {
       const job = this.repository.getJob(jobId);
-      if (!job || job.status !== "RUNNING") return;
+      // An agent may never arrive: finish its bounded queue wait through the same error path,
+      // without pretending an executor started or reserving a provider budget.
+      if (!job || (job.status !== "RUNNING" && !(job.status === "QUEUED" && job.executor === "agent" && error.code === "STAGE_AGENT_UNAVAILABLE"))) return;
       const finishedAt = this.now().toISOString();
       const durationMs = job.startedAt ? Date.parse(finishedAt) - Date.parse(job.startedAt) : 0;
       if ((error.code === "LLM_QUOTA_WAIT" || error.code === "AUTONOMY_BUDGET_WAIT") && error.retryAt) {
@@ -636,9 +645,9 @@ export class PipelineOrchestrator {
     });
   }
 
-  /** A job leased to a worker node with a live lease keeps running when this server restarts. */
+  /** Worker nodes and external agents keep their existing job fence across a server restart. */
   private heldByNode(job: Job): boolean {
-    const lease = this.repository.getJobLease(job.id);
+    const lease = this.repository.getExecutionLease(job.id);
     return Boolean(lease && Date.parse(lease.leaseUntil) > this.now().getTime());
   }
 
@@ -710,8 +719,9 @@ export class PipelineOrchestrator {
       jobId: job.id,
       error: null,
     });
+    this.routeQueuedJob(job);
     this.wakeWorker();
-    return job;
+    return this.repository.getJob(job.id)!;
   }
 
   private continueAll(projectId: string, _afterIndex?: number): void {

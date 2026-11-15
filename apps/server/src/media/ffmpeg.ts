@@ -1,8 +1,10 @@
 import { spawn } from "node:child_process";
 import { existsSync, mkdirSync } from "node:fs";
-import { dirname, resolve } from "node:path";
+import { basename, dirname, resolve } from "node:path";
 import ffmpegStatic from "ffmpeg-static";
 import ffprobeStatic from "ffprobe-static";
+import { reportStageActivity } from "../pipeline/stageActivity.js";
+import type { StageContext } from "../pipeline/stageExecutor.js";
 
 export function resolveFfmpegPath(env: NodeJS.ProcessEnv = process.env): string {
   if (env.FFMPEG_PATH) return env.FFMPEG_PATH;
@@ -76,7 +78,7 @@ export function ensureFileDirectory(filePath: string): string {
 
 export type MediaProbe = { durationSec: number; width: number; height: number; hasVideo: boolean; hasAudio: boolean };
 
-export type FfmpegRunOptions = { cwd?: string; signal?: AbortSignal; onStdout?: (chunk: string) => void };
+export type FfmpegRunOptions = { cwd?: string; signal?: AbortSignal; onStdout?: (chunk: string) => void; context?: StageContext };
 
 /** Runs ffmpeg; rejects with the stderr tail on a non-zero exit. Abort kills the process. */
 export function runFfmpeg(args: string[], options: FfmpegRunOptions = {}): Promise<{ stdout: string; stderr: string }> {
@@ -90,10 +92,16 @@ function runTool(command: string, args: string[], options: FfmpegRunOptions): Pr
       rejectPromise(new DOMException("aborted", "AbortError"));
       return;
     }
+    const commandName = basename(command);
+    reportStageActivity({ childAlive: true, childNote: commandName }, options.context);
+    const notifyExit = () => {
+      reportStageActivity({ childAlive: false, childNote: commandName }, options.context);
+    };
     const child = spawn(command, args, { cwd: options.cwd, stdio: ["ignore", "pipe", "pipe"], windowsHide: true });
     let settled = false;
     const onAbort = () => {
       child.kill("SIGKILL");
+      notifyExit();
       if (!settled) {
         settled = true;
         rejectPromise(new DOMException("aborted", "AbortError"));
@@ -113,6 +121,7 @@ function runTool(command: string, args: string[], options: FfmpegRunOptions): Pr
     });
     child.on("error", (error) => {
       signal?.removeEventListener("abort", onAbort);
+      notifyExit();
       if (!settled) {
         settled = true;
         rejectPromise(error);
@@ -120,6 +129,7 @@ function runTool(command: string, args: string[], options: FfmpegRunOptions): Pr
     });
     child.on("close", (code) => {
       signal?.removeEventListener("abort", onAbort);
+      notifyExit();
       if (settled) return;
       settled = true;
       if (code !== 0) {

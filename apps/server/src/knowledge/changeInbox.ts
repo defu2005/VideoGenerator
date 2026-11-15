@@ -36,7 +36,7 @@ export type ChangeEventRow = {
   severity: EventSeverity;
   fingerprint: string;
   consumers: string[];
-  reaction: { levels: ReactionId[]; note?: string; proposalId?: string };
+  reaction: { levels: ReactionId[]; note?: string; proposalId?: string; researchRunIds?: string[] };
   status: string;
   seenCount: number;
   lastSeenAt: string;

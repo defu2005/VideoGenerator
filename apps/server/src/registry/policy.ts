@@ -98,7 +98,7 @@ export function enablesAutomation(name: string, args: unknown): boolean {
 }
 
 export function forcesUserPending(name: string, args: unknown): boolean {
-  return name === "delete_project" || enablesAutomation(name, args);
+  return name === "delete_project" || name === "run_research" || enablesAutomation(name, args);
 }
 
 export function shouldCreatePending(input: {

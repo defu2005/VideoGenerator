@@ -96,6 +96,7 @@ export function writeOperatorWorkspace(input: {
   snapshot: HandbookSnapshot;
   snapshotMaxChars: number;
   standingOrdersMarkdown: string;
+  lessons?: string;
 }): { dir: string; handbook: string } {
   const dir = operatorDir(input.dataDir);
   migrateLegacyOperator(input.dataDir, dir);
@@ -105,7 +106,7 @@ export function writeOperatorWorkspace(input: {
   for (const skill of OPERATOR_SKILLS) {
     const path = join(dir, "skills", skill.area, `${skill.topic}.md`);
     mkdirSync(dirname(path), { recursive: true });
-    writeFileSync(path, renderSkillMarkdown(skill), "utf8");
+    writeFileSync(path, renderSkillMarkdown(input.extraSkills?.find((extra) => extra.name === skill.name) ?? skill), "utf8");
   }
   for (const skill of input.repoSkills ?? []) {
     const path = join(dir, "skills", skill.area, `${skill.name}.md`);
@@ -121,9 +122,10 @@ export function writeOperatorWorkspace(input: {
   writeFileSync(join(dir, ".cursor", "cli.json"), `${JSON.stringify(cliConfig(), null, 2)}\n`, "utf8");
   const handbook = renderHandbook({
     tools: input.tools,
-    skills: [...OPERATOR_SKILLS, ...(input.repoSkills ?? []), ...(input.extraSkills ?? [])],
+    skills: [...OPERATOR_SKILLS.filter((skill) => !(input.extraSkills ?? []).some((extra) => extra.name === skill.name)), ...(input.repoSkills ?? []), ...(input.extraSkills ?? [])],
     duties: input.duties,
     snapshot: renderSnapshot(input.snapshot, input.snapshotMaxChars),
+    lessons: input.lessons,
   });
   writeFileSync(join(dir, "AGENTS.md"), handbook, "utf8");
   writeFileSync(join(dir, "notes", "standing-orders.md"), input.standingOrdersMarkdown, "utf8");

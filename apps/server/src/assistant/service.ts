@@ -101,6 +101,8 @@ export class AssistantService {
   private learning: LearningService | undefined;
   private clips: ClipService | undefined;
   private nodes: import("../node/nodeService.js").NodeService | undefined;
+  private agentStages: import("../agents/stageService.js").AgentStageService | undefined;
+  private agentVisuals: import("../agents/visualToolkit.js").AgentVisualToolkit | undefined;
   private comments: CommentInboxService | undefined;
   private trends: import("../trends/trendService.js").TrendService | undefined;
   private translations: import("../translations/translationService.js").TranslationService | undefined;
@@ -120,6 +122,10 @@ export class AssistantService {
   setNodes(service: import("../node/nodeService.js").NodeService): void {
     this.nodes = service;
   }
+  setAgentStages(stages: import("../agents/stageService.js").AgentStageService, visuals: import("../agents/visualToolkit.js").AgentVisualToolkit): void {
+    this.agentStages = stages;
+    this.agentVisuals = visuals;
+  }
 
   setClips(service: ClipService): void {
     this.clips = service;
@@ -130,6 +136,9 @@ export class AssistantService {
   setConnections(reader: ConnectionsReader): void {
     this.connections = reader;
   }
+
+  private research: import("../research/runtime.js").ResearchHub | undefined;
+  setResearch(hub: import("../research/runtime.js").ResearchHub) { this.research = hub; }
 
   /** The user chatting or approving; in-process callers (Telegram, operator, scheduler) act as the workspace system actor. */
   private actorNow(): AuthActor {
@@ -540,6 +549,7 @@ export class AssistantService {
 
   private buildToolContext(signal?: AbortSignal): AssistantToolContext {
     return {
+      research: this.research,
       db: this.db,
       sqlite: this.sqlite,
       config: this.config,
@@ -557,6 +567,8 @@ export class AssistantService {
       learning: this.learning,
       clips: this.clips,
       nodes: this.nodes,
+      agentStages: this.agentStages,
+      agentVisuals: this.agentVisuals,
       comments: this.comments,
       trends: this.trends,
       translations: this.translations,

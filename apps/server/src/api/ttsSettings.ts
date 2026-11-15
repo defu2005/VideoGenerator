@@ -9,6 +9,7 @@ import type { AppConfig } from "../lib/config.js";
 import type { TokenVault } from "../publishing/tokenVault.js";
 import type { TtsProviderRegistry } from "../providers/tts/registry.js";
 import { touchFromOwner } from "../operator/autopilot.js";
+import { edgeTtsVersion } from "../providers/tts/edgeTts.js";
 import { describeTtsProviders, readTtsSettings, saveTtsSettings, ttsSecretKey } from "../settings/tts.js";
 
 const SampleParams = z.object({ hash: z.string().regex(/^[a-f0-9]{64}$/) }).strict();
@@ -24,12 +25,18 @@ export function registerTtsSettingsRoutes(
   app.get("/api/settings/tts", async () => {
     const settings = readTtsSettings(sqlite, config.TTS_PROVIDER);
     const subscription = await registry.elevenSubscription();
+    const edgeTtsInfo = await edgeTtsVersion(config.EDGE_TTS_PATH);
     return {
       settings,
       providers: describeTtsProviders({
         settings,
         configured: (id) => registry.configured(id),
         subscription,
+        edgeTts: {
+          path: edgeTtsInfo.path,
+          version: edgeTtsInfo.version,
+          status: edgeTtsInfo.status,
+        },
       }),
     };
   });
@@ -38,11 +45,17 @@ export function registerTtsSettingsRoutes(
     const patch = TtsAppSettingsInputSchema.parse(request.body ?? {});
     touchFromOwner(request.headers, sqlite, "tts:settings");
     const settings = saveTtsSettings(sqlite, config.TTS_PROVIDER, patch);
+    const edgeTtsInfo = await edgeTtsVersion(config.EDGE_TTS_PATH);
     return {
       settings,
       providers: describeTtsProviders({
         settings,
         configured: (id) => registry.configured(id),
+        edgeTts: {
+          path: edgeTtsInfo.path,
+          version: edgeTtsInfo.version,
+          status: edgeTtsInfo.status,
+        },
       }),
     };
   });

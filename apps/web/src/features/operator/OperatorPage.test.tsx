@@ -61,4 +61,29 @@ describe("OperatorPage", () => {
     fireEvent.click(screen.getByRole("button", { name: "Duyệt" }));
     expect(await screen.findByRole("button", { name: "Duyệt" })).toBeInTheDocument();
   });
+
+  it("switches to Hermes tab and renders the supervision panel", async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes("/operator/overview")) return jsonResponse(overview);
+      if (url.includes("/operator/supervision")) {
+        return jsonResponse({
+          duty: { instance: "hermes/duty-runner", expiresAt: "2026-11-13T12:00:00.000Z" },
+          instances: [{ instance: "hermes/duty-runner", kind: "hermes", environment: "wsl", version: "1.0", lastSeenAt: "2026-11-13T11:58:00.000Z", lastToolAt: null, onDuty: true }],
+          escalations: [],
+          actions: [],
+          leases: [],
+          pause: null,
+        });
+      }
+      return jsonResponse({ ok: true });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    renderWithProviders(<OperatorPage />);
+
+    expect(await screen.findByText(/2026.11.05-test/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Hermes" }));
+    expect(await screen.findByTestId("hermes-supervision-tab")).toBeInTheDocument();
+    expect(screen.getAllByText(/hermes\/duty-runner/).length).toBeGreaterThan(0);
+  });
 });

@@ -60,6 +60,7 @@ export class VideoAgentApiError extends Error {
   constructor(
     message: string,
     readonly rawBody?: string,
+    readonly statusCode?: number,
   ) {
     super(message);
     this.name = "VideoAgentApiError";
@@ -72,6 +73,11 @@ export class VideoAgentApiClient {
   constructor(
     baseUrl = process.env.VG_API_URL ?? "http://127.0.0.1:3001",
     private readonly fetchImpl: typeof fetch = fetch,
+    private readonly access?: {
+      apiKey: () => string | undefined;
+      workspaceId?: () => string | undefined;
+      toolSource?: "agent" | "operator";
+    },
   ) {
     this.baseUrl = baseUrl.replace(/\/+$/, "");
   }
@@ -361,8 +367,9 @@ export class VideoAgentApiClient {
     summaryVi?: string;
   }> {
     const headers: Record<string, string> = {};
-    if (process.env.VG_TOOL_SOURCE === "operator" || process.env.VG_TOOL_SOURCE === "agent") {
-      headers["x-vg-tool-source"] = process.env.VG_TOOL_SOURCE;
+    const source = this.access?.toolSource ?? process.env.VG_TOOL_SOURCE;
+    if (source === "operator" || source === "agent") {
+      headers["x-vg-tool-source"] = source;
     }
     for (const [envName, header] of [
       ["VG_AGENT_KIND", "x-vg-agent-kind"],
@@ -408,7 +415,10 @@ export class VideoAgentApiClient {
 
   private async request<T>(path: string, init?: RequestInit): Promise<T> {
     let response: Response;
-    const apiKey = localServiceApiKey();
+    // HTTP mode supplies request-local credentials. Never fall back to a machine's local key.
+    const apiKey = this.access ? this.access.apiKey() : localServiceApiKey();
+    if (this.access && !apiKey) throw new VideoAgentApiError("Missing request credentials", undefined, 401);
+    const workspaceId = this.access ? this.access.workspaceId?.() : process.env.VG_WORKSPACE_ID?.trim();
     try {
       response = await this.fetchImpl(`${this.baseUrl}${path}`, {
         ...init,
@@ -416,7 +426,7 @@ export class VideoAgentApiClient {
           Accept: "application/json",
           ...(init?.body === undefined ? {} : { "Content-Type": "application/json" }),
           ...(apiKey ? { "x-api-key": apiKey } : {}),
-          ...(process.env.VG_WORKSPACE_ID?.trim() ? { "x-workspace-id": process.env.VG_WORKSPACE_ID.trim() } : {}),
+          ...(workspaceId ? { "x-workspace-id": workspaceId } : {}),
           ...init?.headers,
         },
       });
@@ -428,7 +438,7 @@ export class VideoAgentApiClient {
 
     const rawBody = await response.text();
     if (!response.ok) {
-      throw new VideoAgentApiError(rawBody || response.statusText || "Request failed", rawBody);
+      throw new VideoAgentApiError(rawBody || response.statusText || "Request failed", rawBody, response.status);
     }
     if (!rawBody) return undefined as T;
     try {

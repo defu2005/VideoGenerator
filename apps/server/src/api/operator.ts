@@ -71,8 +71,8 @@ export function registerOperatorRoutes(app: FastifyInstance, operator: OperatorS
   });
   app.put("/api/operator/skills/:name/draft", async (request) => {
     const { name } = z.object({ name: z.string().regex(/^[a-z0-9][a-z0-9-]{1,79}$/) }).strict().parse(request.params);
-    const { markdown } = z.object({ markdown: z.string().min(1).max(12_000) }).strict().parse(request.body);
-    return operator.saveSkillEdit(name, markdown);
+    const { markdown, baseVersion } = z.object({ markdown: z.string().min(1).max(12_000), baseVersion: z.number().int().positive().optional() }).strict().parse(request.body);
+    return operator.saveSkillEdit(name, markdown, baseVersion);
   });
   app.get("/api/operator/learning-report", async () => operator.learningReport());
   app.post("/api/operator/skills/:name/versions/:version/activate", async (request) => {

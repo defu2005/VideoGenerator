@@ -29,6 +29,8 @@ import { createUserRequest } from "./autopilot.js";
 import { effectiveAutonomy, repairSettingsFor } from "./autonomy.js";
 import { autonomyBudgetStatus, readAutonomyBudget } from "./autonomyBudget.js";
 import { recordHeld, renderGateInputs, scriptGateInputs, writeScriptRepairHint } from "./qualityGates.js";
+import { currentDuty } from "../supervision/duty.js";
+import { openEscalation } from "../supervision/escalations.js";
 
 /**
  * TASK-121. Code owns the facts and the limits; the agent only picks one action per issue from a fixed list.
@@ -85,7 +87,7 @@ export type RepairStepResult =
   | { status: "off" }
   | { status: "passed" }
   | { status: "repairing"; attempt: number; maxAttempts: number; actions: Array<{ kind: RepairIssueKind; action: RepairActionKind; by: "agent" | "ladder" }>; sync: boolean }
-  | { status: "exhausted"; reason: string; handled: "shelved" | "asked" | "breaker" };
+  | { status: "exhausted"; reason: string; handled: "shelved" | "asked" | "breaker" | "agent" };
 
 const MAX_SYNC_ROUNDS = 20;
 const BREAKER_MS = 60 * 60 * 1000;
@@ -567,9 +569,24 @@ function applyExhausted(
   const attempts = new Set(rowsSince(sqlite, project.id).map((row) => row.attempt)).size;
   const summary = issues.map((issue) => issue.detail).join(", ");
   const kinds = [...new Set(issues.map((issue) => issue.kind))];
+  if (gate === "VISUALS" && env.ctx.agentStages?.handoffAfterRepair(project.id, `${reason}: ${summary}`)) {
+    return { status: "exhausted", reason, handled: "agent" };
+  }
   if (settings.onExhausted === "ask") {
     const why = `Tự sửa chưa đạt (${reason}): ${summary}. Đã thử: ${triedText(sqlite, project.id)}.`;
     recordHeld(sqlite, project.id, why);
+    if (currentDuty(sqlite) && project.id !== PROTECTED_PROJECT_ID) {
+      openEscalation(sqlite, {
+        fromKind: "operator",
+        fromInstance: "app",
+        kind: "repair_exhausted",
+        objectRef: project.id,
+        projectId: project.id,
+        summary: why,
+        evidence: { gate, issues, reason },
+      }, now);
+      return { status: "exhausted", reason, handled: "asked" };
+    }
     const titles: Record<RepairGate, [string, string]> = {
       SCRIPT: ["Giữ cổng kịch bản", "script-gate"], VISUALS: ["Giữ cổng ảnh cảnh", "visual-gate"], RENDER: ["Giữ cổng render", "render-gate"],
     };

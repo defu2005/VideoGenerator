@@ -7,7 +7,7 @@ type Version = {
   name: string;
   version: number;
   markdown: string;
-  status: "draft" | "active" | "archived";
+  status: "draft" | "active" | "archived" | "needs_merge";
   score: number;
   activeScore: number | null;
   evaluation: { score: number; scenarios: Scenario[] };
@@ -20,10 +20,10 @@ type LearningReport = {
 };
 
 const queryKey = ["operator", "skill-versions"];
-const labels = { draft: "Bản nháp", active: "Đang dùng", archived: "Phiên bản trước" };
+const labels = { draft: "Bản nháp", active: "Đang dùng", archived: "Phiên bản trước", needs_merge: "Cần gộp thay đổi" };
 const sources = { repeated_failure: "Lỗi lặp lại", user_review: "Bạn nạp", user_edit: "Bạn sửa", agent_proposal: "Agent đề xuất" };
 
-function SkillVersionItem({ item }: { item: Version }) {
+function SkillVersionItem({ item, active }: { item: Version; active?: Version }) {
   const client = useQueryClient();
   const [editing, setEditing] = useState(false);
   const [text, setText] = useState(item.markdown);
@@ -32,7 +32,7 @@ function SkillVersionItem({ item }: { item: Version }) {
     onSuccess: () => client.invalidateQueries({ queryKey: ["operator"] }),
   });
   const save = useMutation({
-    mutationFn: () => apiRequest(`/operator/skills/${item.name}/draft`, { method: "PUT", body: JSON.stringify({ markdown: text }) }),
+    mutationFn: () => apiRequest(`/operator/skills/${item.name}/draft`, { method: "PUT", body: JSON.stringify({ markdown: text, baseVersion: item.version }) }),
     onSuccess: () => { setEditing(false); void client.invalidateQueries({ queryKey: ["operator"] }); },
   });
   const failed = item.evaluation.scenarios.filter((scenario) => !scenario.ok);
@@ -62,11 +62,15 @@ function SkillVersionItem({ item }: { item: Version }) {
           <button type="button" className="button" disabled={save.isPending} onClick={() => save.mutate()}>Lưu thành bản nháp</button>
           <button type="button" className="button button-secondary" onClick={() => { setEditing(false); setText(item.markdown); }}>Huỷ</button>
         </div>
-      ) : <pre>{item.markdown}</pre>}
+      ) : item.status === "needs_merge" ? <div className="form-grid">
+        <div><h4>Bản đang dùng</h4><pre style={{ whiteSpace: "pre-wrap" }}>{active?.markdown ?? "Chưa có bản đang dùng"}</pre></div>
+        <div><h4>Bản nháp cần gộp</h4><pre style={{ whiteSpace: "pre-wrap" }}>{item.markdown}</pre></div>
+        <p>Chọn Sửa, gộp thay đổi rồi lưu thành bản nháp mới trước khi duyệt.</p>
+      </div> : <pre>{item.markdown}</pre>}
       {!editing ? (
         <button type="button" className="button button-secondary" onClick={() => setEditing(true)}>Sửa</button>
       ) : null}
-      {item.status !== "active" ? (
+      {item.status !== "active" && item.status !== "needs_merge" ? (
         <button type="button" className="button button-secondary" disabled={activate.isPending || item.evaluation.score < 80}
           onClick={() => activate.mutate()}>{item.status === "draft" ? "Duyệt và dùng" : "Khôi phục phiên bản"}</button>
       ) : null}
@@ -165,7 +169,7 @@ export function SkillVersions() {
         {open && versions.isPending ? <p>Đang tải skill…</p> : null}
         {versions.error ? <p role="alert">{versions.error.message}</p> : null}
         {versions.data?.items.length === 0 ? <p>Chưa có phiên bản skill.</p> : null}
-        {versions.data?.items.map((item) => <SkillVersionItem key={`${item.name}:${item.version}`} item={item} />)}
+        {versions.data?.items.map((item) => <SkillVersionItem key={`${item.name}:${item.version}`} item={item} active={versions.data.items.find((other) => other.name === item.name && other.status === "active")} />)}
       </details>
     </section>
   );

@@ -419,6 +419,10 @@ export const notificationLog = sqliteTable("notification_log", {
 export type NotificationLogRow = typeof notificationLog.$inferSelect;
 
 export const jobs = sqliteTable("jobs", {
+  executor: text("executor").notNull().default("app"),
+  handoffReason: text("handoff_reason"),
+  handoffAt: text("handoff_at"),
+  agentInstance: text("agent_instance"),
   id: text("id").primaryKey(),
   /** Null for assistant-chat usage, which is not tied to one video. */
   projectId: text("project_id").references(() => projects.id, { onDelete: "cascade" }),
@@ -989,7 +993,7 @@ export const revenueEntries = sqliteTable("revenue_entries", {
   createdAt: text("created_at").notNull(),
 }, (table) => [
   index("revenue_entries_workspace_idx").on(table.workspaceId),
-  uniqueIndex("revenue_entries_source_external_uidx").on(table.source, table.externalKey),
+  uniqueIndex("revenue_entries_source_external_uidx").on(table.workspaceId, table.source, table.externalKey),
   index("revenue_entries_period_idx").on(table.periodStart, table.periodEnd),
   index("revenue_entries_account_idx").on(table.accountId),
   index("revenue_entries_profile_idx").on(table.profileId),
@@ -1612,7 +1616,7 @@ export const agents = sqliteTable("agents", {
   calls: integer("calls").notNull().default(1),
 }, (table) => [
   index("agents_workspace_idx").on(table.workspaceId),
-  uniqueIndex("agents_identity_uq").on(table.kind, table.name, table.environment),
+  uniqueIndex("agents_identity_uq").on(table.workspaceId, table.kind, table.name, table.environment),
 ]);
 
 export const skillClaims = sqliteTable("skill_claims", {
@@ -1675,12 +1679,14 @@ export const skillReports = sqliteTable("skill_reports", {
 export const knowledgeEntries = sqliteTable("knowledge_entries", {
   workspaceId: text("workspace_id"),
   id: text("id").primaryKey(),
+  key: text("key"),
   kind: text("kind").notNull(),
   json: text("json"),
   revision: integer("revision").notNull(),
   updatedAt: text("updated_at").notNull(),
 }, (table) => [
   index("knowledge_entries_workspace_idx").on(table.workspaceId),
+  uniqueIndex("knowledge_entries_workspace_kind_key_uidx").on(table.workspaceId, table.kind, table.key),
 ]);
 
 export const knowledgeRevisions = sqliteTable("knowledge_revisions", {
@@ -2030,7 +2036,44 @@ export const agentInstances = sqliteTable("agent_instances", {
   lastToolAt: text("last_tool_at"),
   dutyHeartbeatAt: text("duty_heartbeat_at"),
   onDuty: integer("on_duty", { mode: "boolean" }).notNull().default(false),
+  host: text("host"),
+  hermesVersion: text("hermes_version"),
+  bundleVersion: integer("bundle_version").notNull().default(0),
+  skillsHash: text("skills_hash"),
+  toolHash: text("tool_hash"),
+  lastSyncAt: text("last_sync_at"),
+  lastError: text("last_error"),
+  pendingCron: text("pending_cron").notNull().default("[]"),
+  bundleBehindSince: text("bundle_behind_since"),
 });
+
+/** TASK-123: evidence-backed shared lessons; "global" means within this workspace. */
+export const agentLessons = sqliteTable("agent_lessons", {
+  id: text("id").primaryKey(),
+  workspaceId: text("workspace_id"),
+  scope: text("scope").notNull(),
+  text: text("text").notNull(),
+  normalizedText: text("normalized_text").notNull(),
+  evidence: text("evidence").notNull(),
+  sourceKind: text("source_kind").notNull(),
+  sourceInstance: text("source_instance").notNull(),
+  createdAt: text("created_at").notNull(),
+  confirmedCount: integer("confirmed_count").notNull().default(1),
+  status: text("status").notNull().default("active"),
+  supersedes: text("supersedes"),
+  retiredReason: text("retired_reason"),
+}, (table) => [uniqueIndex("agent_lessons_workspace_scope_text_uidx").on(table.workspaceId, table.scope, table.normalizedText)]);
+
+/** TASK-074a: fixed research pipeline audit, scoped to the caller's workspace. */
+export const researchRuns = sqliteTable("research_runs", {
+  id: text("id").primaryKey(), workspaceId: text("workspace_id"),
+  skill: text("skill").notNull(), version: integer("version").notNull(),
+  trigger: text("trigger").notNull(), subject: text("subject").notNull(),
+  status: text("status").notNull(), budgetUsed: text("budget_used").notNull().default("{}"),
+  report: text("report").notNull().default(""), proposalIds: text("proposal_ids").notNull().default("[]"),
+  details: text("details").notNull().default("{}"), changeEventId: text("change_event_id"),
+  createdAt: text("created_at").notNull(), finishedAt: text("finished_at"),
+}, (table) => [index("research_runs_workspace_created_idx").on(table.workspaceId, table.createdAt)]);
 
 /** TASK-122: hand-offs between the operator, Hermes and the user. */
 export const agentEscalations = sqliteTable("agent_escalations", {

@@ -1,4 +1,4 @@
-import { asRecord } from "../llm/http.js";
+import { groundingSources, googleSearchTool } from "../web/grounding.js";
 import type { AppConfig } from "../../lib/config.js";
 import {
   followRedirectsSafely,
@@ -59,7 +59,7 @@ export async function searchPagesWithGeminiGrounding(input: {
     headers: { "content-type": "application/json", "User-Agent": WEB_CRAWL_USER_AGENT },
     body: JSON.stringify({
       contents: [{ role: "user", parts: [{ text: prompt }] }],
-      tools: [{ google_search: {} }],
+      tools: [googleSearchTool()],
       generationConfig: {
         maxOutputTokens: 1024,
         temperature: 0.2,
@@ -104,20 +104,7 @@ export async function searchPagesWithGeminiGrounding(input: {
 }
 
 export function extractGroundingRedirectUris(body: unknown): string[] {
-  const root = asRecord(body);
-  const candidates = Array.isArray(root.candidates) ? root.candidates : [];
-  const uris: string[] = [];
-  for (const candidate of candidates) {
-    const meta = asRecord(asRecord(candidate).groundingMetadata);
-    const chunks = Array.isArray(meta.groundingChunks) ? meta.groundingChunks : [];
-    for (const chunk of chunks) {
-      const web = asRecord(asRecord(chunk).web);
-      if (typeof web.uri === "string" && web.uri.trim()) {
-        uris.push(web.uri.trim());
-      }
-    }
-  }
-  return [...new Set(uris)];
+  return groundingSources(body).map((source) => source.url);
 }
 
 export function buildGroundingPrompt(scenes: GroundingSceneInput[]): string {

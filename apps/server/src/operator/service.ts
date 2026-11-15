@@ -236,6 +236,7 @@ export class OperatorService {
       },
       snapshotMaxChars: settings.snapshotMaxChars,
       standingOrdersMarkdown: renderOrdersMarkdown(orders),
+      lessons: lessonsDigest(this.deps.sqlite),
     });
   }
 
@@ -769,14 +770,22 @@ export class OperatorService {
   }
 
   /** A user's edit becomes a new draft. It is scored and still needs approval before use. */
-  saveSkillEdit(name: string, markdown: string): { name: string; version: number } {
-    if (OPERATOR_SKILLS.some((skill) => skill.name === name)) {
+  saveSkillEdit(name: string, markdown: string, baseVersion?: number): { name: string; version: number } {
+    if (OPERATOR_SKILLS.some((skill) => skill.name === name && !skill.research)) {
       throw new AppError(409, "BUILT_IN_SKILL", "Skill tích hợp được quản lý cùng ứng dụng.");
     }
     if (parseSkillMarkdown(markdown)?.name !== name) {
       throw new AppError(400, "SKILL_NAME_MISMATCH", "Tên trong bản sửa phải giữ nguyên.");
     }
-    const draft = saveSkillDraft(this.deps.sqlite, markdown, { source: "user_edit", runIds: [] }, this.skillRegistry());
+    const original = this.deps.sqlite.prepare(`SELECT version,evidence FROM operator_skill_versions WHERE name=?
+      ${baseVersion === undefined ? "ORDER BY version DESC LIMIT 1" : "AND version=?"}`)
+      .get(...(baseVersion === undefined ? [name] : [name, baseVersion])) as { version: number; evidence: string } | undefined;
+    if (baseVersion !== undefined && !original) throw new AppError(404, "SKILL_VERSION_NOT_FOUND", "Không tìm thấy phiên bản gốc.");
+    const evidence = original ? JSON.parse(original.evidence) as import("./skillVersions.js").SkillEvidence : undefined;
+    const draft = saveSkillDraft(this.deps.sqlite, markdown, {
+      source: "user_edit", sourceKind: "user", parentVersion: original?.version,
+      runIds: evidence?.runIds ?? [], ...(evidence?.files ? { files: evidence.files } : {}),
+    }, this.skillRegistry());
     if (!draft) throw new AppError(429, "SKILL_DRAFT_LIMIT", "Đã đạt giới hạn bản nháp trong ngày.");
     return draft;
   }
@@ -799,7 +808,7 @@ export class OperatorService {
   }
 
   activateSkill(name: string, version: number): void {
-    if (OPERATOR_SKILLS.some((skill) => skill.name === name)) {
+    if (OPERATOR_SKILLS.some((skill) => skill.name === name && !skill.research)) {
       throw new AppError(409, "BUILT_IN_SKILL", "Skill tích hợp được quản lý cùng ứng dụng.");
     }
     const markdown = activateSkillVersion(this.deps.sqlite, name, version, this.skillRegistry());
@@ -1192,7 +1201,8 @@ ${scope}` : ""}`;
   private skillCandidates(): RouteCandidate[] {
     const history = this.historyEvents();
     const now = this.now();
-    const generated = skillBodiesForRouting().map((skill) => ({
+    const userSkills = this.userSkills();
+    const generated = skillBodiesForRouting().filter((skill) => !userSkills.some((user) => user.name === skill.name)).map((skill) => ({
       id: skill.id,
       name: skill.name,
       description: skill.description,
@@ -1214,7 +1224,7 @@ ${scope}` : ""}`;
       area: skill.area,
       history: historicalSuccess(history, now, `repo:${skill.name}`),
     }));
-    const user = this.userSkills().map((skill) => ({
+    const user = userSkills.map((skill) => ({
       id: skill.name,
       name: skill.name,
       description: skill.description,
@@ -1285,6 +1295,7 @@ ${scope}` : ""}`;
       const parsed = parseSkillMarkdown(markdown);
       if (!parsed) continue;
       skills.push({
+        ...(parsed.research ? { research: parsed.research } : {}),
         area: "user",
         topic: parsed.name,
         name: parsed.name,
@@ -1615,3 +1626,4 @@ function renderOrdersMarkdown(orders: Array<{ title: string; prompt: string; cro
 export function operatorToolNames(): Set<string> {
   return new Set(Object.keys(ASSISTANT_TOOLS));
 }
+import { lessonsDigest } from "../fleet/lessons.js";

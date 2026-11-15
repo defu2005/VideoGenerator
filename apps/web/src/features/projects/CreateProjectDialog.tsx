@@ -33,6 +33,7 @@ function validationMessages(details: unknown): Record<string, string> {
 }
 
 function briefValue(settings: BriefSettings, path: string): string | number | boolean | undefined {
+  if (path === "stageExecution.VISUAL_SEARCH") return settings.stageExecution?.VISUAL_SEARCH;
   if (path === "subtitles.enabled") return settings.subtitles.enabled;
   if (path === "subtitles.maxCharsPerLine") return settings.subtitles.maxCharsPerLine;
   if (path === "music.enabled") return settings.music.enabled;
@@ -48,6 +49,7 @@ function briefValue(settings: BriefSettings, path: string): string | number | bo
 }
 
 function setBriefValue(settings: BriefSettings, path: string, value: string | number | boolean): BriefSettings {
+  if (path === "stageExecution.VISUAL_SEARCH") return { ...settings, stageExecution: { ...settings.stageExecution, VISUAL_SEARCH: value as NonNullable<BriefSettings["stageExecution"]>["VISUAL_SEARCH"] } };
   if (path === "subtitles.enabled") return { ...settings, subtitles: { ...settings.subtitles, enabled: Boolean(value) } };
   if (path === "subtitles.maxCharsPerLine") return { ...settings, subtitles: { ...settings.subtitles, maxCharsPerLine: Number(value) } };
   if (path === "music.enabled") return { ...settings, music: { ...settings.music, enabled: Boolean(value) } };
@@ -171,6 +173,8 @@ export function CreateProjectDialog({ open, onClose }: { open: boolean; onClose:
   function resetBrief(path: string) {
     const userSet = briefUserSet.filter((item) => item !== path);
     let settings = { ...brief, userSet };
+    if (path === "stageExecution.VISUAL_SEARCH") settings.stageExecution = undefined;
+    if (path === "agentWaitMinutes") settings.agentWaitMinutes = undefined;
     if (path.startsWith("budget.features.")) {
       const features = { ...settings.budget.features };
       delete features[path.slice("budget.features.".length) as keyof NonNullable<BriefSettings["budget"]["features"]>];
@@ -198,6 +202,8 @@ export function CreateProjectDialog({ open, onClose }: { open: boolean; onClose:
         if (value === undefined) continue;
         if (path.startsWith("subtitles.")) {
           settings.subtitles = { ...(settings.subtitles as object | undefined), [path.slice("subtitles.".length)]: value };
+        } else if (path === "stageExecution.VISUAL_SEARCH") {
+          settings.stageExecution = { VISUAL_SEARCH: value };
         } else if (path.startsWith("music.")) {
           settings.music = { ...(settings.music as object | undefined), [path.slice("music.".length)]: value };
         } else if (path === "budget.mode") {

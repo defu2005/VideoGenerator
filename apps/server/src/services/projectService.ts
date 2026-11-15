@@ -44,6 +44,7 @@ const BRIEF_SETTING_FIELDS = new Set([
   "wordsPerMinute",
   "sceneDurationSec",
   "visualStyle",
+  "agentWaitMinutes",
 ]);
 
 function briefSettingsFromInput(input: CreateProjectInput | UpdateProjectInput): ProjectSettingsInput {
@@ -103,6 +104,7 @@ function mergeSettings(current: ProjectSettings, update: ProjectSettingsInput): 
       ...current.stageExecutors,
       ...update.stageExecutors,
     },
+    stageExecution: update.stageExecution ? { ...current.stageExecution, ...update.stageExecution } : current.stageExecution,
     voice: update.voice
       ? { ...current.voice, ...update.voice }
       : current.voice,
@@ -258,6 +260,8 @@ export function createProjectService(
       budget: resolved.values.settings.budget,
       userSet,
       researchMode: inputSettings.researchMode,
+      stageExecution: requestSettings.stageExecution,
+      agentWaitMinutes: requestSettings.agentWaitMinutes,
       stageExecutors: inputSettings.stageExecutors ?? {},
       voice: inputSettings.voice,
       llm: normalizeLlmSettings(inputSettings.llm),
@@ -308,7 +312,7 @@ export function createProjectService(
       ...input.settings,
     };
     const hasSettingsUpdate = Object.keys(settingsInput).length > 0;
-    const settings = hasSettingsUpdate ? mergeSettings(current.settings, settingsInput) : current.settings;
+    const settings = { ...(hasSettingsUpdate ? mergeSettings(current.settings, settingsInput) : current.settings) };
 
     const explicitBriefFields = Object.keys(settingsInput).filter((field) => BRIEF_SETTING_FIELDS.has(field));
     const nestedBriefFields = [
@@ -317,8 +321,15 @@ export function createProjectService(
       ...(settingsInput.budget?.mode === undefined ? [] : ["budget.mode"]),
       ...Object.keys(settingsInput.budget?.features ?? {}).map((field) => `budget.features.${field}`),
       ...(settingsInput.researchMode === undefined ? [] : ["researchMode"]),
+      ...Object.keys(settingsInput.stageExecution ?? {}).map((stage) => `stageExecution.${stage}`),
     ];
     const resetFields = new Set(input.resetToRecommended ?? []);
+    if (resetFields.has("stageExecution.VISUAL_SEARCH")) {
+      const execution = { ...settings.stageExecution };
+      delete execution.VISUAL_SEARCH;
+      settings.stageExecution = Object.keys(execution).length ? execution : undefined;
+    }
+    if (resetFields.has("agentWaitMinutes")) settings.agentWaitMinutes = undefined;
     const userSet = [...new Set([
       ...current.settings.userSet,
       ...(input.title === undefined ? [] : ["title"]),

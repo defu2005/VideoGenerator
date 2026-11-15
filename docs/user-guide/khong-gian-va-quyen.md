@@ -42,7 +42,7 @@ Trợ lý và agent không mời, không đổi quyền, không tạo hay thu h�
 Mở từ menu người dùng. Tại đây bạn:
 
 - đổi tên và mật khẩu (các phiên khác bị đăng xuất);
-- bật **xác thực hai bước**: nhập mật khẩu, thêm khoá vào ứng dụng xác thực, nhập mã 6 số, rồi lưu **mã dự phòng** (chỉ hiện một lần);
+- bật **xác thực hai bước**: nhập mật khẩu, quét mã QR bằng ứng dụng xác thực (hoặc nhập khóa thủ công), nhập mã 6 số, rồi lưu **mã dự phòng** (chỉ hiện một lần);
 - xem và đăng xuất các phiên đăng nhập;
 - tạo **khóa API** cá nhân cho MCP hoặc script. Khóa đầy đủ chỉ hiện đúng một lần khi tạo; mất thì tạo lại.
 
@@ -51,3 +51,11 @@ Quên mật khẩu trên máy chủ: chạy `npm run reset-password -w @vg/serve
 ## Nhật ký hoạt động {#nhat-ky-hoat-dong}
 
 Mọi thao tác ghi, kể cả bị từ chối và các lệnh công cụ của trợ lý, được ghi lại 180 ngày; bí mật được che. Chủ và quản trị xem ở trang **Nhật ký hoạt động**: lọc theo người, nguồn (giao diện, trợ lý, MCP, operator, hệ thống), kết quả và ngày; bấm một dòng để xem chi tiết.
+
+## Khóa API theo không gian
+
+Khóa API mới được gắn với không gian bạn đang chọn khi tạo. Trang Tài khoản của tôi hiển thị mã không gian của từng khóa. Khóa chỉ gọi được API trong không gian đó; gửi `x-workspace-id` khác sẽ bị từ chối với mã `APIKEY_WORKSPACE_MISMATCH` và có nhật ký truy cập.
+
+Khóa cũ hiển thị **Chưa gắn workspace** và chỉ dùng được trong không gian mặc định của người tạo. Chọn **Gắn vào không gian hiện tại** để gắn một lần. Muốn dùng một không gian khác sau đó, hãy tạo khóa mới trong không gian đó. Người dùng vẫn phải là thành viên và có quyền phù hợp.
+
+Tri thức cùng mã, agent cùng tên và doanh thu cùng mã bên ngoài được lưu riêng theo không gian. Khi nâng cấp, dữ liệu cũ chưa có không gian được gán vào không gian chính; lịch sử tri thức vẫn được giữ.

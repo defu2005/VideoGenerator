@@ -133,6 +133,51 @@ export function stageTimeoutInputHash(
   return (hash >>> 0).toString(16).padStart(8, "0");
 }
 
+/** Bucket the history the plan depends on, so a stored plan refreshes as the data grows (TASK-125/131). */
+export function historyBucket(
+  estimates: Partial<Record<string, { samples?: number; confidence?: string }>>,
+): string {
+  return PLANNED_TIMEOUT_STAGES.map((stage) => {
+    const e = estimates[stage];
+    if (!e) return "0";
+    const samples = typeof e.samples === "number" ? e.samples : 0;
+    return `${Math.floor(samples / 5) * 5}${e.confidence === "high" ? "h" : "l"}`;
+  }).join(",");
+}
+
+/**
+ * Unifies hash construction for stage timeout plans (TASK-131).
+ * Used by both modes.ts (budget estimate) and stageTimeoutPlan.ts so they cannot drift.
+ */
+export function stageTimeoutHash(
+  brief: StageTimeoutBrief & { topic: string; budgetMode: string; historyBucket?: string },
+  history?: string | Partial<Record<string, { samples?: number; confidence?: string }>> | null,
+): string {
+  const bucket = typeof history === "string"
+    ? history
+    : history ? historyBucket(history) : brief.historyBucket;
+  return stageTimeoutInputHash({
+    ...brief,
+    ...(bucket !== undefined ? { historyBucket: bucket } : {}),
+  });
+}
+
+/**
+ * Format ETA text for stages (TASK-131).
+ * Shows "dự kiến còn ~X phút" while under expected time, or "quá dự kiến X phút" once past it.
+ */
+export function formatEtaText(elapsedMs: number, expectedMs: number | null | undefined): string | null {
+  if (expectedMs == null || expectedMs <= 0 || !Number.isFinite(elapsedMs)) return null;
+  if (elapsedMs < expectedMs) {
+    const remainingMs = expectedMs - elapsedMs;
+    const minutes = Math.max(1, Math.round(remainingMs / 60_000));
+    return `dự kiến còn ~${minutes} phút`;
+  }
+  const overdueMs = elapsedMs - expectedMs;
+  const minutes = Math.max(1, Math.round(overdueMs / 60_000));
+  return `quá dự kiến ${minutes} phút`;
+}
+
 export const StageTimeoutBasisSchema = z.enum(["history", "agent", "rough", "baseline", "user"]);
 export type StageTimeoutBasis = z.infer<typeof StageTimeoutBasisSchema>;
 

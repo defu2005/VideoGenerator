@@ -284,7 +284,7 @@ function parseWebp(bytes: Buffer): { fileType: "webp"; mimeType: string; width: 
   return undefined;
 }
 
-async function readBoundedBody(response: Response, limit: number): Promise<Buffer> {
+export async function readBoundedBody(response: Response, limit: number): Promise<Buffer> {
   if (!response.body) throw new ImageDownloadError("Image response was empty.");
   const reader = response.body.getReader();
   const chunks: Uint8Array[] = [];

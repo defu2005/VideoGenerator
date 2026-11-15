@@ -11,7 +11,142 @@ type EdgeTtsDependencies = {
   spawnProcess: typeof spawn;
   probeDuration: typeof probeDurationSec;
   sleep: (ms: number, signal?: AbortSignal) => Promise<void>;
+  versionChecker?: (binaryPath: string | null) => Promise<EdgeTtsVersionInfo>;
 };
+
+/**
+ * Minimum supported version of edge-tts.
+ * How to raise: when Microsoft breaks old clients or changes the endpoint,
+ * bump this constant and add a changelog entry in docs/user-guide/nhat-ky-thay-doi.md.
+ */
+export const EDGE_TTS_MIN_VERSION = "7.3.1";
+
+export function parseEdgeTtsVersion(output: string): string | null {
+  if (!output || typeof output !== "string") return null;
+  const edgeTtsMatch = output.match(/edge[-_]tts\s*[,:]?\s*v?(\d+\.\d+\.\d+)/i);
+  if (edgeTtsMatch && edgeTtsMatch[1]) return edgeTtsMatch[1];
+  const semverMatch = output.match(/(?:^|[^\d.])v?(\d+\.\d+\.\d+)\b/);
+  if (semverMatch && semverMatch[1]) return semverMatch[1];
+  return null;
+}
+
+export function compareSemver(a: string, b: string): number {
+  const pa = a.split(".").map(Number);
+  const pb = b.split(".").map(Number);
+  for (let i = 0; i < 3; i++) {
+    const na = pa[i] ?? 0;
+    const nb = pb[i] ?? 0;
+    if (na > nb) return 1;
+    if (na < nb) return -1;
+  }
+  return 0;
+}
+
+export type EdgeTtsVersionInfo = {
+  path: string;
+  version: string;
+  status: "OK" | "cũ — chạy: pip install -U edge-tts" | "unknown";
+  outdated: boolean;
+};
+
+type VersionCacheEntry = {
+  info: EdgeTtsVersionInfo;
+  expiresAt: number;
+};
+
+const versionCache = new Map<string, VersionCacheEntry>();
+
+export function clearEdgeTtsVersionCache(): void {
+  versionCache.clear();
+}
+
+export async function edgeTtsVersion(
+  binaryPath?: string | null,
+  options?: {
+    spawnProcess?: typeof spawn;
+    minVersion?: string;
+    now?: () => number;
+    forceRefresh?: boolean;
+    timeoutMs?: number;
+  },
+): Promise<EdgeTtsVersionInfo> {
+  const path = binaryPath || "edge-tts";
+  const now = options?.now ? options.now() : Date.now();
+  if (!options?.forceRefresh) {
+    const cached = versionCache.get(path);
+    if (cached && cached.expiresAt > now) {
+      return cached.info;
+    }
+  }
+
+  const spawnFn = options?.spawnProcess ?? spawn;
+  const timeoutMs = options?.timeoutMs ?? 5000;
+  const minVersion = options?.minVersion ?? EDGE_TTS_MIN_VERSION;
+
+  const run = (bin: string, cliArgs: string[]) => new Promise<string>((resolve, reject) => {
+    const child = spawnFn(bin, cliArgs, {
+      env: { ...process.env, PYTHONUTF8: "1", PYTHONIOENCODING: "utf-8" },
+      shell: false,
+      stdio: ["ignore", "pipe", "pipe"],
+      windowsHide: true,
+    });
+    const timer = setTimeout(() => child.kill(), timeoutMs);
+    let stdout = "";
+    let stderr = "";
+    child.stdout?.on("data", (chunk: Buffer | string) => { stdout += chunk.toString(); });
+    child.stderr?.on("data", (chunk: Buffer | string) => { stderr += chunk.toString(); });
+    child.on("close", (code) => {
+      clearTimeout(timer);
+      if (code === 0) resolve(`${stdout}\n${stderr}`.trim());
+      else reject(new Error(stderr || stdout || `${bin} exited with code ${code}`));
+    });
+    child.on("error", (error) => {
+      clearTimeout(timer);
+      reject(error);
+    });
+  });
+
+  let rawOutput = "";
+  try {
+    rawOutput = await run(path, ["--version"]);
+  } catch (err) {
+    const isWin = process.platform === "win32";
+    const isBlocked = err instanceof Error && ("code" in err ? (err.code === "UNKNOWN" || err.code === "EACCES") : err.message.includes("spawn UNKNOWN"));
+    if (isWin && isBlocked) {
+      try {
+        rawOutput = await run("python", ["-m", "edge_tts", "--version"]);
+      } catch {
+        rawOutput = "";
+      }
+    }
+  }
+
+  const parsed = parseEdgeTtsVersion(rawOutput);
+  let info: EdgeTtsVersionInfo;
+  if (!parsed) {
+    info = {
+      path,
+      version: "unknown",
+      status: "unknown",
+      outdated: false,
+    };
+  } else {
+    const isOutdated = compareSemver(parsed, minVersion) < 0;
+    info = {
+      path,
+      version: parsed,
+      status: isOutdated ? "cũ — chạy: pip install -U edge-tts" : "OK",
+      outdated: isOutdated,
+    };
+  }
+
+  versionCache.set(path, {
+    info,
+    expiresAt: now + 10 * 60 * 1000,
+  });
+
+  return info;
+}
 
 const defaultDependencies: EdgeTtsDependencies = {
   spawnProcess: spawn,
@@ -142,6 +277,15 @@ export class EdgeTtsProvider implements TtsProvider {
     const textPath = join(fileRoot, `${randomUUID()}.txt`);
     const srtPath = `${outPath}.srt`;
     writeFileSync(textPath, text, "utf8");
+    const checkOutdated = async (): Promise<boolean> => {
+      try {
+        const checker = this.dependencies.versionChecker ?? ((bin) => edgeTtsVersion(bin));
+        const info = await checker(this.binaryPath);
+        return info.outdated;
+      } catch {
+        return false;
+      }
+    };
     try {
       let networkAttempts = 0;
       for (let attempt = 0; attempt < MAX_NO_AUDIO_ATTEMPTS; attempt += 1) {
@@ -193,6 +337,9 @@ export class EdgeTtsProvider implements TtsProvider {
           if (isEdgeNetworkError(message)) {
             networkAttempts += 1;
             if (networkAttempts >= 4) {
+              if (await checkOutdated()) {
+                throw new StageError("Phiên bản edge-tts đã cũ — chạy: pip install -U edge-tts", "TTS_BINARY_OUTDATED", false);
+              }
               const retryAt = new Date(Date.now() + 5 * 60_000).toISOString();
               throw new StageError(
                 "Không kết nối được dịch vụ giọng đọc Edge (lỗi mạng hoặc DNS). Đã thử 4 lần trong khoảng 90 giây. App sẽ tự chạy lại bước Giọng đọc sau 5 phút; nếu vẫn lỗi, kiểm tra mạng hoặc chọn nhà cung cấp giọng khác ở trang Giọng đọc (TTS).",
@@ -207,12 +354,20 @@ export class EdgeTtsProvider implements TtsProvider {
             continue;
           }
           const noAudio = /noaudioreceived|no audio received/i.test(message);
-          if (!noAudio) throw error;
+          if (!noAudio) {
+            if (await checkOutdated()) {
+              throw new StageError("Phiên bản edge-tts đã cũ — chạy: pip install -U edge-tts", "TTS_BINARY_OUTDATED", false);
+            }
+            throw error;
+          }
         }
         if (attempt < MAX_NO_AUDIO_ATTEMPTS - 1) {
           await this.dependencies.sleep(NO_AUDIO_BACKOFF_MS[attempt], signal);
           if (signal?.aborted) throw new DOMException("aborted", "AbortError");
         }
+      }
+      if (await checkOutdated()) {
+        throw new StageError("Phiên bản edge-tts đã cũ — chạy: pip install -U edge-tts", "TTS_BINARY_OUTDATED", false);
       }
       throw new StageError(
         "edge-tts không trả về âm thanh sau 6 lần thử (dịch vụ Microsoft tạm lỗi). Thử lại bước Giọng đọc sau ít phút.",

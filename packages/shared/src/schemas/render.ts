@@ -15,6 +15,7 @@ export const RenderIssueCodeSchema = z.enum([
   "GRAPHIC_SKIPPED",
   "XFADE_UNAVAILABLE",
   "DUPLICATE_VISUAL",
+  "DUPLICATE_NARRATION",
   "COMPOSE_FALLBACK",
 ]);
 export type RenderIssueCode = z.infer<typeof RenderIssueCodeSchema>;

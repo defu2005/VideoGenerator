@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { OVERDUE_LABEL_VI, type OverdueCheckRow, type OverdueJob } from "@vg/shared";
+import { formatEtaText, OVERDUE_LABEL_VI, type OverdueCheckRow, type OverdueJob } from "@vg/shared";
 import { apiRequest } from "../../services/apiClient";
 import { documentHidden } from "../../hooks/usePageVisible";
 import { useCan } from "../../hooks/useCan";
@@ -53,6 +53,9 @@ export function OverdueCard({ projectId, active }: { projectId: string; active: 
         <span className="status-badge status-badge-warn">Quá dự kiến</span>
         <strong>{job.stage.replaceAll("_", " ")}</strong>
         <span>
+          {formatEtaText(job.elapsedMs, job.expectedMs) ? (
+            <span className="overdue-eta-text">{formatEtaText(job.elapsedMs, job.expectedMs)} · </span>
+          ) : null}
           đã chạy {minutes(job.elapsedMs)}
           {job.expectedMs ? ` / dự kiến ${minutes(job.expectedMs)}` : ""}
         </span>

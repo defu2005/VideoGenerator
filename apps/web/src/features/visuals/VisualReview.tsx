@@ -92,6 +92,13 @@ function providerBadge(candidate: VisualCandidate): string {
   return candidate.provider;
 }
 
+function agentAttribution(candidate: VisualCandidate) {
+  if (!candidate.provider.startsWith("agent:")) return null;
+  const label = (instance: string) => instance.split("/").slice(1).join("/") || instance;
+  const finder = label(candidate.provider.slice(6)), judge = candidate.visionCheck?.checkedBy;
+  return `${finder} tìm${judge ? `, ${label(judge.instance)} duyệt (model ${judge.model})` : ", chưa có kết quả duyệt"}`;
+}
+
 function imageUrl(projectId: string, candidate: VisualCandidate | null): string | undefined {
   if (!candidate) return undefined;
   return candidate.localPath
@@ -483,6 +490,7 @@ export function VisualReview({ project }: { project: Project }) {
                 ? <img src={imageUrl(project.id, candidate)} loading="lazy" alt={candidate.title} />
                 : <span>{row.noVisual ? "Không dùng ảnh" : "Chưa có ảnh được chọn"}</span>}
             </button>
+            {candidate && agentAttribution(candidate) && <p className="visual-why">{agentAttribution(candidate)}</p>}
             <div className="visual-row-actions">
               <button className="button button-primary" type="button" disabled={!candidate || row.status === "READY_FOR_RENDER" || mutate.isPending} onClick={() => run({ type: "approve", sceneId: row.sceneId })}>Duyệt</button>
               <button className="button button-secondary" type="button" disabled={!candidate || mutate.isPending} onClick={() => run({ type: "reject", sceneId: row.sceneId })}>Bỏ ảnh này</button>
@@ -559,6 +567,7 @@ export function VisualReview({ project }: { project: Project }) {
                   <img src={imageUrl(project.id, item)} loading="lazy" alt={item.title} />
                   <strong>{item.title || `Candidate ${index + 1}`}</strong>
                   <small>{providerBadge(item)} · {item.width}×{item.height} · {Math.round(item.relevanceScore * 100)}% · {licenseBadge(item)}</small>
+                  {agentAttribution(item) && <small className="visual-why">{agentAttribution(item)}</small>}
                   {item.why && <small className="visual-why">{item.why}</small>}
                   {item.visionCheck && (
                     <div className="visual-vision-check">

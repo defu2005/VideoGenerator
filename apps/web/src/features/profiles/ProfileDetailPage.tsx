@@ -240,6 +240,7 @@ function BriefTab({ profile }: { profile: ProfileDetail }) {
 
   function changeBrief(path: string, value: string | number | boolean) {
     setBrief((current) => {
+      if (path === "stageExecution.VISUAL_SEARCH") return { ...current, stageExecution: { ...current.stageExecution, VISUAL_SEARCH: value as NonNullable<BriefSettings["stageExecution"]>["VISUAL_SEARCH"] } };
       if (path === "subtitles.enabled") return { ...current, subtitles: { ...current.subtitles, enabled: Boolean(value) } };
       if (path === "subtitles.maxCharsPerLine") return { ...current, subtitles: { ...current.subtitles, maxCharsPerLine: Number(value) } };
       if (path === "music.enabled") return { ...current, music: { ...current.music, enabled: Boolean(value) } };
@@ -256,7 +257,10 @@ function BriefTab({ profile }: { profile: ProfileDetail }) {
   }
 
   function resetBrief(path: string) {
-    const resolved = recommendBrief({ topic: profile.name, settings: { ...brief, userSet: brief.userSet.filter((item) => item !== path) } }).values.settings;
+    const settings = { ...brief, userSet: brief.userSet.filter((item) => item !== path) };
+    if (path === "stageExecution.VISUAL_SEARCH") settings.stageExecution = undefined;
+    if (path === "agentWaitMinutes") settings.agentWaitMinutes = undefined;
+    const resolved = recommendBrief({ topic: profile.name, settings }).values.settings;
     setBrief(resolved);
   }
 
@@ -270,7 +274,7 @@ function BriefTab({ profile }: { profile: ProfileDetail }) {
       await update.mutateAsync({
         id: profile.id,
         input: {
-          defaultBrief,
+          defaultBrief: { ...defaultBrief, stageExecution: defaultBrief.stageExecution ?? null, agentWaitMinutes: defaultBrief.agentWaitMinutes ?? null },
           voice: voice.trim() || ttsProvider || ttsModel.trim() || ttsStyle.trim()
             ? {
               ...(voice.trim() ? { voice: voice.trim() } : {}),
@@ -302,7 +306,7 @@ function BriefTab({ profile }: { profile: ProfileDetail }) {
     <form className="panel form-panel" onSubmit={save}>
       {error && <p className="request-error" role="alert">{error}</p>}
       {message && <p className="field-hint">{message}</p>}
-      <BriefFields topic={profile.name} settings={brief} onChange={changeBrief} onReset={resetBrief} />
+      <BriefFields topic={profile.name} settings={brief} onChange={changeBrief} onReset={resetBrief} scope="profile" />
       <fieldset className="form-row">
         <legend>Phong cách dựng</legend>
         <label className="form-field">

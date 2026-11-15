@@ -3,6 +3,8 @@ import { REPAIR_ACTIONS } from "@vg/shared";
 import type { AssistantToolContext } from "../assistant/tools.js";
 import { AppError } from "../lib/errors.js";
 import { readScriptRepairHint, scriptRevisionFeedback, writeScriptRepairHint } from "./qualityGates.js";
+import { currentDuty } from "../supervision/duty.js";
+import { openEscalation, PROTECTED_PROJECT_ID } from "../supervision/escalations.js";
 
 /** Thin implementations behind the three `repair_*` registry tools (TASK-121). Each reuses an existing service. */
 
@@ -49,14 +51,29 @@ export async function executeRepairScript(args: z.infer<typeof repairScriptArgs>
   if (action === "revise_script") writeScriptRepairHint(ctx.sqlite, projectId, null);
   if (action === "revise_script_stronger_model") writeScriptRepairHint(ctx.sqlite, projectId, { stronger: true });
   if (action === "new_angle") writeScriptRepairHint(ctx.sqlite, projectId, { newAngle: true });
-  if (action === "rerun_research_then_script") {
-    const facts = scriptRevisionFeedback(ctx.sqlite, projectId).reasons.slice(0, 5);
-    writeScriptRepairHint(ctx.sqlite, projectId, { extraQueries: facts });
-    ctx.orchestrator.runStageThenContinue(projectId, "RESEARCH");
-    return { action, previousScriptVersion: bumped.previousVersion, stage: "RESEARCH" };
+  try {
+    if (action === "rerun_research_then_script") {
+      const facts = scriptRevisionFeedback(ctx.sqlite, projectId).reasons.slice(0, 5);
+      writeScriptRepairHint(ctx.sqlite, projectId, { extraQueries: facts });
+      ctx.orchestrator.runStageThenContinue(projectId, "RESEARCH");
+      return { action, previousScriptVersion: bumped.previousVersion, stage: "RESEARCH" };
+    }
+    await ctx.orchestrator.runStage(projectId, "SCRIPT");
+    return { action, previousScriptVersion: bumped.previousVersion, stage: "SCRIPT" };
+  } catch (error) {
+    if (currentDuty(ctx.sqlite) && projectId !== PROTECTED_PROJECT_ID) {
+      openEscalation(ctx.sqlite, {
+        fromKind: "operator",
+        fromInstance: "app",
+        kind: "repair_exhausted",
+        objectRef: projectId,
+        projectId,
+        summary: `Sửa kịch bản thất bại (${action}): ${error instanceof Error ? error.message : String(error)}`,
+        evidence: { action, reason: args.reason, error: String(error) },
+      });
+    }
+    throw error;
   }
-  await ctx.orchestrator.runStage(projectId, "SCRIPT");
-  return { action, previousScriptVersion: bumped.previousVersion, stage: "SCRIPT" };
 }
 
 async function visualService(ctx: AssistantToolContext) {
@@ -68,54 +85,84 @@ async function visualService(ctx: AssistantToolContext) {
 
 export async function executeRepairScene(args: z.infer<typeof repairSceneArgs>, ctx: AssistantToolContext) {
   const { projectId, action } = args;
-  const service = await visualService(ctx);
-  const undo: Array<{ sceneId: string; candidateId: string | null }> = [];
-  let changed = 0;
-  for (const sceneId of args.sceneIds) {
-    const before = service.repairSceneView(projectId).find((scene) => scene.sceneId === sceneId);
-    if (!before || before.owned) continue; // never touch a scene the user owns
-    const previous = before.candidateId;
-    let done = false;
-    if (action === "vision_recheck") {
-      done = (await service.repairVisionRecheck(projectId, sceneId, ctx.registry, ctx.signal)).changed;
-    } else if (action === "pick_next_candidate") {
-      done = (await service.repairPickNextCandidate(projectId, sceneId, ctx.signal)).changed;
-    } else if (action === "research_scene") {
-      await service.repairResearchScene(projectId, sceneId, ctx.signal);
-      done = (await service.repairPickNextCandidate(projectId, sceneId, ctx.signal)).changed;
-    } else if (action === "web_search_scene") {
-      if (!service.repairWebAllowed()) throw new AppError(409, "REPAIR_WEB_OFF", "Nguồn ảnh web chưa bật.");
-      await service.repairWebSearchScene(projectId, sceneId, ctx.signal);
-      done = (await service.repairPickNextCandidate(projectId, sceneId, ctx.signal)).changed;
-    } else if (action === "rephrase_scene_visual") {
-      service.repairRephraseScene(projectId, sceneId);
-      await service.repairResearchScene(projectId, sceneId, ctx.signal);
-      done = (await service.repairPickNextCandidate(projectId, sceneId, ctx.signal)).changed;
-    } else {
-      done = service.repairSwitchShotType(projectId, sceneId).changed;
+  try {
+    const service = await visualService(ctx);
+    const undo: Array<{ sceneId: string; candidateId: string | null }> = [];
+    let changed = 0;
+    for (const sceneId of args.sceneIds) {
+      const before = service.repairSceneView(projectId).find((scene) => scene.sceneId === sceneId);
+      if (!before || before.owned) continue; // never touch a scene the user owns
+      const previous = before.candidateId;
+      let done = false;
+      if (action === "vision_recheck") {
+        done = (await service.repairVisionRecheck(projectId, sceneId, ctx.registry, ctx.signal)).changed;
+      } else if (action === "pick_next_candidate") {
+        done = (await service.repairPickNextCandidate(projectId, sceneId, ctx.signal)).changed;
+      } else if (action === "research_scene") {
+        await service.repairResearchScene(projectId, sceneId, ctx.signal);
+        done = (await service.repairPickNextCandidate(projectId, sceneId, ctx.signal)).changed;
+      } else if (action === "web_search_scene") {
+        if (!service.repairWebAllowed()) throw new AppError(409, "REPAIR_WEB_OFF", "Nguồn ảnh web chưa bật.");
+        await service.repairWebSearchScene(projectId, sceneId, ctx.signal);
+        done = (await service.repairPickNextCandidate(projectId, sceneId, ctx.signal)).changed;
+      } else if (action === "rephrase_scene_visual") {
+        service.repairRephraseScene(projectId, sceneId);
+        await service.repairResearchScene(projectId, sceneId, ctx.signal);
+        done = (await service.repairPickNextCandidate(projectId, sceneId, ctx.signal)).changed;
+      } else {
+        done = service.repairSwitchShotType(projectId, sceneId).changed;
+      }
+      undo.push({ sceneId, candidateId: previous });
+      if (done) changed += 1;
     }
-    undo.push({ sceneId, candidateId: previous });
-    if (done) changed += 1;
+    if (args.thenTimeline) ctx.orchestrator.runStageThenContinue(projectId, "TIMELINE");
+    return { action, changed, scenes: undo };
+  } catch (error) {
+    if (currentDuty(ctx.sqlite) && projectId !== PROTECTED_PROJECT_ID) {
+      openEscalation(ctx.sqlite, {
+        fromKind: "operator",
+        fromInstance: "app",
+        kind: "repair_exhausted",
+        objectRef: projectId,
+        projectId,
+        summary: `Sửa ảnh cảnh thất bại (${action}): ${error instanceof Error ? error.message : String(error)}`,
+        evidence: { action, reason: args.reason, error: String(error) },
+      });
+    }
+    throw error;
   }
-  if (args.thenTimeline) ctx.orchestrator.runStageThenContinue(projectId, "TIMELINE");
-  return { action, changed, scenes: undo };
 }
 
 export async function executeRepairRenderStage(args: z.infer<typeof repairRenderStageArgs>, ctx: AssistantToolContext) {
   const { projectId, action } = args;
-  switch (action) {
-    case "rerun_voice": ctx.orchestrator.runStageThenContinue(projectId, "VOICE"); break;
-    case "rerun_music": ctx.orchestrator.runStageThenContinue(projectId, "MUSIC_SEARCH"); break;
-    case "rerun_subtitle": ctx.orchestrator.runStageThenContinue(projectId, "SUBTITLE"); break;
-    case "rebuild_timeline": ctx.orchestrator.runStageThenContinue(projectId, "TIMELINE"); break;
-    case "rerender": await ctx.orchestrator.runStage(projectId, "RENDER"); break;
-    case "revise_script_target_length": {
-      bumpReviseRound(ctx, projectId);
-      const hint = readScriptRepairHint(ctx.sqlite, projectId) ?? {};
-      writeScriptRepairHint(ctx.sqlite, projectId, { ...hint, ...(args.targetWords ? { targetWords: args.targetWords } : {}) });
-      ctx.orchestrator.runStageThenContinue(projectId, "SCRIPT");
-      break;
+  try {
+    switch (action) {
+      case "rerun_voice": ctx.orchestrator.runStageThenContinue(projectId, "VOICE"); break;
+      case "rerun_music": ctx.orchestrator.runStageThenContinue(projectId, "MUSIC_SEARCH"); break;
+      case "rerun_subtitle": ctx.orchestrator.runStageThenContinue(projectId, "SUBTITLE"); break;
+      case "rebuild_timeline": ctx.orchestrator.runStageThenContinue(projectId, "TIMELINE"); break;
+      case "rerender": await ctx.orchestrator.runStage(projectId, "RENDER"); break;
+      case "revise_script_target_length": {
+        bumpReviseRound(ctx, projectId);
+        const hint = readScriptRepairHint(ctx.sqlite, projectId) ?? {};
+        writeScriptRepairHint(ctx.sqlite, projectId, { ...hint, ...(args.targetWords ? { targetWords: args.targetWords } : {}) });
+        ctx.orchestrator.runStageThenContinue(projectId, "SCRIPT");
+        break;
+      }
     }
+    return { action };
+  } catch (error) {
+    if (currentDuty(ctx.sqlite) && projectId !== PROTECTED_PROJECT_ID) {
+      openEscalation(ctx.sqlite, {
+        fromKind: "operator",
+        fromInstance: "app",
+        kind: "repair_exhausted",
+        objectRef: projectId,
+        projectId,
+        summary: `Sửa bước render thất bại (${action}): ${error instanceof Error ? error.message : String(error)}`,
+        evidence: { action, reason: args.reason, error: String(error) },
+      });
+    }
+    throw error;
   }
-  return { action };
 }

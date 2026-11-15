@@ -1,7 +1,7 @@
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { controlUrlProblem, EXIT_FOR_UPDATE_CODE, isPrivateHost, NodeAgent } from "../src/node/agent.js";
 import { probeReason, runRenderProbe } from "../src/node/probe.js";
 
@@ -156,12 +156,14 @@ describe("probe and update exit", () => {
       jobId: "job-1", leaseId: "l1", progress: 10, message: "", cancelled: false, controller: new AbortController(), promise: finished,
     });
     const result = agent.run().then((code) => { exited = true; return code; });
-    await new Promise((done) => setTimeout(done, 150));
-    expect(exited).toBe(false); // still waiting for the job
-    expect(beatsAfterMismatch).toBeGreaterThan(2); // keeps heart-beating while it waits
-    expect(leases).toBe(0); // does not take new work
-    (agent as unknown as { running: Map<string, unknown> }).running.delete("job-1");
-    release?.();
+    try {
+      await vi.waitFor(() => expect(beatsAfterMismatch).toBeGreaterThan(2), { timeout: 3000, interval: 10 });
+      expect(exited).toBe(false); // still waiting for the job
+      expect(leases).toBe(0); // does not take new work
+    } finally {
+      (agent as unknown as { running: Map<string, unknown> }).running.delete("job-1");
+      release?.();
+    }
     expect(await Promise.race([result, new Promise<number>((done) => setTimeout(() => done(-1), 3000))])).toBe(EXIT_FOR_UPDATE_CODE);
   });
 

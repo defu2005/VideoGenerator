@@ -61,6 +61,12 @@ type JobRow = {
   run_after: string;
   previous_state: string;
   node_id?: string | null;
+  executor?: "app" | "agent";
+  handoff_reason?: string | null;
+  handoff_at?: string | null;
+  agent_instance?: string | null;
+  lease_until?: string | null;
+  heartbeat_at?: string | null;
 };
 
 type StageRow = {
@@ -270,16 +276,24 @@ export class JobRepository {
   }
 
   /** Lease columns live apart from updateJob so a normal status update never touches them. */
-  setJobLease(jobId: string, lease: { nodeId: string; leaseId: string; leaseUntil: string; heartbeatAt: string } | null): void {
+  setJobLease(jobId: string, lease: ({ nodeId: string; agentInstance?: never } | { nodeId?: never; agentInstance: string }) & { leaseId: string; leaseUntil: string; heartbeatAt: string } | null): void {
     if (!lease) {
       // Ending a lease keeps node_id on a finished job so the history still says which machine ran it.
       this.sqlite.prepare(
-        "UPDATE jobs SET node_id = CASE WHEN status IN ('QUEUED', 'RUNNING') THEN NULL ELSE node_id END, lease_id = NULL, lease_until = NULL, heartbeat_at = NULL WHERE id = ?",
+        "UPDATE jobs SET node_id = CASE WHEN status IN ('QUEUED', 'RUNNING') THEN NULL ELSE node_id END, agent_instance = CASE WHEN status IN ('QUEUED', 'RUNNING') THEN NULL ELSE agent_instance END, lease_id = NULL, lease_until = NULL, heartbeat_at = NULL WHERE id = ?",
       ).run(jobId);
       return;
     }
-    this.sqlite.prepare("UPDATE jobs SET node_id = ?, lease_id = ?, lease_until = ?, heartbeat_at = ? WHERE id = ?")
-      .run(lease.nodeId, lease.leaseId, lease.leaseUntil, lease.heartbeatAt, jobId);
+    this.sqlite.prepare("UPDATE jobs SET node_id = ?, agent_instance = ?, lease_id = ?, lease_until = ?, heartbeat_at = ? WHERE id = ?")
+      .run(lease.nodeId ?? null, lease.agentInstance ?? null, lease.leaseId, lease.leaseUntil, lease.heartbeatAt, jobId);
+  }
+
+  /** Shared fencing columns; node and agent ownership are mutually exclusive. */
+  getExecutionLease(jobId: string): { nodeId: string | null; agentInstance: string | null; leaseId: string; leaseUntil: string; heartbeatAt: string | null } | null {
+    const row = this.sqlite.prepare("SELECT node_id,agent_instance,lease_id,lease_until,heartbeat_at FROM jobs WHERE id=?").get(jobId) as
+      { node_id: string | null; agent_instance: string | null; lease_id: string | null; lease_until: string | null; heartbeat_at: string | null } | undefined;
+    if (!row?.lease_id || !row.lease_until || (!row.node_id && !row.agent_instance) || (row.node_id && row.agent_instance)) return null;
+    return { nodeId: row.node_id, agentInstance: row.agent_instance, leaseId: row.lease_id, leaseUntil: row.lease_until, heartbeatAt: row.heartbeat_at };
   }
 
   getJobLease(jobId: string): { nodeId: string; leaseId: string; leaseUntil: string } | null {
@@ -310,6 +324,7 @@ export class JobRepository {
        WHERE j.project_id IS NOT NULL
          AND (j.scope IS NULL OR j.scope NOT LIKE 'retrieval_index:%')
          AND j.status = 'QUEUED' AND j.run_after <= ?
+         AND j.executor = 'app'
        ORDER BY j.created_at ASC, j.rowid ASC`,
     ).all(now.toISOString()) as JobRow[];
     const runningRows = this.sqlite.prepare(
@@ -424,6 +439,12 @@ export class JobRepository {
       runAfter: row.run_after,
       nodeId: row.node_id ?? null,
       nodeName,
+      executor: row.executor ?? "app",
+      handoffReason: row.handoff_reason ?? null,
+      handoffAt: row.handoff_at ?? null,
+      agentInstance: row.agent_instance ?? null,
+      leaseUntil: row.lease_until ?? null,
+      heartbeatAt: row.heartbeat_at ?? null,
     });
   }
 

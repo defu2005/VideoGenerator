@@ -31,7 +31,7 @@ export function mergedStoryPrompt(
       `Speaking pace: ${pace} words per minute`,
       "Return {research:{summary,keyFacts,timeline,angles,outline,cautions},script:{title,hook,sections,outro,music}}.",
       `Research: ${factTargets[depth]} keyFacts[{fact,confidence,sourceHint|null}], at most 10 timeline[{date,event}] and 6 cautions[string]; outline 3-8 items [{section,purpose,points[string]}].`,
-      "Script: narration within 20% of target; sections[{id,heading,narration,visualQueries:{primary,alternatives[]},visualNotes,musicMood,energy}]. Provide 0-3 visual-query alternatives per section; the server calculates duration. music:{mood,energy,keywords[]}.",
+      "Script: narration within 20% of target; sections[{id,heading,narration,visualQueries:{primary,alternatives[]},visualNotes,musicMood,energy}]. The hook is spoken on its own: section 1 must continue after it without repeating it. The outro must conclude the video without repeating the last section. Provide 0-3 visual-query alternatives per section; the server calculates duration. music:{mood,energy,keywords[]}.",
       "Enum values must be these English words exactly: confidence = high|medium|low; energy = low|medium|high. JSON keys stay in English.",
     ].join("\n"), channelDirection, learnedNotes), guidance),
   };

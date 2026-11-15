@@ -105,6 +105,15 @@ describe("policy matrix", () => {
 });
 
 describe("coverage", () => {
+  it("requires settings read access for machine resource status", async () => {
+    try {
+      act(actorWith({ role: "viewer" }));
+      expect((await app.inject({ method: "GET", url: "/api/resources" })).statusCode).toBe(403);
+      act(actorWith({ role: "editor" }));
+      expect((await app.inject({ method: "GET", url: "/api/resources" })).statusCode).toBe(200);
+    } finally { act(testActor); }
+  });
+
   it("maps every assistant tool to an action and nothing else", () => {
     expect(Object.keys(TOOL_ACTIONS).sort()).toEqual(Object.keys(ASSISTANT_TOOLS).sort());
   });

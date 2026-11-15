@@ -3,6 +3,7 @@ import { autonomyBudgetStatus, currentAutonomyBudget, hasAutonomySpendLimit, hol
 import { effectiveAutonomy } from "../../operator/autonomy.js";
 import { gatewayBypassOn } from "../../operator/playbooks.js";
 import { UsageService } from "../../services/usageService.js";
+import { reportStageActivity } from "../../pipeline/stageActivity.js";
 import type { Project } from "@vg/shared";
 import type { FastifyBaseLogger } from "fastify";
 import { join } from "node:path";
@@ -36,6 +37,8 @@ const gatewayFallbackLogged = new WeakSet<AbortSignal>();
 const unmeteredProviders = new Set(["mock", "ollama", "claude-cli", "copilot-cli", "antigravity-cli"]);
 
 export async function generateStructured<T>(input: {
+  /** Native grounding returns only provider-verified metadata as {sources}; model text is discarded. */
+  nativeSearch?: boolean;
   provider: LlmProvider;
   model: string;
   system: string;
@@ -67,6 +70,9 @@ export async function generateStructured<T>(input: {
   cached: boolean;
 }> {
   assertVisionCapable(input.provider, input.images);
+  if (input.nativeSearch && !input.provider.capabilities?.nativeSearch) {
+    throw new LlmError("Route không hỗ trợ tìm kiếm web có nguồn xác minh.", "LLM_NOT_CONFIGURED", false);
+  }
   const preparedImages = await prepareVisionImages(
     input.images,
     input.visionCacheDir ?? join(process.cwd(), ".vision-cache"),
@@ -80,7 +86,7 @@ export async function generateStructured<T>(input: {
     prompt: input.prompt,
     schemaName: input.schemaName,
     schemaVersion: input.schemaVersion,
-    cacheKeyExtra: [input.cacheKeyExtra ?? "", imageKey].filter(Boolean).join("|"),
+    cacheKeyExtra: [input.cacheKeyExtra ?? "", imageKey, input.nativeSearch ? "nativeSearch" : ""].filter(Boolean).join("|"),
   });
   const cached = input.cache?.get(key);
   if (cached) {
@@ -135,6 +141,7 @@ export async function generateStructured<T>(input: {
   const requestImages = preparedImages.map((image) => ({ path: image.path, label: image.label }));
   let response;
   input.beforeProviderCall?.();
+  reportStageActivity({ llmInFlight: true });
   try {
     response = await input.provider.generate({
       schemaName: input.schemaName,
@@ -143,7 +150,8 @@ export async function generateStructured<T>(input: {
       system: input.system,
       messages: [{ role: "user", content: input.prompt }],
       maxOutputTokens,
-      json: !input.functions?.length,
+      json: !input.functions?.length && !input.nativeSearch,
+      ...(input.nativeSearch ? { nativeSearch: true } : {}),
       ...(input.functions?.length ? { functions: input.functions } : {}),
       ...(requestImages.length ? { images: requestImages } : {}),
     }, input.signal);
@@ -170,6 +178,8 @@ export async function generateStructured<T>(input: {
       });
     }
     throw withUsage(error, { ...usage(), llmCalls: calls + attemptedCalls(error) }, input.provider.id === "copilot-cli");
+  } finally {
+    reportStageActivity({ llmInFlight: false });
   }
   calls += 1;
   totalInputTokens += response.usage.inputTokens;
@@ -203,11 +213,12 @@ export async function generateStructured<T>(input: {
     );
   }
 
-  let rawText = response.text;
+  let rawText = input.nativeSearch ? JSON.stringify({ sources: response.sources ?? [] }) : response.text;
   let validation = validateOutput(input.schema, rawText, input.normalize);
-  const repairAttempts = input.repairAttempts ?? 1;
+  const repairAttempts = input.nativeSearch ? 0 : input.repairAttempts ?? 1;
   let repairs = 0;
   while (!validation.success && repairs < repairAttempts) {
+    reportStageActivity({ llmInFlight: true });
     try {
       input.beforeProviderCall?.();
       response = await input.provider.generate({
@@ -253,6 +264,8 @@ export async function generateStructured<T>(input: {
         });
       }
       throw withUsage(error, { ...usage(), llmCalls: calls + attemptedCalls(error) }, input.provider.id === "copilot-cli");
+    } finally {
+      reportStageActivity({ llmInFlight: false });
     }
     calls += 1;
     repairs += 1;
@@ -542,6 +555,7 @@ async function routeStructured<T>(input: {
   let budgetWait: LlmError | undefined;
 
   const quotaWait = () => {
+    reportStageActivity({ quotaWait: true });
     const retryAt = quota?.earliestRetryAt(ordered.map((step) => ({ provider: step.provider.id, model: step.model }))) ?? null;
     if (!retryAt) {
       return mergedError(

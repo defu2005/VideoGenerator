@@ -2,6 +2,7 @@ import {
   StageEstimateAgentSchema,
   historyBucket,
   planFromEstimates,
+  stageTimeoutHash,
   stageTimeoutInputHash,
   stageTimeoutPlanIsFresh,
   timeoutBriefFromSettings,
@@ -26,7 +27,7 @@ export async function ensureStageTimeoutPlan(input: {
 }): Promise<void> {
   const brief = timeoutBriefFromSettings(input.project.settings, input.project.topic);
   const estimates = estimateAllStages(input.sqlite, brief);
-  const hash = stageTimeoutInputHash({ ...brief, historyBucket: historyBucket(estimates) });
+  const hash = stageTimeoutHash(brief, estimates);
   if (!input.force && stageTimeoutPlanIsFresh(input.project.settings, hash)) return;
   const previous = input.project.settings.stageTimeouts ?? null;
   const features = resolveBudget(input.project);

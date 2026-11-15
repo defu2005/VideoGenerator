@@ -10,6 +10,7 @@ export type DetectorScheduleDeps = {
   npm: (command: string) => Promise<unknown>;
   audit: (result: { task: string; status: "ok" | "error" | "offline"; at: string }) => void;
   health?: () => Promise<void>; drift?: () => Promise<void>;
+  research?: () => Promise<void>;
 };
 const interval = (entry: KnowledgeEntry) => entry.volatility === "weekly" ? 1 : entry.volatility === "monthly" ? 3.5 : 7;
 
@@ -41,6 +42,7 @@ export class DetectorScheduler {
     if (d.drift) await run("drift", 1, d.drift);
     const entries = d.knowledge.list();
     await run("stale", 7, () => d.inbox.sweepStale(entries.map(({ entry, freshness }) => ({ id: entry.id, kind: entry.kind, freshness }))));
+    if (!d.eco() && d.research) await d.research();
     const watches = new Map<string, { url: string; entry: KnowledgeEntry; kind: KnowledgeEntry["watch"][number]["kind"] }>();
     for (const { entry } of entries) for (const watch of entry.watch) {
       watches.set(`${entry.id}:${watch.url}`, { url: watch.url, entry, kind: watch.kind });

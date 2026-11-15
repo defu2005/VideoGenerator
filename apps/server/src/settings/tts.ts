@@ -38,6 +38,11 @@ export function describeTtsProviders(input: {
   settings: TtsAppSettings;
   configured: (id: string) => boolean;
   subscription?: TtsProviderStatus["subscription"];
+  edgeTts?: {
+    path?: string;
+    version?: string;
+    status?: string;
+  };
 }): TtsProviderStatus[] {
   return TTS_CATALOG.filter((entry) => entry.id !== "mock").map((entry) => ({
     id: entry.id,
@@ -54,5 +59,10 @@ export function describeTtsProviders(input: {
     ...(entry.id === "piper" ? { binaryPath: input.settings.piperBinary, modelsDir: input.settings.piperModelsDir } : {}),
     ...(entry.id === "vieneu" ? { commandTemplate: input.settings.vieneuTemplate } : {}),
     ...(entry.id === "elevenlabs" && input.subscription ? { subscription: input.subscription } : {}),
+    ...(entry.id === "edge-tts" && input.edgeTts ? {
+      binaryPath: input.edgeTts.path,
+      version: input.edgeTts.version,
+      versionStatus: input.edgeTts.status,
+    } : {}),
   }));
 }

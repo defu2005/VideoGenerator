@@ -2,6 +2,12 @@ import { describe, expect, it } from "vitest";
 import { detectLanguage, recommendBrief } from "../src/index.js";
 
 describe("recommendBrief", () => {
+  it("preserves explicit stage execution settings without filling inherited ones", () => {
+    expect(recommendBrief({ topic: "Ảnh" }).values.settings.stageExecution).toBeUndefined();
+    const settings = recommendBrief({ topic: "Ảnh", settings: { stageExecution: { VISUAL_SEARCH: "agent" }, agentWaitMinutes: 45 } }).values.settings;
+    expect(settings.stageExecution).toEqual({ VISUAL_SEARCH: "agent" });
+    expect(settings.agentWaitMinutes).toBe(45);
+  });
   it.each([
     ["Lịch sử trận đấu năm 2016", "vi"],
     ["The history of games in 2016", "en"],

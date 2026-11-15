@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { stageTimeoutInputHash, stageTimeoutPlanIsFresh, timeoutBriefFromSettings, type StageTimeoutPlan } from "../pipeline/stageTimeouts.js";
+import { stageTimeoutHash, stageTimeoutInputHash, stageTimeoutPlanIsFresh, timeoutBriefFromSettings, type StageTimeoutPlan } from "../pipeline/stageTimeouts.js";
 import { VISION_IMAGE_TOKEN_ESTIMATE } from "../schemas/vision.js";
 
 export const BudgetModeSchema = z.enum(["ECO", "BALANCED", "QUALITY", "MAX", "CUSTOM"]);
@@ -359,6 +359,7 @@ export const BudgetEstimateSchema = z.object({
 export type BudgetEstimateInput = {
   topic: string;
   description?: string;
+  historyBucket?: string;
   settings: {
     budget?: BudgetSettings;
     language: string;
@@ -373,6 +374,7 @@ export type BudgetEstimateInput = {
     aspectRatio?: string;
     stageTimeouts?: StageTimeoutPlan | null;
     visuals?: { quality?: "budget" | "best" };
+    historyBucket?: string;
   };
 };
 
@@ -388,6 +390,7 @@ export function estimateBudget(
   project: BudgetEstimateInput,
   provider?: string | readonly string[] | Partial<Record<string, { provider?: string; model?: string } | null>>,
   stages: readonly { stage: string; state: string }[] = [],
+  history?: string | Partial<Record<string, { samples?: number; confidence?: string }>> | null,
 ): BudgetEstimate {
   const budget = project.settings.budget ?? { mode: "BALANCED" as const };
   const features = visualFeaturesFor(resolveBudget(budget), project.settings.visuals?.quality === "best" ? "best" : "budget");
@@ -404,9 +407,12 @@ export function estimateBudget(
 
   const researchCalls = storyMode === "off" || researchDone ? 0 : 1;
   const timeoutBrief = timeoutBriefFromSettings(project.settings, project.topic);
+  const resolvedHistory = history !== undefined
+    ? history
+    : project.historyBucket ?? project.settings.historyBucket;
   const freshTimeoutPlan = stageTimeoutPlanIsFresh(
     { stageTimeouts: project.settings.stageTimeouts },
-    stageTimeoutInputHash(timeoutBrief),
+    stageTimeoutHash(timeoutBrief, resolvedHistory),
   );
   const stageTimeoutCalls = features.stageTimeouts && !freshTimeoutPlan && !researchDone ? 1 : 0;
   perStage.push({

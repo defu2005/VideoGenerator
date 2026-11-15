@@ -27,6 +27,10 @@ describe("autonomy grants", () => {
       if (tool.risk === "confirm") expect(Object.hasOwn(TOOL_GRANTS, tool.name), tool.name).toBe(true);
     }
     expect(autonomyDecision("unknown", {}, full)).toBe("pending");
+    expect(autonomyDecision("run_research", {}, full)).toBe("pending");
+    for (const source of ["assistant", "operator", "mcp", "agent"] as const) {
+      expect(shouldCreatePending({ name: "run_research", args: {}, risk: "confirm", source, autoConfirm: true, alwaysConfirm: false, autonomy: full })).toBe(true);
+    }
     expect(autonomyDecision("computer_act", {}, full)).toBe("pending");
     expect(autonomyDecision("publish_project", {}, supervised)).toBe("pending");
     expect(autonomyDecision("publish_project", { body: { visibility: "private" } }, supervised)).toBe("run");

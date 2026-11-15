@@ -42,6 +42,21 @@ export function OriginalityCard({ projectId }: { projectId: string }) {
         {data.scores?.script && <p>Kịch bản giống nhất: <a href={`/projects/${data.scores.script.projectId}/script`}>{data.scores.script.title}</a> ({percent(data.scores.script.similarity)}).</p>}
         <p>Ảnh tái sử dụng: {data.scores?.reusedImages ?? 0} · Đã so {data.scores?.comparedProjects ?? 0} video cùng hồ sơ.</p>
         {data.scores?.title && <p>Tiêu đề giống nhất: <a href={`/projects/${data.scores.title.projectId}/metadata`}>{data.scores.title.title}</a> ({percent(data.scores.title.similarity)}).</p>}
+        {(data.scores?.visualSameness ?? data.visualSameness) && (() => {
+          const vs = (data.scores?.visualSameness ?? data.visualSameness)!;
+          return (
+            <p>
+              Độ giống video trước: <strong>{vs.channelScore !== null ? percent(vs.channelScore) : "—"}</strong>
+              {vs.closestVideo && (
+                <> · Gần nhất: <a href={`/projects/${vs.closestVideo.projectId}/render`}>{vs.closestVideo.title}</a> ({percent(vs.closestVideo.similarity)})</>
+              )}
+              {vs.drivingPart && (
+                <> · {vs.drivingPart}</>
+              )}
+              . <span className="field-hint">Gợi ý: Đổi biến thể hoặc pack trong {data.profileId ? <a href={`/profiles/${data.profileId}/style`}>tab Phong cách</a> : "tab Phong cách"}.</span>
+            </p>
+          );
+        })()}
         <details><summary>Nguồn nghiên cứu ({manifest.script.sources.length})</summary><ul>{manifest.script.sources.map((s) => <li key={s.url}><a href={s.url} target="_blank" rel="noreferrer">{s.title}</a></li>)}</ul></details>
         <details><summary>Asset &amp; giấy phép ({manifest.assets.length})</summary><ul>{manifest.assets.map((a, i) => <li key={`${a.assetId}:${i}`}>
           {kindLabel[a.kind]} · {a.screenSeconds.toFixed(1)} giây · {a.license?.name ?? (a.kind === "own_template" ? "App tự tạo" : "Chưa rõ giấy phép")} · {a.licenseVerified ? "Có bằng chứng" : "Chưa xác minh"}

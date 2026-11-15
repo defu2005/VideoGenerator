@@ -105,4 +105,6 @@ export type BriefSettings = Pick<ProjectSettings,
   | "edit"
   | "motionGraphics"
   | "format"
+  | "stageExecution"
+  | "agentWaitMinutes"
 >;

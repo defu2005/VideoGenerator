@@ -170,6 +170,8 @@ export function recommendBrief(input: RecommendBriefInput): RecommendBriefResult
 
   values.title = title;
   values.settings = {
+    ...(provided.stageExecution ? { stageExecution: provided.stageExecution } : {}),
+    ...(provided.agentWaitMinutes === undefined ? {} : { agentWaitMinutes: provided.agentWaitMinutes }),
     budget: {
       mode: budgetMode,
       ...(provided.budget?.features ? { features: provided.budget.features } : {}),

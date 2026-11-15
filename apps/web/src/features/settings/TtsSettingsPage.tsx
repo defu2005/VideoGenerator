@@ -135,6 +135,18 @@ export function TtsSettingsPage() {
                     </button>
                   </label>
                 )}
+                {provider.id === "edge-tts" && (
+                  <div className="form-field" style={{ marginTop: 8 }}>
+                    <span>Kiểm tra phiên bản</span>
+                    <p style={{ margin: "4px 0" }}>Đường dẫn: <code>{provider.binaryPath || "edge-tts"}</code></p>
+                    <p style={{ margin: "4px 0" }}>
+                      Phiên bản: <strong>{provider.version || "không rõ"}</strong> · Trạng thái:{" "}
+                      <span style={{ color: provider.versionStatus?.includes("cũ") ? "var(--color-danger-600, #dc2626)" : "inherit" }}>
+                        {provider.versionStatus || "OK"}
+                      </span>
+                    </p>
+                  </div>
+                )}
                 {provider.id === "piper" && (
                   <>
                     <label className="form-field"><span>Đường dẫn Piper</span><input name="piperBinary" aria-label="Đường dẫn Piper" defaultValue={provider.binaryPath ?? ""} /></label>

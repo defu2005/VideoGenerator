@@ -21,6 +21,10 @@ const profile = (arg = "profileId"): Spec => ({ kind: "profile_automation", arg 
  * `supervision.test.ts` fails when a mutating tool is missing, so a new tool must pick one.
  */
 export const RESOURCE_MAP: Record<string, Spec> = {
+  // Stage writes carry TASK-118 job fences, not pipeline-control profile/project leases.
+  // A channel manager must not block a scout already working on an assigned job.
+  stage_claim_next: "global", stage_heartbeat: "global", stage_complete: "global", stage_release: "global",
+  visual_submit_candidates: "global", visual_record_verdict: "global", visual_select: "global",
   update_stage_timeouts: project(), run_pipeline: project(), approve_gate: project(), repair_script: project(),
   repair_scene: project(), repair_render_stage: project(), publish_project: project(), make_shorts: project(),
   make_translation: project(), research_scene_visuals: project(), crop_scene_images: project(), dedupe_scene_visuals: project(),
@@ -43,6 +47,7 @@ export const RESOURCE_MAP: Record<string, Spec> = {
   hermes_duty_heartbeat: "global", operator_pause: "global", operator_resume: "global", operator_new_session: "global",
   operator_enqueue: "global", operator_order_upsert: "global", operator_order_disable: "global", operator_override: "global",
   escalation_claim: "global", escalation_resolve: "global", escalation_forward_to_user: "global", notify_user: "global",
+  record_lesson: "global", retire_lesson: "global", run_research: "global",
 };
 
 /** The object a tool call changes, or null when it is global or not a known writer. */
@@ -154,6 +159,20 @@ export function releaseLeasesOfRun(sqlite: Database.Database, instance: string, 
  * Returns the holder that was displaced, if any.
  */
 export function userBreakLease(sqlite: Database.Database, ref: ResourceRef, now = new Date()): string | null {
+  if (ref.kind === "project") {
+    // A user's project edit invalidates the existing TASK-118 job fence too, even if
+    // no pipeline-control lease is held. It never grants a second agent lease.
+    sqlite.transaction(() => {
+      const rows = sqlite.prepare("SELECT id,stage FROM jobs WHERE project_id=? AND executor='agent' AND status IN ('QUEUED','RUNNING')").all(ref.id) as Array<{ id: string; stage: string }>;
+      for (const row of rows) {
+        sqlite.prepare("UPDATE jobs SET executor='app',status='QUEUED',node_id=NULL,agent_instance=NULL,lease_id=NULL,lease_until=NULL,heartbeat_at=NULL,message=? WHERE id=?")
+          .run("Người dùng vừa sửa dự án; đã thu hồi lease agent.", row.id);
+        sqlite.prepare("UPDATE project_stages SET state='QUEUED',message=?,updated_at=? WHERE project_id=? AND stage=? AND job_id=?")
+          .run("Người dùng đã lấy lại stage.", now.toISOString(), ref.id, row.stage, row.id);
+        publishAgentEvent({ type: "lease.preempted", projectId: ref.id, stage: row.stage, summary: "Người dùng đã thu hồi lease stage của agent." });
+      }
+    }).immediate();
+  }
   const live = getLease(sqlite, ref, now);
   if (!live || live.holderKind === "user") return null;
   const result = acquireLease(sqlite, ref, { kind: "user", instance: "user", rank: RANK.user }, now);

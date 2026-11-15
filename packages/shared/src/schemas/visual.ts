@@ -21,7 +21,7 @@ export const LicenseMetadataSchema = z.object({
 }).strict();
 export type LicenseMetadata = z.infer<typeof LicenseMetadataSchema>;
 
-export const VisualProviderSchema = z.enum([
+export const VisualProviderSchema = z.union([z.enum([
   "wikimedia",
   "openverse",
   "pexels",
@@ -37,7 +37,7 @@ export const VisualProviderSchema = z.enum([
   "custom",
   "brave",
   "web-grounding",
-]);
+]), z.templateLiteral(["agent:", z.string()])]);
 export type VisualProvider = z.infer<typeof VisualProviderSchema>;
 
 /** Stock / museum image sources controllable from Settings → Nguồn ảnh (excludes mock/custom/web). */

@@ -25,13 +25,13 @@ function currentMonthRange(): { from: string; to: string } {
 }
 
 function UsageTotalsCards({ totals, rate }: {
-  totals: { llmCalls: number; inputTokens: number; outputTokens: number; cachedCalls: number; fallbackCalls: number; premiumRequests: number; tokensUnknown: boolean; costUsd: number };
+  totals: { llmCalls: number; inputTokens: number; outputTokens: number; cachedCalls: number; fallbackCalls: number; premiumRequests: number; tokensUnknown: boolean; costUsd: number; costUnknown?: boolean; callsUnknown?: boolean };
   rate: number;
 }) {
   const cards = [
     ["Token vào", formatTokens(totals.inputTokens, totals.tokensUnknown)],
     ["Token ra", formatTokens(totals.outputTokens, totals.tokensUnknown)],
-    ["Lượt gọi", new Intl.NumberFormat("vi-VN").format(totals.llmCalls)],
+    ["Lượt gọi", `${new Intl.NumberFormat("vi-VN").format(totals.llmCalls)}${totals.callsUnknown ? " + chưa rõ" : ""}`],
     ["Lượt yêu cầu premium", new Intl.NumberFormat("vi-VN").format(totals.premiumRequests)],
     ["Dùng cache", new Intl.NumberFormat("vi-VN").format(totals.cachedCalls)],
     ["Dự phòng", new Intl.NumberFormat("vi-VN").format(totals.fallbackCalls)],
@@ -39,7 +39,7 @@ function UsageTotalsCards({ totals, rate }: {
   return (
     <section className="usage-stat-grid" aria-label="Tổng mức dùng">
       {cards.map(([label, value]) => <KpiCard key={label} label={label} value={value} />)}
-      <KpiCard label="Chi phí ước tính" value={formatVnd(totals.costUsd, rate)} hint={formatUsd(totals.costUsd)} />
+      <KpiCard label="Chi phí ước tính" value={formatVnd(totals.costUsd, rate)} hint={totals.costUnknown ? `${formatUsd(totals.costUsd)} · còn chi phí agent chưa báo` : formatUsd(totals.costUsd)} />
     </section>
   );
 }
@@ -80,10 +80,10 @@ export function UsagePage() {
               const isSubscription = group.costUsd === 0 && SUBSCRIPTION_PROVIDERS.has(provider);
               return <tr key={group.key}>
                 <th scope="row">{group.label}</th>
-                <td>{group.llmCalls}</td>
+                <td>{group.llmCalls}{group.callsUnknown ? " + chưa rõ" : ""}</td>
                 <td>{formatTokens(group.inputTokens, group.tokensUnknown)}</td>
                 <td>{formatTokens(group.outputTokens, group.tokensUnknown)}</td>
-                <td>{isSubscription ? "0 ₫ (gói subscription)" : `${formatVnd(group.costUsd, data.usdVndRate)} · ${formatUsd(group.costUsd)}`}</td>
+                <td>{isSubscription ? "0 ₫ (gói subscription)" : `${formatVnd(group.costUsd, data.usdVndRate)} · ${formatUsd(group.costUsd)}${group.costUnknown ? " + phần chưa rõ" : ""}`}</td>
               </tr>;
             })}</tbody>
           </table></div>

@@ -23,7 +23,7 @@ function findWorkspaceRoot(startDirectory: string): string | undefined {
 const workspaceRoot = findWorkspaceRoot(process.cwd()) ?? process.cwd();
 loadDotenv({ path: join(workspaceRoot, ".env") });
 
-function resolveEdgeTtsPath(env: NodeJS.ProcessEnv = process.env): string {
+export function resolveEdgeTtsPath(env: NodeJS.ProcessEnv = process.env): string {
   const direct = env.EDGE_TTS_PATH || env.EDGE_TTS_BIN || env.EDGE_TTS_EXECUTABLE;
   if (direct) return direct;
   const candidates: string[] = [];
@@ -49,6 +49,7 @@ function resolveEdgeTtsPath(env: NodeJS.ProcessEnv = process.env): string {
 const ConfigSchema = z.object({
   PORT: z.coerce.number().int().min(1).max(65535).default(3001),
   HOST: z.string().min(1).default("127.0.0.1"),
+  VG_MCP_HEALTH_URL: z.string().url().optional(),
   DATA_DIR: z.string().min(1).default("./data"),
   VG_ENVIRONMENT: z.string().trim().min(1).max(64).default("default"),
   DATABASE_PATH: z.string().min(1).optional(),
@@ -203,6 +204,7 @@ const ConfigSchema = z.object({
 export type AppConfig = {
   PORT: number;
   HOST: string;
+  VG_MCP_HEALTH_URL?: string;
   DATA_DIR: string;
   VG_ENVIRONMENT: string;
   DATABASE_PATH: string;

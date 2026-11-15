@@ -45,6 +45,9 @@ describe("TtsSettingsPage", () => {
             wordTimings: true,
             pricePerMillion: 0,
             languages: ["vi", "en"],
+            binaryPath: "edge-tts",
+            version: "7.3.1",
+            versionStatus: "OK",
             apiKey: SECRET,
           },
           {
@@ -75,5 +78,7 @@ describe("TtsSettingsPage", () => {
     fireEvent.change(screen.getByLabelText("Lọc giới tính giọng"), { target: { value: "male" } });
     expect(screen.queryByRole("button", { name: "Nghe thử vi-VN-HoaiMyNeural" })).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Nghe thử vi-VN-NamMinhNeural" })).toBeInTheDocument();
+    expect(screen.getByText("7.3.1")).toBeInTheDocument();
+    expect(screen.getByText("OK")).toBeInTheDocument();
   });
 });

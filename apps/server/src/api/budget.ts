@@ -1,4 +1,4 @@
-import { ApiErrorSchema, BudgetEstimateSchema, estimateBudget, LLM_TASKS, type LlmTaskId } from "@vg/shared";
+import { ApiErrorSchema, BudgetEstimateSchema, estimateBudget, historyBucket, LLM_TASKS, timeoutBriefFromSettings, type LlmTaskId } from "@vg/shared";
 import { z } from "zod";
 import type { FastifyInstance } from "fastify";
 import type { AppConfig } from "../lib/config.js";
@@ -8,6 +8,7 @@ import { requireProject } from "../services/projectService.js";
 import type { LlmProviderRegistry } from "../providers/llm/registry.js";
 import { getAppLlmSettings } from "../providers/llm/settings.js";
 import { LlmError } from "../providers/llm/types.js";
+import { estimateAllStages } from "../pipeline/stageHistory.js";
 
 const ParamsSchema = z.object({ id: z.string().uuid() }).strict();
 
@@ -36,6 +37,9 @@ export function registerBudgetRoutes(
         if (!(error instanceof LlmError) || error.code !== "LLM_NOT_CONFIGURED") throw error;
       }
     }
-    return estimateBudget(project, routes, stageStates);
+    const brief = timeoutBriefFromSettings(project.settings, project.topic);
+    const estimates = estimateAllStages(repository.sqlite, brief);
+    const bucket = historyBucket(estimates);
+    return estimateBudget(project, routes, stageStates, bucket);
   });
 }

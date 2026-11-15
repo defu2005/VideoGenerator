@@ -59,6 +59,7 @@ export function loadRepoSkills(input: {
     }
     const risk = parsed.risk === "read" || parsed.risk === "safe" || parsed.risk === "confirm" ? parsed.risk : "confirm";
     const skill: RepoSkill = {
+      ...(parsed.research ? { research: parsed.research } : {}),
       source: "repo",
       path,
       markdown,

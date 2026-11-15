@@ -750,6 +750,92 @@ flowchart TD
 - Gọi API `DELETE /api/projects/:id/scenes/:sceneId` để xóa Scene 1 (`6713e315-4836-4fba-8af4-34cd5908fbdc`) bị lặp.
 - Tự động chạy lại Voice/Timeline/Render để video mở đầu liền mạch, không còn lặp thoại.
 
+### Trạng thái
+- **Đã giải quyết trong TASK-130:** Triển khai hàm `dedupeSeams(script, language)` trong `@vg/shared` (chuẩn hóa NFC, token Jaccard >= 0.9, bảo vệ section không bị rỗng) và gọi trực tiếp trong `planScenes` cùng SCRIPT executor (ghi log từng câu được loại bỏ); bổ sung quy tắc trong prompt không lặp lại hook/outro; tích hợp kiểm tra pre-render cảnh báo nếu hai cảnh liền nhau trùng câu thoại.
+
+---
+
+## 18. [PROPOSAL-STORAGE-004] Kiến trúc Lưu trữ Phân tán Đa Nền tảng (S3/Cloudflare R2/Google Drive/Local Fallback) & Chu kỳ Quản lý Rác Artifacts Bền vững
+
+### 1. Bối cảnh & Yêu cầu Nghiệp vụ
+- **Vấn đề:** Khi hệ thống mở rộng nhiều máy worker render liên tục 24/7, việc lưu trữ 100% dữ liệu artifacts (ảnh gốc, audio, video render, frame tạm) tập trung tại ổ đĩa máy chủ chính (Server/Control Plane) dễ gây nghẽn băng thông mạng (network bottleneck) và cạn kiệt dung lượng đĩa máy chủ (disk exhaustion).
+- **Yêu cầu từ người dùng:**
+  1. Người dùng có thể cấu hình linh hoạt các nền tảng lưu trữ ngoại vi (Cloudflare R2, AWS S3/MinIO, Google Drive...).
+  2. Máy chủ tự động cấp quyền/đường dẫn nền tảng tương ứng để máy worker truyền và nhận nguyên liệu trực tiếp với nền tảng lưu trữ, không chuyển tiếp qua máy chủ.
+  3. **Cơ chế dự phòng (Failover):** Nếu nền tảng lưu trữ ngoại vi gặp lỗi (hết hạn ngạch, lỗi mạng, token hết hạn, sự cố dịch vụ), hệ thống tự động fallback tiếp tục lưu trữ trực tiếp trên ổ đĩa máy chủ để chuỗi sản xuất không bao giờ bị đứt đoạn.
+  4. **Nghiên cứu kỹ luồng dọn dẹp rác (Garbage Collection / Pruning):** Tuyệt đối không xóa thô bạo; phải phân tích toàn diện các ca tái sử dụng (re-use, re-render, undo, reference sharing) để tránh tình trạng xóa file xong lại phát sinh nhu cầu dùng lại.
+
+---
+
+### 2. Thiết kế Kiến trúc Lưu trữ Phân tán Đa Nền tảng (Storage Providers)
+
+#### A. Cấu hình & Quản lý Nhà cung cấp (Storage Provider Adapter Interface)
+- Định nghĩa chuẩn `StorageProvider` trong `packages/shared` hoặc `apps/server/src/storage/`:
+  - `name`: `local` | `s3_r2` | `google_drive`
+  - `getDownloadUrl(sha256, filename, ttlSec)`: Trả về Direct/Pre-signed URL để Worker tải về.
+  - `getUploadTarget(sha256, filename, ttlSec)`: Trả về Pre-signed PUT/POST URL hoặc thông tin upload trực tiếp.
+  - `checkHealth()`: Kiểm tra tính sẵn sàng (quota, write permission, latency).
+- **Cấu hình trên giao diện Web (Cài đặt → Lưu trữ):**
+  - **Cloudflare R2 / S3:** Account ID, Access Key ID, Secret Access Key, Bucket name, Endpoint URL, Public/CDN domain (R2 được ưu tiên cao nhất vì Zero Egress Fee - miễn phí cước băng thông tải ra).
+  - **Google Drive:** OAuth refresh token hoặc Service Account JSON, Folder ID chỉ định.
+  - **Local Server:** Cấu hình thư mục lưu trữ cục bộ (mặc định luôn sẵn sàng làm chốt chặn cuối cùng).
+
+#### B. Cơ chế Phân bổ & Giao tiếp Worker (Direct Worker Transfer)
+1. **Khi Server giao việc (Lease response):**
+   - Thay vì chỉ gửi đường dẫn nội bộ `/api/nodes/agent/artifacts/:sha256`, Server gửi kèm mảng URLs nguồn:
+     `artifactUrls: { [sha256]: { preferredUrl: string, fallbackUrl: string } }`
+   - `preferredUrl`: Link Pre-signed tải trực tiếp từ Cloudflare R2 / S3 / Google Drive.
+   - `fallbackUrl`: Link tải trực tiếp từ máy chủ chính.
+2. **Khi Worker nộp kết quả (Output Upload):**
+   - Worker nhận thông tin upload target trước khi hoàn tất việc.
+   - Worker đẩy file video/audio thẳng lên Cloudflare R2 / S3. Sau khi upload thành công, worker chỉ gửi mã băm SHA-256, kích thước và định dạng về Server qua API `complete`.
+
+#### C. Cơ chế Tự động Chuyển đổi Dự phòng (Smart Fallback Policy)
+- Nếu Worker gặp lỗi khi upload lên Cloudflare R2 / Google Drive (HTTP 403, 429, 5xx, timeout):
+  - Worker tự động ghi nhận cảnh báo `STORAGE_PROVIDER_FAILED`, chuyển hướng upload trực tiếp về API Server `/api/nodes/agent/jobs/:id/outputs/*` như cơ chế hiện tại.
+  - Server ghi nhận sự cố vào bảng `storage_provider_health` và kích hoạt anomaly giám sát `storage_fallback_active` để thông báo cho người dùng trên Bảng điều khiển.
+
+---
+
+### 3. Nghiên cứu Toàn diện Luồng Dọn dẹp Tài nguyên (Safe Lifecycle & Pruning)
+
+Để tránh tuyệt đối nguy cơ xóa nhầm tệp mà sau đó lại cần dùng lại, quy trình dọn dẹp phải dựa trên mô hình **Content-Addressable Storage (CAS) + Bảng đếm tham chiếu (Reference Counting) + Vòng đời dự án (Project Lifecycle)**:
+
+#### A. Phân loại Tài nguyên theo Mức độ Tái sử dụng
+1. **Nhóm Bất biến & Tái sử dụng Cao (Global Immutable Assets - KHÔNG ĐƯỢC XÓA TỰ ĐỘNG):**
+   - Nhạc nền (BGM), âm thanh hiệu ứng (SFX) trong thư mục mẫu.
+   - Logo thương hiệu, hình ảnh phong cách (Style Pack templates), font chữ, preset đồ họa.
+   - Các tệp này được định danh duy nhất bằng SHA-256 và dùng chung cho toàn bộ workspace.
+2. **Nhóm Tái sử dụng Nội bộ Kênh / Dự án (Channel/Project Shared Assets):**
+   - Ảnh nhân vật, bối cảnh đã qua kiểm duyệt Vision (đặc biệt các ảnh tìm từ Brave/Web khó tìm lại).
+   - Bộ nhớ cache của Worker (`data/cache/artifacts/`): Worker tự quản lý theo giải thuật **LRU (Least Recently Used)**; tệp nào lâu nhất không dùng mới bị xóa khỏi Worker, nhưng bản gốc trên Storage Provider vẫn giữ nguyên.
+3. **Nhóm Nháp Trung gian (Ephemeral / Intermediate Artifacts - Có thể dọn dẹp có điều kiện):**
+   - Frame ảnh canvas trung gian sau khi ghép video xong.
+   - Ảnh ứng viên bị Vision từ chối (REJECTED/FAILED) và không được chọn vào timeline.
+   - File WAV thô trước khi nén sang MP3/AAC.
+
+#### B. Các Kịch bản (Edge Cases) Cần Bảo vệ Tuyệt đối Trước Khi Dọn Dẹp
+- **Case 1: Người dùng Hoàn tác / Quay lại bản cũ (Undo & Revisions):**
+  - Khi chỉnh sửa kịch bản hoặc tinh chỉnh timeline (TASK-043, TASK-111), các audio clip và video trước đó không được xóa ngay. Chúng phải được bảo lưu theo cấu hình `keepVersions` (mặc định giữ ít nhất 2-3 phiên bản gần nhất).
+- **Case 2: Chạy lại bước sau khi duyệt (Re-run Stage):**
+  - Khi người dùng bấm chạy lại một stage (ví dụ `VISUAL_REVIEW` hoặc `RENDER`), các assets đã chọn ở lần chạy trước phải được giữ lại trong danh sách ứng viên cho đến khi người dùng phê duyệt phương án mới.
+- **Case 3: Kiểm duyệt lại hoặc tái xuất bản (Re-publish / Derivative Shorts):**
+  - Sau khi video dài hoàn tất, bước tạo Shorts/Clips (TASK-037, TASK-103) cần trích xuất trực tiếp từ video gốc hoặc timeline cũ. Do đó video render gốc phải được bảo vệ cho tới khi mọi phái sinh hoàn tất.
+
+#### C. Quy tắc Dọn dẹp Bền vững Đề xuất cho Hệ thống
+1. **Kiểm tra Tham chiếu Không còn Thực thể Nào Trỏ Tới (Zero Reference Check):**
+   - Chỉ xem xét dọn dẹp một artifact khi:
+     `SELECT COUNT(*) FROM project_scenes WHERE asset_hash = ?` = 0
+     VÀ không nằm trong `style_packs`, không nằm trong `source_manifests` của báo cáo bản quyền/originality (TASK-084).
+2. **Cơ chế Xóa mềm và Thời gian Chờ (Grace Period / Soft Delete):**
+   - Khi một artifact không còn được tham chiếu, gắn cờ `orphaned_at = NOW()`.
+   - Giữ trạng thái chờ tối thiểu **14 đến 30 ngày** (Grace Period) trên Storage trước khi xóa cứng. Trong thời gian này, nếu có thao tác phục hồi (Undo / Clone project), trạng thái orphan lập tức bị hủy bỏ.
+3. **Chính sách Lưu trữ Sau Xuất bản (Post-Publish Archival):**
+   - Sau khi video đã đăng tải thành công lên YouTube/TikTok và trải qua 7 ngày ổn định:
+     - Tự động xóa các frame ảnh tạm thời và audio trung gian.
+     - Giữ nguyên video render hoàn chỉnh, kịch bản, thumbnail và audio lồng tiếng chính thức.
+
+
 
 
 

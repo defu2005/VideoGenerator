@@ -2,6 +2,10 @@ import { z } from "zod";
 
 export const AGENT_EVENT_TYPES = [
   "stage_started",
+  "stage_handoff",
+  "stage_claimed",
+  "stage_completed_by_agent",
+  "stage_released",
   "stage_finished",
   "stage_failed",
   "waiting_approval",

@@ -56,6 +56,8 @@ function addTotals(target: UsageTotals, value: UsageTotals): void {
   target.premiumRequests += value.premiumRequests;
   target.tokensUnknown ||= value.tokensUnknown;
   target.costUsd += value.costUsd;
+  if (value.costUnknown) target.costUnknown = true;
+  if (value.callsUnknown) target.callsUnknown = true;
 }
 
 function createBucket(key: string, label = key): UsageBucket {
@@ -66,6 +68,7 @@ function callTotals(call: UsageCallSummary): UsageTotals {
   const count = call.callCount;
   return {
     llmCalls: call.cached ? 0 : count,
+    ...(call.provider.startsWith("agent:") && count === 0 ? { callsUnknown: true } : {}),
     inputTokens: call.cached ? 0 : call.inputTokens,
     outputTokens: call.cached ? 0 : call.outputTokens,
     cachedCalls: call.cached ? count : 0,
@@ -74,6 +77,7 @@ function callTotals(call: UsageCallSummary): UsageTotals {
     premiumRequests: call.premiumRequests,
     tokensUnknown: call.tokensUnknown,
     costUsd: call.costUsd,
+    ...(call.costUnknown ? { costUnknown: true } : {}),
   };
 }
 
@@ -93,11 +97,12 @@ function usageForJob(job: UsageJobRow): ProjectUsageRun | undefined {
   const status = parsedStatus.data;
   const stage = parsedStage.data;
   const billableCallCount = usage.calls?.reduce(
-    (sum, call) => sum + (!call.cached && !SUBSCRIPTION_PROVIDERS.has(call.provider) ? 1 : 0),
+    (sum, call) => sum + (!call.cached && !call.provider.startsWith("agent:") && !SUBSCRIPTION_PROVIDERS.has(call.provider) ? 1 : 0),
     0,
   ) ?? 0;
   const hasCallDetails = (usage.calls?.length ?? 0) > 0;
-  const ownCosts = hasCallDetails && usage.calls!.every((call) => typeof call.costUsd === "number");
+  const ownCosts = hasCallDetails && usage.calls!.every((call) => call.provider.startsWith("agent:") || typeof call.costUsd === "number");
+  const agentKnownCost = usage.calls?.filter((call) => call.provider.startsWith("agent:")).reduce((n, call) => n + (call.costUsd ?? 0), 0) ?? 0;
   const calls: UsageCallSummary[] = hasCallDetails
     ? usage.calls!.map((call) => ({
       task: call.task,
@@ -106,7 +111,7 @@ function usageForJob(job: UsageJobRow): ProjectUsageRun | undefined {
       inputTokens: call.inputTokens,
       outputTokens: call.outputTokens,
       premiumRequests: call.premiumRequests ?? 0,
-      callCount: 1,
+      callCount: call.callCount ?? 1,
       cached: call.cached,
       fallback: call.fallback,
       ...(call.fallbackReason ? { fallbackReason: call.fallbackReason } : {}),
@@ -114,11 +119,12 @@ function usageForJob(job: UsageJobRow): ProjectUsageRun | undefined {
       // The job-level flag only says some call lacked counts: blame calls that reported none.
       tokensUnknown: (usage.tokensUnknown ?? false) && !call.cached
         && call.inputTokens === 0 && call.outputTokens === 0,
-      costUsd: ownCosts
+      ...(call.costUnknown || (call.provider.startsWith("agent:") && call.costUsd === undefined) ? { costUnknown: true } : {}),
+      costUsd: call.provider.startsWith("agent:") ? call.costUsd ?? 0 : ownCosts
         ? (call.costUsd ?? 0)
         : call.cached || SUBSCRIPTION_PROVIDERS.has(call.provider) || billableCallCount === 0
           ? 0
-          : usage.costUsd / billableCallCount,
+          : Math.max(0, usage.costUsd - agentKnownCost) / billableCallCount,
       ...(typeof call.characters === "number" ? { characters: call.characters } : {}),
     }))
     : usage.llmCalls > 0 || usage.inputTokens > 0 || usage.outputTokens > 0 || usage.costUsd > 0 || usage.tokensUnknown

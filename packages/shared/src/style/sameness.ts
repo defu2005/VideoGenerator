@@ -192,6 +192,8 @@ export const VisualSamenessSettingsSchema = z.object({
   maxCrossChannelSameness: z.number().min(0).max(1).default(0.7),
   /** Earlier videos compared per channel. */
   window: z.number().int().min(1).max(50).default(10),
+  /** At warn, issues show in report and review gate; at block, they move the project to manual review. */
+  level: z.enum(["warn", "block"]).default("warn"),
 }).strict();
 export type VisualSamenessSettings = z.infer<typeof VisualSamenessSettingsSchema>;
 export const DEFAULT_VISUAL_SAMENESS_SETTINGS = VisualSamenessSettingsSchema.parse({});
@@ -216,9 +218,10 @@ function median(values: number[]): number {
  * Compares a video with earlier ones. `earlier` may hold videos of any channel of the same
  * user, newest first; the video itself is skipped.
  */
-export function compareVisualSameness(current: VideoLook, earlier: VideoLook[], settings: VisualSamenessSettings = DEFAULT_VISUAL_SAMENESS_SETTINGS): VisualSamenessScores {
+export function compareVisualSameness(current: VideoLook, earlier: VideoLook[], settings: Partial<VisualSamenessSettings> = DEFAULT_VISUAL_SAMENESS_SETTINGS): VisualSamenessScores {
+  const s = { ...DEFAULT_VISUAL_SAMENESS_SETTINGS, ...settings };
   const others = earlier.filter((look) => look.videoId !== current.videoId);
-  const own = others.filter((look) => look.channelId === current.channelId).slice(0, settings.window);
+  const own = others.filter((look) => look.channelId === current.channelId).slice(0, s.window);
   let channel: VisualSamenessScores["channel"] = null;
   const ownScores: number[] = [];
   for (const look of own) {
@@ -230,7 +233,7 @@ export function compareVisualSameness(current: VideoLook, earlier: VideoLook[], 
   for (const look of others) {
     if (look.channelId === current.channelId) continue;
     const list = byChannel.get(look.channelId) ?? [];
-    if (list.length < settings.window) list.push(look);
+    if (list.length < s.window) list.push(look);
     byChannel.set(look.channelId, list);
   }
   let crossChannel: VisualSamenessScores["crossChannel"] = null;
@@ -249,19 +252,20 @@ export function compareVisualSameness(current: VideoLook, earlier: VideoLook[], 
 }
 
 /** Same shape as `OriginalityIssue` in originality/checks.ts, so the report can append these. */
-export function visualSamenessIssues(scores: VisualSamenessScores, settings: VisualSamenessSettings = DEFAULT_VISUAL_SAMENESS_SETTINGS): { ruleId: string; text: string }[] {
+export function visualSamenessIssues(scores: VisualSamenessScores, settings: Partial<VisualSamenessSettings> = DEFAULT_VISUAL_SAMENESS_SETTINGS): { ruleId: string; text: string }[] {
+  const s = { ...DEFAULT_VISUAL_SAMENESS_SETTINGS, ...settings };
   const issues: { ruleId: string; text: string }[] = [];
   const pct = (value: number) => `${(value * 100).toFixed(1)}%`;
-  if (scores.channel && scores.channel.similarity > settings.maxChannelSameness) {
+  if (scores.channel && scores.channel.similarity > s.maxChannelSameness) {
     issues.push({
       ruleId: "ORIG_VISUAL_SAME_CHANNEL",
-      text: `Hình ảnh giống video trước của kênh (${scores.channel.videoId}) ${pct(scores.channel.similarity)}, vượt ngưỡng nội bộ ${pct(settings.maxChannelSameness)}. Đổi biến thể hoặc bố cục của vài cảnh đồ hoạ.`,
+      text: `Hình ảnh giống video trước của kênh (${scores.channel.videoId}) ${pct(scores.channel.similarity)}, vượt ngưỡng nội bộ ${pct(s.maxChannelSameness)}. Đổi biến thể hoặc bố cục của vài cảnh đồ hoạ.`,
     });
   }
-  if (scores.crossChannel && scores.crossChannel.similarity > settings.maxCrossChannelSameness) {
+  if (scores.crossChannel && scores.crossChannel.similarity > s.maxCrossChannelSameness) {
     issues.push({
       ruleId: "ORIG_VISUAL_CROSS_CHANNEL",
-      text: `Giao diện giống kênh khác của bạn (${scores.crossChannel.channelId}) ${pct(scores.crossChannel.similarity)}, vượt ngưỡng nội bộ ${pct(settings.maxCrossChannelSameness)}. Hai kênh nên có style pack khác nhau.`,
+      text: `Giao diện giống kênh khác của bạn (${scores.crossChannel.channelId}) ${pct(scores.crossChannel.similarity)}, vượt ngưỡng nội bộ ${pct(s.maxCrossChannelSameness)}. Hai kênh nên có style pack khác nhau.`,
     });
   }
   return issues;

@@ -14,7 +14,7 @@ type InstanceRow = {
 /** Called on every authenticated agent call: remembers who is out there and when they last did something. */
 export function touchInstance(
   sqlite: Database.Database, agent: Pick<TrustedAgent, "instance" | "kind" | "environment">,
-  options: { tool?: boolean; version?: string | null; now?: Date } = {},
+  options: { tool?: boolean; version?: string | null; now?: Date; workspaceId?: string | null } = {},
 ): void {
   const now = (options.now ?? new Date()).toISOString();
   sqlite.prepare(
@@ -24,6 +24,10 @@ export function touchInstance(
        version = COALESCE(excluded.version, agent_instances.version), last_seen_at = excluded.last_seen_at,
        last_tool_at = COALESCE(excluded.last_tool_at, agent_instances.last_tool_at)`,
   ).run(agent.instance, agent.kind, agent.environment, options.version ?? null, now, options.tool ? now : null);
+  if (options.workspaceId) {
+    sqlite.prepare("INSERT INTO app_settings (key,value,updated_at) VALUES (?,?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value,updated_at=excluded.updated_at")
+      .run(`fleet.instanceWorkspace.${agent.instance}`, JSON.stringify(options.workspaceId), now);
+  }
 }
 
 export function currentDuty(sqlite: Database.Database, now = new Date()): { instance: string; expiresAt: string; lastSeenAt: string } | null {
