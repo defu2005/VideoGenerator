@@ -14,6 +14,16 @@ Không có nút cài đặt nào cho bước này. Máy cần FFmpeg đã đi k�
 
 Giới hạn: đây là công cụ local. Tắt terminal là ứng dụng dừng. Đừng chạy lệnh này trên máy người khác.
 
+## Bản vận hành và bản phát triển {#ban-van-hanh}
+
+Dùng để làm video thật trong khi code mới vẫn đang được phát triển.
+
+- **Bản vận hành (product):** dữ liệu thật của bạn. Mở `http://localhost:5100`. Chạy trong thư mục `videoGenerator-product` bằng `powershell -File deploy/product/start.ps1`, dừng bằng `deploy/product/stop.ps1`.
+- **Bản phát triển (dev):** `npm run dev` ở mục trên. Dùng dữ liệu thử riêng trong `data-dev`, không thấy dự án thật. Lần đầu tạo tài khoản bằng `npm run reset-password`.
+- Tính năng mới chỉ có ở bản vận hành sau khi đã được review và nâng cấp bằng `deploy/product/promote.ps1`. Lệnh này sao lưu dữ liệu trước khi nâng cấp.
+
+Giới hạn: không chạy hai bản trên cùng dữ liệu thật. Khi nối thêm tài khoản nền tảng ở bản vận hành, đường dẫn callback dùng cổng 3100. Chi tiết và cách quay lại bản trước: `docs/BRANCHES.md`.
+
 ## Docker {#docker}
 
 Dùng khi bạn muốn chạy app trên một máy Linux hoặc VPS, không mở terminal `npm run dev`.

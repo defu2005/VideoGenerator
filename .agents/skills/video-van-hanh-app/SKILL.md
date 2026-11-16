@@ -34,8 +34,12 @@ risk: safe
 
 ## Kết nối
 
-- MCP `video-agent` chạy qua stdio (`apps/mcp/dist`), gọi API tại `http://127.0.0.1:3001`. Web dev ở cổng 5173 (cổng 5180 cũng được cho phép).
-- API phải đang chạy (`npm run dev`). Máy khác hoặc agent chạy trên cloud không gọi được cổng `127.0.0.1` của máy này.
+- Có hai bản app (`docs/BRANCHES.md`):
+  - **Vận hành thật = bản product:** API `http://127.0.0.1:3100`, web `http://localhost:5100`, dữ liệu thật. Chạy bằng `powershell -File deploy/product/start.ps1` trong `C:\Users\defu\Documents\videoGenerator-product`.
+  - **Bản dev:** API `3001`, web `5173`/`5180`, dữ liệu thử `data-dev`. Chỉ dùng để thử code mới, không có dự án thật.
+- MCP `video-agent` chạy qua stdio (`apps/mcp/dist`). Mặc định gọi `3001` (dev). Muốn điều khiển bản product thì đặt `VG_API_URL=http://127.0.0.1:3100`. Trước khi làm việc thật, kiểm tra mình đang nối bản nào.
+- API phải đang chạy. Máy khác hoặc agent chạy trên cloud không gọi được cổng `127.0.0.1` của máy này.
+- Không sửa code hay file trong thư mục product. Không tự chạy `promote.ps1`: việc nâng cấp chỉ làm sau khi người dùng hoặc Claude đã review.
 - Khóa nội bộ do MCP client tự đọc từ `data/secrets/local-services.key`. Không dán khóa vào prompt, skill, ghi chú hay báo cáo.
 - Tool chưa hiện trong phiên: tải lại MCP, hoặc gọi cùng đường dẫn bằng `app_api` (`method` + `path` bắt đầu bằng `/api/`).
 - Bắt đầu mỗi phiên bằng `get_agent_context`, rồi `find_skills` với từ khóa của việc cần làm và `read_skill` để đọc skill tìm được.

@@ -18,3 +18,7 @@ provider-intelligence/monitoring/
 provider-intelligence/reports/
 .playwright-mcp/
 
+
+# Dev sandbox data and product instance state (docs/BRANCHES.md)
+data-dev/
+.product/

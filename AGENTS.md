@@ -11,3 +11,5 @@ Short version of the rules:
 - Tests never use the network or real LLM/TTS CLIs.
 - Never approve gates or render on project `56374fb2-54cf-48ff-9441-2e6c653295d4`.
 - To operate the running app (not to code), read `.agents/skills/video-van-hanh-app/SKILL.md` first.
+- Two branches (read `docs/BRANCHES.md`): `dev` is this checkout, where all coding happens, and its dev server uses the sandbox `data-dev/`. `product` is the worktree `../videoGenerator-product`, which runs the real app on `data/` (API 3100, web 5100). Never edit the product worktree. Code reaches it only through `deploy/product/promote.ps1` after review. Never point a dev server at the real `data/`.
+- Every feature, in either branch, needs docs before it is done or promoted (README rule 12). Users need the user guide section, the `featureMap` entry and a changelog line. Operating agents need the tool descriptions and a skill in `.agents/skills/`. Developers need the `ARCHITECTURE.md` changes. Never edit a migration that is already in the journal.
