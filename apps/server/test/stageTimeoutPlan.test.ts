@@ -1,7 +1,9 @@
 import Fastify from "fastify";
 import { afterEach, describe, expect, it } from "vitest";
+import { estimateBudget, historyBucket, stageTimeoutHash, timeoutBriefFromSettings } from "@vg/shared";
 import { JobWorker } from "../src/jobs/worker.js";
 import { ensureStageTimeoutPlan } from "../src/pipeline/stageTimeoutPlan.js";
+import { estimateAllStages } from "../src/pipeline/stageHistory.js";
 import { defaultLlmGatewaySettings } from "../src/providers/llm/gatewaySettings.js";
 import { MockLlmProvider } from "../src/providers/llm/mock.js";
 import type { LlmProviderRegistry } from "../src/providers/llm/registry.js";
@@ -129,5 +131,33 @@ describe("stage timeout plan", () => {
     const voice = harness.repository.getProject(harness.projectId)!.settings.stageTimeouts?.stages.VOICE;
     expect(voice).toMatchObject({ timeoutMs: 90_000, source: "user" });
     expect(llm.calls).toEqual(["StageTimeouts"]);
+  });
+
+  it("TASK-131: modes.ts and stageTimeoutPlan.ts produce the same hash for the same input", async () => {
+    const harness = makeHarness();
+    const llm = registry();
+    const project = harness.repository.getProject(harness.projectId)!;
+    await ensureStageTimeoutPlan({
+      project,
+      sqlite: harness.sqlite,
+      registry: llm.registry,
+      signal: new AbortController().signal,
+    });
+    const stored = harness.repository.getProject(harness.projectId)!;
+    const plan = stored.settings.stageTimeouts!;
+    expect(plan).toBeDefined();
+
+    const brief = timeoutBriefFromSettings(stored.settings, stored.topic);
+    const estimates = estimateAllStages(harness.sqlite, brief);
+    const serverHash = stageTimeoutHash(brief, estimates);
+    expect(plan.inputHash).toBe(serverHash);
+
+    // estimateBudget in modes.ts using the same brief and history bucket
+    const estimate = estimateBudget(stored, undefined, [], historyBucket(estimates));
+    const researchStage = estimate.perStage.find((s) => s.stage === "RESEARCH")!;
+    const timeoutTask = researchStage.tasks?.find((t) => t.task === "stageTimeouts");
+    if (timeoutTask) {
+      expect(timeoutTask.calls).toEqual({ min: 0, max: 0 });
+    }
   });
 });

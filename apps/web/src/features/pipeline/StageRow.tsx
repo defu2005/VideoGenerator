@@ -12,9 +12,11 @@ type Props = {
   onCancel?: () => void;
   /** Where the active job runs: a worker name, or null for the main machine. Undefined hides the line. */
   machine?: string | null;
+  /** Estimated time remaining or overdue text (TASK-131). */
+  eta?: string | null;
 };
 
-export function StageRow({ record, canRun, busy, onRun, onRetry, onApprove, onCancel, machine }: Props) {
+export function StageRow({ record, canRun, busy, onRun, onRetry, onApprove, onCancel, machine, eta }: Props) {
   const mayApprove = useCan("gate.approve");
   const mayRun = useCan("stage.run");
   const isGate = GATES.includes(record.stage);
@@ -33,6 +35,7 @@ export function StageRow({ record, canRun, busy, onRun, onRetry, onApprove, onCa
           <span style={{ width: `${record.progress}%` }} />
         </div>
       )}
+      {eta && <p className="stage-eta">{eta}</p>}
       {machine !== undefined && <p className="stage-machine">{machine ? `Máy: ${machine}` : "Máy chính"}</p>}
       {record.message && <p className="stage-message">{record.message}</p>}
       {record.error && <p className="stage-error" role="alert">{record.error.message}</p>}

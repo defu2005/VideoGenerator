@@ -77,7 +77,7 @@ export function ProjectUsagePanel({ projectId, project }: { projectId: string; p
       <section className="usage-stat-grid" aria-label="Tổng token của video">
         <article className="panel usage-stat"><span>Token vào</span><strong>{formatTokens(totals.inputTokens, totals.tokensUnknown)}</strong></article>
         <article className="panel usage-stat"><span>Token ra</span><strong>{formatTokens(totals.outputTokens, totals.tokensUnknown)}</strong></article>
-        <article className="panel usage-stat"><span>Lượt gọi LLM</span><strong>{totals.llmCalls.toLocaleString("vi-VN")}</strong></article>
+        <article className="panel usage-stat"><span>Lượt gọi LLM</span><strong>{totals.llmCalls.toLocaleString("vi-VN")}{totals.callsUnknown ? " + chưa rõ" : ""}</strong></article>
         <article className="panel usage-stat"><span>Lượt yêu cầu premium</span><strong>{totals.premiumRequests.toLocaleString("vi-VN")}</strong></article>
         <article className="panel usage-stat"><span>Lượt cache</span><strong>{totals.cachedCalls.toLocaleString("vi-VN")}</strong></article>
         <article className="panel usage-stat"><span>Lượt dự phòng</span><strong>{totals.fallbackCalls.toLocaleString("vi-VN")}</strong></article>
@@ -85,6 +85,7 @@ export function ProjectUsagePanel({ projectId, project }: { projectId: string; p
           <span>Chi phí ước tính</span>
           <strong>{allSubscription && totals.costUsd === 0 ? "0 ₫ (gói subscription)" : formatVnd(totals.costUsd, data.usdVndRate)}</strong>
           {!allSubscription && <small>{formatUsd(totals.costUsd)}</small>}
+          {totals.costUnknown && <small>Còn chi phí agent chưa được báo; số trên chỉ gồm phần đã biết.</small>}
         </article>
       </section>
       <p className={`usage-estimate${estimate.isError ? " is-error" : ""}`} role={estimate.isError ? "alert" : undefined}>{estimateText}</p>
@@ -126,7 +127,7 @@ export function ProjectUsagePanel({ projectId, project }: { projectId: string; p
                   <tbody>{stageRuns.map((run) => <tr key={run.jobId}>
                     <td>{run.status}</td><td>{run.attempt}</td><td>{run.scope ?? "—"}</td>
                     <td>{formatTime(run.startedAt)}{run.durationMs === null ? "" : ` · ${(run.durationMs / 1000).toFixed(1)} giây`}</td>
-                    <td>{run.calls.map((call, index) => <div key={`${call.task}-${index}`}>{call.task} · {call.provider}/{call.model}{typeof call.characters === "number" ? ` · ${call.characters} ký tự` : ""}{call.task === "tts" ? ` · ${formatUsd(call.costUsd)}` : ""}{call.cached ? " · cache" : ""}{call.fallback && call.fallbackReason === "quota" ? <span className="ai-chip quota-chip-out">dự phòng (hết quota)</span> : call.fallback ? " · dự phòng" : ""}{!call.ok ? " · lỗi" : ""}</div>)}</td>
+                    <td>{run.calls.map((call, index) => <div key={`${call.task}-${index}`}>{call.task} · {call.provider}/{call.model}{typeof call.characters === "number" ? ` · ${call.characters} ký tự` : ""}{call.costUnknown ? " · chưa rõ chi phí" : call.task === "tts" ? ` · ${formatUsd(call.costUsd)}` : ""}{call.cached ? " · cache" : ""}{call.fallback && call.fallbackReason === "quota" ? <span className="ai-chip quota-chip-out">dự phòng (hết quota)</span> : call.fallback ? " · dự phòng" : ""}{!call.ok ? " · lỗi" : ""}</div>)}</td>
                     <td>{formatTokens(run.totals.inputTokens + run.totals.outputTokens, run.totals.tokensUnknown)}</td>
                   </tr>)}</tbody>
                 </table></div>
@@ -140,9 +141,9 @@ export function ProjectUsagePanel({ projectId, project }: { projectId: string; p
         {data.byModel.length === 0 ? <p className="usage-empty">Chưa có mô hình được ghi nhận.</p> : <div className="usage-table-wrap"><table className="usage-table">
           <thead><tr><th>Nhà cung cấp / mô hình</th><th>Lượt gọi</th><th>Token vào</th><th>Token ra</th><th>Chi phí ước tính</th></tr></thead>
           <tbody>{data.byModel.map((model) => <tr key={model.key}>
-            <th scope="row">{model.label}</th><td>{model.llmCalls}</td>
+            <th scope="row">{model.label}</th><td>{model.llmCalls}{model.callsUnknown ? " + chưa rõ" : ""}</td>
             <td>{formatTokens(model.inputTokens, model.tokensUnknown)}</td><td>{formatTokens(model.outputTokens, model.tokensUnknown)}</td>
-            <td>{SUBSCRIPTION_PROVIDERS.has(model.key.split("/")[0]) ? "0 ₫ (gói subscription)" : `${formatVnd(model.costUsd, data.usdVndRate)} · ${formatUsd(model.costUsd)}`}</td>
+            <td>{SUBSCRIPTION_PROVIDERS.has(model.key.split("/")[0]) ? "0 ₫ (gói subscription)" : `${formatVnd(model.costUsd, data.usdVndRate)} · ${formatUsd(model.costUsd)}${model.costUnknown ? " + phần chưa rõ" : ""}`}</td>
           </tr>)}</tbody>
         </table></div>}
       </section>

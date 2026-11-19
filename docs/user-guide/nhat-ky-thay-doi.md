@@ -1,6 +1,51 @@
 # Nhật ký thay đổi {#nhat-ky}
 
+## TASK-128a
+
+- **Agent nhận bước tìm ảnh:** chọn app, agent ngoài, hoặc app trước rồi chuyển các cảnh còn mở cho agent. Cấu hình dự án ưu tiên hơn hồ sơ; có thể bỏ override để tiếp tục kế thừa. Thời gian chờ mặc định 30 phút.
+- **Nhận việc có lease:** khóa máy gắn danh tính cố định; một chủ cho mỗi job, heartbeat, kiểm tra lại lease khi ghi và kiểm tra thật trước khi hoàn tất. Người dùng sửa dự án hoặc bấm **Lấy lại cho app** sẽ ngắt lease cũ. Vòng sửa ảnh hết cách có thể chuyển cho agent trước khi hỏi hoặc gác dự án.
+- **Ảnh agent tìm và duyệt:** tải URL an toàn, lưu nguồn/hash, loại trùng, xem đúng tệp qua MCP và gắn kết quả vision với hash. Giữ nguyên các cổng bản quyền, nguồn, watermark và chất lượng; chỉ người dùng đổi chế độ bản quyền.
+- **Theo dõi:** hiển thị chủ việc, lý do, heartbeat, ai tìm/duyệt ảnh và model; cảnh báo nhận–trả quá ba lần. Chi phí agent chưa báo được ghi là chưa rõ, tách khỏi các lời gọi provider của app. Xem [Agent nhận stage](agent-nhan-stage.md).
+
+
+
 Mục mới ở trên. Mỗi task làm đổi việc bạn thấy hoặc việc bạn bấm sẽ thêm một mục.
+
+## TASK-122
+
+- **Hermes giám sát Operator: một chuỗi chỉ huy, không xung đột:**
+  - **Phân định vai trò:** Operator chạy ngầm trong tiến trình app để thực hiện tác vụ hàng ngày; Hermes chạy bên ngoài (WSL, container) đóng vai trò giám sát viên (Supervisor) trực nhật 24/7, theo dõi operator, xử lý việc chuyển giao (escalation), phát hiện bất thường và có thể tiếp quản tài nguyên khi cần. Chuỗi chỉ huy: Người dùng > Hermes trực nhật > Operator > Mã giám sát deterministic.
+  - **Khóa tài nguyên (Leases):** Mỗi tài nguyên (dự án, tự động hóa hồ sơ, lượt đăng...) tại một thời điểm chỉ có một agent giữ quyền thay đổi. Thứ tự ưu tiên cho phép cấp trên tiếp quản (preempt) cấp dưới: Người dùng (rank 40) > Hermes trực nhật (rank 30) > Hermes khác (rank 20) > Operator (rank 10). Thao tác của người dùng luôn giải phóng khóa ngay lập tức.
+  - **Trực nhật (Duty) & Chuyển giao việc (Escalation):** Chỉ một instance Hermes giữ quyền trực nhật (`hermes_duty_heartbeat`, TTL 3 phút). Các sự cố agent giải quyết được (cổng giữ, hết lượt sửa, job kẹt, nhà cung cấp lỗi, đăng bài thất bại, chỉ dẫn chưa rõ) tự động chuyển sang Hermes với hạn 30 phút thay vì làm phiền người dùng. Hết hạn hoặc mất trực sẽ tự chuyển tiếp tới người dùng ("Cần bạn"). Vòng lặp chuyển giao giới hạn tối đa 3 lần. Việc động chạm bí mật, tiền bạc, quyền hạn, xoá vĩnh viễn hoặc dự án bảo vệ luôn đi thẳng tới người dùng.
+  - **An toàn dự phòng (Fail-safe):** Hermes tạm dừng operator tối đa 360 phút (6 giờ); nếu Hermes mất trực quá 10 phút, lệnh tạm dừng tự động được huỷ để operator tiếp tục. Lệnh dừng của người dùng (`/stop`) không bao giờ bị Hermes mở lại.
+  - **Giao diện Web:** Tab "Hermes" mới trên trang Agent operator hiển thị thông tin trực nhật, danh sách instance, việc chuyển giao, khóa tài nguyên và nhật ký thao tác Hermes; cài đặt khóa cá nhân bổ sung chọn loại agent và bật quyền giám sát (`canSupervise`).
+  - **Kỹ năng giám sát (Skill pack):** Kỹ năng `vg-supervise` (chu kỳ kiểm tra, tự im lặng khi yên bình) và `vg-escalation` (xử lý từng việc chuyển giao) định hình hành vi cho Hermes qua cron: `hermes cron create "every 15m" "Run the vg-supervise skill" --skill vg-supervise --name vg-supervise`. Xem [Tự vận hành](tu-van-hanh.md#hermes-giam-sat).
+
+## TASK-131
+
+- **Hoàn thiện các kết nối giữa TASK-120 và TASK-125:**
+  - **Tải trước footage trước khi dựng (`media.prefetch`):** Khi kế hoạch compose đã sẵn sàng, hệ thống chủ động tạo việc phụ `MEDIA_FETCH` để tải trước các đoạn clip còn thiếu trong kho đệm (trên máy worker hoặc máy chủ) thay vì để bước dựng video phải tải từ đầu. Cài đặt `media.prefetch` (mặc định bật) cho phép tắt nếu cần. Xem [Máy worker](may-worker.md#kha-nang).
+  - **Báo cáo hoạt động thực tế (`reportActivity`):** Các tiến trình con ffmpeg (`childAlive`, `childNote`) và các cuộc gọi mô hình ngôn ngữ (`llmInFlight`, `quotaWait`) được báo cáo liên tục theo nhịp điều tiết 5 giây vào ngữ cảnh thực thi, giúp cơ chế phát hiện bước quá giờ nhận diện chính xác bước còn đang chạy hay đã bị treo thật sự.
+  - **Thời gian dự kiến còn lại (ETA):** Thẻ bước quá giờ và thanh tiến trình hiển thị ước tính \"dự kiến còn ~X phút\" khi bước đang chạy trong thời hạn dự kiến, và chuyển thành \"quá dự kiến X phút\" khi vượt quá. Xem [Bước chạy quá dự kiến](du-an-va-quy-trinh.md#buoc-qua-du-kien).
+  - **Đồng nhất mã băm kế hoạch thời gian:** Gom logic băm kế hoạch timeout ở bảng tính ngân sách và server vào hàm chung `stageTimeoutHash`, đảm bảo kế hoạch tự động làm mới khi lịch sử thời gian các bước tích luỹ thêm.
+  - **Sửa lỗi kiểm thử gác dự án:** Khắc phục triệt để lỗi kiểm thử `reopenShelved` quanh mốc nửa đêm giờ UTC bằng việc đồng bộ múi giờ và tiêm đồng hồ kiểm thử.
+
+## TASK-130
+
+- **Khử lặp thoại ở mép nối hook, outro và giữa các phần:** Lời dẫn không còn bị lặp lại ở điểm tiếp nối giữa câu hook và phần 1, giữa câu cuối của phần trước với câu đầu của phần sau, hoặc ở phần outro. Cơ chế lọc code thuần (`dedupeSeams`) chuẩn hóa NFC, so khớp tuyệt đối và tương đồng token Jaccard ≥ 0.9 (bảo vệ không làm rỗng phần dẫn) được áp dụng trực tiếp trong bước tạo kịch bản (`SCRIPT`) và lập kế hoạch cảnh (`planScenes`), đồng thời ghi log chi tiết từng câu bị loại bỏ. Prompt kịch bản bổ sung quy tắc hook và outro độc lập; hệ thống kiểm tra trước render cảnh báo nếu phát hiện hai cảnh liền kề bị trùng lặp câu (chỉ cảnh báo, không chặn render).
+
+## TASK-133
+
+- **Mã QR cho xác thực hai bước (TOTP 2FA):** trang **Tài khoản của tôi** nay hiển thị mã QR vẽ trực tiếp bằng SVG (chuẩn ECC Medium, vùng đệm 4 module, màu `currentColor` trên nền sáng giúp quét tốt cả ở chế độ tối) phía trên chuỗi khoá bí mật. Mã QR được tạo hoàn toàn cục bộ trên trình duyệt qua thư viện Project Nayuki (MIT, nhúng file đơn `apps/web/src/lib/vendor/qrcodegen.ts`, không thêm gói npm), không gửi URI hay bí mật ra bất kỳ máy chủ hay dịch vụ ngoài nào. Xem [Tài khoản của tôi](khong-gian-va-quyen.md#tai-khoan-cua-toi).
+- **Kiểm tra phiên bản edge-tts:** hệ thống tự động kiểm tra phiên bản binary `edge-tts` (tối thiểu `7.3.1`, bộ nhớ đệm 10 phút) và hiển thị phiên bản cùng trạng thái tại trang **Cài đặt → Giọng đọc (TTS)** và chi tiết `/api/health`. Nếu phiên bản cài trên máy đã cũ và việc tạo giọng thất bại, lỗi được ánh xạ sang mã `TTS_BINARY_OUTDATED` (không thử lại vô ích) kèm câu thông báo tiếng Việt chứa lệnh chính xác `pip install -U edge-tts`. Cơ chế dự phòng giọng tự động coi mã này như chưa cấu hình để nhà cung cấp TTS khác trong chuỗi có thể tiếp quản. Xem [Giọng đọc](hinh-anh-va-giong-doc.md#giong-doc) và [Xử lý sự cố](xu-ly-su-co.md#loi-giong).
+
+## TASK-113
+
+- Độ giống hình ảnh đưa vào kiểm tra tính nguyên bản: sau khi render, app so độ giống hình ảnh (tổ hợp biến thể template, khung hình dHash, tỉ lệ cảnh quay và phong cách) với các video trước trong kênh và giữa các kênh trong không gian làm việc. Thẻ **Nguồn & tính nguyên bản** hiện dòng "Độ giống video trước" kèm điểm số, link video gần nhất, yếu tố chi phối (như cùng tổ hợp biến thể) và gợi ý đổi biến thể hoặc pack trong tab Phong cách. Ở mức cảnh báo (`warn`), cảnh báo chỉ hiển thị nhắc nhở; ở mức chặn (`block`), vượt ngưỡng chuyển dự án sang duyệt tay (`REVIEW`). Xem [Nguồn và tính nguyên bản](dang-bai.md#nguon-va-tinh-nguyen-ban).
+
+## TASK-129b
+
+- Bộ điều tiết tài nguyên máy (`resourceGovernor`): hệ thống đo CPU, RAM, ổ đĩa và GPU mỗi 5 giây, tự tăng hoặc giảm số việc chạy cùng lúc cho 4 nhóm việc (Dựng và xử lý CPU, GPU, Tải và đăng IO, Gọi AI) theo thuật toán AIMD để máy luôn chạy hết công suất mà không bị nghẽn (ngưỡng 85% CPU/RAM, 90% GPU, ổ đĩa trống trên 5 GB). Thẻ **Tài nguyên** trên Bảng điều khiển hiển thị tải và slot đang chạy; cài đặt bật/tắt và min/max từng nhóm ở **Cài đặt → Render** (`#tai-nguyen`); giám sát tự động cảnh báo khi việc chờ hơn 15 phút (`resource_starved`) và phát sự kiện `capacity_idle` khi máy rảnh rỗi hơn 10 phút. Xem [Tài nguyên máy](tai-nguyen-may.md).
 
 ## TASK-112
 
@@ -394,3 +439,20 @@ Thêm tab Tri thức, chỉ mục FTS5 tiếng Việt, embedding tuỳ chọn v�
 ## TASK-116
 
 - Thêm trang [Nhóm và lời mời](khong-gian-va-quyen.md#nhom-va-loi-moi), [Tài khoản của tôi](khong-gian-va-quyen.md#tai-khoan-cua-toi) (2FA, phiên, khóa API) và [Nhật ký hoạt động](khong-gian-va-quyen.md#nhat-ky-hoat-dong).
+
+## TASK-132
+
+- Tách khóa định danh agent, tri thức và doanh thu theo không gian; giữ lịch sử tri thức khi nâng cấp.
+- Khóa API mới gắn với không gian hiện tại; khóa cũ có nút gắn một lần và mặc định chỉ dùng trong không gian mặc định của người tạo.
+- Từ chối và ghi nhật ký khi khóa API yêu cầu không gian khác.
+- Rà soát bàn giao: sửa quyền đọc trạng thái Tài nguyên máy; bổ sung hướng dẫn cho công cụ giám sát Hermes và tài nguyên máy.
+## TASK-123
+
+- Thêm MCP HTTP cho nhiều máy, gói kỹ năng/bài học chung, bộ đồng bộ Hermes và tab Fleet để xem lệch phiên bản, lệnh cron còn thiếu và cấu hình chung.
+- Bản nháp kỹ năng giữ nguồn và phiên bản gốc, cần gộp khi xung đột; chỉ chủ app được bật tự dùng kỹ năng chỉ đọc đã qua đánh giá.
+- Client MCP từ xa giữ quyền của chủ khóa API; không được tự nâng thành chủ workspace bằng header nguồn công cụ.
+
+## TASK-074a
+
+- Thêm trang Tự cải tiến và nút Tìm hiểu lại trong Tri thức: nghiên cứu có ngân sách, quote đã kiểm, báo cáo và đề xuất chờ duyệt.
+- Thêm sáu hướng nghiên cứu, nhật ký và các công cụ tìm/đọc/kiểm nguồn; ưu tiên tri thức cũ rủi ro cao, ECO chỉ chạy thủ công, lịch tuần tạo sẵn nhưng tắt.

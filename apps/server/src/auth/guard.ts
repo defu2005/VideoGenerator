@@ -1,3 +1,5 @@
+import { writeAudit } from "./auditLog.js";
+import { apiKeyWorkspace } from "./keyWorkspace.js";
 import { fromNodeHeaders } from "better-auth/node";
 import type { FastifyInstance } from "fastify";
 import { AppError } from "../lib/errors.js";
@@ -67,7 +69,13 @@ export function registerAuthGuard(server: FastifyInstance, input: {
       }
       if (!valid || !userId) throw UNAUTHORIZED;
       const requested = headerValue(request.headers["x-workspace-id"])?.trim() || undefined;
-      request.actor = resolveWorkspace(input.sqlite, { kind: "apikey", userId, keyId, requested });
+      const stored = input.sqlite.prepare("SELECT metadata FROM apikey WHERE id=?").get(keyId) as { metadata: string | null } | undefined;
+      const workspaceId = apiKeyWorkspace(stored?.metadata) ?? membershipsOf(input.sqlite, userId)[0]?.workspaceId;
+      if (requested && requested !== workspaceId) {
+        writeAudit(input.sqlite, { workspaceId, actor: { kind: "apikey", userId, keyId }, action: "apikey.workspace_denied", outcome: "denied", statusCode: 403, source: "api", targetType: "workspace", targetId: requested });
+        throw new AppError(403, "APIKEY_WORKSPACE_MISMATCH", "Khóa API chỉ dùng được trong không gian đã gắn.");
+      }
+      request.actor = resolveWorkspace(input.sqlite, { kind: "apikey", userId, keyId, requested: workspaceId });
       return;
     }
 

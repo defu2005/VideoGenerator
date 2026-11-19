@@ -1,8 +1,8 @@
 import Database from "better-sqlite3";
 import { drizzle } from "drizzle-orm/better-sqlite3";
 import { randomUUID } from "node:crypto";
-import { afterEach, describe, expect, it } from "vitest";
-import { buildTimeline, ScriptSchema, type Project } from "@vg/shared";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { buildTimeline, ScriptSchema, VideoLookSchema, type Project, type VideoLook } from "@vg/shared";
 import * as schema from "../src/db/schema.js";
 import { migrateDatabase } from "../src/db/migrate.js";
 import { OriginalityService } from "../src/originality/service.js";
@@ -109,5 +109,257 @@ describe("source manifest and gate", () => {
     expect(evaluatePublishGuardrail(f.sqlite, p.id, renderId).reason).toContain("khớp timeline");
     expect(evaluatePublishGuardrail(f.sqlite, p.id, randomUUID()).forcePrivate).toBe(true);
     expect(ASSISTANT_TOOLS.get_originality_report?.risk).toBe("read");
+  });
+});
+
+describe("visual sameness in originality", () => {
+  function makeLook(opts: {
+    videoId: string;
+    channelId?: string;
+    combos?: Array<{ templateId: string; key: string; sec: number }>;
+    kindShare?: Record<string, number>;
+    frameHashes?: string[];
+    palette?: string[];
+    fingerprint?: string;
+  }): VideoLook {
+    return VideoLookSchema.parse({
+      videoId: opts.videoId,
+      channelId: opts.channelId ?? "ch1",
+      createdAt: now,
+      style: {
+        packId: "pack1",
+        packVersion: 1,
+        fingerprint: opts.fingerprint ?? "fp-1",
+        palette: opts.palette ?? ["#0F172A", "#F5C518", "#FFFFFF"],
+        fonts: ["font1", "font2"],
+        layout: "editorial",
+        ease: "smooth",
+        caseDisplay: "none",
+        backgrounds: ["bg1"],
+      },
+      combos: opts.combos ?? [{ templateId: "list_full", key: "layout=cards", sec: 5 }],
+      kindShare: opts.kindShare ?? { list_full: 1 },
+      frameHashes: opts.frameHashes ?? ["aaaa5555aaaa5555", "aaaa5555aaaa5555"],
+    });
+  }
+
+  function saveLook(sqlite: Database.Database, input: {
+    projectId: string;
+    renderId: string;
+    profileId: string | null;
+    look: VideoLook;
+    workspaceId?: string | null;
+  }) {
+    sqlite.prepare(`
+      INSERT INTO video_looks (id, project_id, render_id, profile_id, pack_id, pack_version, fingerprint, look, created_at, workspace_id)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      randomUUID(),
+      input.projectId,
+      input.renderId,
+      input.profileId,
+      input.look.style.packId ?? "",
+      input.look.style.packVersion ?? 1,
+      input.look.style.fingerprint,
+      JSON.stringify(input.look),
+      now,
+      input.workspaceId ?? null,
+    );
+  }
+
+  it("two near-identical looks in one channel produce a warn issue in the report", () => {
+    const f = fixture();
+    const first = f.project();
+    const r1 = f.rendered(first.id);
+    const look1 = makeLook({ videoId: r1, channelId: f.profileId });
+    saveLook(f.sqlite, { projectId: first.id, renderId: r1, profileId: f.profileId, look: look1 });
+
+    const second = f.project();
+    // Use different script to isolate visual sameness from script similarity
+    const s2 = ScriptSchema.parse({
+      title: "Kinh tế học",
+      hook: "Khác biệt hoàn toàn",
+      sections: [{ id: "econ", heading: "Giải thích kinh tế", narration: "Một chủ đề kinh tế khác không trùng từ ngữ với kịch bản trước." }],
+      outro: "Hết.",
+    });
+    f.sqlite.prepare("UPDATE scripts SET data = ? WHERE project_id = ?").run(JSON.stringify(s2), second.id);
+    f.sqlite.prepare("UPDATE scenes SET section_id = 'econ', narration = ? WHERE project_id = ?").run(s2.sections[0]!.narration, second.id);
+    f.sqlite.prepare("UPDATE video_metadata SET draft = ? WHERE project_id = ?").run(JSON.stringify({ titles: ["Kinh tế học"] }), second.id);
+
+    const r2 = f.rendered(second.id);
+    const look2 = makeLook({ videoId: r2, channelId: f.profileId });
+    saveLook(f.sqlite, { projectId: second.id, renderId: r2, profileId: f.profileId, look: look2 });
+
+    const report = f.service.recheck(second.id, { id: r2, plan: null });
+    expect(report.scores?.visualSameness?.channelScore).toBeGreaterThan(0.85);
+    expect(report.scores?.visualSameness?.closestVideo).toMatchObject({
+      projectId: first.id,
+      similarity: expect.any(Number),
+    });
+    expect(report.scores?.visualSameness?.drivingPart).toBeTruthy();
+
+    const issue = report.findings.find((x) => x.ruleId === "ORIG_VISUAL_SAME_CHANNEL");
+    expect(issue).toBeDefined();
+    expect(issue?.severity).toBe("SHOULD");
+
+    const guidelines = new GuidelineService(f.sqlite);
+    for (const finding of report.findings.filter((x) => x.status === "OPEN" && x.ruleId !== "ORIG_VISUAL_SAME_CHANNEL")) {
+      guidelines.dismiss(second.id, finding.id, "Đã tự duyệt giấy phép");
+    }
+    const cleanReport = f.service.recheck(second.id, { id: r2, plan: null });
+    expect(cleanReport.verdict).toBe("OK");
+    expect(cleanReport.findings.find((x) => x.ruleId === "ORIG_VISUAL_SAME_CHANNEL" && x.status === "OPEN")).toBeDefined();
+  });
+
+  it("different looks produce no issue", () => {
+    const f = fixture();
+    const first = f.project();
+    const r1 = f.rendered(first.id);
+    const look1 = makeLook({
+      videoId: r1,
+      channelId: f.profileId,
+      combos: [{ templateId: "list_full", key: "layout=cards", sec: 5 }],
+      kindShare: { list_full: 1 },
+      frameHashes: ["aaaa5555aaaa5555"],
+    });
+    saveLook(f.sqlite, { projectId: first.id, renderId: r1, profileId: f.profileId, look: look1 });
+
+    const second = f.project();
+    const s2 = ScriptSchema.parse({
+      title: "Vũ trụ học",
+      hook: "Các vì sao",
+      sections: [{ id: "astro", heading: "Khám phá", narration: "Khám phá không gian vũ trụ và các thiên hà xa xôi." }],
+      outro: "Hết.",
+    });
+    f.sqlite.prepare("UPDATE scripts SET data = ? WHERE project_id = ?").run(JSON.stringify(s2), second.id);
+    f.sqlite.prepare("UPDATE scenes SET section_id = 'astro', narration = ? WHERE project_id = ?").run(s2.sections[0]!.narration, second.id);
+    f.sqlite.prepare("UPDATE video_metadata SET draft = ? WHERE project_id = ?").run(JSON.stringify({ titles: ["Vũ trụ học"] }), second.id);
+
+    const r2 = f.rendered(second.id);
+    const look2 = makeLook({
+      videoId: r2,
+      channelId: f.profileId,
+      combos: [{ templateId: "map", key: "layout=globe", sec: 5 }],
+      kindShare: { map: 1 },
+      frameHashes: ["0000000000000000"],
+    });
+    saveLook(f.sqlite, { projectId: second.id, renderId: r2, profileId: f.profileId, look: look2 });
+
+    const report = f.service.recheck(second.id, { id: r2, plan: null });
+    expect(report.scores?.visualSameness?.channelScore).toBeLessThan(0.85);
+    expect(report.findings.some((x) => x.ruleId === "ORIG_VISUAL_SAME_CHANNEL")).toBe(false);
+  });
+
+  it("the cross-channel case flags similar looks between different channels", () => {
+    const f = fixture();
+    const profile2 = randomUUID();
+    f.sqlite.prepare("INSERT INTO profiles (id,name,default_brief,guidelines,created_at,updated_at) VALUES (?,?,'{}','{}',?,?)").run(profile2, profile2, now, now);
+
+    const first = f.project(f.profileId);
+    const r1 = f.rendered(first.id);
+    const look1 = makeLook({ videoId: r1, channelId: f.profileId, fingerprint: "fp-shared" });
+    saveLook(f.sqlite, { projectId: first.id, renderId: r1, profileId: f.profileId, look: look1 });
+
+    const second = f.project(profile2);
+    const s2 = ScriptSchema.parse({
+      title: "Kênh thứ hai",
+      hook: "Chủ đề hoàn toàn độc lập",
+      sections: [{ id: "s2", heading: "Độc lập", narration: "Nội dung độc lập hoàn toàn để không kích hoạt kiểm tra kịch bản." }],
+      outro: "Hết.",
+    });
+    f.sqlite.prepare("UPDATE scripts SET data = ? WHERE project_id = ?").run(JSON.stringify(s2), second.id);
+    f.sqlite.prepare("UPDATE scenes SET section_id = 's2', narration = ? WHERE project_id = ?").run(s2.sections[0]!.narration, second.id);
+    f.sqlite.prepare("UPDATE video_metadata SET draft = ? WHERE project_id = ?").run(JSON.stringify({ titles: ["Kênh thứ hai"] }), second.id);
+
+    const r2 = f.rendered(second.id);
+    const look2 = makeLook({ videoId: r2, channelId: profile2, fingerprint: "fp-shared" });
+    saveLook(f.sqlite, { projectId: second.id, renderId: r2, profileId: profile2, look: look2 });
+
+    const report = f.service.recheck(second.id, { id: r2, plan: null });
+    expect(report.scores?.visualSameness?.crossChannelScore).toBeGreaterThan(0.7);
+    const issue = report.findings.find((x) => x.ruleId === "ORIG_VISUAL_CROSS_CHANNEL");
+    expect(issue).toBeDefined();
+    expect(issue?.severity).toBe("SHOULD");
+  });
+
+  it("a missing look, or a look with empty frame hashes, still produces a report, using the parts it has", () => {
+    const f = fixture();
+    const first = f.project();
+    // Project without look: recheck succeeds
+    const report1 = f.service.recheck(first.id);
+    expect(report1.scores?.visualSameness).toBeNull();
+    expect(report1.verdict).toBeDefined();
+
+    // With empty frame hashes
+    const r1 = f.rendered(first.id);
+    const look1 = makeLook({ videoId: r1, channelId: f.profileId, frameHashes: [] });
+    saveLook(f.sqlite, { projectId: first.id, renderId: r1, profileId: f.profileId, look: look1 });
+
+    const second = f.project();
+    const r2 = f.rendered(second.id);
+    const look2 = makeLook({ videoId: r2, channelId: f.profileId, frameHashes: [] });
+    saveLook(f.sqlite, { projectId: second.id, renderId: r2, profileId: f.profileId, look: look2 });
+
+    const report2 = f.service.recheck(second.id, { id: r2, plan: null });
+    expect(report2.scores?.visualSameness).toBeDefined();
+    expect(report2.scores?.visualSameness?.parts?.frames).toBeNull();
+    expect(report2.scores?.visualSameness?.parts?.combos).not.toBeNull();
+    expect(report2.scores?.visualSameness?.channelScore).not.toBeNull();
+  });
+
+  it("a compute error only logs", () => {
+    const f = fixture();
+    const p = f.project();
+    f.rendered(p.id);
+
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    f.sqlite.exec("DROP TABLE video_looks");
+    try {
+      const report = f.service.recheck(p.id);
+      expect(report.scores?.visualSameness).toBeNull();
+      const logged = warn.mock.calls.map((c) => String(c[0])).join("\n");
+      expect(logged).toContain("[originality] visual sameness computation failed");
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
+  it("block level sends the project to manual review", () => {
+    const f = fixture();
+    f.sqlite.prepare("UPDATE profiles SET guidelines = ? WHERE id = ?").run(
+      JSON.stringify({ originality: { visualSameness: { level: "block" } } }),
+      f.profileId,
+    );
+
+    const first = f.project();
+    const r1 = f.rendered(first.id);
+    const look1 = makeLook({ videoId: r1, channelId: f.profileId });
+    saveLook(f.sqlite, { projectId: first.id, renderId: r1, profileId: f.profileId, look: look1 });
+
+    const second = f.project();
+    const s2 = ScriptSchema.parse({
+      title: "Chủ đề riêng",
+      hook: "Khác",
+      sections: [{ id: "sec", heading: "Khác", narration: "Nội dung riêng biệt hoàn toàn không trùng từ ngữ." }],
+      outro: "Hết.",
+    });
+    f.sqlite.prepare("UPDATE scripts SET data = ? WHERE project_id = ?").run(JSON.stringify(s2), second.id);
+    f.sqlite.prepare("UPDATE scenes SET section_id = 'sec', narration = ? WHERE project_id = ?").run(s2.sections[0]!.narration, second.id);
+    f.sqlite.prepare("UPDATE video_metadata SET draft = ? WHERE project_id = ?").run(JSON.stringify({ titles: ["Chủ đề riêng"] }), second.id);
+
+    const r2 = f.rendered(second.id);
+    const look2 = makeLook({ videoId: r2, channelId: f.profileId });
+    saveLook(f.sqlite, { projectId: second.id, renderId: r2, profileId: f.profileId, look: look2 });
+
+    const report = f.service.recheck(second.id, { id: r2, plan: null });
+    expect(report.scores?.visualSameness?.channelScore).toBeGreaterThan(0.85);
+
+    const issue = report.findings.find((x) => x.ruleId === "ORIG_VISUAL_SAME_CHANNEL");
+    expect(issue).toBeDefined();
+    expect(issue?.severity).toBe("MUST");
+    expect(report.verdict).toBe("REVIEW");
+
+    const req = f.sqlite.prepare("SELECT COUNT(*) AS n FROM operator_requests WHERE dedupe_key = ? AND status = 'open'").get(`originality:${second.id}`) as { n: number };
+    expect(req.n).toBe(1);
   });
 });

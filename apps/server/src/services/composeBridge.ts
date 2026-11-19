@@ -38,6 +38,9 @@ import { LlmCache } from "../providers/llm/cache.js";
 import { estimateLlmCost } from "../providers/llm/pricing.js";
 import type { LlmProviderRegistry } from "../providers/llm/registry.js";
 import { getAppLlmSettings } from "../providers/llm/settings.js";
+import type { MediaItemInput } from "../node/remoteBundle.js";
+import type { MediaFetchService } from "../node/mediaFetch.js";
+import type { Job } from "@vg/shared";
 import { generateRoutedStructured } from "../providers/llm/structured.js";
 import type Database from "better-sqlite3";
 
@@ -487,3 +490,48 @@ function jsonRecord(value: unknown): unknown {
   }
   return value ?? undefined;
 }
+
+/** Collects unique footage items that a compose plan uses (TASK-131). */
+export function collectPlanFootageItems(plan: ComposePlan, hits: Map<string, FootageHit>): MediaItemInput[] {
+  const items: MediaItemInput[] = [];
+  const seen = new Set<string>();
+  for (const scene of plan.scenes) {
+    for (const shot of scene.shots) {
+      if (shot.source.kind !== "footage") continue;
+      const key = footageKey(shot.source.license.provider, shot.source.clipId);
+      if (seen.has(key)) continue;
+      seen.add(key);
+      const hit = hits.get(key);
+      if (!hit) continue;
+      items.push({
+        provider: hit.provider,
+        clipId: hit.clipId,
+        url: hit.url,
+        width: hit.width,
+        height: hit.height,
+        durationSec: hit.durationSec,
+        author: hit.author,
+        licenseName: hit.licenseName,
+        pageUrl: hit.pageUrl,
+      });
+    }
+  }
+  return items;
+}
+
+/**
+ * Enqueue a prefetch job for missing footage items ahead of render (TASK-131).
+ * RENDER does not wait on it; this is a head start.
+ */
+export function prefetchPlanFootage(
+  mediaFetch: MediaFetchService,
+  projectId: string,
+  plan: ComposePlan,
+  hits: Map<string, FootageHit>,
+  targetShortSide: number,
+  options?: { sqlite?: Database.Database | null; project?: Project | null; enabled?: boolean },
+): Job | null {
+  const items = collectPlanFootageItems(plan, hits);
+  return mediaFetch.maybePrefetch(projectId, items, targetShortSide, options);
+}
+

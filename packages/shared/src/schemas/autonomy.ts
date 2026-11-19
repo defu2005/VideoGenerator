@@ -96,6 +96,7 @@ export function intersectAutonomy(a: AutonomySettings, b: AutonomySettings): Aut
 
 /** Null requires human review even with every grant. */
 export const TOOL_GRANTS: Readonly<Partial<Record<string, keyof AutonomyGrants | null>>> = {
+  run_research: null,
   add_revenue_entry: null, update_profile_direction: "strategy", set_profile_automation: "enableAutomation",
   resume_automation_all: "enableAutomation", run_pipeline: "retries", decide_overdue: "retries", approve_gate: "approveGates",
   publish_project: "publish", cancel_publication: "retries", apply_models: "providers",

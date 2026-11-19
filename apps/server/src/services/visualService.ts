@@ -38,6 +38,7 @@ import {
   VISUAL_ATTENTION_REASONS,
   type VisualAttentionReason,
   type LlmCallUsage,
+  hashesMatch,
 } from "@vg/shared";
 import type Database from "better-sqlite3";
 import type { FastifyBaseLogger } from "fastify";
@@ -532,6 +533,88 @@ export class VisualService {
         },
       },
     };
+  }
+
+  /** TASK-128: internal toolkit bridge. Its caller must hold the job fence around each write. */
+  agentCandidate(candidateId: string) { return this.findCandidate(candidateId); }
+
+  agentOpenScenes(projectId: string) {
+    const project = this.requireProject(projectId), visionRequired = this.visionRequired(project);
+    return this.getProjectVisuals(projectId).scenes.filter((scene) => {
+      if (scene.noVisual || userOwnsVisualSelection(scene.selection)) return false;
+      const candidate = scene.selectedCandidate;
+      if (!candidate || !scene.selection) return true;
+      return scene.attentionReason != null || Boolean(candidate.downloadError) || !this.candidatePassesGate(candidate, visionRequired)
+        || (candidate.origin === "agent" && candidate.licenseVerified === false && visualCopyrightMode(this.sqlite, project.profileId) === "off");
+    });
+  }
+
+  agentStoreCandidate(candidate: VisualCandidate, stored: StoredImage, hashed: { phash: string; phashCenter: string }) {
+    this.requireScene(candidate.projectId, candidate.sceneId);
+    this.saveCandidate(candidate);
+    this.updateCandidateDownload(candidate.id, stored, hashed);
+    this.repository.emitVisualUpdated(candidate.projectId, candidate.sceneId, "agent-submitted");
+    return this.findCandidate(candidate.id)!;
+  }
+
+  agentRecordVerdict(candidateId: string, check: VisionCheck) {
+    const candidate = this.findCandidate(candidateId);
+    if (!candidate) throw new AppError(404, "VISUAL_CANDIDATE_NOT_FOUND", "Không thấy ảnh ứng viên.");
+    this.sqlite.prepare("UPDATE visual_candidates SET vision_check=? WHERE id=?").run(JSON.stringify(VisionCheckSchema.parse(check)), candidateId);
+    this.repository.emitVisualUpdated(candidate.projectId, candidate.sceneId, "agent-judged");
+    return this.findCandidate(candidateId)!;
+  }
+
+  agentPostCheck(projectId: string) {
+    if (this.loadScenes(projectId).length === 0) throw new AppError(422, "VISUAL_STAGE_INCOMPLETE", "Dự án chưa có cảnh để kiểm tra ảnh.");
+    const open = this.agentOpenScenes(projectId);
+    if (open.length) throw new AppError(422, "VISUAL_STAGE_INCOMPLETE", `Còn ${open.length} cảnh chưa qua cổng ảnh.`, { sceneIds: open.map((scene) => scene.sceneId) });
+    const scenes = this.getProjectVisuals(projectId).scenes;
+    const project = this.requireProject(projectId);
+    for (const scene of scenes) {
+      const candidate = scene.selectedCandidate;
+      if (!candidate || candidate.origin !== "agent" || userOwnsVisualSelection(scene.selection)) continue;
+      const check = candidate.visionCheck;
+      if (check?.verdict !== "pass" || !check.subjectMatch || !check.checkedBy || !candidate.localPath || !candidate.sha256 || check.sha256 !== candidate.sha256) {
+        throw new AppError(422, "VISUAL_AGENT_VERDICT_REQUIRED", "Ảnh agent chọn chưa có kết quả duyệt hợp lệ.");
+      }
+      const actualHash = createHash("sha256").update(readFileSync(resolveAssetPath(this.config.DATA_DIR, projectId, candidate.localPath))).digest("hex");
+      if (actualHash !== candidate.sha256) throw new AppError(409, "VISUAL_HASH_CHANGED", "Tệp ảnh đã đổi sau khi duyệt.");
+      if (!this.candidatePassesGate(candidate, true) || (candidate.licenseVerified === false && visualCopyrightMode(this.sqlite, project.profileId) === "off")) {
+        throw new AppError(422, "VISUAL_GATE_REJECTED", "Ảnh agent chọn chưa qua cổng chất lượng hoặc giấy phép.");
+      }
+      if (scenes.some((other) => other.sceneId !== scene.sceneId && other.selectedCandidate && (other.selectedCandidate.sha256 === candidate.sha256 || hashesMatch(other.selectedCandidate.phash, candidate.phash, 6) || hashesMatch(other.selectedCandidate.phashCenter, candidate.phashCenter, 6)))) {
+        throw new AppError(409, "VISUAL_DUPLICATE_SELECTION", "Ảnh agent chọn trùng với cảnh khác.");
+      }
+    }
+    return { selectedCount: scenes.filter((scene) => scene.selection).length, skippedCount: scenes.filter((scene) => scene.noVisual).length };
+  }
+
+  async agentSelectCandidate(projectId: string, sceneId: string, candidateId: string, guard: () => void) {
+    const project = this.requireProject(projectId), candidate = this.findCandidate(candidateId);
+    if (!candidate || candidate.projectId !== projectId || candidate.sceneId !== sceneId || candidate.discardedAt) {
+      throw new AppError(404, "VISUAL_CANDIDATE_NOT_FOUND", "Không thấy ảnh của cảnh này.");
+    }
+    guard();
+    if (!this.agentOpenScenes(projectId).some((scene) => scene.sceneId === sceneId)) {
+      throw new AppError(409, "VISUAL_SCENE_CLOSED", "Cảnh đã có ảnh hợp lệ hoặc đang được người dùng bảo vệ.");
+    }
+    const check = candidate.visionCheck;
+    if (check?.verdict !== "pass" || !check.subjectMatch || !check.checkedBy || !candidate.sha256 || check.sha256 !== candidate.sha256 || !candidate.localPath) {
+      throw new AppError(422, "VISUAL_AGENT_VERDICT_REQUIRED", "Cần agent duyệt đúng tệp ảnh trước khi chọn.");
+    }
+    const actualHash = createHash("sha256").update(readFileSync(resolveAssetPath(this.config.DATA_DIR, projectId, candidate.localPath))).digest("hex");
+    if (actualHash !== check.sha256) throw new AppError(409, "VISUAL_HASH_CHANGED", "Tệp ảnh đã đổi sau khi duyệt.");
+    if (candidate.licenseVerified === false && visualCopyrightMode(this.sqlite, project.profileId) === "off") {
+      throw new AppError(422, "VISUAL_COPYRIGHT_MODE", "Chế độ hiện tại không cho agent chọn ảnh chưa xác minh giấy phép.");
+    }
+    if (!this.candidatePassesGate(candidate, true)) throw new AppError(422, "VISUAL_GATE_REJECTED", "Ảnh chưa qua cổng chất lượng và nguồn ảnh.");
+    const selected = this.getProjectVisuals(projectId).scenes.filter((scene) => scene.sceneId !== sceneId).map((scene) => scene.selectedCandidate).filter((item) => item != null);
+    if (selected.some((item) => item.sha256 === candidate.sha256 || hashesMatch(item.phash, candidate.phash, 6) || hashesMatch(item.phashCenter, candidate.phashCenter, 6))) {
+      throw new AppError(409, "VISUAL_DUPLICATE_SELECTION", "Ảnh trùng với ảnh đã chọn cho cảnh khác.");
+    }
+    await this.forceApproveCandidate(projectId, sceneId, candidate, undefined, guard);
+    return this.getSceneVisuals(projectId, sceneId);
   }
 
   async selectCandidate(projectId: string, sceneId: string, candidateId: string) {
@@ -1078,6 +1161,7 @@ export class VisualService {
     sceneId: string,
     candidate: VisualCandidate,
     signal?: AbortSignal,
+    beforeWrite?: () => void,
   ): Promise<void> {
     const now = new Date().toISOString();
     const existing = this.getSelection(projectId, sceneId);
@@ -1095,10 +1179,11 @@ export class VisualService {
       updatedAt: now,
     });
     this.repository.atomic(() => {
+      beforeWrite?.();
       this.upsertSelection(selection);
       this.sqlite.prepare("UPDATE scenes SET no_visual = 0 WHERE project_id = ? AND id = ?").run(projectId, sceneId);
     });
-    await this.approveSelected(projectId, sceneId, selection, candidate, signal);
+    await this.approveSelected(projectId, sceneId, selection, candidate, signal, beforeWrite);
   }
 
   private attentionReasonFor(
@@ -1484,11 +1569,14 @@ export class VisualService {
     selection: VisualSelection,
     candidate: VisualCandidate,
     signal?: AbortSignal,
+    beforeWrite?: () => void,
   ) {
     if (candidate.localPath && candidate.sha256 && candidate.actualWidth && candidate.actualHeight) {
       const now = new Date().toISOString();
       this.repository.atomic(() => {
+        beforeWrite?.();
         this.upsertSelection({ ...selection, status: "APPROVED", reviewedAt: now, updatedAt: now });
+        if (beforeWrite) this.clearNeedsAttention(sceneId);
         this.markTimelineStale(projectId);
         this.repository.emitVisualUpdated(projectId, sceneId, "approved");
       });
@@ -1512,6 +1600,7 @@ export class VisualService {
     const now = new Date().toISOString();
     const hashed = await hashImage(resolveAssetPath(this.config.DATA_DIR, projectId, stored.localPath));
     this.repository.atomic(() => {
+      beforeWrite?.();
       this.updateCandidateDownload(candidate.id, stored, hashed);
       this.upsertSelection({
         ...selection,

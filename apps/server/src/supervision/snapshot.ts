@@ -3,6 +3,8 @@ import { currentDuty, listInstances } from "./duty.js";
 import { listEscalations, openEscalationCount } from "./escalations.js";
 import { listLiveLeases } from "./leases.js";
 import { getOperatorPause } from "./pause.js";
+import { fleetOverview } from "../fleet/service.js";
+import { canReadStageFinding } from "../agents/releaseMonitor.js";
 
 export const SNAPSHOT_MAX_BYTES = 3000;
 const STUCK_JOB_MS = 30 * 60_000;
@@ -60,13 +62,20 @@ export function buildSupervisionSnapshot(sqlite: Database.Database, now = new Da
     new Date(now.getTime() - 6 * 3_600_000).toISOString());
   if (failedRuns >= 3) anomalies.push({ kind: "operator_failing", severity: "warn", ref: "operator", detail: `${failedRuns} lượt operator lỗi trong 6 giờ` });
   const findings = sqlite.prepare(
-    "SELECT kind, dedupe_key FROM supervisor_findings WHERE status = 'open' AND severity IN ('error','high') LIMIT 3",
+    "SELECT kind, dedupe_key FROM supervisor_findings WHERE status = 'open' AND (severity IN ('error','high') OR kind='stage_release_loop') LIMIT 3",
   ).all() as Array<{ kind: string; dedupe_key: string }>;
-  for (const finding of findings) anomalies.push({ kind: "finding", severity: "high", ref: short(finding.dedupe_key, 60), detail: finding.kind });
+  for (const finding of findings) {
+    if (finding.kind === "stage_release_loop") {
+      const jobId = finding.dedupe_key.slice("stage_release_loop:".length);
+      if (canReadStageFinding(sqlite, jobId)) anomalies.push({ kind: "stage_release_loop", severity: "warn", ref: `job:${jobId}`, detail: "Stage được nhận rồi trả lại hơn 3 lần." });
+    } else anomalies.push({ kind: "finding", severity: "high", ref: short(finding.dedupe_key, 60), detail: finding.kind });
+  }
   if (telegramConflict(sqlite)) {
     anomalies.push({ kind: "telegram_conflict", severity: "warn", ref: "telegram", detail: "Hai tiến trình cùng đọc bot Telegram (HTTP 409)." });
   }
 
+  // Existing operational failures take precedence when the compact snapshot is full.
+  anomalies.push(...fleetOverview(sqlite, now).anomalies.slice(0, 5));
   const duty = currentDuty(sqlite, now);
   const pause = getOperatorPause(sqlite, now);
   const escalations = openEscalationCount(sqlite);

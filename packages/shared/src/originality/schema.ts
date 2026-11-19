@@ -44,18 +44,42 @@ export const SourceManifestSchema = z.object({
 }).strict();
 export type SourceManifest = z.infer<typeof SourceManifestSchema>;
 const MatchSchema = z.object({ projectId: z.string(), title: z.string(), similarity: z.number().min(0).max(1) }).nullable();
+
+export const VisualSamenessSignalSchema = z.object({
+  channelScore: z.number().min(0).max(1).nullable(),
+  crossChannelScore: z.number().min(0).max(1).nullable(),
+  parts: z.object({
+    combos: z.number().min(0).max(1).nullable(),
+    frames: z.number().min(0).max(1).nullable(),
+    kinds: z.number().min(0).max(1),
+    style: z.number().min(0).max(1),
+  }).strict().nullable(),
+  closestVideo: z.object({
+    projectId: z.string(),
+    videoId: z.string(),
+    title: z.string(),
+    similarity: z.number().min(0).max(1),
+  }).strict().nullable(),
+  drivingPart: z.string().nullable(),
+  comparedVideos: z.number().int().nonnegative(),
+}).strict();
+export type VisualSamenessSignal = z.infer<typeof VisualSamenessSignalSchema>;
+
 export const OriginalityScoresSchema = z.object({
   script: MatchSchema,
   title: MatchSchema,
   reusedImages: z.number().int().nonnegative(),
   imageMatches: z.array(z.object({ assetId: z.string(), projectId: z.string(), title: z.string() }).strict()),
   comparedProjects: z.number().int().nonnegative(),
+  visualSameness: VisualSamenessSignalSchema.nullable().default(null),
 }).strict();
 export type OriginalityScores = z.infer<typeof OriginalityScoresSchema>;
 export const OriginalityReportSchema = z.object({
   projectId: z.string(), renderId: z.string().nullable(),
   manifest: SourceManifestSchema.nullable(), scores: OriginalityScoresSchema.nullable(),
+  visualSameness: VisualSamenessSignalSchema.nullable().default(null),
   verdict: z.enum(["OK", "REVIEW"]), settings: OriginalitySettingsSchema,
   findings: z.array(GuidelineFindingSchema), updatedAt: z.string().nullable(),
+  profileId: z.string().nullable().default(null),
 }).strict();
 export type OriginalityReport = z.infer<typeof OriginalityReportSchema>;

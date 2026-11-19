@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from "react";
+import { useMemo, useState, type FormEvent } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Badge } from "../../components/ui/Badge";
 import { Button } from "../../components/ui/Button";
@@ -9,10 +9,11 @@ import { useToast } from "../../components/ui/Toast";
 import { useConfirm } from "../../components/useConfirm";
 import { fetchMe } from "../../services/meApi";
 import {
-  changePassword, createApiKey, deleteApiKey, disableTwoFactor, enableTwoFactor, listApiKeys, listSessions,
-  regenerateBackupCodes, revokeOtherSessions, revokeSession, secretFromUri, updateName, verifyTotp,
+  bindApiKey, changePassword, createApiKey, deleteApiKey, disableTwoFactor, enableTwoFactor, listAgentKeyProfiles, listApiKeys, listSessions,
+  regenerateBackupCodes, revokeOtherSessions, revokeSession, saveAgentKeyProfile, secretFromUri, updateName, verifyTotp,
 } from "../../services/accountApi";
 import { copyText } from "../team/InviteModal";
+import { qrcodegen } from "../../lib/vendor/qrcodegen";
 
 const onFail = (toast: ReturnType<typeof useToast>) => (cause: unknown) =>
   toast.error(cause instanceof Error ? cause.message : "Không thực hiện được.");
@@ -93,6 +94,57 @@ function BackupCodes({ codes, onDone }: { codes: string[]; onDone: () => void })
   );
 }
 
+export function TotpQrCode({ uri }: { uri: string }) {
+  const qrData = useMemo(() => {
+    if (!uri) return null;
+    try {
+      const qr = qrcodegen.QrCode.encodeText(uri, qrcodegen.QrCode.Ecc.MEDIUM);
+      const quietZone = 4;
+      const size = qr.size + quietZone * 2;
+      const parts: string[] = [];
+      for (let y = 0; y < qr.size; y++) {
+        for (let x = 0; x < qr.size; x++) {
+          if (qr.getModule(x, y)) {
+            parts.push(`M${x + quietZone},${y + quietZone}h1v1h-1z`);
+          }
+        }
+      }
+      return { pathD: parts.join(" "), size };
+    } catch {
+      return null;
+    }
+  }, [uri]);
+
+  if (!qrData) return null;
+
+  return (
+    <div
+      className="qr-tile"
+      data-testid="totp-qr-code"
+      style={{
+        display: "inline-block",
+        background: "#ffffff",
+        color: "#000000",
+        padding: "12px",
+        borderRadius: "8px",
+        border: "1px solid var(--color-neutral-200, #e5e7eb)",
+      }}
+    >
+      <svg
+        role="img"
+        aria-label="Quét mã QR bằng ứng dụng xác thực"
+        viewBox={`0 0 ${qrData.size} ${qrData.size}`}
+        width="180"
+        height="180"
+        style={{ display: "block" }}
+      >
+        <rect width="100%" height="100%" fill="#ffffff" />
+        <path d={qrData.pathD} fill="currentColor" />
+      </svg>
+    </div>
+  );
+}
+
 function TwoFactorCard({ enabled, required }: { enabled: boolean; required: boolean }) {
   const toast = useToast();
   const queryClient = useQueryClient();
@@ -143,7 +195,9 @@ function TwoFactorCard({ enabled, required }: { enabled: boolean; required: bool
       {required && !enabled ? <p role="alert"><strong>Nhóm yêu cầu bạn bật xác thực hai bước</strong> trước khi dùng các trang khác.</p> : null}
       {codes ? <BackupCodes codes={codes} onDone={() => setCodes(null)} /> : setup ? (
         <div className="form-stack">
-          <p>1. Mở ứng dụng xác thực (Google Authenticator, Authy, 1Password…) và thêm tài khoản bằng khóa dưới đây.</p>
+          <p>1. Quét mã QR bằng ứng dụng xác thực (Google Authenticator, Authy, 1Password…):</p>
+          <TotpQrCode uri={setup.uri} />
+          <p className="muted">Hoặc thêm tài khoản bằng khóa thiết lập:</p>
           <p><code aria-label="Khóa thiết lập">{secret}</code>{" "}
             <Button size="sm" variant="secondary" onClick={() => { void copyText(secret).then((ok) => (ok ? toast.success("Đã chép khóa.") : toast.error("Không chép được."))); }}>Chép khóa</Button>
           </p>
@@ -218,6 +272,7 @@ function ApiKeysCard() {
   const queryClient = useQueryClient();
   const { ask, dialog } = useConfirm();
   const keys = useQuery({ queryKey: ["my-api-keys"], queryFn: listApiKeys });
+  const profilesQuery = useQuery({ queryKey: ["agent-key-profiles"], queryFn: listAgentKeyProfiles });
   const [name, setName] = useState("");
   const [days, setDays] = useState("90");
   const [fresh, setFresh] = useState<string | null>(null);
@@ -227,10 +282,21 @@ function ApiKeysCard() {
     onSuccess: (result) => { setFresh(result.key); setName(""); toast.success("Đã tạo khóa API."); refresh(); },
     onError: onFail(toast),
   });
+  const bind = useMutation({ mutationFn: bindApiKey, onSuccess: refresh, onError: onFail(toast) });
   const remove = useMutation({ mutationFn: deleteApiKey, onSuccess: () => { toast.success("Đã xóa khóa."); refresh(); }, onError: onFail(toast) });
+  const updateProfile = useMutation({
+    mutationFn: (args: { keyId: string; agentKind?: string; instanceName?: string; canSupervise?: boolean }) =>
+      saveAgentKeyProfile(args.keyId, { agentKind: args.agentKind, instanceName: args.instanceName, canSupervise: args.canSupervise }),
+    onSuccess: () => {
+      toast.success("Đã cập nhật cấu hình khóa agent.");
+      void queryClient.invalidateQueries({ queryKey: ["agent-key-profiles"] });
+    },
+    onError: onFail(toast),
+  });
   async function onRemove(id: string, label: string) {
     if (await ask({ title: "Xóa khóa API?", message: `Khóa "${label}" sẽ ngừng hoạt động ngay và không hoàn tác được.`, confirmLabel: "Xóa khóa" })) remove.mutate(id);
   }
+  const AGENT_KINDS = ["operator", "assistant", "hermes", "codex", "cursor", "claude", "other"] as const;
   return (
     <Card title="Khóa API cá nhân">
       <p className="muted">Khóa dùng để cho một công cụ khác gọi API với quyền của bạn. Khóa chỉ hiện đầy đủ một lần lúc tạo.</p>
@@ -254,13 +320,45 @@ function ApiKeysCard() {
       )}
       {keys.data && keys.data.length > 0 ? (
         <ul className="plain-list">
-          {keys.data.map((key) => (
-            <li key={key.id}>
-              <strong>{key.name || "Khóa không tên"}</strong> <code>{`${key.prefix ?? ""}${key.start ?? ""}…`}</code>
-              <span className="muted"> · tạo {new Date(key.createdAt).toLocaleDateString("vi-VN")}{key.expiresAt ? ` · hết hạn ${new Date(key.expiresAt).toLocaleDateString("vi-VN")}` : ""}</span>
-              {" "}<Button size="sm" variant="danger" onClick={() => { void onRemove(key.id, key.name || "không tên"); }}>Xóa</Button>
-            </li>
-          ))}
+          {keys.data.map((key) => {
+            const metadata = (() => { try { return typeof key.metadata === "string" ? JSON.parse(key.metadata) : key.metadata; } catch { return null; } })();
+            const workspaceId = metadata?.workspaceId;
+            const profile = profilesQuery.data?.profiles.find((p) => p.keyId === key.id);
+            return (
+              <li key={key.id} style={{ marginBottom: "12px", paddingBottom: "12px", borderBottom: "1px solid var(--border-subtle, #eee)" }}>
+                <div>
+                  <span className="muted" style={{ display: "block", overflowWrap: "anywhere", marginBottom: "4px" }}>{workspaceId ? `Không gian: ${workspaceId}` : "Chưa gắn workspace"}</span>
+                  {!workspaceId && <Button size="sm" variant="secondary" disabled={bind.isPending} onClick={() => bind.mutate(key.id)}>Gắn vào không gian hiện tại</Button>}
+                  <strong>{key.name || "Khóa không tên"}</strong> <code>{`${key.prefix ?? ""}${key.start ?? ""}…`}</code>
+                  <span className="muted"> · tạo {new Date(key.createdAt).toLocaleDateString("vi-VN")}{key.expiresAt ? ` · hết hạn ${new Date(key.expiresAt).toLocaleDateString("vi-VN")}` : ""}</span>
+                  {" "}<Button size="sm" variant="danger" onClick={() => { void onRemove(key.id, key.name || "không tên"); }}>Xóa</Button>
+                </div>
+                <div style={{ display: "flex", gap: "16px", alignItems: "center", marginTop: "6px" }}>
+                  <label style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}>
+                    <span className="muted" style={{ fontSize: "0.9em" }}>Loại agent:</span>
+                    <select
+                      aria-label={`Loại agent cho khóa ${key.name || key.id}`}
+                      value={profile?.agentKind ?? "other"}
+                      onChange={(event) => updateProfile.mutate({ keyId: key.id, agentKind: event.target.value })}
+                    >
+                      {AGENT_KINDS.map((k) => (
+                        <option key={k} value={k}>{k}</option>
+                      ))}
+                    </select>
+                  </label>
+                  <label style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}>
+                    <input
+                      type="checkbox"
+                      aria-label={`Cho phép giám sát cho khóa ${key.name || key.id}`}
+                      checked={profile?.canSupervise ?? false}
+                      onChange={(event) => updateProfile.mutate({ keyId: key.id, canSupervise: event.target.checked })}
+                    />
+                    <span style={{ fontSize: "0.9em" }}>Cho phép giám sát (canSupervise)</span>
+                  </label>
+                </div>
+              </li>
+            );
+          })}
         </ul>
       ) : null}
       {dialog}

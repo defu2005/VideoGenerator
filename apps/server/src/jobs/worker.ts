@@ -1,3 +1,5 @@
+import { runAsActor } from "../auth/requestContext.js";
+import { systemActorFor } from "../auth/workspaces.js";
 import { runIndexJob } from "../retrieval/service.js";
 import type { FastifyBaseLogger } from "fastify";
 import { PROTECTED_PROJECT_ID, STAGE_TIMEOUT_LABELS_VI, isPlannedTimeoutStage, resolveStageTimeoutMs, retryStageTimeoutMs, stageTimeoutCapMs, timeoutBriefFromSettings, type Job, type JobError, type PipelineStage, type Project } from "@vg/shared";
@@ -15,14 +17,20 @@ import { readDrain } from "../operator/autopilot.js";
 import { autonomyBudgetStatus, hasAutonomySpendLimit, recordBudgetFindings, runWithAutonomyBudget } from "../operator/autonomyBudget.js";
 import type { UsageService } from "../services/usageService.js";
 import { ActivityTracker, clearOverdue } from "./overdueStore.js";
+import { createThrottledActivityReporter, runWithStageContext } from "../pipeline/stageActivity.js";
 import type { ResourceGovernor } from "./resourceGovernor.js";
 import { OverdueRun, type DecideInput, type DecideResult, type OverdueAbortKind, type OverdueDeps } from "./overdueRun.js";
+import type { AgentStageService } from "../agents/stageService.js";
+import { ImageProviderError } from "../providers/images/http.js";
 
 type Clock = () => Date;
 type RunningTask = { controller: AbortController; promise: Promise<void> };
 
 /** Map thrown stage errors to JobError; 401/403/404/410 image downloads are never retryable. */
 export function jobErrorFromCaught(error: unknown): JobError {
+  if (error instanceof ImageProviderError && error.status === 429) {
+    return { code: "IMAGE_PROVIDER_RATE_LIMIT", message: error.message, retryable: error.retryable };
+  }
   if (error instanceof StageError) {
     return {
       code: error.code,
@@ -82,6 +90,7 @@ export class JobWorker {
   private governor: ResourceGovernor | undefined;
   private overdueDeps: Omit<OverdueDeps, "now" | "notify"> | undefined;
   private readonly overdueRuns = new Map<string, OverdueRun>();
+  private agentStages: AgentStageService | undefined;
 
   constructor(
     private readonly repository: JobRepository,
@@ -101,6 +110,9 @@ export class JobWorker {
   /** Runs every 10 s, also when the local worker is off: expires worker-node leases. */
   setSweep(fn: () => void): void {
     this.sweep = fn;
+  }
+  setAgentStages(service: AgentStageService): void {
+    this.agentStages = service;
   }
 
   /** Says whether this machine may take a queued job now (false: leave it for a worker node). */
@@ -171,9 +183,10 @@ export class JobWorker {
         startedAtMs: Date.parse(job.startedAt), expectedMs: entry?.expectedMs ?? Math.round(limitMs / 2), limitMs,
         maxAttempts: job.maxAttempts, historyNote: null, remote: true,
         remoteFacts: () => {
-          const r = db.prepare("SELECT heartbeat_at, progress, message FROM jobs WHERE id = ?").get(id) as
-            { heartbeat_at: string | null; progress: number; message: string | null } | undefined;
-          return { heartbeatAgeMs: r?.heartbeat_at ? Math.max(0, this.now().getTime() - Date.parse(r.heartbeat_at)) : null, progress: r?.progress ?? 0, message: r?.message ?? null };
+          const r = db.prepare("SELECT heartbeat_at, progress, message, agent_instance FROM jobs WHERE id = ?").get(id) as
+            { heartbeat_at: string | null; progress: number; message: string | null; agent_instance: string | null } | undefined;
+          return { heartbeatAgeMs: r?.heartbeat_at ? Math.max(0, this.now().getTime() - Date.parse(r.heartbeat_at)) : null, progress: r?.progress ?? 0, message: r?.message ?? null,
+            holderLabel: r?.agent_instance ? `Agent ${r.agent_instance}` : "Máy worker" };
         },
         abort: (kind, reason) => {
           this.orchestrator.failJob(id, overdueAbortError(kind, reason));
@@ -201,6 +214,7 @@ export class JobWorker {
       this.sweepTimer = setInterval(() => {
         try {
           run();
+          this.agentStages?.sweep();
           this.sweepRemote();
           if (this.config.WORKER_ENABLED) this.wake();
         } catch (error) {
@@ -214,6 +228,7 @@ export class JobWorker {
 
   async tick(): Promise<void> {
     if (this.stopping) return;
+    this.agentStages?.sweep();
     void import("../events/webhooks.js").then(({ deliverBoundWebhooks }) => deliverBoundWebhooks(this.repository.sqlite)).catch(() => undefined);
     if (readDrain(this.repository.sqlite).draining) return;
     if (!this.indexTask) this.indexTask = runIndexJob(this.repository.sqlite,this.indexAbort.signal).finally(()=>{this.indexTask=undefined;});
@@ -224,6 +239,7 @@ export class JobWorker {
       const job = this.repository.getNextQueuedJob(now, (candidate) =>
         !skipped.has(candidate.id) && this.hasClassSlot(candidate) && this.localMayTake(candidate, now) && this.orchestrator.canStartQueuedJob(candidate, now));
       if (!job) break;
+      if (this.agentStages?.beforeLocal(job)) continue;
       const claimed = this.orchestrator.startJob(job.id);
       if (!claimed) {
         skipped.add(job.id);
@@ -324,7 +340,9 @@ export class JobWorker {
       });
       return;
     }
-    return runWithAutonomyBudget(read, () => this.run(job, controller));
+    const workspace = this.repository.sqlite.prepare("SELECT workspace_id FROM projects WHERE id=?").get(job.projectId) as { workspace_id: string | null } | undefined;
+    return runAsActor(systemActorFor(this.repository.sqlite, workspace?.workspace_id),
+      () => runWithAutonomyBudget(read, () => this.run(job, controller)));
   }
 
   private async run(job: Job, controller: AbortController): Promise<void> {
@@ -416,36 +434,41 @@ export class JobWorker {
       };
       arm(timeoutMs);
     });
+    const throttledActivity = createThrottledActivityReporter((activity) => {
+      tracker.setActivity({
+        ...(activity.childAlive !== undefined ? { childAlive: activity.childAlive } : {}),
+        ...(activity.childNote !== undefined ? { childNote: activity.childNote } : {}),
+        ...(activity.llmInFlight !== undefined ? { llmInFlight: activity.llmInFlight } : {}),
+        ...(activity.quotaWait !== undefined ? { quotaWait: activity.quotaWait } : {}),
+      });
+      tracker.markSignal(this.now().getTime());
+    }, 5000, () => this.now().getTime());
+
+    const stageContext = {
+      project,
+      job,
+      signal: controller.signal,
+      logger,
+      reportProgress: (progress: number, message?: string) => {
+        const timestamp = this.now().getTime();
+        lastProgressAt = timestamp;
+        tracker.note(progress, message, timestamp);
+        if (progress < 100 && timestamp - lastReportedAt < 250 && progress - lastProgress < 5) return;
+        lastReportedAt = timestamp;
+        lastProgress = progress;
+        this.orchestrator.reportProgress(job.id, progress, message);
+      },
+      recordUsage: (usage: Partial<import("@vg/shared").JobUsage>) => this.orchestrator.recordUsage(job.id, usage),
+      reportActivity: throttledActivity,
+    };
+
     try {
       const result = await Promise.race([
-        executor.run({
-          project,
-          job,
-          signal: controller.signal,
-          logger,
-          reportProgress: (progress, message) => {
-            const timestamp = this.now().getTime();
-            lastProgressAt = timestamp;
-            tracker.note(progress, message, timestamp);
-            if (progress < 100 && timestamp - lastReportedAt < 250 && progress - lastProgress < 5) return;
-            lastReportedAt = timestamp;
-            lastProgress = progress;
-            this.orchestrator.reportProgress(job.id, progress, message);
-          },
-          recordUsage: (usage) => this.orchestrator.recordUsage(job.id, usage),
-          reportActivity: (activity) => {
-            tracker.setActivity({
-              ...(activity.childAlive !== undefined ? { childAlive: activity.childAlive } : {}),
-              ...(activity.childNote !== undefined ? { childNote: activity.childNote } : {}),
-              ...(activity.llmInFlight !== undefined ? { llmInFlight: activity.llmInFlight } : {}),
-              ...(activity.quotaWait !== undefined ? { quotaWait: activity.quotaWait } : {}),
-            });
-            tracker.markSignal(this.now().getTime());
-          },
-        }),
+        runWithStageContext(stageContext, () => executor.run(stageContext)),
         timeoutPromise,
       ]);
       if (this.stopping) return;
+      if (this.agentStages?.afterLocal(job)) return;
       this.orchestrator.completeJob(job.id, result.message);
     } catch (error) {
       if (this.stopping) return;
@@ -456,7 +479,8 @@ export class JobWorker {
           retryable: true,
         });
       } else {
-        this.orchestrator.failJob(job.id, jobErrorFromCaught(error));
+        const failure = jobErrorFromCaught(error);
+        if (!this.agentStages?.afterError(job, failure)) this.orchestrator.failJob(job.id, failure);
       }
     } finally {
       if (timeoutHandle) clearTimeout(timeoutHandle);

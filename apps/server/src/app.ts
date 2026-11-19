@@ -131,6 +131,15 @@ import { installAssistantTelegramHandlers } from "./assistant/telegramBridge.js"
 import { OperatorService } from "./operator/service.js";
 import { collectOperatorEvents, dispatchOperatorEvents } from "./operator/events.js";
 import { registerOperatorRoutes } from "./api/operator.js";
+import { registerFleetRoutes } from "./api/fleet.js";
+import { ResearchHub } from "./research/runtime.js";
+import { registerResearchRoutes } from "./api/research.js";
+import { AgentStageService } from "./agents/stageService.js";
+import { AgentVisualToolkit } from "./agents/visualToolkit.js";
+import { registerAgentStageRoutes } from "./api/agentStages.js";
+import { registerSeededStandingOrder } from "./operator/extensions.js";
+import { runAsActor } from "./auth/requestContext.js";
+import { systemActorFor } from "./auth/workspaces.js";
 import { registerSkillReportRoutes } from "./api/skillReports.js";
 import { KnowledgeService } from "./knowledge/service.js";
 import { ChangeInbox } from "./knowledge/changeInbox.js";
@@ -389,6 +398,8 @@ export function buildApp({ config, testActor }: { config: AppConfig; testActor?:
     sceneService,
   );
   assistantService.setClips(clipService);
+  const researchHub = new ResearchHub(database.sqlite, llmProviders, config);
+  assistantService.setResearch(researchHub);
   notificationService.setWaitingApprovalButtons((event) => {
     const action = assistantService.createPendingApproveGate({
       projectId: event.projectId,
@@ -541,6 +552,8 @@ export function buildApp({ config, testActor }: { config: AppConfig; testActor?:
     },
   });
   setProviderIntel(providerIntelService);
+  registerSeededStandingOrder({ id: "seed-research-weekly", title: "Rà lại tri thức mỗi tuần", enabled: false, moduleId: "self-improvement", cron: "0 9 * * 1",
+    prompt: "Đọc list_stale_knowledge, chọn tối đa 3 mục quan trọng và gọi run_research với skill research-knowledge-refresh, knowledgeId, subject là ID mục và trigger schedule. Dùng ngân sách hiện tại, không tự duyệt đề xuất." });
   const operatorService = new OperatorService({
     llmProviders,
     sqlite: database.sqlite,
@@ -549,6 +562,7 @@ export function buildApp({ config, testActor }: { config: AppConfig; testActor?:
     assistant: assistantService,
     logger: server.log,
   });
+  researchHub.setRepoSkills(() => operatorService.repoSkillSummaries().map(({ name }) => operatorService.readRepoSkill(name)));
   wakeHolder.wake = (reason, prompt) => {
     if (process.env.VITEST) return { status: "refused" };
     return operatorService.wakeOperator(reason, prompt);
@@ -632,6 +646,20 @@ export function buildApp({ config, testActor }: { config: AppConfig; testActor?:
     }),
     usageService,
   );
+  const agentStages: AgentStageService = new AgentStageService({ repository: jobRepository, orchestrator,
+    context: (job) => agentVisuals.context(job),
+    validateComplete: (job) => { agentVisuals.validateComplete(job); },
+    openReason: (job) => {
+      if (job.stage !== "VISUAL_SEARCH") return null;
+      const open = visualService.agentOpenScenes(job.projectId);
+      return open.length ? `${open.length} cảnh còn mở: ${open.map((scene) => `${scene.order + 1} (${scene.attentionReason ?? (scene.selectedCandidate ? "ảnh chưa qua cổng" : "chưa có ảnh")})`).join(", ")}` : null;
+    },
+  });
+  const agentVisuals: AgentVisualToolkit = new AgentVisualToolkit(jobRepository, agentStages, visualService, config);
+  orchestrator.setQueuedJobHandler((job) => { agentStages.beforeLocal(job); });
+  worker.setAgentStages(agentStages);
+  assistantService.setAgentStages(agentStages, agentVisuals);
+  registerAgentStageRoutes(server, database.sqlite, agentStages, agentVisuals);
   worker.setSweep(() => nodeService.sweep());
   worker.setOverdue({
     sqlite: database.sqlite,
@@ -694,7 +722,7 @@ export function buildApp({ config, testActor }: { config: AppConfig; testActor?:
       else callback(null, false);
     },
   });
-  registerHealthRoutes(server, database.sqlite, config.RENDER_CONCURRENCY);
+  registerHealthRoutes(server, database.sqlite, config.RENDER_CONCURRENCY, config.EDGE_TTS_PATH, config.VG_MCP_HEALTH_URL);
   registerHelpRoutes(server);
   registerProjectRoutes(server, projectService);
   registerStageTimeoutRoutes(server, { sqlite: database.sqlite, registry: llmProviders, jobs: jobRepository });
@@ -735,6 +763,8 @@ export function buildApp({ config, testActor }: { config: AppConfig; testActor?:
   });
   registerAssistantRoutes(server, assistantService);
   registerOperatorRoutes(server, operatorService, database.sqlite);
+  registerFleetRoutes(server, database.sqlite, Object.entries(config).filter(([key, value]) => /KEY|TOKEN|SECRET|PASSWORD/.test(key) && typeof value === "string").map(([, value]) => value as string));
+  registerResearchRoutes(server, database.sqlite, researchHub);
   registerSkillReportRoutes(server, database.sqlite, config);
   registerRegistryRoutes(server, assistantService, operatorService);
   registerKnowledgeRoutes(server, knowledge, config.CORS_ORIGIN, database.sqlite);
@@ -761,6 +791,7 @@ export function buildApp({ config, testActor }: { config: AppConfig; testActor?:
     return { allowCopyrightedStills: visualCopyrightMode(database.sqlite, id) };
   });
   server.put("/api/profiles/:id/visual-copyright", async (request) => {
+    if (request.actor?.kind !== "user") throw new AppError(403, "VISUAL_COPYRIGHT_USER_ONLY", "Chỉ người dùng được đổi chế độ ảnh có bản quyền.");
     const { id } = z.object({ id: z.string().uuid() }).parse(request.params);
     const body = z.object({ allowCopyrightedStills: z.enum(["off", "commentary"]) }).parse(request.body);
     const { setVisualCopyrightMode } = await import("./services/visualPolicy.js");
@@ -872,6 +903,10 @@ export function buildApp({ config, testActor }: { config: AppConfig; testActor?:
   const detectorScheduler = createDetectorRuntime(database.sqlite, {
     signal: detectorAbort.signal,
     llm: knowledgeWatchModel(database.sqlite, llmProviders, detectorAbort.signal),
+    research: async () => {
+      const spaces = database.sqlite.prepare("SELECT id FROM organization").all() as Array<{ id: string }>;
+      for (const space of spaces) await runAsActor(systemActorFor(database.sqlite, space.id), () => researchHub.tick(detectorAbort.signal));
+    },
     health: () => statusPoller.poll(detectorAbort.signal),
     drift: async () => { new DriftMonitor(database.sqlite, () => new Date(), `http://${apiHost.includes(":") ? `[${apiHost}]` : apiHost}:${config.PORT}/api/knowledge/metrics`).run(); },
     audit: result => server.log.info(result, "knowledge detector run"),

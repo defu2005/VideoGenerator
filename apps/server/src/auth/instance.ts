@@ -60,7 +60,7 @@ export function createAuth(input: {
         creatorRole: "owner",
         allowUserToCreateOrganization: false,
       }),
-      apiKey({ rateLimit: { enabled: false } }),
+      apiKey({ enableMetadata: true, rateLimit: { enabled: false } }),
     ],
     advanced: {
       useSecureCookies: false,

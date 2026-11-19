@@ -1512,6 +1512,10 @@ fieldset.form-row > legend {
 .settings-list dt { color: var(--color-neutral-500); font-size: 10px; }
 .settings-list dd { margin: 0; color: var(--color-neutral-900); font-size: 10px; font-weight: 600; text-align: right; }
 .pipeline-card { grid-column: 1 / -1; }
+.agent-stage-card { padding: 16px; margin: 12px 0; border: 1px solid var(--color-neutral-300); border-radius: 12px; overflow-wrap: anywhere; }
+.agent-stage-heading { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+.agent-stage-card p { margin: 8px 0; }
+.agent-stage-card .button { min-height: 44px; }
 .pipeline-panel-heading { display: flex; align-items: center; justify-content: space-between; gap: 14px; }
 .pipeline-panel-heading h2 { margin-bottom: 0; }
 .pipeline-top-actions { display: flex; flex-wrap: wrap; gap: 7px; }

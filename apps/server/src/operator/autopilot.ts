@@ -1,16 +1,18 @@
 import { shelvedDigestLines } from "./repairDigest.js";
-import { stampWorkspace, workspaceOfProfile } from "../auth/requestContext.js";
+import { stampWorkspace, workspaceOfProfile, currentWorkspaceId } from "../auth/requestContext.js";
 import { randomInt, randomUUID, timingSafeEqual } from "node:crypto";
 import { rmSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
 import type Database from "better-sqlite3";
 import {
   AUTONOMY_PRESETS, GoalSpecSchema, PreferenceScopeSchema, RequestKindSchema, actionUrlAllowed, capGoalVideos,
-  fairShareTurn, goalCapacityWarning, quietHoursHold, topicIsSensitive,
+  fairShareTurn, goalCapacityWarning, localDateString, quietHoursHold, topicIsSensitive,
   type GoalSpec, type PreferenceScope, type RequestKind,
 } from "@vg/shared";
 import { AppError } from "../lib/errors.js";
 import { UsageService } from "../services/usageService.js";
+import { currentDuty } from "../supervision/duty.js";
+import { AGENT_SOLVABLE_KINDS, openEscalation, PROTECTED_PROJECT_ID, USER_ONLY_KINDS } from "../supervision/escalations.js";
 import { autonomyBudgetStatus } from "./autonomyBudget.js";
 import { effectiveAutonomy, saveAutonomySettings } from "./autonomy.js";
 import { setAutomationPaused } from "../services/automationSettings.js";
@@ -162,6 +164,58 @@ export function createUserRequest(sqlite: Database.Database, input: {
   }
   const existing = sqlite.prepare("SELECT id FROM operator_requests WHERE dedupe_key = ? AND status = 'open'").get(input.dedupeKey) as { id: string } | undefined;
   if (existing) return { id: existing.id, created: false };
+
+  // TASK-122: When Hermes is on duty and the issue is agent-solvable, escalate to Hermes with 30-min deadline.
+  // Non-solvable issues (secrets, money, permissions, deletes, protected project) always go straight to the user.
+  let solvableKind: string | null = null;
+  if ((AGENT_SOLVABLE_KINDS as readonly string[]).includes(input.checkKind as typeof AGENT_SOLVABLE_KINDS[number])) {
+    solvableKind = input.checkKind;
+  } else if (input.dedupeKey.startsWith("script-gate:") || input.dedupeKey.startsWith("visual-gate:") || input.dedupeKey.startsWith("render-gate:")) {
+    solvableKind = "held_quality_gate";
+  } else if (input.dedupeKey.startsWith("repair-exhausted:")) {
+    solvableKind = "repair_exhausted";
+  } else if (input.dedupeKey.startsWith("publish-failed:") || input.checkKind === "publish") {
+    solvableKind = "publish_failure";
+  } else if (input.checkKind === "provider_failing") {
+    solvableKind = "provider_failing";
+  } else if (input.checkKind === "unclear_instruction") {
+    solvableKind = "unclear_instruction";
+  }
+
+  let projectId: string | null = null;
+  const projectMatch = input.actionUrl?.match(/\/projects\/([0-9a-fA-F-]{36})/);
+  if (projectMatch) {
+    projectId = projectMatch[1];
+  } else if (input.checkArgs && typeof input.checkArgs === "object" && "projectId" in input.checkArgs) {
+    projectId = String((input.checkArgs as Record<string, unknown>).projectId);
+  }
+
+  const isUserOnly = (USER_ONLY_KINDS as readonly string[]).includes(input.checkKind as typeof USER_ONLY_KINDS[number])
+    || kind === "needs_key"
+    || kind === "reconnect_account"
+    || input.checkKind === "delete"
+    || input.checkKind === "money"
+    || projectId === PROTECTED_PROJECT_ID;
+
+  const now = input.now ? input.now() : new Date();
+  if (solvableKind && !isUserOnly && currentDuty(sqlite, now)) {
+    const esc = openEscalation(sqlite, {
+      fromKind: "operator",
+      fromInstance: "app",
+      kind: solvableKind,
+      objectRef: input.dedupeKey,
+      projectId,
+      summary: `${input.title}: ${input.whyVi}`,
+      evidence: {
+        dedupeKey: input.dedupeKey,
+        checkKind: input.checkKind,
+        actionUrl: input.actionUrl,
+        args: input.checkArgs,
+      },
+    }, now);
+    return { id: esc.id, created: true };
+  }
+
   const at = nowIso(input.now ?? (() => new Date()));
   if (kind !== "needs_key" && kind !== "reconnect_account") {
     const cap = input.maxQuestionsPerDay ?? 3;
@@ -407,14 +461,20 @@ export function buildDigest(sqlite: Database.Database, now: Clock = () => new Da
   const day = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Ho_Chi_Minh" }).format(at);
   const requests = listOpenRequests(sqlite);
   const goals = listGoals(sqlite, null).filter((row) => row.status === "active");
-  const findings = readRows(sqlite, "SELECT kind, status, resolution, severity, dedupe_key FROM supervisor_findings WHERE last_seen_at LIKE ?", `${day}%`);
-  const published = readRows(sqlite, `SELECT platform, title, visibility, link FROM (
-      SELECT a.platform AS platform, pr.title AS title, p.visibility_used AS visibility, p.external_url AS link, p.published_at AS at
+  const findingsRows = readRows(sqlite, "SELECT kind, status, resolution, severity, dedupe_key, last_seen_at FROM supervisor_findings");
+  const findings = findingsRows.filter((row) => {
+    const atStr = String(row.last_seen_at ?? "");
+    return atStr.startsWith(day) || (atStr && localDateString(new Date(atStr), "Asia/Ho_Chi_Minh") === day);
+  });
+  const publishedRows = readRows(sqlite, `SELECT a.platform AS platform, pr.title AS title, p.visibility_used AS visibility, p.external_url AS link, p.published_at AS at
       FROM publications p
       JOIN projects pr ON pr.id = p.project_id
       JOIN platform_accounts a ON a.id = p.account_id
-      WHERE p.status = 'PUBLISHED' AND p.published_at LIKE ?
-    )`, `${day}%`);
+      WHERE p.status = 'PUBLISHED'`);
+  const published = publishedRows.filter((p) => {
+    const atStr = String(p.at ?? "");
+    return atStr.startsWith(day) || (atStr && localDateString(new Date(atStr), "Asia/Ho_Chi_Minh") === day);
+  });
   const inProgress = readRows(sqlite, `SELECT pr.title AS title, j.stage AS stage, j.message AS waiting
     FROM jobs j JOIN projects pr ON pr.id = j.project_id
     WHERE j.status IN ('QUEUED', 'RUNNING')`);
@@ -425,6 +485,7 @@ export function buildDigest(sqlite: Database.Database, now: Clock = () => new Da
     const plan = (goal.spec as { plan?: { videos?: number } } | undefined)?.plan;
     return plan?.videos ? `${goal.text}: ${plan.videos} video` : goal.text;
   });
+  const researchWeek = readRows(sqlite, "SELECT proposal_ids FROM research_runs WHERE workspace_id IS ? AND created_at >= ?", currentWorkspaceId(sqlite), new Date(at.getTime() - 7 * 86_400_000).toISOString());
   return {
     day,
     published,
@@ -437,6 +498,7 @@ export function buildDigest(sqlite: Database.Database, now: Clock = () => new Da
     spend: digestSpend(sqlite, at),
     spendNote: "Chi tiết chi phí nằm ở Mức dùng.",
     shelved: shelvedDigestLines(sqlite, day),
+    selfImprovementWeek: { researched: researchWeek.length, knowledgeProposals: researchWeek.reduce((sum, row) => sum + (JSON.parse(String(row.proposal_ids)) as unknown[]).length, 0) },
     tomorrow,
   };
 }

@@ -13,6 +13,8 @@ export const JobErrorSchema = z.object({
 export type JobError = z.infer<typeof JobErrorSchema>;
 
 export const LlmCallUsageSchema = z.object({
+  /** Zero is an external-stage placeholder with no reported call count. */
+  callCount: z.number().int().nonnegative().optional(),
   task: z.string().min(1),
   provider: z.string().min(1),
   model: z.string(),
@@ -28,6 +30,7 @@ export const LlmCallUsageSchema = z.object({
   characters: z.number().int().nonnegative().optional(),
   /** This call's own cost. When every call sets it, usage keeps these amounts. */
   costUsd: z.number().nonnegative().optional(),
+  costUnknown: z.boolean().optional(),
 }).strict();
 export type LlmCallUsage = z.infer<typeof LlmCallUsageSchema>;
 
@@ -36,6 +39,7 @@ export const JobUsageSchema = z.object({
   inputTokens: z.number().int().nonnegative(),
   outputTokens: z.number().int().nonnegative(),
   costUsd: z.number().nonnegative(),
+  costUnknown: z.boolean().optional(),
   provider: z.string().optional(),
   model: z.string().optional(),
   tokensUnknown: z.boolean().optional(),
@@ -56,6 +60,12 @@ export const StageRecordSchema = z.object({
 export type StageRecord = z.infer<typeof StageRecordSchema>;
 
 export const JobSchema = z.object({
+  executor: z.enum(["app", "agent"]).default("app"),
+  handoffReason: z.string().nullable().optional(),
+  handoffAt: z.string().datetime({ offset: true }).nullable().optional(),
+  agentInstance: z.string().nullable().optional(),
+  leaseUntil: z.string().datetime({ offset: true }).nullable().optional(),
+  heartbeatAt: z.string().datetime({ offset: true }).nullable().optional(),
   id: z.string().uuid(),
   projectId: z.string().uuid(),
   stage: PipelineStageSchema,

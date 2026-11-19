@@ -1,0 +1,34 @@
+services:
+  hermes:
+    image: nousresearch/hermes-agent:${HERMES_VERSION:-0.23.1}
+    # Keep the official /init entrypoint: it initializes the volume then drops to HERMES_UID.
+    command: ["gateway", "run"]
+    env_file: [.env.hermes]
+    environment:
+      HERMES_HOME: /opt/data
+      HERMES_UID: ${HERMES_UID:-10000}
+      HERMES_GID: ${HERMES_GID:-10000}
+    volumes: ["hermes-data:/opt/data"]
+    restart: unless-stopped
+
+  vg-hermes-sync:
+    image: ${VG_IMAGE:-vg:dev}
+    user: "${HERMES_UID:-10000}:${HERMES_GID:-10000}"
+    command: ["node", "apps/mcp/dist/sync.js"]
+    env_file: [.env.hermes]
+    environment:
+      VG_HERMES_HOME: /opt/data
+      VG_ENVIRONMENT: docker
+      HERMES_VERSION: ${HERMES_VERSION:-0.23.1}
+      VG_SYNC_INTERVAL_SEC: ${VG_SYNC_INTERVAL_SEC:-300}
+    volumes: ["hermes-data:/opt/data"]
+    init: true
+    restart: unless-stopped
+    healthcheck:
+      disable: true
+    depends_on:
+      hermes:
+        condition: service_started
+
+volumes:
+  hermes-data:

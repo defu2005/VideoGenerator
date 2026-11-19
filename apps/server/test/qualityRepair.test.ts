@@ -42,19 +42,27 @@ afterEach(() => {
 
 const projectId = "33333333-3333-4333-8333-333333333333";
 const profileId = "22222222-2222-4222-8222-222222222222";
-const now = () => new Date().toISOString();
+const defaultClock = () => new Date();
+const now = () => defaultClock().toISOString();
 
-function setup(options: { level?: "autonomous" | "supervised" | "assist"; repair?: Record<string, unknown>; mode?: string } = {}) {
+function setup(options: {
+  level?: "autonomous" | "supervised" | "assist";
+  repair?: Record<string, unknown>;
+  mode?: string;
+  clock?: () => Date;
+} = {}) {
+  const clock = options.clock ?? defaultClock;
+  const clockIso = () => clock().toISOString();
   const root = mkdtempSync(join(tmpdir(), "vg-repair-"));
   roots.push(root);
   const opened = openDatabase(join(root, "app.db"));
   migrateDatabase(opened.db);
   const sqlite = opened.sqlite;
   opens.push(sqlite);
-  sqlite.prepare(`INSERT INTO profiles (id, name, default_brief, guidelines, created_at, updated_at) VALUES (?, 'Hồ sơ', '{}', '{}', ?, ?)`).run(profileId, now(), now());
+  sqlite.prepare(`INSERT INTO profiles (id, name, default_brief, guidelines, created_at, updated_at) VALUES (?, 'Hồ sơ', '{}', '{}', ?, ?)`).run(profileId, clockIso(), clockIso());
   sqlite.prepare(`INSERT INTO projects (id, title, topic, mode, settings, status, stage, profile_id, created_at, updated_at)
     VALUES (?, 'Video thử', 'lịch sử', 'ASSISTED', ?, 'REVIEW', 'SCRIPT', ?, ?, ?)`)
-    .run(projectId, JSON.stringify({ targetDurationSec: 100, budget: { mode: options.mode ?? "BALANCED" } }), profileId, now(), now());
+    .run(projectId, JSON.stringify({ targetDurationSec: 100, budget: { mode: options.mode ?? "BALANCED" } }), profileId, clockIso(), clockIso());
   const level = options.level ?? "autonomous";
   const settings = AutonomySettingsSchema.parse({ level, grants: AUTONOMY_PRESETS[level], ...(options.repair ? { repair: options.repair } : {}) });
   saveAutonomySettings(sqlite, settings);
@@ -72,13 +80,13 @@ function setup(options: { level?: "autonomous" | "supervised" | "assist"; repair
     },
     gated: true,
   } as never;
-  return { sqlite, ctx, calls };
+  return { sqlite, ctx, calls, clock };
 }
 
-function script(sqlite: import("better-sqlite3").Database, score: number | null, blocking = 0, round = 0) {
+function script(sqlite: import("better-sqlite3").Database, score: number | null, blocking = 0, round = 0, clockIso: () => string = now) {
   sqlite.prepare("DELETE FROM scripts WHERE project_id = ?").run(projectId);
   sqlite.prepare(`INSERT INTO scripts (project_id, data, origin, edited, input_hash, version, provider, model, updated_at, quality_score, blocking_facts, revise_round)
-    VALUES (?, '{}', 'AGENT', 0, 'h', 1, 'mock', 'mock', ?, ?, ?, ?)`).run(projectId, now(), score, blocking, round);
+    VALUES (?, '{}', 'AGENT', 0, 'h', 1, 'mock', 'mock', ?, ?, ?, ?)`).run(projectId, clockIso(), score, blocking, round);
 }
 
 function render(sqlite: import("better-sqlite3").Database, file: string, duration: number, report: Record<string, unknown>) {
@@ -161,13 +169,17 @@ describe("script repair", () => {
     expect(sqlite.prepare("SELECT COUNT(*) AS n FROM operator_tool_audit WHERE tool = 'repair_script' AND origin = 'supervisor'").get()).toEqual({ n: 2 });
   });
 
-  it("shelves the project when the budget runs out", async () => {
-    const { sqlite, ctx } = setup({ repair: { maxAttemptsPerProject: 2, maxRendersPerProject: 2, maxUsdPerProject: null, onExhausted: "shelve" } });
+  async function exerciseShelveAt(clock: () => Date) {
+    const clockIso = () => clock().toISOString();
+    const { sqlite, ctx } = setup({
+      repair: { maxAttemptsPerProject: 2, maxRendersPerProject: 2, maxUsdPerProject: null, onExhausted: "shelve" },
+      clock,
+    });
     sqlite.prepare(`INSERT INTO profile_topics (id, profile_id, topic, source, status, priority, project_id, created_at, updated_at)
-      VALUES ('t1', ?, 'lịch sử', 'USER', 'IN_PRODUCTION', 5, ?, ?, ?)`).run(profileId, projectId, now(), now());
-    script(sqlite, 5);
+      VALUES ('t1', ?, 'lịch sử', 'USER', 'IN_PRODUCTION', 5, ?, ?, ?)`).run(profileId, projectId, clockIso(), clockIso());
+    script(sqlite, 5, 0, 0, clockIso);
     hooks.script = async () => ({});
-    const env: RepairEnv = { ctx };
+    const env: RepairEnv = { ctx, now: clock };
     expect((await repairStep(env, projectId, "SCRIPT")).status).toBe("repairing");
     expect((await repairStep(env, projectId, "SCRIPT")).status).toBe("repairing");
     const last = await repairStep(env, projectId, "SCRIPT");
@@ -176,10 +188,22 @@ describe("script repair", () => {
     expect(sqlite.prepare("SELECT status, project_id, notes FROM profile_topics WHERE id = 't1'").get())
       .toMatchObject({ status: "APPROVED", project_id: null });
     expect(sqlite.prepare("SELECT COUNT(*) AS n FROM operator_requests").get()).toEqual({ n: 0 });
-    const digest = buildDigest(sqlite) as { shelved: string[] };
+    const digest = buildDigest(sqlite, clock) as { shelved: string[] };
     expect(digest.shelved[0]).toMatch(/Đã gác video «Video thử»/);
-    expect(reopenShelved(sqlite, projectId).status).toBe("REVIEW");
+    expect(reopenShelved(sqlite, projectId, clock()).status).toBe("REVIEW");
     expect(listRepairLog(sqlite, projectId).attempts).toBe(0);
+  }
+
+  it("shelves the project when the budget runs out", async () => {
+    await exerciseShelveAt(() => new Date("2026-11-13T12:00:00.000Z"));
+  });
+
+  it("TASK-131: passes shelve test at 23:59:59Z across UTC midnight", async () => {
+    await exerciseShelveAt(() => new Date("2026-11-13T23:59:59.000Z"));
+  });
+
+  it("TASK-131: passes shelve test at 00:00:01Z across UTC midnight", async () => {
+    await exerciseShelveAt(() => new Date("2026-11-14T00:00:01.000Z"));
   });
 
   it("asks the user when onExhausted is ask and lists what was tried", async () => {
@@ -224,6 +248,18 @@ describe("script repair", () => {
 });
 
 describe("scene and render repair", () => {
+  it("hands exhausted visual repairs to the stage service before asking or shelving", async () => {
+    const { sqlite, ctx } = setup({ repair: { maxAttemptsPerProject: 1, maxRendersPerProject: 2, maxUsdPerProject: null, onExhausted: "ask" } });
+    const handoffAfterRepair = vi.fn(() => ({ id: "rescue-job" }));
+    Object.assign(ctx, { agentStages: { handoffAfterRepair } });
+    hooks.scene = async () => ({});
+    const visuals = { repairSceneView: () => [view({ sceneId: sceneA, reason: "no_candidate", candidateId: null })], repairWebAllowed: () => false };
+    const result = await runQualityRepair({ ctx, visuals }, projectId, "VISUALS");
+    expect(result).toMatchObject({ status: "exhausted", handled: "agent" });
+    expect(handoffAfterRepair).toHaveBeenCalledWith(projectId, expect.any(String));
+    expect((sqlite.prepare("SELECT status FROM projects WHERE id=?").get(projectId) as { status: string }).status).not.toBe("SHELVED");
+    expect(sqlite.prepare("SELECT 1 FROM operator_requests WHERE dedupe_key=?").get(`visual-gate:${projectId}`)).toBeUndefined();
+  });
   it("repairs scenes in one call, never touching user-owned scenes", async () => {
     const { sqlite, ctx } = setup();
     const state: Record<string, SceneView> = {

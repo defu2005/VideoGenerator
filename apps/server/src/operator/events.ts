@@ -4,6 +4,8 @@ import { AppError } from "../lib/errors.js";
 import { createHash } from "node:crypto";
 import { z } from "zod";
 import { getAutomationPaused } from "../services/automationSettings.js";
+import { currentDuty } from "../supervision/duty.js";
+import { openEscalation } from "../supervision/escalations.js";
 
 export const OperatorEventKind = z.enum(["job_failed", "render_completed", "quota_wait", "approval_wait", "job_overdue"]);
 export const OperatorEventRule = z.object({
@@ -79,8 +81,13 @@ export function dispatchOperatorEvents(sqlite: Database.Database, deps: {
           }).status !== "refused";
           if (accepted) sqlite.prepare("UPDATE operator_events SET wake_run_id = ? WHERE id = ?").run(runId, event.id);
         }
-        if (rule.telegram && !event.telegram_sent_at && await deps.telegram(`${labels[rule.kind]}. Xem sự kiện ${event.id} trong Agent operator.`)) {
-          sqlite.prepare("UPDATE operator_events SET telegram_sent_at = ? WHERE id = ?").run(new Date().toISOString(), event.id);
+        if (rule.telegram && !event.telegram_sent_at) {
+          if (rule.kind === "job_overdue" && currentDuty(sqlite)) {
+            continue;
+          }
+          if (await deps.telegram(`${labels[rule.kind]}. Xem sự kiện ${event.id} trong Agent operator.`)) {
+            sqlite.prepare("UPDATE operator_events SET telegram_sent_at = ? WHERE id = ?").run(new Date().toISOString(), event.id);
+          }
         }
       }
     }
@@ -90,7 +97,7 @@ export function dispatchOperatorEvents(sqlite: Database.Database, deps: {
 export function collectOperatorEvents(sqlite: Database.Database): void {
   sqlite.transaction(() => {
     // TASK-125: fires on the first overdue mark and on each escalate.
-    // TODO(TASK-122): route job_overdue into an escalation (Hermes decides, then the user).
+    // TASK-122: route job_overdue into an escalation (Hermes decides, then the user).
     sqlite.prepare(`
       INSERT OR IGNORE INTO operator_events (id, kind, profile_id, project_id, job_id, occurred_at)
       SELECT 'job_overdue:' || c.id, 'job_overdue', p.profile_id, c.project_id, c.job_id, c.at
@@ -98,6 +105,25 @@ export function collectOperatorEvents(sqlite: Database.Database): void {
       WHERE c.project_id <> ? AND p.profile_id IS NOT NULL
         AND (c.check_no = 1 OR c.action = 'escalate') AND c.source IN ('ladder', 'llm', 'override')
     `).run(PROTECTED_PROJECT_ID);
+    if (currentDuty(sqlite)) {
+      const overdueRows = sqlite.prepare(`
+        SELECT c.id, c.job_id, c.project_id, c.stage, c.reason
+        FROM stage_overdue_checks AS c JOIN projects AS p ON p.id = c.project_id
+        WHERE c.project_id <> ? AND p.profile_id IS NOT NULL
+          AND (c.check_no = 1 OR c.action = 'escalate') AND c.source IN ('ladder', 'llm', 'override')
+      `).all(PROTECTED_PROJECT_ID) as Array<{ id: string; job_id: string; project_id: string; stage: string; reason: string }>;
+      for (const row of overdueRows) {
+        openEscalation(sqlite, {
+          fromKind: "operator",
+          fromInstance: "app",
+          kind: "stuck_job",
+          objectRef: row.job_id,
+          projectId: row.project_id,
+          summary: `Bước ${row.stage} của job ${row.job_id} quá giờ: ${row.reason}`,
+          evidence: { checkId: row.id, jobId: row.job_id, stage: row.stage, reason: row.reason },
+        });
+      }
+    }
     sqlite.prepare(`
       INSERT OR IGNORE INTO operator_events (id, kind, profile_id, project_id, job_id, occurred_at)
       SELECT kind || ':' || id || ':' || attempt, kind, profile_id, project_id, id, occurred_at

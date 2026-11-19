@@ -5,6 +5,7 @@ import { isAuthAllowlisted } from "./guard.js";
 import { can, scopeFor } from "./policy.js";
 import { findRule, loadResource } from "./routePermissions.js";
 import { runInRequestContext, setContextActor } from "./requestContext.js";
+import { userBreakLease } from "../supervision/leases.js";
 
 export type RegisteredRoute = { method: string; url: string };
 
@@ -51,6 +52,11 @@ export function registerPermissionHook(server: FastifyInstance, sqlite: Database
       : undefined);
     if (!decision.ok) {
       throw new AppError(decision.status, decision.status === 404 ? "NOT_FOUND" : "FORBIDDEN", decision.reason);
+    }
+    if (actor.kind === "user" && !["GET", "HEAD", "OPTIONS"].includes(request.method) && rule.resource === "project" && resource && (resource.workspaceId !== null || actor.ownsUnassigned)) {
+      const params = (request.params ?? {}) as { id?: string; projectId?: string };
+      const projectId = params.id ?? params.projectId;
+      if (projectId) userBreakLease(sqlite, { kind: "project", id: projectId });
     }
   });
   return { routes };

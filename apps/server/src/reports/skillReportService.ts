@@ -1,3 +1,4 @@
+import { currentWorkspaceId } from "../auth/requestContext.js";
 import { createHash, randomUUID } from "node:crypto";
 import type Database from "better-sqlite3";
 import { z } from "zod";
@@ -8,7 +9,7 @@ import { enqueueIndex } from "../retrieval/service.js";
 import { catalogDirection, readCatalogMetric } from "./metricCatalog.js";
 
 const CLAIM_MS = 2 * 60 * 60 * 1000;
-const seenAgents = new Map<string, number>();
+const seenAgents = new WeakMap<Database.Database, Map<string, number>>();
 
 const textField = z.string().max(4000).optional();
 const metricSchema = z.object({
@@ -227,9 +228,10 @@ export function listAgents(sqlite: Database.Database): Array<Record<string, unkn
   return sqlite.prepare(
     `SELECT kind, name, environment, model, first_seen_at, last_seen_at, calls,
        (SELECT COUNT(*) FROM skill_reports r
-        WHERE r.agent_kind = agents.kind AND r.agent_name = agents.name AND r.agent_environment = agents.environment) AS reports
-     FROM agents ORDER BY last_seen_at DESC`,
-  ).all() as Array<Record<string, unknown>>;
+        WHERE r.agent_kind = agents.kind AND r.agent_name = agents.name AND r.agent_environment = agents.environment
+          AND r.profile_id IN (SELECT id FROM profiles WHERE workspace_id IS agents.workspace_id)) AS reports
+     FROM agents WHERE workspace_id IS ? ORDER BY last_seen_at DESC`,
+  ).all(currentWorkspaceId(sqlite)) as Array<Record<string, unknown>>;
 }
 
 export function openSkillClaims(sqlite: Database.Database): Array<Record<string, unknown>> {
@@ -278,15 +280,18 @@ export function skillReportSummary(sqlite: Database.Database): Array<Record<stri
 }
 
 export function noteAgentSeen(sqlite: Database.Database, agent: AgentIdentity, at = new Date()): void {
-  const key = `${agent.kind}|${agent.name}|${agent.environment}`;
-  const last = seenAgents.get(key) ?? 0;
+  const workspaceId = currentWorkspaceId(sqlite);
+  const key = `${workspaceId}|${agent.kind}|${agent.name}|${agent.environment}`;
+  const seen = seenAgents.get(sqlite) ?? new Map<string, number>();
+  seenAgents.set(sqlite, seen);
+  const last = seen.get(key) ?? 0;
   if (at.getTime() - last < 60_000) return;
-  seenAgents.set(key, at.getTime());
+  seen.set(key, at.getTime());
   const stamp = at.toISOString();
   sqlite.prepare(
-    `INSERT INTO agents (id, kind, name, environment, model, first_seen_at, last_seen_at, calls)
-     VALUES (?, ?, ?, ?, ?, ?, ?, 1)
-     ON CONFLICT(kind, name, environment) DO UPDATE SET
+    `INSERT INTO agents (id, workspace_id, kind, name, environment, model, first_seen_at, last_seen_at, calls)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1)
+     ON CONFLICT(workspace_id, kind, name, environment) DO UPDATE SET
        model = excluded.model, last_seen_at = excluded.last_seen_at, calls = calls + 1`,
-  ).run(randomUUID(), agent.kind, agent.name, agent.environment, agent.model, stamp, stamp);
+  ).run(randomUUID(), workspaceId, agent.kind, agent.name, agent.environment, agent.model, stamp, stamp);
 }

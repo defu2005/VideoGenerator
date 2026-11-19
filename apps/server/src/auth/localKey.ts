@@ -1,3 +1,4 @@
+import { defaultWorkspaceId } from "./workspaces.js";
 import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import type Database from "better-sqlite3";
@@ -57,6 +58,7 @@ export async function ensureLocalServiceKey(input: {
     body: {
       name: LOCAL_SERVICE_KEY_NAME,
       userId: ownerId,
+      metadata: { workspaceId: defaultWorkspaceId(input.sqlite) },
     },
   });
   if (!created.key) throw new Error("Local service key was not created");

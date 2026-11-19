@@ -648,10 +648,11 @@ describe("operator runtime", () => {
       payload: { tickCron: "* * * * *" },
     });
     arm({ stdout: [JSON.stringify({ type: "result", result: "Đã kiểm tra" })] });
-    const started = app.vgOperator.service.tick(new Date());
+    const tickAt = new Date();
+    const started = app.vgOperator.service.tick(tickAt);
     expect(started.started.length).toBeGreaterThanOrEqual(2);
     await app.vgOperator.service.waitForIdle();
-    const again = app.vgOperator.service.tick(new Date());
+    const again = app.vgOperator.service.tick(tickAt);
     expect(again.started).toEqual([]);
   });
 

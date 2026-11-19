@@ -1,10 +1,12 @@
 import { createHash, randomUUID } from "node:crypto";
 import { existsSync } from "node:fs";
-import { untrustedTextHasInstructions, type ScriptGateInput } from "@vg/shared";
+import { checkNeighbouringSceneDuplicates, preRenderCheck, untrustedTextHasInstructions, type DuplicateSentenceWarning, type ScriptGateInput } from "@vg/shared";
 import { localDateString } from "@vg/shared";
 import type Database from "better-sqlite3";
 import { readAutonomyBudget } from "./autonomyBudget.js";
 import { createUserRequest } from "./autopilot.js";
+import { currentDuty } from "../supervision/duty.js";
+import { openEscalation } from "../supervision/escalations.js";
 
 export const SILENT_MAX_VOLUME_DB = -50;
 
@@ -146,6 +148,18 @@ export function recordHeld(sqlite: Database.Database, projectId: string, check: 
   sqlite.prepare(`INSERT INTO app_settings (key, value, updated_at) VALUES ('autonomy.heldGates', ?, ?)
     ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at`)
     .run(JSON.stringify(next), new Date().toISOString());
+
+  if (currentDuty(sqlite)) {
+    openEscalation(sqlite, {
+      fromKind: "operator",
+      fromInstance: "app",
+      kind: "held_quality_gate",
+      objectRef: projectId,
+      projectId,
+      summary: `Giữ cổng chất lượng: ${check}`,
+      evidence: { projectId, check },
+    });
+  }
 }
 
 export function renderGateInputs(sqlite: Database.Database, projectId: string): {
@@ -293,3 +307,22 @@ export function notePublicationClaim(sqlite: Database.Database, input: {
     checkKind: "info",
   });
 }
+
+/**
+ * Pre-render check: inspects project scenes for duplicate narration across neighbouring scenes.
+ * Returns warnings with scene ids. Does not block render on its own.
+ */
+export function preRenderSceneCheck(
+  sqlite: Database.Database,
+  projectId: string,
+  language = "vi",
+): DuplicateSentenceWarning[] {
+  const scenes = sqlite.prepare(
+    'SELECT id, narration, "order" FROM scenes WHERE project_id = ? ORDER BY "order" ASC',
+  ).all(projectId) as Array<{ id: string; narration: string; order: number }>;
+  return checkNeighbouringSceneDuplicates(scenes, language);
+}
+
+export { checkNeighbouringSceneDuplicates, preRenderCheck };
+export type { DuplicateSentenceWarning };
+

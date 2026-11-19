@@ -148,3 +148,40 @@ environment:
 3. **Trong Docker chỉ dùng provider có API key**, hoặc OmniRoute chạy trên host. Compose đã thêm `host.docker.internal`. Đặt `OMNIROUTE_BASE_URL=http://host.docker.internal:20128/v1` và `OMNIROUTE_API_KEY` trong `.env`, rồi `docker compose up -d`.
 
 Nên dùng cách 3 trên VPS. Giữ Claude CLI, agy và cursor-agent trên máy bạn đã đăng nhập.
+
+## Hermes Supervisor
+
+Khi vận hành cùng Hermes (giao tiếp qua MCP), bạn có thể tạo lịch cron để Hermes định kỳ kiểm tra và giám sát hệ thống:
+
+```bash
+hermes cron create "every 15m" "Run the vg-supervise skill" --skill vg-supervise --name vg-supervise
+```
+
+Lưu ý: Tác vụ cron yêu cầu tiến trình Hermes gateway đang chạy (bộ lập lịch hoạt động bên trong gateway).
+## Hermes trên nhiều máy
+
+Chuẩn bị bằng `bash deploy/install.sh control --with-hermes`. Bước này chỉ sao chép compose và mẫu `.env.hermes` trống; không khởi động Hermes trước khi bạn đặt khóa riêng. Image mặc định được pin `nousresearch/hermes-agent:0.23.1`; không dùng tag `latest`. Giữ entrypoint chính thức: nó khởi tạo volume rồi hạ quyền xuống user Hermes. Sidecar dùng cùng UID/GID (mặc định 10000) và cùng volume, không chạy root.
+
+1. Trong Tài khoản của tôi, tạo **một khóa máy cho mỗi instance**, gắn loại `hermes`, tên instance riêng; chỉ bật `canSupervise` cho máy được phép nhận trực. Mỗi khóa API gắn với một workspace.
+2. Điền `VG_API_URL`, `VG_API_KEY`, `VG_MCP_URL` (URL công khai kết thúc `/mcp`), `VG_HERMES_MODEL_KEY` và `VG_AGENT_NAME` vào `.env.hermes` trên máy đó. Chỉ điền khóa trực tiếp vào file của máy; không dán vào prompt, bundle hay báo cáo. Đặt `HERMES_VERSION=0.23.1` hoặc tag cố định khớp Cài đặt → Đội Hermes.
+3. Chạy `docker compose --env-file .env.hermes -f compose.control.yml -f compose.hermes.yml up -d hermes vg-hermes-sync`. Để control đọc được `.env` riêng khi dùng `--env-file`, đảm bảo các biến triển khai như `VG_IMAGE`/`DOMAIN` được xuất từ môi trường của control hoặc giữ giá trị mặc định. Trên máy Hermes độc lập, chỉ cần `-f compose.hermes.yml`; API URL trỏ về hub từ xa.
+4. Mỗi volume `hermes-data` chỉ có một gateway và một sidecar. Máy khác dùng volume riêng. Không nối hai gateway vào cùng thư mục.
+5. Sau đồng bộ cấu hình, chạy `/reload-mcp` hoặc restart gateway. Sidecar chỉ viết `vg-sync/reload-needed`, không restart thay bạn. Tab Fleet hiển thị lệnh cron thiếu; bạn chạy nó, không sửa `cron/jobs.json` bằng tay. Gateway phải chạy để cron hoạt động.
+6. Chỉ một Hermes nhận duty tại một thời điểm; máy khác dự phòng. Không dùng token Telegram của app cho Hermes: tắt Telegram ở Hermes hoặc dùng bot khác.
+7. Nâng cấp: đổi phiên bản trong Cài đặt → Đội Hermes và `HERMES_VERSION` trong `.env.hermes`, rồi chạy compose với cùng `--env-file`, `pull` và `up -d`. Không xóa volume.
+
+### WSL và stdio
+
+Stdio vẫn chạy `node apps/mcp/dist/index.js`. Để chuyển sang HTTP, sửa riêng mục `mcp_servers.video-agent` trong config Hermes theo ví dụ dưới; không chia sẻ thư mục Hermes đang dùng với một gateway khác:
+
+```yaml
+mcp_servers:
+  video-agent:
+    url: ${VG_MCP_URL}
+    headers:
+      Authorization: "Bearer ${VG_API_KEY}"
+```
+
+Xuất các biến khóa trên WSL bằng cơ chế giữ bí mật bạn đang dùng, đặt `VG_HERMES_HOME` tới thư mục Hermes của instance và `HERMES_VERSION` tới bản đang chạy. Chạy `node apps/mcp/dist/sync.js --once` để kiểm tra, rồi bỏ `--once` để chạy vòng lặp (mặc định 300 giây; có thể đặt `VG_SYNC_INTERVAL_SEC`). Không cần chạy Hermes CLI từ sidecar. Dừng hub không làm sidecar xóa gói đang dùng; lỗi mạng chỉ ghi một dòng gọn.
+
+Bộ đồng bộ giữ các khóa YAML ngoài phạm vi quản lý và ghi `config.yaml.vg-bak` trước khi cấu hình đổi. Chỉ thư mục `vg-skills`, trạng thái trong `vg-sync` và các khóa model/provider/MCP/skills/memory được chỉ định mới được ghi. `skills.external_dirs` của máy được giữ, thêm thư mục gói cục bộ. `.env`, `auth.json`, `memories/` và `sessions/` không được đọc hay gửi đi.

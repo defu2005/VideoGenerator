@@ -533,6 +533,34 @@
       "when": 1794529180451,
       "tag": "0075_omniscient_slipstream",
       "breakpoints": true
+    },
+    {
+      "idx": 76,
+      "version": "6",
+      "when": 1794592550906,
+      "tag": "0076_new_miracleman",
+      "breakpoints": true
+    },
+    {
+      "idx": 77,
+      "version": "6",
+      "when": 1794680236467,
+      "tag": "0077_zippy_riptide",
+      "breakpoints": true
+    },
+    {
+      "idx": 78,
+      "version": "6",
+      "when": 1794689178622,
+      "tag": "0078_friendly_multiple_man",
+      "breakpoints": true
+    },
+    {
+      "idx": 79,
+      "version": "6",
+      "when": 1794693883859,
+      "tag": "0079_common_dexter_bennett",
+      "breakpoints": true
     }
   ]
 }

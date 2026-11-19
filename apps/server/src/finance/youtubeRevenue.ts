@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { currentWorkspaceId } from "../auth/requestContext.js";
+import { currentWorkspaceId, workspaceOfProfile } from "../auth/requestContext.js";
 import type Database from "better-sqlite3";
 import {
   YOUTUBE_ANALYTICS_MONETARY_READONLY_SCOPE,
@@ -176,8 +176,9 @@ export function upsertYoutubeRevenueEntries(
   let inserted = 0;
   let updated = 0;
 
+  const workspaceId = workspaceOfProfile(sqlite, opts.profileId) ?? currentWorkspaceId(sqlite);
   const find = sqlite.prepare(
-    `SELECT id FROM revenue_entries WHERE source = 'youtube_api' AND external_key = ?`,
+    `SELECT id FROM revenue_entries WHERE source = 'youtube_api' AND external_key = ? AND workspace_id IS ?`,
   );
   const update = sqlite.prepare(
     `UPDATE revenue_entries SET amount = ?, currency = ?, kind = ?, period_start = ?, period_end = ?,
@@ -201,7 +202,7 @@ export function upsertYoutubeRevenueEntries(
     note: string | null,
   ) => {
     if (!(amount > 0)) return;
-    const existing = find.get(externalKey) as { id: string } | undefined;
+    const existing = find.get(externalKey, workspaceId) as { id: string } | undefined;
     if (existing) {
       update.run(
         amount,

@@ -247,6 +247,25 @@ describe("CreateProjectDialog", () => {
     expect(screen.getByLabelText("Tone")).toHaveValue("serious");
   });
 
+  it("sends nested executor settings and wait minutes in the create payload", async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.includes("/profiles")) return jsonResponse({ items: [] });
+      if (url === "/api/projects" && init?.method === "POST") return jsonResponse(project, 201);
+      return jsonResponse([]);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    renderWithProviders(<CreateProjectDialog open onClose={vi.fn()} />);
+    fireEvent.change(screen.getByLabelText(/Topic/), { target: { value: "Ocean life" } });
+    fireEvent.click(screen.getByRole("button", { name: /Customize/ }));
+    fireEvent.change(screen.getByRole("combobox", { name: "Ai xử lý bước tìm ảnh" }), { target: { value: "agent" } });
+    fireEvent.change(screen.getByRole("spinbutton", { name: "Thời gian chờ agent (phút)" }), { target: { value: "45" } });
+    fireEvent.click(screen.getByRole("button", { name: "Tạo" }));
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith("/api/projects", expect.objectContaining({ method: "POST" })));
+    const request = fetchMock.mock.calls.find(([url, init]) => String(url) === "/api/projects" && init?.method === "POST")!;
+    expect(JSON.parse(request[1]!.body as string).settings).toMatchObject({ stageExecution: { VISUAL_SEARCH: "agent" }, agentWaitMinutes: 45 });
+  });
+
   it("sends per-task model settings in the create payload", async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);

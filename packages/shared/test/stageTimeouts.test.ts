@@ -1,11 +1,14 @@
 import { describe, expect, it } from "vitest";
 import {
   baselineStageTimeouts,
+  formatEtaText,
+  historyBucket,
   planFromBaseline,
   planFromModel,
   resolveStageTimeoutMs,
   retryStageTimeoutMs,
   stageTimeoutCapMs,
+  stageTimeoutHash,
   stageTimeoutInputHash,
   stageTimeoutPlanIsFresh,
 } from "../src/index.js";
@@ -117,5 +120,40 @@ describe("stage timeouts", () => {
     expect(stageTimeoutCapMs("VISUAL_SEARCH")).toBe(1_800_000);
     expect(retryStageTimeoutMs("RENDER", 6_000_000, 2)).toBe(stageTimeoutCapMs("RENDER"));
     expect(stageTimeoutCapMs("RENDER")).toBe(7_200_000);
+  });
+
+  it("TASK-131: stageTimeoutHash unifies hash and marks a plan stale when history bucket changes", () => {
+    const brief = { ...reference, topic: "thời tiết", budgetMode: "BALANCED" };
+    const emptyEstimates = {};
+    const bucket1 = historyBucket(emptyEstimates);
+    const hashFromEstimates = stageTimeoutHash(brief, emptyEstimates);
+    const hashFromBucket = stageTimeoutHash(brief, bucket1);
+    expect(hashFromEstimates).toBe(hashFromBucket);
+    expect(hashFromEstimates).toBe(stageTimeoutInputHash({ ...brief, historyBucket: bucket1 }));
+
+    // When history grows (e.g. 5 samples with high confidence on RENDER)
+    const grownEstimates = { RENDER: { samples: 5, confidence: "high" } };
+    const bucket2 = historyBucket(grownEstimates);
+    expect(bucket2).not.toBe(bucket1);
+    const grownHash = stageTimeoutHash(brief, grownEstimates);
+    expect(grownHash).not.toBe(hashFromEstimates);
+
+    // Stored plan with old hash is now stale against the new history hash
+    const storedPlan = { source: "baseline" as const, inputHash: hashFromEstimates, summary: "cũ", stages: {} };
+    expect(stageTimeoutPlanIsFresh({ stageTimeouts: storedPlan }, hashFromEstimates)).toBe(true);
+    expect(stageTimeoutPlanIsFresh({ stageTimeouts: storedPlan }, grownHash)).toBe(false);
+  });
+
+  it("TASK-131: formatEtaText shows 'còn ~X phút' under expected time and 'quá dự kiến' over it", () => {
+    expect(formatEtaText(0, null)).toBeNull();
+    expect(formatEtaText(0, 0)).toBeNull();
+    // 2 minutes elapsed out of 5 minutes expected -> 3 minutes remaining
+    expect(formatEtaText(120_000, 300_000)).toBe("dự kiến còn ~3 phút");
+    // 1 second elapsed out of 60 seconds expected -> ~1 minute remaining
+    expect(formatEtaText(1_000, 60_000)).toBe("dự kiến còn ~1 phút");
+    // Exactly at expected -> 0 overdue -> 1 minute
+    expect(formatEtaText(300_000, 300_000)).toBe("quá dự kiến 1 phút");
+    // 7 minutes elapsed out of 5 minutes expected -> 2 minutes overdue
+    expect(formatEtaText(420_000, 300_000)).toBe("quá dự kiến 2 phút");
   });
 });

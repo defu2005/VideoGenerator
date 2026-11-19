@@ -1,4 +1,5 @@
 import { OpenAiCompatibleProvider } from "./openaiCompatible.js";
+import { groundingSources, googleSearchTool } from "../web/grounding.js";
 import { readFileSync } from "node:fs";
 import { fetchLlmJson, asRecord, numeric } from "./http.js";
 import { LlmError, type LlmProvider, type LlmRequest, type LlmResponse } from "./types.js";
@@ -6,7 +7,7 @@ import { LlmError, type LlmProvider, type LlmRequest, type LlmResponse } from ".
 export class GeminiProvider implements LlmProvider {
   readonly id = "gemini";
   readonly label = "Google Gemini";
-  readonly capabilities = { embeddings: true, vision: true, maxImagesPerCall: 10 } as const;
+  readonly capabilities = { nativeSearch: true, embeddings: true, vision: true, maxImagesPerCall: 10 } as const;
 
   constructor(
     private readonly apiKey: string,
@@ -28,10 +29,11 @@ export class GeminiProvider implements LlmProvider {
         body: JSON.stringify({
           systemInstruction: { parts: [{ text: req.system }] },
           contents,
+          ...(req.nativeSearch ? { tools: [googleSearchTool()] } : {}),
           generationConfig: {
             maxOutputTokens: req.maxOutputTokens,
             ...(req.temperature === undefined ? {} : { temperature: req.temperature }),
-            ...(req.json ? { responseMimeType: "application/json" } : {}),
+            ...(req.json && !req.nativeSearch ? { responseMimeType: "application/json" } : {}),
           },
         }),
       },
@@ -49,13 +51,14 @@ export class GeminiProvider implements LlmProvider {
     const finishReason: LlmResponse["finishReason"] = candidate.finishReason === "MAX_TOKENS"
       ? "length"
       : candidate.finishReason === "STOP" ? "stop" : "other";
-    if (!text && finishReason !== "length") {
+    if (!text && !req.nativeSearch && finishReason !== "length") {
       throw new LlmError("Gemini returned no text content", "LLM_UNAVAILABLE", true, undefined, {
         llmCalls: 1,
         ...responseUsage,
       });
     }
     return {
+      ...(req.nativeSearch ? { sources: groundingSources(body) } : {}),
       text,
       usage: responseUsage,
       model: req.model,

@@ -90,12 +90,18 @@ import { originalityToolDefs } from "../originality/toolDefs.js";
 import { providerIntelToolDefs } from "../providerIntel/toolDefs.js";
 import { styleToolDefs } from "../style/toolDefs.js";
 import { supervisionToolDefs } from "../supervision/toolDefs.js";
+import { fleetToolDefs } from "../fleet/toolDefs.js";
+import { researchToolDefs } from "../research/toolDefs.js";
+import { agentStageToolDefs } from "../agents/toolDefs.js";
 import { ComputerActArgs, ComputerObserveArgs, computerAct, computerObserve, computerUseStatus } from "../computerUse/service.js";
 import { stageTimeoutMinutes, writeStageTimeoutStages } from "../pipeline/stageTimeoutOverrides.js";
 
 const emptyObject = z.object({}).strict();
 
 export type AssistantToolContext = {
+  agentStages?: import("../agents/stageService.js").AgentStageService;
+  agentVisuals?: import("../agents/visualToolkit.js").AgentVisualToolkit;
+  research?: import("../research/runtime.js").ResearchHub;
   db: AppDatabase;
   sqlite: Database.Database;
   config: AppConfig;
@@ -1633,8 +1639,9 @@ const toolDefs: AssistantToolDef[] = [
       const { join } = await import("node:path");
       const { listSkillVersions } = await import("../operator/skillVersions.js");
       const builtin = OPERATOR_SKILLS.find((skill) => skill.name === name);
+      const active = listSkillVersions(ctx.sqlite, true).find((skill) => skill.name === name);
       const { skillHash } = await import("../reports/skillHash.js");
-      if (builtin) {
+      if (builtin && !active) {
         const markdown = renderSkillMarkdown(builtin);
         return { name, source: "builtin", area: builtin.area, risk: builtin.risk, tools: builtin.tools, markdown, hash: skillHash(markdown) };
       }
@@ -1643,10 +1650,9 @@ const toolDefs: AssistantToolDef[] = [
         toolNames: new Set(Object.keys(ASSISTANT_TOOLS)),
         builtinNames: new Set(OPERATOR_SKILLS.map((skill) => skill.name)),
       }).skills.find((skill) => skill.name === name);
-      if (repo) {
+      if (repo && !active) {
         return { name, source: "repo", area: repo.area, risk: repo.risk, tools: repo.tools, markdown: repo.markdown, hash: skillHash(repo.markdown) };
       }
-      const active = listSkillVersions(ctx.sqlite, true).find((skill) => skill.name === name);
       const file = join(operatorDir(ctx.config.DATA_DIR), "skills", "user", `${name}.md`);
       const markdown = active?.markdown ?? (existsSync(file) ? readFileSync(file, "utf8") : "");
       const parsed = markdown ? parseSkillMarkdown(markdown) : null;
@@ -1723,11 +1729,12 @@ const toolDefs: AssistantToolDef[] = [
       const parsed = z.object({ markdown: z.string(), reason: z.string(), basedOn: z.array(z.string()).optional() }).parse(args);
       const { OPERATOR_SKILLS, parseSkillMarkdown } = await import("../operator/skills.js");
       const { saveSkillDraft } = await import("../operator/skillVersions.js");
-      const name = parseSkillMarkdown(parsed.markdown)?.name;
-      if (name && OPERATOR_SKILLS.some((skill) => skill.name === name)) {
+      const skillInput = parseSkillMarkdown(parsed.markdown);
+      const name = skillInput?.name;
+      if (name && OPERATOR_SKILLS.some((skill) => skill.name === name && !skill.research)) {
         throw new AppError(409, "BUILT_IN_SKILL", "Skill tích hợp được quản lý cùng ứng dụng.");
       }
-      if (name && !name.startsWith("video-")) {
+      if (name && !name.startsWith("video-") && !(name.startsWith("research-") && skillInput?.research)) {
         throw new AppError(400, "INVALID_OPERATOR_SKILL", "Tên skill phải bắt đầu bằng video-.");
       }
       const agent = ctx.agent ?? { kind: "other", name: "unknown", model: null, environment: "unknown" };
@@ -2061,6 +2068,9 @@ const toolDefs: AssistantToolDef[] = [
   ...providerIntelToolDefs,
   ...styleToolDefs,
   ...supervisionToolDefs,
+  ...fleetToolDefs,
+  ...researchToolDefs,
+  ...agentStageToolDefs,
   ...knowledgeToolDefs,
   ...originalityToolDefs,
 ];

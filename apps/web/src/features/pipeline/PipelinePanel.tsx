@@ -1,4 +1,4 @@
-import { estimateBudget, GATES, STAGE_DEPENDS, STAGE_ORDER, isSideJobStage, type Project } from "@vg/shared";
+import { estimateBudget, formatEtaText, GATES, STAGE_DEPENDS, STAGE_ORDER, isSideJobStage, type Project } from "@vg/shared";
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 import { ApiRequestError, apiRequest } from "../../services/apiClient";
@@ -10,6 +10,7 @@ import { pipelineJobs, stageBlocked } from "./activeJobs";
 import { StageRow } from "./StageRow";
 import { OverdueCard } from "./OverdueCard";
 import { getProjectLlmRoutes } from "../../services/llmApi";
+import { AgentStageCard } from "./AgentStageCard";
 
 export function PipelinePanel({ projectId, project }: { projectId: string; project?: Project }) {
   const pipeline = usePipeline(projectId);
@@ -81,6 +82,7 @@ export function PipelinePanel({ projectId, project }: { projectId: string; proje
         </div>
       </div>
       <OverdueCard projectId={projectId} active={active} />
+      {jobs.filter((job) => job.executor === "agent").map((job) => <AgentStageCard key={job.id} projectId={projectId} job={job} />)}
       {estimate && (
         <p className="pipeline-budget-estimate" role="status">
           <span>{estimate.total.min === 0 && estimate.total.max === 0
@@ -109,19 +111,30 @@ export function PipelinePanel({ projectId, project }: { projectId: string; proje
       <p className="pipeline-mode-hint">{state.mode}: {state.mode === "MANUAL" ? "run each stage when you are ready" : state.mode === "AUTO" ? "the agent continues through review gates automatically" : "the agent pauses at review gates"}.</p>
       {actionError && <p className="request-error" role="alert">{actionError}</p>}
       <ol className="pipeline-stage-list">
-        {stages.map((record, index) => (
-          <StageRow
-            key={record.stage}
-            record={record}
-            canRun={canRunStage(index)}
-            busy={pipeline.isMutating}
-            onRun={() => void perform({ type: "run", stage: record.stage })}
-            onRetry={() => void perform({ type: "retry", stage: record.stage })}
-            onApprove={() => void perform({ type: "approve", stage: record.stage })}
-            onCancel={GATES.includes(record.stage) ? undefined : () => void perform({ type: "cancel", stage: record.stage })}
-            machine={record.stage === "RENDER" ? machineOf(jobs.find((job) => job.stage === "RENDER")) : undefined}
-          />
-        ))}
+        {stages.map((record, index) => {
+          const activeJob = jobs.find((job) => job.stage === record.stage && (job.status === "RUNNING" || job.status === "QUEUED"));
+          const expectedMs = project?.settings.stageTimeouts?.stages?.[record.stage]?.expectedMs
+            ?? project?.settings.stageTimeouts?.stages?.[record.stage]?.timeoutMs;
+          const startedAt = activeJob?.startedAt;
+          const elapsedMs = startedAt ? Math.max(0, Date.now() - new Date(startedAt).getTime()) : undefined;
+          const eta = record.state === "RUNNING" && elapsedMs !== undefined && expectedMs
+            ? formatEtaText(elapsedMs, expectedMs)
+            : undefined;
+          return (
+            <StageRow
+              key={record.stage}
+              record={record}
+              canRun={canRunStage(index)}
+              busy={pipeline.isMutating}
+              onRun={() => void perform({ type: "run", stage: record.stage })}
+              onRetry={() => void perform({ type: "retry", stage: record.stage })}
+              onApprove={() => void perform({ type: "approve", stage: record.stage })}
+              onCancel={GATES.includes(record.stage) ? undefined : () => void perform({ type: "cancel", stage: record.stage })}
+              machine={record.stage === "RENDER" ? machineOf(jobs.find((job) => job.stage === "RENDER")) : undefined}
+              eta={eta}
+            />
+          );
+        })}
       </ol>
     </section>
   );

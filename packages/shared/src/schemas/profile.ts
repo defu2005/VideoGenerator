@@ -230,7 +230,10 @@ export const ProfileUpdateSchema = z.object({
   direction: z.string().max(8000).optional(),
   language: z.string().optional(),
   market: MarketCodeSchema.nullable().optional(),
-  defaultBrief: ProfileDefaultBriefInputSchema.optional(),
+  defaultBrief: ProfileDefaultBriefInputSchema.extend({
+    stageExecution: ProfileDefaultBriefInputSchema.shape.stageExecution.nullable().optional(),
+    agentWaitMinutes: ProfileDefaultBriefInputSchema.shape.agentWaitMinutes.nullable().optional(),
+  }).optional(),
   voice: VoiceSettingsSchema.nullable().optional(),
   guidelines: GuidelineSettingsInputSchema.optional(),
   llm: ProfileLlmSettingsInputSchema.nullable().optional(),

@@ -1,6 +1,8 @@
-import type { AssistantToolRisk } from "@vg/shared";
+import { ResearchSkillMetadataSchema, type ResearchSkillMetadata, type AssistantToolRisk } from "@vg/shared";
+import { RESEARCH_SKILLS } from "../research/skills.js";
 
 export type OperatorSkill = {
+  research?: ResearchSkillMetadata;
   area: string;
   topic: string;
   name: string;
@@ -14,6 +16,7 @@ export type OperatorSkill = {
 };
 
 export const OPERATOR_SKILLS: OperatorSkill[] = [
+  ...RESEARCH_SKILLS,
   {
     area: "dang-bai",
     topic: "publish-project",
@@ -175,12 +178,12 @@ export const OPERATOR_SKILLS: OperatorSkill[] = [
     description: "Đọc tối đa năm mục tri thức cũ hoặc đến hạn và đề xuất cập nhật kèm nguồn.",
     triggers: ["làm mới tri thức", "tri thức cũ", "knowledge refresh"],
     antiTriggers: ["duyệt giúp", "tự chấp nhận", "nhấc giữ"],
-    tools: ["list_stale_knowledge", "get_knowledge", "propose_knowledge_change"],
+    tools: ["list_stale_knowledge", "get_knowledge", "run_research"],
     risk: "confirm",
     shortSteps: [
       "Gọi list_stale_knowledge và chỉ lấy tối đa 5 mục.",
       "Đọc get_knowledge và trang watch của từng mục.",
-      "Nếu có câu trích khớp, gọi propose_knowledge_change.",
+      "Gọi run_research với skill research-knowledge-refresh và knowledgeId cho từng mục; chờ xác nhận ngân sách.",
     ],
     longNotes: [
       "Không gọi công cụ chấp nhận đề xuất.",
@@ -239,7 +242,9 @@ export function renderSkillMarkdown(skill: OperatorSkill): string {
   return [
     "---",
     `name: ${skill.name}`,
-    `description: ${skill.description}`,
+    ...(skill.research ? ["description: >-", `  ${skill.description.replace(/\n/g, "\n  ")}`, "operator: true", `area: ${skill.area}`,
+      "kind: research", "question: >-", `  ${skill.research.question.replace(/\n/g, "\n  ")}`,
+      `outputKinds: ${JSON.stringify(skill.research.outputKinds)}`, `sources: ${JSON.stringify(skill.research.sources)}`, `maxPages: ${skill.research.maxPages}`] : [`description: ${skill.description}`]),
     "triggers:",
     triggers,
     "antiTriggers:",
@@ -259,6 +264,7 @@ export function renderSkillMarkdown(skill: OperatorSkill): string {
 }
 
 export type ParsedSkill = {
+  research?: ResearchSkillMetadata;
   name: string;
   description: string;
   triggers: string[];
@@ -288,7 +294,14 @@ export function parseSkillMarkdown(markdown: string): ParsedSkill | null {
   const steps = body.match(/## Các bước\s*([\s\S]*?)(?:\n## |$)/);
   const shortBody = (ngan?.[1] ?? steps?.[1] ?? body).trim();
   if (!name || !description) return null;
-  return { name, description, triggers, antiTriggers, tools, risk, operator, area, shortBody, body };
+  let research: ResearchSkillMetadata | undefined;
+  if (scalar(front, "kind") === "research") {
+    const parsed = ResearchSkillMetadataSchema.safeParse({ kind: "research", question: scalar(front, "question"),
+      outputKinds: listUnder(front, "outputKinds"), sources: listUnder(front, "sources"), maxPages: scalar(front, "maxPages") ? Number(scalar(front, "maxPages")) : undefined });
+    if (!parsed.success) return null;
+    research = parsed.data;
+  }
+  return { name, description, triggers, antiTriggers, tools, risk, operator, area, shortBody, body, ...(research ? { research } : {}) };
 }
 
 function scalar(front: string, key: string): string {
@@ -310,6 +323,8 @@ function scalar(front: string, key: string): string {
 
 function listUnder(front: string, key: string): string[] {
   const lines = front.split(/\r?\n/);
+  const inline = lines.find((line) => line.startsWith(`${key}:`))?.slice(key.length + 1).trim();
+  if (inline?.startsWith("[") && inline.endsWith("]")) return inline.slice(1, -1).split(",").map((value) => value.trim().replace(/^["']|["']$/g, "")).filter(Boolean);
   const start = lines.findIndex((line) => line.trim() === `${key}:`);
   if (start < 0) return [];
   const items: string[] = [];

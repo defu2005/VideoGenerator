@@ -250,7 +250,12 @@ export async function runProviderFallback<T>(input: {
       } catch (error) {
         if (error instanceof Error && error.name === "AbortError") throw error;
         lastError = error;
-        failureCodes.push(error && typeof error === "object" && "code" in error ? String((error as { code?: string }).code) : "OTHER");
+        const code = error && typeof error === "object" && "code" in error ? String((error as { code?: string }).code) : "OTHER";
+        failureCodes.push(code);
+        if (code === "TTS_BINARY_OUTDATED" || code === "TTS_BINARY_MISSING") {
+          tried.push(`${id} (chưa cấu hình)`);
+          break;
+        }
         tried.push(attempt === 0 ? id : `${id} lần ${attempt + 1}`);
       }
     }
@@ -258,6 +263,7 @@ export async function runProviderFallback<T>(input: {
   const message = ttsFailureMessage(tried);
   const lastCode = failureCodes.at(-1) ?? "";
   if (failureCodes.length > 0 && failureCodes.every((code) => code === "TTS_NETWORK") && lastError instanceof Error) throw lastError;
+  if (lastError instanceof Error && (lastCode === "TTS_BINARY_OUTDATED" || lastCode === "TTS_BINARY_MISSING")) throw lastError;
   if (lastError instanceof Error && lastError.message && !lastError.message.includes("Không tạo được giọng đọc")) {
     const lastId = tried.at(-1)?.split(" ")[0] ?? "tts";
     throw new Error(`${message} (${lastId}: ${lastCode || "TTS_FAILED"}) ${stripSecrets(lastError.message)}`);

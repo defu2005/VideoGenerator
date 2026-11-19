@@ -6,6 +6,7 @@ import { afterAll, describe, expect, it } from "vitest";
 import { buildApp } from "../src/app.js";
 import { parseConfig } from "../src/lib/config.js";
 import { testActor } from "./testActor.js";
+import Database from "better-sqlite3";
 
 const root = mkdtempSync(join(tmpdir(), "vg-auth-"));
 const apps: ReturnType<typeof buildApp>[] = [];
@@ -57,6 +58,79 @@ async function createOwner(app: ReturnType<typeof buildApp>, extra: { remoteAddr
 }
 
 describe("auth", () => {
+  it("keeps a fleet draft's support files when the user edits its selected version", async () => {
+    const { app, dataDir } = makeApp();
+    expect((await createOwner(app)).statusCode).toBe(201);
+    const login = await app.inject({ method: "POST", url: "/api/auth/sign-in/email", payload: { email: owner.email, password: owner.password } });
+    const cookie = cookieHeader(login.headers["set-cookie"]);
+    const key = await app.inject({ method: "POST", url: "/api/auth/api-key/create", headers: { cookie }, payload: { name: "fleet-edit" } });
+    const db = new Database(join(dataDir, "app.db"));
+    try {
+      db.prepare("INSERT INTO agent_key_profiles (key_id,agent_kind,instance_name,can_supervise,updated_at) VALUES (?,'hermes','edit-fixture',0,'now')").run(key.json().id);
+      const markdown = "---\nname: video-fleet-edit\ndescription: Đọc dự án để kiểm tra\noperator: true\narea: tu-van-hanh\ntriggers:\n  - kiểm thử video-fleet-edit\ntools:\n  - list_projects\nrisk: read\n---\n\n# Kiểm tra\n\n## Khi nào dùng\nKhi cần kiểm thử video-fleet-edit.\n\n## Các bước\nGọi list_projects.\n\n## Kiểm tra kết quả\nCó danh sách.\n\n## Lỗi hay gặp\nUNKNOWN_TOOL.\n\n## Không được làm\nKhông ghi dữ liệu.\n";
+      const proposed = await app.inject({ method: "POST", url: "/api/agents/skills/drafts", headers: { "x-api-key": key.json().key }, payload: {
+        name: "video-fleet-edit", markdown, files: { "references/check.md": "Bằng chứng của phiên bản một." }, evidence: { reason: "Kiểm thử giữ tệp" },
+      } });
+      expect(proposed.statusCode).toBe(200);
+      const edited = await app.inject({ method: "PUT", url: "/api/operator/skills/video-fleet-edit/draft", headers: { cookie }, payload: { markdown: `${markdown}\nĐã gộp.`, baseVersion: proposed.json().version } });
+      expect(edited.statusCode).toBe(200);
+      const row = db.prepare("SELECT evidence FROM operator_skill_versions WHERE name=? AND version=?").get("video-fleet-edit", edited.json().version) as { evidence: string };
+      expect(JSON.parse(row.evidence)).toMatchObject({ source: "user_edit", parentVersion: proposed.json().version, files: { "references/check.md": "Bằng chứng của phiên bản một." } });
+    } finally { db.close(); }
+  });
+  it("binds keys to the active workspace, denies cross-workspace headers, and binds legacy keys", async () => {
+    const { app, dataDir } = makeApp();
+    expect((await createOwner(app)).statusCode).toBe(201);
+    const login = await app.inject({ method: "POST", url: "/api/auth/sign-in/email", payload: { email: owner.email, password: owner.password } });
+    const cookie = cookieHeader(login.headers["set-cookie"]);
+    const db = new Database(join(dataDir, "app.db"));
+    try {
+      const user = db.prepare("SELECT id FROM user LIMIT 1").get() as { id: string };
+      const first = db.prepare("SELECT id FROM organization LIMIT 1").get() as { id: string };
+      db.prepare("INSERT INTO organization (id,name,slug,created_at) VALUES ('second','Second','second',?)").run(Date.now() + 1000);
+      db.prepare("INSERT INTO member (id,organization_id,user_id,role,created_at) VALUES ('second-member','second',?,'owner',?)").run(user.id,Date.now());
+      db.prepare("UPDATE session SET active_organization_id=?").run(first.id);
+      const created = await app.inject({ method: "POST", url: "/api/auth/api-key/create", headers: { cookie }, payload: { name: "scoped", metadata: { workspaceId: "second" } } });
+      expect(created.statusCode).toBe(200);
+      const { key, id } = created.json();
+      const trailing = await app.inject({ method: "POST", url: "/api/auth/api-key/create/", headers: { cookie }, payload: { name: "trailing", metadata: { workspaceId: "second" } } });
+      // The plugin may reject a trailing slash; if accepted it must use the same binding rule.
+      expect([200, 404]).toContain(trailing.statusCode);
+      if (trailing.statusCode === 200) {
+        expect((await app.inject({ method: "GET", url: "/api/me", headers: { "x-api-key": trailing.json().key } })).json().workspace.id).toBe(first.id);
+      }
+      const headers = { "x-api-key": key };
+      db.prepare("UPDATE member SET role='viewer' WHERE user_id=? AND organization_id=?").run(user.id, first.id);
+      const deniedAgent = await app.inject({ method: "POST", url: "/api/registry/invoke", headers: { ...headers, "x-vg-tool-source": "agent" }, payload: { name: "get_llm_settings", args: {} } });
+      expect(deniedAgent.statusCode).toBe(403);
+      db.prepare("UPDATE member SET role='owner' WHERE user_id=? AND organization_id=?").run(user.id, first.id);
+      expect((await app.inject({ method: "GET", url: "/api/agents/bundle", headers })).statusCode).toBe(403);
+      db.prepare("INSERT INTO agent_key_profiles (key_id,agent_kind,instance_name,can_supervise,updated_at) VALUES (?,'hermes','fleet-fixture',0,'now')").run(id);
+      expect((await app.inject({ method: "GET", url: "/api/agents/bundle", headers })).statusCode).toBe(200);
+      expect((await app.inject({ method: "PUT", url: "/api/settings/hermes-fleet", headers, payload: { autoActivateReadOnlySkills: true } })).statusCode).toBe(403);
+      expect((await app.inject({ method: "GET", url: "/api/operator/fleet", headers })).statusCode).toBe(403);
+      expect((await app.inject({ method: "GET", url: "/api/projects", headers })).statusCode).toBe(200);
+      expect((await app.inject({ method: "GET", url: "/api/projects", headers: { ...headers, "x-workspace-id": "second" } })).statusCode).toBe(403);
+      expect(db.prepare("SELECT COUNT(*) AS n FROM audit_log WHERE action='apikey.workspace_denied'").get()).toEqual({ n: 1 });
+      db.prepare("UPDATE apikey SET metadata=NULL WHERE id=?").run(id);
+      expect((await app.inject({ method: "GET", url: "/api/projects", headers })).statusCode).toBe(200);
+      expect((await app.inject({ method: "GET", url: "/api/projects", headers: { ...headers, "x-workspace-id": "second" } })).statusCode).toBe(403);
+      const bound = await app.inject({ method: "POST", url: "/api/auth/api-key/bind", headers: { cookie }, payload: { keyId: id } });
+      expect(bound.statusCode).toBe(200);
+      expect(JSON.parse((db.prepare("SELECT metadata FROM apikey WHERE id=?").get(id) as { metadata: string }).metadata).workspaceId).toBe(first.id);
+      db.prepare("UPDATE session SET active_organization_id='second'").run();
+      const secondKey = await app.inject({ method: "POST", url: "/api/auth/api-key/create", headers: { cookie }, payload: { name: "second-scoped" } });
+      expect(secondKey.statusCode).toBe(200);
+      const secondHeaders = { "x-api-key": secondKey.json().key };
+      const identity = await app.inject({ method: "GET", url: "/api/me", headers: secondHeaders });
+      expect(identity.statusCode).toBe(200);
+      expect(identity.json().workspace.id).toBe("second");
+      const changed = await app.inject({ method: "POST", url: "/api/auth/api-key/update", headers: { cookie }, payload: { keyId: secondKey.json().id, name: "renamed", metadata: { workspaceId: first.id } } });
+      expect(changed.statusCode).toBe(200);
+      expect((await app.inject({ method: "GET", url: "/api/me", headers: secondHeaders })).json().workspace.id).toBe("second");
+      expect((await app.inject({ method: "POST", url: "/api/auth/api-key/bind", headers: { cookie }, payload: { keyId: id } })).statusCode).toBe(409);
+    } finally { db.close(); }
+  });
   it("rejects an unauthenticated project list in Vietnamese", async () => {
     const { app } = makeApp();
     const response = await app.inject({ method: "GET", url: "/api/projects" });

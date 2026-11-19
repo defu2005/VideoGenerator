@@ -29,6 +29,10 @@ export type VisionCheckResult = z.infer<typeof VisionCheckResultSchema>;
 export const VisionCheckSchema = VisionCheckResultSchema.extend({
   model: z.string(),
   checkedAt: z.string().datetime({ offset: true }),
+  checkedBy: z.object({ kind: z.literal("agent"), instance: z.string().min(1), model: z.string().min(1) }).strict().optional(),
+  sha256: z.string().regex(/^[a-f0-9]{64}$/).optional(),
+  verdict: z.enum(["pass", "reject"]).optional(),
+  subjectMatch: z.boolean().optional(),
 }).strict();
 export type VisionCheck = z.infer<typeof VisionCheckSchema>;
 

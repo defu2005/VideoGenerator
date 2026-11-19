@@ -40,6 +40,8 @@ export const TtsProviderStatusSchema = z.object({
   modelsDir: z.string().optional(),
   commandTemplate: z.string().optional(),
   subscription: TtsSubscriptionSchema.optional(),
+  version: z.string().optional(),
+  versionStatus: z.string().optional(),
 }).strict();
 export type TtsProviderStatus = z.infer<typeof TtsProviderStatusSchema>;
 

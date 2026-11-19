@@ -1,4 +1,20 @@
-import { ApiRequestError } from "./apiClient";
+import { ApiRequestError, apiRequest } from "./apiClient";
+
+export type AgentKeyProfile = {
+  keyId: string;
+  agentKind: string;
+  instanceName: string;
+  canSupervise: boolean;
+};
+
+export const listAgentKeyProfiles = () =>
+  apiRequest<{ profiles: AgentKeyProfile[] }>("/settings/agent-keys");
+
+export const saveAgentKeyProfile = (keyId: string, patch: { agentKind?: string; instanceName?: string; canSupervise?: boolean }) =>
+  apiRequest<AgentKeyProfile>(`/settings/agent-keys/${encodeURIComponent(keyId)}`, {
+    method: "PUT",
+    body: JSON.stringify(patch),
+  });
 
 /** Account calls go straight to Better Auth (`/api/auth/*`); the plugin is installed only on the server. */
 async function auth<T>(path: string, init: { method?: string; body?: unknown } = {}): Promise<T> {
@@ -28,7 +44,7 @@ export function authMessage(status: number, code?: string, message?: string): st
 }
 
 export type SessionRow = { id: string; token: string; userAgent?: string | null; ipAddress?: string | null; createdAt: string; updatedAt?: string; expiresAt: string };
-export type ApiKeyRow = { id: string; name: string | null; start?: string | null; prefix?: string | null; enabled?: boolean; createdAt: string; lastRequest?: string | null; expiresAt?: string | null };
+export type ApiKeyRow = { metadata?: { workspaceId?: string } | string | null; id: string; name: string | null; start?: string | null; prefix?: string | null; enabled?: boolean; createdAt: string; lastRequest?: string | null; expiresAt?: string | null };
 
 export const changePassword = (currentPassword: string, newPassword: string) =>
   auth("/change-password", { body: { currentPassword, newPassword, revokeOtherSessions: true } });
@@ -55,3 +71,5 @@ export const deleteApiKey = (keyId: string) => auth("/api-key/delete", { body: {
 export function secretFromUri(uri: string): string {
   try { return new URL(uri).searchParams.get("secret") ?? ""; } catch { return ""; }
 }
+
+export const bindApiKey = (keyId: string) => auth("/api-key/bind", { body: { keyId } });

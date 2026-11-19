@@ -8,11 +8,13 @@ export function BriefFields({
   settings,
   onChange,
   onReset,
+  scope = "project",
 }: {
   topic: string;
   settings: BriefSettings;
   onChange: (path: string, value: string | number | boolean) => void;
   onReset: (path: string) => void;
+  scope?: "profile" | "project";
 }) {
   const result = recommendBrief({ topic, settings });
   const budgetFeatures = resolveBudget(settings.budget);
@@ -256,6 +258,21 @@ export function BriefFields({
       {field("music.volume", "Music volume", (
         <input aria-label="Music volume" type="number" min={0} max={1} step={0.01} value={resolved.music.volume} onChange={(event) => onChange("music.volume", Number(event.target.value))} />
       ))}
+      <label className="form-field">
+        <span>Ai xử lý bước tìm ảnh</span>
+        <select aria-label="Ai xử lý bước tìm ảnh" value={settings.stageExecution?.VISUAL_SEARCH ?? ""} onChange={(event) => event.target.value ? onChange("stageExecution.VISUAL_SEARCH", event.target.value) : onReset("stageExecution.VISUAL_SEARCH")}>
+          <option value="">{scope === "profile" ? "Mặc định" : "Theo hồ sơ / mặc định"}</option>
+          <option value="app">App xử lý</option>
+          <option value="agent">Giao cho agent ngoài</option>
+          <option value="app_then_agent">App trước, agent khi chưa xong</option>
+        </select>
+        <small>Hiện hỗ trợ bước tìm ảnh. Mặc định app làm trước; agent nhận các cảnh còn thiếu.{scope === "project" ? " Để trống để kế thừa hồ sơ." : " Dự án đang kế thừa sẽ dùng cấu hình này."}</small>
+      </label>
+      <label className="form-field">
+        <span>Thời gian chờ agent (phút)</span>
+        <input aria-label="Thời gian chờ agent (phút)" type="number" min={1} max={1440} placeholder="30" value={settings.agentWaitMinutes ?? ""} onChange={(event) => event.target.value ? onChange("agentWaitMinutes", Number(event.target.value)) : onReset("agentWaitMinutes")} />
+        <small>{scope === "project" ? "Để trống để kế thừa hồ sơ; mặc định 30 phút." : "Để trống để dùng mặc định 30 phút."} Hết thời gian mà chưa ai nhận, app báo lỗi rõ ràng.</small>
+      </label>
       {result.warnings.map((warning) => <small className="field-warning" key={warning}>{warning}</small>)}
     </div>
   );

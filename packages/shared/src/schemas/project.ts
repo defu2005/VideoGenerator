@@ -18,8 +18,11 @@ import { MotionGraphicsSettingsSchema } from "../motion/templates.js";
 import { StageTimeoutPlanSchema } from "../pipeline/stageTimeouts.js";
 import { OnOverdueSchema } from "../pipeline/overdue.js";
 import { ThumbnailMetaSchema } from "../thumbnails/index.js";
+import { StageExecutionSettingsSchema, AgentWaitMinutesSchema } from "../agents/stageExecution.js";
 
 export const VideoBriefSettingsSchema = z.object({
+  stageExecution: StageExecutionSettingsSchema.optional(),
+  agentWaitMinutes: AgentWaitMinutesSchema.optional(),
   budget: BudgetSettingsSchema.default({ mode: "BALANCED" }),
   language: z.string().default("vi"),
   targetDurationSec: z.number().int().min(30).max(1800).default(120),
@@ -70,6 +73,8 @@ export const VideoBriefSettingsSchema = z.object({
 });
 
 export const VideoBriefSettingsInputSchema = z.object({
+  stageExecution: StageExecutionSettingsSchema.optional(),
+  agentWaitMinutes: AgentWaitMinutesSchema.optional(),
   budget: BudgetSettingsInputSchema.optional(),
   platform: z.enum(["youtube", "youtube_shorts", "tiktok", "facebook_reels", "custom"]).optional(),
   style: z.enum(["storytelling", "documentary", "explainer", "news", "listicle"]).optional(),
@@ -103,6 +108,8 @@ const DirectBriefInputFields = {
 };
 
 export const ProjectSettingsSchema = z.object({
+  stageExecution: StageExecutionSettingsSchema.optional(),
+  agentWaitMinutes: AgentWaitMinutesSchema.optional(),
   market: MarketCodeSchema.optional(),
   knowledgeRev: z.string().regex(/^[a-f0-9]{12}$/).optional(),
   language: z.string().default("vi"),

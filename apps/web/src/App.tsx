@@ -11,6 +11,7 @@ import { queryRetryDelay, shouldRetryQuery } from "./services/queryRetry";
 const DashboardPage = lazy(() => import("./features/dashboard/DashboardPage").then((m) => ({ default: m.DashboardPage })));
 const AssistantPage = lazy(() => import("./features/assistant/AssistantPage").then((m) => ({ default: m.AssistantPage })));
 const OperatorPage = lazy(() => import("./features/operator/OperatorPage").then((m) => ({ default: m.OperatorPage })));
+const FleetSettingsPage = lazy(() => import("./features/operator/FleetTab").then((m) => ({ default: m.FleetTab })));
 const AutonomyJournalPage = lazy(() => import("./features/operator/AutonomyJournalPage").then((m) => ({ default: m.AutonomyJournalPage })));
 const ProjectListPage = lazy(() => import("./features/projects/ProjectListPage").then((m) => ({ default: m.ProjectListPage })));
 const ProjectDetailPage = lazy(() => import("./features/projects/ProjectDetailPage").then((m) => ({ default: m.ProjectDetailPage })));
@@ -38,6 +39,7 @@ const AccountPage = lazy(() => import("./features/account/AccountPage").then((m)
 const AuditPage = lazy(() => import("./features/audit/AuditPage").then((m) => ({ default: m.AuditPage })));
 const NodesPage = lazy(() => import("./features/nodes/NodesPage").then((m) => ({ default: m.NodesPage })));
 const HelpPage = lazy(() => import("./features/help/HelpPage").then((m) => ({ default: m.HelpPage })));
+const ResearchPage = lazy(() => import("./features/research/ResearchPage").then((m) => ({ default: m.ResearchPage })));
 const UiGalleryPage = import.meta.env.DEV
   ? lazy(() => import("./features/dev/UiGalleryPage").then((m) => ({ default: m.UiGalleryPage })))
   : null;
@@ -71,6 +73,7 @@ export function App() {
               <Route index element={<DashboardPage />} />
               <Route path="assistant" element={<AssistantPage />} />
               <Route path="operator" element={<OperatorPage />} />
+              <Route path="settings/hermes-fleet" element={<FleetSettingsPage />} />
               <Route path="operator/journal" element={<AutonomyJournalPage />} />
               <Route path="projects" element={<ProjectListPage />} />
               <Route path="profiles" element={<ProfileListPage />} />
@@ -92,6 +95,7 @@ export function App() {
               <Route path="settings/notifications" element={<NotificationsPage />} />
               <Route path="settings/guidelines" element={<GuidelineSettingsPage />} />
               <Route path="settings/knowledge" element={<ExternalKnowledgePage />} />
+              <Route path="self-improvement" element={<ResearchPage />} />
               <Route path="usage" element={<UsagePage />} />
               <Route path="team" element={<TeamPage />} />
               <Route path="account" element={<AccountPage />} />

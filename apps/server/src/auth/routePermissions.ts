@@ -19,6 +19,9 @@ const r = (method: RouteRule["method"], pattern: string, action: Action | null, 
  * A `:name` segment matches any one segment. A segment ending in `*` matches the rest of the path.
  */
 export const ROUTE_RULES: RouteRule[] = [
+  r("POST", "/api/stage-agents/claim", "stage.run"),
+  r("POST", "/api/stage-agents/jobs/:id/*", "stage.run", "job"),
+  r("READ", "/api/stage-agents/candidates/:id/image", "project.read"),
   // identity, audit, workspace
   r("READ", "/api/me", null),
   r("READ", "/api/audit", "audit.read"),
@@ -91,8 +94,11 @@ export const ROUTE_RULES: RouteRule[] = [
   r("READ", "/api/dashboard/*", "project.read"),
   r("READ", "/api/usage", "project.read"),
   r("READ", "/api/events", "project.read"),
+  r("READ", "/api/resources", "settings.read"),
   r("READ", "/api/quality-repairs/*", "project.read"),
   r("READ", "/api/agents*", "settings.read"),
+  r("POST", "/api/agents/instances/heartbeat", "settings.read"),
+  r("POST", "/api/agents/skills/drafts", "automation.manage"),
 
   // assistant (the pending-action role check happens in the registry)
   r("PUT", "/api/assistant/settings", "settings.write"),
@@ -150,6 +156,9 @@ export const ROUTE_RULES: RouteRule[] = [
   r("READ", "/api/guidelines/*", "project.read"),
   r("WRITE", "/api/guidelines/*", "settings.write"),
   r("READ", "/api/knowledge*", "project.read"),
+  r("READ", "/api/research*", "project.read"),
+  r("POST", "/api/research/runs", "settings.write"),
+  r("PUT", "/api/research/settings", "settings.write"),
   r("WRITE", "/api/knowledge*", "project.write"),
   r("READ", "/api/registry/*", "settings.read"),
   r("POST", "/api/registry/invoke", null),

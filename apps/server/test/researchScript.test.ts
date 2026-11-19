@@ -604,4 +604,49 @@ describe("research and script stages", () => {
       .rejects.toMatchObject({ code: "LLM_LIMIT_TOO_SMALL", retryable: false });
     expect(long.generate).not.toHaveBeenCalled();
   });
+
+  it("dedupes repeated seams before saving script and logs dropped sentences", async () => {
+    const harness = makeHarness({ LLM_DEFAULT_PROVIDER: "mock", LLM_ENABLE_MOCK: true });
+    const project = harness.repository.getProject(harness.projectId)!;
+    harness.sqlite.prepare("UPDATE projects SET settings = ? WHERE id = ?")
+      .run(JSON.stringify({ ...project.settings, targetDurationSec: 30, budget: { mode: "ECO" } }), harness.projectId);
+    const registry = new LlmProviderRegistry(harness.config);
+    const mock = registry.get("mock")!;
+    const mockScriptWithDup = {
+      title: "Dup test",
+      hook: "Đây là câu mở đầu đặc sắc của video mang tính tò mò cao.",
+      sections: [
+        {
+          id: "sec-1",
+          heading: "P1",
+          narration: "Đây là câu mở đầu đặc sắc của video mang tính tò mò cao. Đây là câu tiếp theo của phần một giải thích chi tiết nội dung mà người xem đang rất quan tâm tìm hiểu sâu hơn. Chúng ta cùng theo dõi tiếp nhé.",
+          visualQueries: { primary: "visual1", alternatives: [] },
+          visualNotes: "",
+          musicMood: "calm",
+          energy: "medium",
+        },
+      ],
+      outro: "Kết thúc video với lời chào tạm biệt các bạn và hẹn gặp lại lần sau.",
+      music: { mood: "calm", energy: "medium", keywords: [] },
+    };
+    vi.spyOn(mock, "generate").mockResolvedValue({
+      text: JSON.stringify(mockScriptWithDup),
+      model: "mock",
+      provider: "mock",
+      finishReason: "stop",
+      usage: { inputTokens: 10, outputTokens: 20 },
+    });
+    const scriptExecutor = new ScriptExecutor(harness.sqlite, registry, harness.config);
+    const scriptCall = contextFor(harness, "SCRIPT");
+    const logInfoSpy = vi.spyOn(scriptCall.context.logger, "info");
+    await scriptExecutor.run(scriptCall.context);
+
+    const saved = harness.sqlite.prepare("SELECT data FROM scripts WHERE project_id = ?").get(harness.projectId) as { data: string };
+    const parsed = JSON.parse(saved.data) as typeof mockScriptWithDup;
+    expect(parsed.sections[0].narration).toBe("Đây là câu tiếp theo của phần một giải thích chi tiết nội dung mà người xem đang rất quan tâm tìm hiểu sâu hơn. Chúng ta cùng theo dõi tiếp nhé.");
+    expect(logInfoSpy).toHaveBeenCalledWith(
+      expect.objectContaining({ seam: "hook", sectionId: "sec-1" }),
+      expect.stringContaining("Dropped duplicate narration sentence"),
+    );
+  });
 });

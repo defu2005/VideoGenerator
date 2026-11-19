@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
-import { stampWorkspace } from "../auth/requestContext.js";
+import { currentWorkspaceId } from "../auth/requestContext.js";
 import {
   diffJson, KNOWLEDGE_SNAPSHOT, KnowledgeEntrySchema, knowledgeApplies, knowledgeConsumers,
   knowledgeRisk, knowledgeTime, parseKnowledgeImport, PROTECTED_PROJECT_ID, quoteInPage, snapshotKnowledge,
@@ -46,7 +46,7 @@ export class KnowledgeService {
   }
 
   list(filter: KnowledgeFilter = {}) {
-    const rows = this.db.prepare("SELECT id FROM knowledge_entries").all() as Array<{ id: string }>;
+    const rows = this.db.prepare("SELECT key AS id FROM knowledge_entries WHERE workspace_id IS ?").all(currentWorkspaceId(this.db)) as Array<{ id: string }>;
     const ids = new Set([...KNOWLEDGE_SNAPSHOT, ...rows, ...this.userEntries()].map(({ id }) => id));
     const at = this.now();
     const active = [...ids].flatMap((id) => this.get(id, at) ?? []);
@@ -72,7 +72,7 @@ export class KnowledgeService {
   }
 
   revisedEntries() {
-    return this.db.prepare("SELECT id, revision FROM knowledge_entries ORDER BY updated_at DESC, id").all() as
+    return this.db.prepare("SELECT key AS id, revision FROM knowledge_entries WHERE workspace_id IS ? ORDER BY updated_at DESC, key").all(currentWorkspaceId(this.db)) as
       Array<{ id: string; revision: number }>;
   }
 
@@ -84,18 +84,20 @@ export class KnowledgeService {
   }
 
   proposals() {
-    return (this.db.prepare("SELECT * FROM knowledge_proposals WHERE status = 'pending' ORDER BY created_at DESC, rowid DESC").all() as ProposalRow[])
+    return (this.db.prepare("SELECT p.* FROM knowledge_proposals p JOIN knowledge_entries e ON e.id=p.entry_id WHERE p.status = 'pending' AND e.workspace_id IS ? ORDER BY p.created_at DESC, p.rowid DESC").all(currentWorkspaceId(this.db)) as ProposalRow[])
       .map((row) => ({
-        id: row.id, entryId: row.entry_id, kind: row.kind, proposed: parse(row.proposed)!,
+        id: row.id, entryId: parse(row.proposed)!.id, kind: row.kind, proposed: parse(row.proposed)!,
         patch: JSON.parse(row.patch) as unknown, risk: row.risk, origin: row.origin, createdAt: row.created_at,
-        consumers: knowledgeConsumers(row.entry_id),
+        researchRunId: row.origin === "research" ? (this.db.prepare("SELECT id FROM research_runs WHERE workspace_id IS ? AND EXISTS (SELECT 1 FROM json_each(proposal_ids) WHERE value=?) LIMIT 1").get(currentWorkspaceId(this.db), row.id) as { id: string } | undefined)?.id : undefined,
+        consumers: knowledgeConsumers(parse(row.proposed)!.id),
       }));
   }
 
-  propose(entry: KnowledgeEntry, reason: string, origin = "proposal") {
+  propose(entry: KnowledgeEntry, reason: string, origin = "proposal", checkedPages?: ReadonlyMap<string, string>) {
     return this.db.transaction(() => {
       const proposed = KnowledgeEntrySchema.parse(entry);
       const before = this.latest(proposed.id);
+      const entryId = this.entryId(proposed.id, proposed.kind, true)!;
       if (before.entry && before.entry.kind !== proposed.kind) {
         throw new AppError(409, "KNOWLEDGE_KIND_CONFLICT", "Không đổi loại của một mục tri thức đã có.");
       }
@@ -103,13 +105,13 @@ export class KnowledgeService {
       const risk = knowledgeRisk(before.entry, proposed, patch);
       const id = randomUUID();
       const at = this.now().toISOString();
-      this.db.prepare("UPDATE knowledge_proposals SET status='superseded', decided_at=?, decided_by='system' WHERE entry_id=? AND status='pending'").run(at, proposed.id);
+      this.db.prepare("UPDATE knowledge_proposals SET status='superseded', decided_at=?, decided_by='system' WHERE entry_id=? AND status='pending'").run(at, entryId);
       this.db.prepare(`INSERT INTO knowledge_proposals
         (id, entry_id, kind, proposed, patch, origin, evidence, risk, status, created_at, base_revision, reason)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?)`)
-        .run(id, proposed.id, proposed.kind, JSON.stringify(proposed), JSON.stringify(patch),
+        .run(id, entryId, proposed.kind, JSON.stringify(proposed), JSON.stringify(patch),
           origin, JSON.stringify(proposed.evidence), risk, at, before.revision, reason);
-      if (this.shouldAutoApply(proposed, risk)) {
+      if (!(origin === "research" && risk !== "low") && this.shouldAutoApply(proposed, risk, checkedPages)) {
         const revision = this.apply(proposed.id, proposed.kind, proposed, before, origin, "system", reason);
         this.finish(id, "accepted", "system");
         return { id, risk, status: "accepted" as const, revision };
@@ -138,7 +140,7 @@ export class KnowledgeService {
             : before.revision;
           // The evidence-only refresh must not invalidate an already pending substantive proposal.
           this.db.prepare("UPDATE knowledge_proposals SET base_revision=? WHERE entry_id=? AND status='pending' AND base_revision=?")
-            .run(revision, entry.id, before.revision);
+            .run(revision, this.entryId(entry.id), before.revision);
           return { index, entryId: entry.id, status: "refreshed" as const, revision };
         }
         return { index, entryId: entry.id, ...this.propose(entry, label, "import") };
@@ -149,11 +151,12 @@ export class KnowledgeService {
 
   decide(id: string, decision: "accepted" | "rejected", reason?: string) {
     return this.db.transaction(() => {
-      const row = this.db.prepare("SELECT * FROM knowledge_proposals WHERE id=? AND status='pending'").get(id) as (ProposalRow & { reason: string }) | undefined;
+      const row = this.db.prepare("SELECT p.* FROM knowledge_proposals p JOIN knowledge_entries e ON e.id=p.entry_id WHERE p.id=? AND p.status='pending' AND e.workspace_id IS ?").get(id, currentWorkspaceId(this.db)) as (ProposalRow & { reason: string }) | undefined;
       if (!row) throw new AppError(409, "KNOWLEDGE_PROPOSAL_CLOSED", "Đề xuất không còn chờ duyệt.");
       let revision: number | undefined;
       if (decision === "accepted") {
-        const before = this.latest(row.entry_id);
+        const key = parse(row.proposed)!.id;
+        const before = this.latest(key);
         if (before.revision !== row.base_revision) throw new AppError(409, "KNOWLEDGE_PROPOSAL_STALE", "Tri thức đã đổi. Hãy tạo lại đề xuất.");
         const proposed = parse(row.proposed)!;
         const entry = before.entry ? { ...proposed, evidence: proposed.evidence.map((source) => {
@@ -161,7 +164,7 @@ export class KnowledgeService {
           const checkedAt = dates.reduce((date, old) => date > old.checkedAt ? date : old.checkedAt, source.checkedAt);
           return { ...source, checkedAt };
         }) } : proposed;
-        revision = this.apply(row.entry_id, row.kind, entry, before, row.origin, "user", reason ?? row.reason);
+        revision = this.apply(key, row.kind, entry, before, row.origin, "user", reason ?? row.reason);
       }
       this.finish(id, decision, "user");
       return { id, status: decision, revision };
@@ -175,10 +178,10 @@ export class KnowledgeService {
         : this.rows(id).find((row) => row.revision === revision);
       if (current.revision === 0 || historical === undefined) throw new AppError(404, "KNOWLEDGE_REVISION_NOT_FOUND", "Không tìm thấy phiên bản tri thức.");
       const entry = revision === 0 ? historical as KnowledgeEntry | null : parse((historical as RevisionRow).after);
-      const kind = current.entry?.kind ?? entry?.kind ?? (this.db.prepare("SELECT kind FROM knowledge_entries WHERE id=?").get(id) as { kind: string }).kind;
+      const kind = current.entry?.kind ?? entry?.kind ?? (this.db.prepare("SELECT kind FROM knowledge_entries WHERE id=?").get(this.entryId(id)) as { kind: string }).kind;
       const next = this.apply(id, kind, entry, current, "rollback", "user", reason ?? `Khôi phục phiên bản ${revision}`);
       this.db.prepare("UPDATE knowledge_proposals SET status='superseded', decided_at=?, decided_by='user' WHERE entry_id=? AND status='pending'")
-        .run(this.now().toISOString(), id);
+        .run(this.now().toISOString(), this.entryId(id));
       return { id, revision: next };
     }).immediate();
   }
@@ -202,7 +205,7 @@ export class KnowledgeService {
     }).immediate();
   }
 
-  private shouldAutoApply(entry: KnowledgeEntry, risk: KnowledgeRisk): boolean {
+  private shouldAutoApply(entry: KnowledgeEntry, risk: KnowledgeRisk, checkedPages?: ReadonlyMap<string, string>): boolean {
     if (risk === "high") return false;
     if (risk === "medium") {
       const row = this.db.prepare("SELECT value FROM app_settings WHERE key='knowledge.autoApplyMedium'").get() as { value: string } | undefined;
@@ -211,19 +214,32 @@ export class KnowledgeService {
     const official = entry.evidence.filter((source) => source.type === "official");
     return entry.confidence === "high" && official.length > 0 && official.every(({ url, quote }) => {
       if (!quote) return false;
+      const checked = checkedPages?.get(url);
+      if (checked !== undefined) return quoteInPage(checked, quote);
       const page = this.db.prepare("SELECT body_text FROM provider_intel_pages WHERE url=? AND status='ok' ORDER BY last_fetched_at DESC LIMIT 1")
         .get(url) as { body_text: string } | undefined;
       return page !== undefined && quoteInPage(page.body_text, quote);
     });
   }
 
+  private entryId(key: string, kind?: string, create = false): string | undefined {
+    const workspaceId = currentWorkspaceId(this.db);
+    const row = this.db.prepare("SELECT id FROM knowledge_entries WHERE key=? AND workspace_id IS ?")
+      .get(key, workspaceId) as { id: string } | undefined;
+    if (row || !create) return row?.id;
+    const id = randomUUID();
+    this.db.prepare("INSERT INTO knowledge_entries (id,key,workspace_id,kind,json,revision,updated_at) VALUES (?,?,?,?,NULL,0,?)")
+      .run(id, key, workspaceId, kind, this.now().toISOString());
+    return id;
+  }
+
   private rows(id: string): RevisionRow[] {
-    return this.db.prepare("SELECT * FROM knowledge_revisions WHERE entry_id=? ORDER BY revision DESC").all(id) as RevisionRow[];
+    return this.db.prepare("SELECT * FROM knowledge_revisions WHERE entry_id=? ORDER BY revision DESC").all(this.entryId(id) ?? "") as RevisionRow[];
   }
 
   private latest(id: string) {
-    const row = this.db.prepare("SELECT json, revision FROM knowledge_entries WHERE id=?").get(id) as { json: string | null; revision: number } | undefined;
-    return row ? { entry: parse(row.json), revision: row.revision }
+    const row = this.db.prepare("SELECT json, revision FROM knowledge_entries WHERE key=? AND workspace_id IS ?").get(id, currentWorkspaceId(this.db)) as { json: string | null; revision: number } | undefined;
+    return row && row.revision > 0 ? { entry: parse(row.json), revision: row.revision }
       : { entry: snapshotKnowledge(id) ?? null, revision: 0 };
   }
 
@@ -234,12 +250,11 @@ export class KnowledgeService {
     const at = this.now().toISOString();
     const revision = before.revision + 1;
     const json = entry && JSON.stringify(entry);
-    this.db.prepare(`INSERT INTO knowledge_entries (id, kind, json, revision, updated_at) VALUES (?,?,?,?,?)
-      ON CONFLICT(id) DO UPDATE SET kind=excluded.kind, json=excluded.json, revision=excluded.revision, updated_at=excluded.updated_at`)
-      .run(id, kind, json, revision, at);
-    stampWorkspace(this.db, "knowledge_entries", id);
+    const entryId = this.entryId(id, kind, true)!;
+    this.db.prepare("UPDATE knowledge_entries SET json=?, revision=?, updated_at=? WHERE id=?")
+      .run(json, revision, at, entryId);
     this.db.prepare(`INSERT INTO knowledge_revisions (id,entry_id,revision,before,after,patch,origin,actor,reason,created_at)
-      VALUES (?,?,?,?,?,?,?,?,?,?)`).run(randomUUID(), id, revision, before.entry && JSON.stringify(before.entry),
+      VALUES (?,?,?,?,?,?,?,?,?,?)`).run(randomUUID(), entryId, revision, before.entry && JSON.stringify(before.entry),
       json, JSON.stringify(patchFor(before.entry, entry)), origin, actor, reason, at);
     return revision;
   }

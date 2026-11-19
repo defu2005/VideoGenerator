@@ -10,10 +10,11 @@ import { runPlaybooks, setGatewayBypass } from "./playbooks.js";
 import { runStandingPlans } from "./planner.js";
 import { autonomyBudgetStatus, hasAutonomySpendLimit, recordBudgetFindings } from "./autonomyBudget.js";
 import { effectiveAutonomy } from "./autonomy.js";
+import { canReadStageFinding, stageReleaseLoops } from "../agents/releaseMonitor.js";
 
 const MINUTE = 60_000;
 const RETENTION = 7 * 24 * 60 * MINUTE;
-const MONITORED = ["job_stalled", "job_overdue", "account_attention", "topics_low", "disk_low", "worker_idle", "quota_wait", "slot_at_risk", "resource_starved"] as const;
+const MONITORED = ["job_stalled", "job_overdue", "account_attention", "topics_low", "disk_low", "worker_idle", "quota_wait", "slot_at_risk", "resource_starved", "stage_release_loop"] as const;
 const ALERTS: Partial<Record<(typeof MONITORED)[number], string>> = {
   job_stalled: "Một job vượt thời gian chạy dự kiến.",
   account_attention: "Một tài khoản nền tảng cần kiểm tra kết nối.",
@@ -62,7 +63,8 @@ export function listSupervisorState(db: Database.Database, profileId?: string) {
     id: string; profileId: string | null; kind: string; severity: string; detail: string;
     firstSeenAt: string; lastSeenAt: string; status: string; resolution: string | null;
   }[];
-  return { heartbeat: heartbeat ?? null, findings: rows.map(({ detail, ...row }) => ({ ...row, detail: JSON.parse(detail) as unknown })) };
+  return { heartbeat: heartbeat ?? null, findings: rows.map(({ detail, ...row }) => ({ ...row, detail: JSON.parse(detail) as unknown }))
+    .filter((row) => row.kind !== "stage_release_loop" || canReadStageFinding(db, (row.detail as { jobId?: unknown } | null)?.jobId)) };
 }
 
 export class AutonomySupervisor {
@@ -110,6 +112,10 @@ export class AutonomySupervisor {
       return level === "supervised" || level === "autonomous";
     }).map(({ id }) => id));
     const detected: Finding[] = [];
+    for (const loop of stageReleaseLoops(this.db)) {
+      detected.push({ kind: "stage_release_loop", key: loop.jobId, profileId: loop.profileId, severity: "warn",
+        detail: { ...loop, message: `Stage được nhận rồi trả lại ${loop.count} lần; cần xem nguyên nhân hoặc lấy lại cho app.` } });
+    }
     const running = this.options.repository.getRunningJobs().filter((job) => job.projectId !== PROTECTED_PROJECT_ID);
     for (const job of running) {
       if (!job.startedAt) continue;
@@ -316,15 +322,16 @@ export class AutonomySupervisor {
       if (plans.digest) {
         const digest = buildDigest(this.db, () => now);
         const fallback = `Bản tin ${digest.day}: ${digest.requests.length} việc cần bạn, ${digest.goals.length} mục tiêu.`;
+        const weekly = `\nTự cải tiến 7 ngày: ${digest.selfImprovementWeek.researched} lượt nghiên cứu, ${digest.selfImprovementWeek.knowledgeProposals} đề xuất tri thức.`;
         const summarize = this.options.summarize;
         if (summarize) {
           void summarize(fallback).then((line) => {
-            this.options.notify?.({ id: `digest:${digest.day}`, profileId: null, message: line || fallback });
+            this.options.notify?.({ id: `digest:${digest.day}`, profileId: null, message: (line || fallback) + weekly });
           }).catch(() => {
-            this.options.notify?.({ id: `digest:${digest.day}`, profileId: null, message: fallback });
+            this.options.notify?.({ id: `digest:${digest.day}`, profileId: null, message: fallback + weekly });
           });
         } else {
-          this.options.notify?.({ id: `digest:${digest.day}`, profileId: null, message: fallback });
+          this.options.notify?.({ id: `digest:${digest.day}`, profileId: null, message: fallback + weekly });
         }
       }
     } catch (error) {

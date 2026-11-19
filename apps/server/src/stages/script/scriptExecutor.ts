@@ -1,5 +1,5 @@
 import { enqueueIndex } from "../../retrieval/service.js";
-import { FORMAT_RECIPE_IDS, ResearchNotesSchema, fallbackFormat, missingRequiredSections, resolveBudget, resolveFormat, ScriptSchema, guidelineRulesFor, storyModeForProject, type GuidelineFindingDraft, type LlmCallUsage, type Script } from "@vg/shared";
+import { FORMAT_RECIPE_IDS, ResearchNotesSchema, fallbackFormat, missingRequiredSections, resolveBudget, resolveFormat, ScriptSchema, guidelineRulesFor, storyModeForProject, dedupeSeams, type GuidelineFindingDraft, type LlmCallUsage, type Script } from "@vg/shared";
 import type Database from "better-sqlite3";
 import { z } from "zod";
 import type { AppConfig } from "../../lib/config.js";
@@ -79,11 +79,18 @@ export class ScriptExecutor implements StageExecutor {
     if (mergedSource && (!budget.scriptReview || existing?.review_notes !== null)) {
       try {
         const parsed = ScriptSchema.parse(JSON.parse(existing!.data) as unknown);
-        const durationCheck = checkScriptDuration(parsed, project.settings.targetDurationSec, this.config.SPEECH_WORDS_PER_MINUTE);
+        const { script: dedupedParsed, dropped: earlyDropped } = dedupeSeams(parsed, project.settings.language);
+        for (const drop of earlyDropped) {
+          context.logger.info(
+            { seam: drop.seam, sectionId: drop.sectionId, sentence: drop.sentence },
+            `Dropped duplicate narration sentence at ${drop.seam} seam: "${drop.sentence}"`,
+          );
+        }
+        const durationCheck = checkScriptDuration(dedupedParsed, project.settings.targetDurationSec, this.config.SPEECH_WORDS_PER_MINUTE);
         if (durationCheck.reject) {
           throw new LlmError("The merged script no longer matches the target duration.", "LLM_INVALID_OUTPUT", false);
         }
-        const data = computeSectionDurations(parsed, this.config.SPEECH_WORDS_PER_MINUTE);
+        const data = computeSectionDurations(dedupedParsed, this.config.SPEECH_WORDS_PER_MINUTE);
         this.sqlite.prepare("UPDATE scripts SET data = ?, updated_at = ? WHERE project_id = ?")
           .run(JSON.stringify(data), new Date().toISOString(), project.id);
         const mergedSpent = { llmCalls: 0, inputTokens: 0, outputTokens: 0, tokensUnknown: false, calls: [] as LlmCallUsage[] };
@@ -459,6 +466,18 @@ export class ScriptExecutor implements StageExecutor {
         }
         if (missing.length > 0) {
           reviewNotes = [...(reviewNotes ?? []), `Thiếu mục bắt buộc: ${missing.join(", ")}`].slice(0, 8);
+        }
+      }
+      if (finalData) {
+        const { script: dedupedFinal, dropped: finalDropped } = dedupeSeams(finalData, project.settings.language);
+        if (finalDropped.length > 0) {
+          for (const drop of finalDropped) {
+            context.logger.info(
+              { seam: drop.seam, sectionId: drop.sectionId, sentence: drop.sentence },
+              `Dropped duplicate narration sentence at ${drop.seam} seam: "${drop.sentence}"`,
+            );
+          }
+          finalData = computeSectionDurations(dedupedFinal, this.config.SPEECH_WORDS_PER_MINUTE);
         }
       }
       context.reportProgress(85, "Saving script");

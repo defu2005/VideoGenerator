@@ -28,6 +28,10 @@ if ! docker compose version >/dev/null 2>&1; then
 fi
 
 role="${1:-${VG_INSTALL_ROLE:-}}"
+with_hermes=false
+for option in "$@"; do
+  if [ "$option" = "--with-hermes" ]; then with_hermes=true; fi
+done
 if [ -z "$role" ]; then
   if [ -t 0 ]; then
     echo "Cài máy này làm gì?"
@@ -73,6 +77,14 @@ copy_if_different "$DOCKER_DIR/compose.control.yml" "$VG_HOME/compose.control.ym
 copy_if_different "$DOCKER_DIR/compose.worker.yml" "$VG_HOME/compose.worker.yml"
 copy_if_different "$DOCKER_DIR/Caddyfile" "$VG_HOME/Caddyfile"
 copy_if_different "$DOCKER_DIR/litestream.yml" "$VG_HOME/litestream.yml"
+if [ "$with_hermes" = true ]; then
+  copy_if_different "$DOCKER_DIR/compose.hermes.yml" "$VG_HOME/compose.hermes.yml"
+  if [ ! -f "$VG_HOME/.env.hermes" ]; then
+    (umask 077; cp "$DOCKER_DIR/hermes.env.example" "$VG_HOME/.env.hermes")
+  fi
+  echo "Đã chuẩn bị Hermes. Điền khóa máy riêng trong $VG_HOME/.env.hermes. Không khởi động gateway trước khi điền."
+  echo "Sau đó chạy trong $VG_HOME: docker compose --env-file .env.hermes -f compose.control.yml -f compose.hermes.yml up -d hermes vg-hermes-sync"
+fi
 
 rand_b64() {
   if command -v openssl >/dev/null 2>&1; then

@@ -65,6 +65,7 @@ RUN npm ci --no-audit --no-fund \
 
 COPY packages ./packages
 COPY apps ./apps
+COPY .agents/skills ./.agents/skills
 COPY deploy/docker/entrypoint.sh /usr/local/bin/vg-entrypoint
 
 RUN chmod +x /usr/local/bin/vg-entrypoint \

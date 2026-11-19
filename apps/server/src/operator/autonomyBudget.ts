@@ -3,9 +3,56 @@ import { currentWorkspaceId } from "../auth/requestContext.js";
 import { AsyncLocalStorage } from "node:async_hooks";
 import { randomUUID } from "node:crypto";
 import { AutonomyBudgetSchema, DEFAULT_AUTONOMY_BUDGET, localDateString, type AutonomyBudget } from "@vg/shared";
+import { SelfImprovementSettingsSchema, type SelfImprovementCounter, type SelfImprovementSettings } from "@vg/shared";
+import { AppError } from "../lib/errors.js";
 import type { UsageService } from "../services/usageService.js";
 
 const budgetContext = new AsyncLocalStorage<() => BudgetState>();
+
+function improvementKey(db: Database.Database, name: string) {
+  return `selfImprovement.${currentWorkspaceId(db) ?? "default"}.${name}`;
+}
+function improvementRead(db: Database.Database, key: string): unknown {
+  const row = db.prepare("SELECT value FROM app_settings WHERE key=?").get(key) as { value: string } | undefined;
+  return row ? JSON.parse(row.value) as unknown : undefined;
+}
+function improvementPut(db: Database.Database, key: string, value: unknown, now: Date) {
+  db.prepare(`INSERT INTO app_settings(key,value,updated_at) VALUES(?,?,?)
+    ON CONFLICT(key) DO UPDATE SET value=excluded.value,updated_at=excluded.updated_at`).run(key, JSON.stringify(value), now.toISOString());
+}
+export function selfImprovementSettings(db: Database.Database): SelfImprovementSettings {
+  return SelfImprovementSettingsSchema.parse(improvementRead(db, improvementKey(db, "settings")) ?? {});
+}
+/** Expose only from a user-only settings endpoint; no registry tool can raise these limits. */
+export function saveSelfImprovementSettings(db: Database.Database, raw: unknown, now = new Date()) {
+  const settings = SelfImprovementSettingsSchema.parse(raw);
+  improvementPut(db, improvementKey(db, "settings"), settings, now); return settings;
+}
+export function selfImprovementBudgetStatus(db: Database.Database, now = new Date()) {
+  const settings = selfImprovementSettings(db), day = localDateString(now, "Asia/Ho_Chi_Minh");
+  const raw = improvementRead(db, improvementKey(db, `used.${day}`));
+  const used = Object.fromEntries(Object.keys(settings.budget).map((key) => [key, 0])) as Record<SelfImprovementCounter, number>;
+  if (raw && typeof raw === "object") for (const key of Object.keys(used) as SelfImprovementCounter[]) {
+    const value = (raw as Record<string, unknown>)[key];
+    if (typeof value === "number" && Number.isSafeInteger(value) && value >= 0) used[key] = value;
+  }
+  return { day, limits: settings.budget, used };
+}
+/** Reserve before each operation, atomically across concurrent runs; failed attempts still consume budget. */
+export function consumeSelfImprovementBudget(db: Database.Database, counter: SelfImprovementCounter, options: { manual?: boolean; now?: Date } = {}) {
+  return db.transaction(() => {
+    const now = options.now ?? new Date(), settings = selfImprovementSettings(db);
+    if (!options.manual && ((settings.eco && ["researchRuns", "skillDrafts"].includes(counter))
+      || (!settings.automaticResearch && counter === "researchRuns"))) {
+      throw new AppError(409, "SELF_IMPROVEMENT_DISABLED", "Chế độ hiện tại không cho phép tự nghiên cứu hoặc soạn skill.");
+    }
+    const status = selfImprovementBudgetStatus(db, now);
+    if (status.used[counter] >= status.limits[counter]) throw new AppError(429, "SELF_IMPROVEMENT_BUDGET_LIMIT", "Đã đạt giới hạn tự cải tiến trong ngày.");
+    status.used[counter]++;
+    improvementPut(db, improvementKey(db, `used.${status.day}`), status.used, now);
+    return status;
+  }).immediate();
+}
 const spendHolds = new Map<string, number>();
 let holdSeq = 0;
 export type BudgetState = { state: "normal" | "warn" | "stop"; retryAt: string | null };

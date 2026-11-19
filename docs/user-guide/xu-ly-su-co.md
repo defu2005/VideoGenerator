@@ -54,7 +54,9 @@ Câu `Không tạo được giọng đọc.` nghĩa là nhà TTS lỗi hoặc ch
 3. Trên tab **Voice** của dự án, bấm **Tạo lại** cho cảnh lỗi.
 4. Giọng mạng có thể cần thử lại. Ứng dụng tự thử lại Edge vài lần trước khi báo lỗi.
 
-Không bấm **Render** khi chưa có đủ giọng: video sẽ thiếu tiếng. Mã liên quan là `TTS_FAILED`.
+5. Với Edge, nếu phiên bản cài trên máy đã cũ và không gọi được dịch vụ, bước Giọng đọc báo lỗi `TTS_BINARY_OUTDATED` và hướng dẫn chạy lệnh `pip install -U edge-tts` để nâng cấp.
+
+Không bấm **Render** khi chưa có đủ giọng: video sẽ thiếu tiếng. Mã liên quan là `TTS_FAILED`, `TTS_BINARY_MISSING`, `TTS_BINARY_OUTDATED`.
 
 ### Render thất bại {#loi-render}
 

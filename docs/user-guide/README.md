@@ -11,14 +11,17 @@ Video Agent chạy trên máy bạn. Menu bên trái mở từng khu vực. Dấ
 | Tài khoản | [Không gian làm việc và quyền](khong-gian-va-quyen.md) |
 | Cài đặt | [Cài đặt](cai-dat.md) |
 | Cài đặt | [Máy worker](may-worker.md) |
+| Cài đặt | [Tài nguyên máy](tai-nguyen-may.md) |
 | Kết nối | [Kết nối](ket-noi.md) |
 | Hồ sơ | [Hồ sơ](ho-so.md) |
 | Dự án và quy trình | [Dự án và quy trình](du-an-va-quy-trinh.md) |
 | Ảnh và giọng | [Hình ảnh và giọng đọc](hinh-anh-va-giong-doc.md) |
+| Ảnh và agent | [Agent nhận stage](agent-nhan-stage.md) |
 | Render | [Render và thumbnail](render-va-thumbnail.md) |
 | Đăng bài | [Đăng bài](dang-bai.md) |
 | Tự động | [Tự động hoá](tu-dong-hoa.md) |
 | Tự vận hành | [Mức tự chủ và quyền](tu-van-hanh.md) |
+| Vận hành | [Tự cải tiến và nghiên cứu](tu-cai-tien.md) |
 | Agent bên ngoài | [Kết nối agent bên ngoài](ket-noi-agent.md) |
 | Số liệu | [Phân tích và tài chính](phan-tich-va-tai-chinh.md) |
 | Bình luận | [Bình luận](binh-luan.md) |

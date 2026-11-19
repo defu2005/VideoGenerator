@@ -23,8 +23,15 @@ export const NAV_SECTIONS: NavSection[] = [
     items: [
       { to: "/", label: "Bảng điều khiển", end: true, icon: "dashboard" },
       { to: "/assistant", label: "Trợ lý AI", icon: "assistant" },
+    ],
+  },
+  {
+    id: "operations",
+    label: "Vận hành",
+    items: [
       { to: "/operator", label: "Agent operator", icon: "operator", needs: "operator.use" },
       { to: "/operator/journal", label: "Nhật ký tự vận hành", icon: "operator", needs: "operator.use" },
+      { to: "/self-improvement", label: "Tự cải tiến", icon: "globe", needs: "project.read" },
     ],
   },
   {
@@ -54,6 +61,7 @@ export const NAV_SECTIONS: NavSection[] = [
     items: [
       { to: "/settings/connections", label: "Kết nối", icon: "plug", needs: "channel.manage" },
       { to: "/settings/ai", label: "Mô hình AI", icon: "bot", needs: "settings.write" },
+      { to: "/settings/hermes-fleet", label: "Đội Hermes", icon: "server", needs: "operator.use" },
       { to: "/providers", label: "Nhà cung cấp AI", icon: "server", needs: "settings.write" },
       { to: "/settings/render", label: "Render", icon: "sliders" },
       { to: "/settings/image-sources", label: "Nguồn ảnh", icon: "image" },

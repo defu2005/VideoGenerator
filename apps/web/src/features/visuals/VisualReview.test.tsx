@@ -65,7 +65,7 @@ const pipeline: PipelineState = {
 
 const rateLimitReason = "Máy chủ ảnh đang giới hạn tốc độ (HTTP 429) — thử lại sau ít phút";
 
-function setup(approveFails = false, approveAllResult?: unknown) {
+function setup(approveFails = false, approveAllResult?: unknown, entry = candidate) {
   const calls: { url: string; init?: RequestInit }[] = [];
   vi.stubGlobal("EventSource", undefined);
   vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -76,8 +76,8 @@ function setup(approveFails = false, approveAllResult?: unknown) {
     if (approveFails && url.endsWith("/visuals/approve")) {
       return jsonResponse({ error: { code: "IMAGE_DOWNLOAD_FAILED", message: "Image download failed", details: {} } }, 422);
     }
-    if (url.includes(`/scenes/${sceneId}/visuals`)) return jsonResponse(sceneVisuals);
-    if (url.endsWith("/visuals")) return jsonResponse(visuals);
+    if (url.includes(`/scenes/${sceneId}/visuals`)) return jsonResponse({ ...sceneVisuals, candidates: [entry] });
+    if (url.endsWith("/visuals")) return jsonResponse({ ...visuals, scenes: visuals.scenes.map((scene) => ({ ...scene, selectedCandidate: entry })) });
     if (url.endsWith("/gates/VISUAL_REVIEW/approve")) return jsonResponse(pipeline);
     return jsonResponse(sceneVisuals);
   }));
@@ -88,6 +88,14 @@ function setup(approveFails = false, approveAllResult?: unknown) {
 afterEach(() => vi.unstubAllGlobals());
 
 describe("VisualReview", () => {
+  it("shows who found and judged an agent image on the scene and candidate cards", async () => {
+    const entry: VisualCandidate = { ...candidate, origin: "agent", provider: "agent:hermes/Hermes-2", visionCheck: { fit: 9, depicts: "River", issues: [], cropOk: true, model: "own-vision", checkedAt: project.updatedAt, checkedBy: { kind: "agent", instance: "hermes/Hermes-2", model: "own-vision" } } };
+    setup(false, undefined, entry);
+    const text = "Hermes-2 tìm, Hermes-2 duyệt (model own-vision)";
+    expect(await screen.findByText(text)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Đổi ảnh" }));
+    await waitFor(() => expect(screen.getAllByText(text)).toHaveLength(2));
+  });
   it("renders scene details, status and warnings and explains why the gate is disabled", async () => {
     setup();
     expect(await screen.findByText("A broad river beneath a sunrise.")).toBeInTheDocument();

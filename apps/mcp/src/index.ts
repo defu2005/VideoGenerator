@@ -3,7 +3,11 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { VideoAgentApiClient } from "./apiClient.js";
 import { registerVideoAgentTools, type RegistryCatalogTool } from "./tools.js";
+import { startHttpMcp } from "./http.js";
 
+if (process.env.VG_MCP_HTTP_PORT) {
+  startHttpMcp(Number(process.env.VG_MCP_HTTP_PORT));
+} else {
 const server = new McpServer({
   name: "video-agent-mcp",
   version: "0.1.0",
@@ -22,4 +26,5 @@ try {
 } catch (error) {
   console.error(error instanceof Error ? error.message : String(error));
   process.exitCode = 1;
+}
 }

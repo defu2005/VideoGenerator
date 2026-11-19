@@ -337,7 +337,7 @@ export class TtsProviderRegistry {
       };
     } catch (error) {
       if (error instanceof Error && error.name === "AbortError") throw error;
-      if (error instanceof StageError && error.code === "TTS_NETWORK") throw error;
+      if (error instanceof StageError && (error.code === "TTS_NETWORK" || error.code === "TTS_BINARY_OUTDATED" || error.code === "TTS_BINARY_MISSING")) throw error;
       if (budgetWait) throw budgetWait;
       const message = error instanceof Error ? error.message : "Không tạo được giọng đọc.";
       const code = error instanceof StageError ? error.code : "";

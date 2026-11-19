@@ -27,6 +27,7 @@ import {
   resolveBudget,
   resolveStyle,
   resolveEditEngine,
+  checkNeighbouringSceneDuplicates,
   renderTargetFor,
   subtitleLayoutForAspect,
   toAss,
@@ -1014,7 +1015,6 @@ export class RenderService {
         @version, @note, @pinned, @deleted_at, @review_thread_id, @metadata_snapshot, @aspect_ratio, @variant_of)
     `).run(row);
 
-    recheckOriginalitySafely(this.sqlite, project.id, { id: renderId, plan: composePlan });
     await recordFinishedLookSafely(this.sqlite, {
       projectId: project.id,
       renderId,
@@ -1027,6 +1027,7 @@ export class RenderService {
       thumbsDir,
       thumbnailIds: fullReport.thumbnails,
     }, this.now);
+    recheckOriginalitySafely(this.sqlite, project.id, { id: renderId, plan: composePlan });
     try {
       this.applyRetention(project.id);
     } catch (error) {
@@ -1092,6 +1093,7 @@ export class RenderService {
   ): Promise<Omit<RenderReport, "clipsReused" | "clipsRendered" | "elapsedSec">> {
     const issues: RenderIssue[] = [];
     this.warnDuplicateVisuals(project, issues);
+    this.warnDuplicateNarration(project, issues);
     const probe = await this.tools.probe(outputPath, signal);
     const expected = timeline.totalDurationSec;
     if (!probe.hasVideo) issues.push({ code: "NO_VIDEO", severity: "ERROR", sceneId: null, message: "Video không có luồng hình." });
@@ -1204,6 +1206,22 @@ export class RenderService {
         severity: "WARN",
         sceneId: group[1]?.sceneId ?? null,
         message: `${group.length} cảnh trong video đang dùng cùng một ảnh.`,
+      });
+    }
+  }
+
+  private warnDuplicateNarration(project: Project | undefined, issues: RenderIssue[]): void {
+    if (!project) return;
+    const scenes = this.sqlite.prepare(
+      'SELECT id, narration, "order" FROM scenes WHERE project_id = ? ORDER BY "order" ASC',
+    ).all(project.id) as Array<{ id: string; narration: string; order: number }>;
+    const warnings = checkNeighbouringSceneDuplicates(scenes, project.settings?.language);
+    for (const warn of warnings) {
+      issues.push({
+        code: "DUPLICATE_NARRATION",
+        severity: "WARN",
+        sceneId: warn.sceneId,
+        message: warn.message,
       });
     }
   }

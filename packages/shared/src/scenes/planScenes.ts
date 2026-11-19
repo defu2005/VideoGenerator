@@ -1,6 +1,9 @@
 import type { Script, ScriptSection } from "../schemas/script.js";
 import type { SceneDraft } from "../schemas/scene.js";
 import { splitSentences } from "./sentences.js";
+import { dedupeSeams } from "./dedupeSeams.js";
+
+export * from "./dedupeSeams.js";
 
 // Restored on 2026-11-03 from packages/shared/dist/scenes/planScenes.js (built 1 minute before
 // the source file was zeroed by an interrupted write); types re-added from planScenes.d.ts.
@@ -227,6 +230,9 @@ export function planScenes(script: Script, settings: Settings): SceneDraft[] {
     || !Number.isFinite(settings.wordsPerMinute) || settings.wordsPerMinute <= 0) {
     throw new RangeError("Scene duration and words per minute must be positive finite numbers.");
   }
+
+  const { script: cleanedScript } = dedupeSeams(script, settings.language);
+  script = cleanedScript;
 
   const firstSection = script.sections[0] ?? null;
   const lastSection = script.sections.at(-1) ?? null;

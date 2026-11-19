@@ -4,7 +4,7 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { VideoAgentApiClient, VideoAgentApiError } from "./apiClient.js";
 
 type ToolReply = {
-  content: { type: "text"; text: string }[];
+  content: ({ type: "text"; text: string } | { type: "image"; mimeType: string; data: string })[];
   isError?: boolean;
 };
 
@@ -102,24 +102,27 @@ export function registerVideoAgentTools(
   server: McpServer,
   api: VideoAgentApiClient = new VideoAgentApiClient(),
   catalog: RegistryCatalogTool[] = [],
-): void {
-  const operatorOnly = process.env.VG_TOOL_SOURCE === "operator";
+  options: { operatorOnly?: boolean } = {},
+): void | ((catalog: RegistryCatalogTool[]) => void) {
+  const operatorOnly = options.operatorOnly ?? process.env.VG_TOOL_SOURCE === "operator";
   const registered = new Set<string>();
+  const catalogHandles = new Map<string, { remove: () => void }>();
   const registerTool = server.tool.bind(server) as (
     name: string,
     description: string,
     shape: object,
     cb: (args: any) => Promise<ToolReply>,
-  ) => void;
+  ) => { remove: () => void };
   function define(name: string, description: string, shape: object, handler: (args: any) => Promise<ToolReply>): void {
     registered.add(name);
-    registerTool(name, description, shape, async (args) => {
+    const handle = registerTool(name, description, shape, async (args) => {
       if (name !== "research_scene_visuals" && name !== "dedupe_scene_visuals" && name !== "crop_scene_images" && containsProtectedProject(args)) return reply("Dự án này bị từ chối.", true);
       return handler(args);
     });
+    catalogHandles.set(name, handle);
   }
-  function registerCatalog(): void {
-    for (const tool of catalog) {
+  function registerCatalog(items = catalog): void {
+    for (const tool of items) {
       if (registered.has(tool.name)) continue;
       let schema: z.ZodType | undefined;
       if (tool.inputSchema) {
@@ -129,12 +132,22 @@ export function registerVideoAgentTools(
           // Older catalogs and unsupported keywords still get server-side validation.
         }
       }
-      const handler = (args: unknown) => {
+      const handler = async (args: unknown): Promise<ToolReply> => {
         if (tool.name !== "research_scene_visuals" && tool.name !== "dedupe_scene_visuals" && tool.name !== "crop_scene_images" && containsProtectedProject(args)) return Promise.resolve(reply("Dự án này bị từ chối.", true));
+        if (tool.name === "visual_get_candidate_image") {
+          try {
+            const response = await api.invokeRegistry(tool.name, args);
+            if (!response.result) return reply(response);
+            const result = z.object({ content: z.array(z.object({ type: z.literal("image"), mimeType: z.literal("image/png"), data: z.string().min(1) }).strict()), sha256: z.string().regex(/^[a-f0-9]{64}$/) }).strict().parse(response.result);
+            return { content: [...result.content, { type: "text", text: `SHA256 ảnh gốc: ${result.sha256}` }] };
+          } catch (error) {
+            return reply(error instanceof VideoAgentApiError ? error.rawBody ?? error.message : error instanceof Error ? error.message : String(error), true);
+          }
+        }
         return invoke(() => api.invokeRegistry(tool.name, args));
       };
       if (schema) {
-        server.registerTool(tool.name, { description: tool.description, inputSchema: schema }, handler);
+        catalogHandles.set(tool.name, server.registerTool(tool.name, { description: tool.description, inputSchema: schema }, handler));
         registered.add(tool.name);
         continue;
       }
@@ -151,7 +164,11 @@ export function registerVideoAgentTools(
   }
   if (operatorOnly) {
     registerCatalog();
-    return;
+    return (updated) => {
+      for (const [name, handle] of catalogHandles) { handle.remove(); registered.delete(name); }
+      catalogHandles.clear();
+      registerCatalog(updated);
+    };
   }
   const briefFields = {
     title: z.string().optional(),

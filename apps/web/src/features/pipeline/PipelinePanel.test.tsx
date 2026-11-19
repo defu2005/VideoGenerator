@@ -30,6 +30,7 @@ function makePipeline(): PipelineState {
 
 function makeJob(status: Job["status"], stage: Job["stage"] = "RESEARCH", progress = 0): Job {
   return {
+    executor: "app",
     id: jobId,
     projectId,
     stage,

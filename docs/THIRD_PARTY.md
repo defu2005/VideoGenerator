@@ -7,6 +7,7 @@
 - `@fontsource/be-vietnam-pro@5.3.0` — OFL-1.1. Font tiếng Việt nhúng cục bộ.
 - `ffmpeg-static@5.3.0` — gói npm và binary FFmpeg đi kèm là GPL-3.0-or-later. App gọi binary bằng process. Một người chạy trên máy của họ. Không thêm codec ngoài bản binary này.
 - `ffprobe-static` — đi cùng bước kiểm tra file render.
+- QR Code generator library (Project Nayuki) — MIT. Tạo mã QR cho xác thực hai bước (TOTP 2FA) trực tiếp trong trình duyệt, nhúng dưới dạng file đơn `apps/web/src/lib/vendor/qrcodegen.ts`. Không phụ thuộc npm, không gửi URI/khoá ra bên ngoài. https://github.com/nayuki/QR-Code-generator
 
 Đã xem và không gắn (dùng cá nhân, 2026-11-06). Lý do nằm ở `docs/ARCHITECTURE.md` mục 11.
 

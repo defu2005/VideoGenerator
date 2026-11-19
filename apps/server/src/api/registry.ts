@@ -1,7 +1,8 @@
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import type { AssistantService } from "../assistant/service.js";
-import { ASSISTANT_TOOLS, getToolCatalogForPrompt } from "../assistant/tools.js";
+import { ASSISTANT_TOOLS } from "../assistant/tools.js";
+import { registryCatalog } from "../registry/catalog.js";
 import { systemActorFor } from "../auth/workspaces.js";
 import { invokeRegistryTool } from "../registry/invoke.js";
 import type { OperatorService } from "../operator/service.js";
@@ -16,13 +17,7 @@ const InvokeBodySchema = z.object({
 
 export function registerRegistryRoutes(app: FastifyInstance, assistant: AssistantService, operator: OperatorService): void {
   app.get("/api/registry/tools", async () => ({
-    tools: getToolCatalogForPrompt().map((tool) => ({
-      name: tool.name,
-      description: tool.description,
-      risk: tool.risk,
-      properties: tool.args,
-      inputSchema: z.toJSONSchema(ASSISTANT_TOOLS[tool.name]!.argsSchema, { io: "input" }),
-    })),
+    tools: registryCatalog(),
   }));
 
   app.post("/api/registry/invoke", async (request, reply) => {
@@ -38,7 +33,8 @@ export function registerRegistryRoutes(app: FastifyInstance, assistant: Assistan
     const title = source === "operator" ? "Hệ thống operator" : source === "agent" ? "MCP có quyền thao tác" : "Hệ thống MCP";
     const ctx = assistant.toolContext();
     const caller = request.actor;
-    const actor = source === "mcp" && caller ? caller : systemActorFor(ctx.sqlite, caller?.workspaceId);
+    // Remote clients cannot promote their key owner's role by selecting the agent/operator source.
+    const actor = invocation ? systemActorFor(ctx.sqlite, caller?.workspaceId) : caller ?? systemActorFor(ctx.sqlite);
     if (source === "operator") {
       ctx.agent = INTERNAL_OPERATOR;
     } else {
@@ -49,7 +45,7 @@ export function registerRegistryRoutes(app: FastifyInstance, assistant: Assistan
         warn: (data, msg) => request.log.warn(data, msg),
       });
       ctx.agent = trusted;
-      touchInstance(ctx.sqlite, trusted, { tool: true });
+      touchInstance(ctx.sqlite, trusted, { tool: true, workspaceId: caller?.workspaceId });
     }
     const result = await invokeRegistryTool({
       name: body.name,

@@ -59,7 +59,7 @@ Dùng để chọn giọng cho mọi dự án. Menu: **Giọng đọc (TTS)**.
 4. Bấm **Lưu giọng đọc**.
 5. Nhà cần khoá: dán `<token của bạn>` vào đúng ô của nhà đó.
 
-Edge không cần khoá. Google, Gemini, ElevenLabs, OpenAI, FPT, Viettel cần khoá của bạn. Piper và VieNeu chạy local nếu bạn đã cài. Đổi giọng mặc định không tạo lại file cũ. Vào từng dự án bấm **Tạo lại**. Xem [Không tạo được giọng đọc](xu-ly-su-co.md#loi-giong).
+Edge không cần khoá; trang cài đặt hiển thị đường dẫn và kiểm tra phiên bản edge-tts (báo cũ kèm lệnh `pip install -U edge-tts` nếu bản thấp hơn yêu cầu). Google, Gemini, ElevenLabs, OpenAI, FPT, Viettel cần khoá của bạn. Piper và VieNeu chạy local nếu bạn đã cài. Đổi giọng mặc định không tạo lại file cũ. Vào từng dự án bấm **Tạo lại**. Xem [Không tạo được giọng đọc](xu-ly-su-co.md#loi-giong).
 
 ## Giọng trong dự án {#giong-trong-du-an}
 

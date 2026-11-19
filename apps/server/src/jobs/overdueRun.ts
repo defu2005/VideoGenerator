@@ -120,7 +120,7 @@ export interface OverdueRunInput {
   historyNote: string | null;
   remote: boolean;
   /** Remote jobs: facts that come from the lease heartbeat instead of the local process. */
-  remoteFacts?: () => { heartbeatAgeMs: number | null; progress: number; message: string | null };
+  remoteFacts?: () => { heartbeatAgeMs: number | null; progress: number; message: string | null; holderLabel?: string };
   /** Stop the stage. The worker decides how (abort the controller, or fail a remote job). */
   abort: (kind: OverdueAbortKind, reason: string) => void;
 }
@@ -195,7 +195,7 @@ export class OverdueRun {
       const alive = remoteInfo.heartbeatAgeMs !== null && remoteInfo.heartbeatAgeMs < 90_000;
       tracker.setActivity({
         childAlive: alive,
-        childNote: alive ? "Máy worker còn gửi nhịp tim" : "Máy worker đã lâu không gửi nhịp tim",
+        childNote: alive ? `${remoteInfo.holderLabel ?? "Máy worker"} còn gửi nhịp tim` : `${remoteInfo.holderLabel ?? "Máy worker"} đã lâu không gửi nhịp tim`,
       });
     }
     const snap = tracker.snapshot(now);

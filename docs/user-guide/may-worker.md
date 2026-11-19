@@ -30,7 +30,7 @@ Mỗi máy khai báo những việc nó làm được, kèm phiên bản:
 
 - `render`: dựng video.
 - `tts:<nhà cung cấp>`: tạo giọng đọc, ví dụ `tts:piper`, `tts:google_cloud`. CLI cục bộ (Piper, VieNeu, edge-tts) chỉ được khai báo khi máy thật sự có công cụ. Nhà cung cấp dùng khoá (Google, ElevenLabs...) do người cài máy liệt kê trong `VG_NODE_TTS` (ví dụ `VG_NODE_TTS=google_cloud,openai`); máy không giữ sẵn khoá nào.
-- `media_fetch`: tải clip stock về kho. Mặc định bật; đặt `VG_NODE_MEDIA=false` để tắt.
+- `media_fetch`: tải clip stock về kho. Mặc định bật; đặt `VG_NODE_MEDIA=false` để tắt. Khi kế hoạch compose đã có, hệ thống có thể chủ động tải trước các clip còn thiếu (`media.prefetch`, mặc định bật) lên node hoặc máy chủ để khâu dựng video không phải chờ.
 
 Bấm tên máy để xem khả năng kèm phiên bản và tick bỏ khả năng nào không muốn máy nhận. Việc chỉ được giao cho máy **có đủ khả năng**: máy không có `tts:piper` sẽ không bao giờ nhận việc tạo giọng bằng Piper.
 

@@ -37,6 +37,7 @@ export function scriptPrompt(
       `Speaking pace: ${pace} words per minute`,
       research ? `Research notes (unverified; preserve uncertainty):\n${JSON.stringify(research)}` : "No research notes are available; use the topic only.",
       "Script fields: title, hook, sections[{id,heading,narration,visualQueries:{primary,alternatives},visualNotes,musicMood,energy}], outro, music:{mood,energy,keywords}.",
+      "The hook is spoken on its own: section 1 must continue after it without repeating it. The outro must conclude the video without repeating the last section.",
       "Use English visual search terms, retain proper nouns, provide 0-3 alternatives; the server calculates section durations.",
     ].join("\n"), channelDirection, learnedNotes), guidance) + (ownerRules?.trim() ? `\n\n${ownerRules.trim()}` : ""),
   };

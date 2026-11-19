@@ -91,3 +91,53 @@ npm run export-skills -- --write
 ```
 
 Lệnh chỉ xuất kỹ năng `video-*` đang dùng, ghi vào `.agents/skills/<tên>/SKILL.md`. File khác nội dung chỉ bị ghi đè khi có `--write`; lệnh không xoá file nào.
+
+## Hermes giám sát Operator (Supervisor) {#hermes-giam-sat}
+
+Hệ thống có hai loại agent phối hợp cùng nhau:
+- **Operator (in-process):** Chạy ngầm liên tục trong tiến trình app, thực hiện công việc thường nhật (hàng đợi, lệnh thường trực, duyệt cổng trong hạn mức tự chủ, sửa lỗi chất lượng).
+- **Hermes (external supervisor):** Chạy ngoài tiến trình (WSL, máy riêng), kết nối qua MCP để giám sát 24/7, gỡ kẹt, giải quyết việc chuyển giao (escalation), tạm dừng hoặc hoàn tác thao tác operator khi cần.
+
+### Chuỗi chỉ huy & Khóa tài nguyên (Leases)
+
+Chuỗi quyền hạn tuyệt đối: **Người dùng (rank 40) > Hermes trực nhật (rank 30) > Hermes khác (rank 20) > Operator (rank 10) > Mã giám sát an toàn.** Cấp dưới không bao giờ chặn hay đảo ngược quyết định của cấp trên.
+
+- **Khóa tài nguyên:** Mỗi đối tượng (`project`, `profile_automation`, `publication`, `account`, `operator_run`) tại một thời điểm chỉ cho phép một agent chỉnh sửa. Cấp cao hơn có quyền tiếp quản (preempt) khóa của cấp dưới. Lệnh từ người dùng (web hoặc Telegram) luôn hủy ngay lập tức mọi khóa của agent.
+- **Trực nhật (Duty):** Chỉ đúng một instance Hermes giữ cờ trực nhật thông qua nhịp báo sống `hermes_duty_heartbeat` (TTL 3 phút, cần khoá có quyền `canSupervise`). Các instance khác hoạt động ở chế độ dự phòng (standby).
+
+### Chuyển giao việc (Escalation)
+
+Khi Operator hoặc cơ chế tự sửa gặp sự cố:
+- **Việc agent giải quyết được** (`held_quality_gate`, `repair_exhausted`, `stuck_job`, `provider_failing`, `publish_failure`, `unclear_instruction`): Tự động chuyển giao cho Hermes với thời hạn xử lý 30 phút. Người dùng không bị làm phiền ngay.
+- **Việc chuyển thẳng cho người dùng ("Cần bạn"):** Các thao tác liên quan đến khoá bí mật, tiền bạc, quyền hạn, xoá vĩnh viễn dữ liệu, dự án được bảo vệ (`56374fb2-54cf-48ff-9441-2e6c653295d4`), hoặc việc chuyển qua lại quá 3 lần (chống lặp ping-pong).
+- Nếu Hermes không kịp xử lý trong 30 phút hoặc mất trực, việc tự động chuyển sang người dùng.
+
+### Giới hạn cứng & An toàn dự phòng
+
+- **Giới hạn cứng:** Hermes có đầy đủ công cụ của operator nhưng **không bao giờ** vượt qua các giới hạn: không bí mật, không tiền bạc, không tự sửa quyền của chính mình, không xoá cứng, không đụng dự án được bảo vệ.
+- **Tạm dừng có kiểm soát:** Hermes có thể tạm dừng operator tối đa 360 phút (6 giờ) kèm lý do rõ ràng. Nếu Hermes mất trực quá 10 phút, lệnh tạm dừng tự động được huỷ. Lệnh dừng của người dùng (`/stop`) Hermes không thể gỡ.
+
+### Lệnh chạy định kỳ cho Hermes
+
+Để Hermes kiểm tra định kỳ 15 phút một lần, chạy lệnh sau trong môi trường Hermes (yêu cầu Hermes gateway đang chạy):
+
+```bash
+hermes cron create "every 15m" "Run the vg-supervise skill" --skill vg-supervise --name vg-supervise
+```
+
+## Đồng bộ Hermes giữa các máy {#dong-bo-hermes}
+
+Mở **Cài đặt → Đội Hermes**, hoặc tab **Fleet** cạnh tab Hermes trong trang Agent operator. Chỉ chủ app đăng nhập qua giao diện được thay đổi cấu hình chung. Mỗi máy có khóa máy riêng, được gắn loại **Hermes** trong **Tài khoản của tôi**; chỉ bật quyền giám sát cho máy được phép nhận trực.
+
+- Mỗi Hermes giữ một thư mục riêng. Một thư mục chỉ chạy một gateway; không chia sẻ memory hoặc session giữa các gateway.
+- Các máy dùng MCP HTTP của cùng hub ở đường dẫn `/mcp`, nên cùng thấy bộ công cụ hiện tại. Chế độ stdio cũ vẫn dùng được.
+- Bộ đồng bộ kéo kỹ năng đã kích hoạt, sổ tay, lệnh thường trực và bài học chung; mặc định kiểm tra mỗi 5 phút, không gọi model AI. File chứa khóa, memory và session của máy không được gửi lên hub.
+- Thẻ từng máy hiển thị gói đã nhận, phiên bản Hermes, lần đồng bộ và cách xử lý khi lệch hoặc mất kết nối. Nút **Chép lệnh cài bộ đồng bộ** chỉ chép lệnh; bạn tự đặt khóa riêng trên máy đích rồi chạy.
+- Sau lần đầu hoặc khi cấu hình đổi, chạy `/reload-mcp` trong Hermes hoặc khởi động lại gateway. Bộ đồng bộ không tự khởi động lại Hermes.
+- Nếu thiếu lịch giám sát, tab Fleet hiển thị đúng lệnh cron để chép. Gateway phải đang chạy thì lịch mới hoạt động. Hermes không dùng chung bot Telegram với app; tắt Telegram của Hermes hoặc dùng bot khác.
+
+Trong cấu hình chung, chọn provider, model, URL mà các máy truy cập được và phiên bản Hermes cố định. Khi đổi phiên bản, cập nhật image trên từng máy, kéo image rồi khởi động lại. Trường URL không chứa khóa hay mật khẩu; khóa model luôn do bạn đặt riêng trên máy Hermes.
+
+Kỹ năng Hermes tự viết được gửi thành **bản nháp** có nguồn và bằng chứng. Trang **Phiên bản skill** cho xem kết quả đánh giá. Nếu bản nháp dựa trên bản đang dùng cũ, mục **Cần gộp thay đổi** hiển thị hai bản cạnh nhau: chọn **Sửa**, gộp rồi lưu thành bản nháp mới. Không có gộp tự động. Mặc định bạn phải duyệt; tùy chọn tự kích hoạt chỉ áp dụng skill chỉ đọc đã qua đánh giá, không áp dụng skill nhắc đến công cụ ghi hay bản cần gộp. Chọn lại phiên bản cũ để khôi phục; các máy nhận nó ở lần đồng bộ tiếp theo.
+
+Bài học dùng chung có nguồn, phạm vi và số lần xác nhận. Nội dung trùng được gộp; bài học không trở thành quyền hay lệnh mới. Chỉ Hermes đang trực được ngừng dùng bài học kèm lý do; lịch sử vẫn được giữ.

@@ -28,11 +28,13 @@ const USER_ONLY_AREAS: Record<string, string> = {
   "an-toan": "Trang giải thích giới hạn an toàn; không có thao tác cho agent.",
   "cai-dat": "Cài đặt máy và app do người dùng làm.",
   "may-worker": "Máy worker thử nghiệm: chỉ chủ sở hữu và quản trị thêm hoặc gỡ máy.",
+  "tai-nguyen-may": "Cài đặt bộ điều tiết và trần tài nguyên do người dùng quản lý; agent chỉ xử lý cảnh báo trong phạm vi được giao.",
   "tro-ly-va-telegram":"Ghép Telegram dùng token, chỉ người dùng làm.",
 };
 
 /** Guide page → skill that covers it when the skill's own `area` is a different page. */
 const AREA_TO_SKILL: Record<string, string> = {
+  "agent-nhan-stage": "video-hinh-anh-va-giong",
   "phan-tich-va-tai-chinh": "video-doc-so-lieu",
   "che-do-ngan-sach": "video-mo-hinh-ai",
   "tri-thuc-va-thay-doi": "knowledge_refresh",
@@ -47,6 +49,7 @@ const UNCOVERED_TOOLS: Record<string, string> = {
   knowledge_status: "Tri thức có skill dựng sẵn knowledge_refresh; chưa có skill repo.",
   list_knowledge: "Tri thức có skill dựng sẵn knowledge_refresh; chưa có skill repo.",
   import_knowledge: "Nhập tri thức là việc của skill dựng sẵn knowledge_refresh.",
+  propose_knowledge_change: "Đề xuất thủ công vẫn dùng được; skill nghiên cứu dùng run_research để luôn kiểm quote và giữ medium/high chờ duyệt.",
   list_change_catalog: "Thay đổi bên ngoài có skill dựng sẵn change_investigation.",
   mark_change_reviewed: "Thay đổi bên ngoài có skill dựng sẵn change_investigation.",
   resolve_change_event: "Thay đổi bên ngoài có skill dựng sẵn change_investigation.",

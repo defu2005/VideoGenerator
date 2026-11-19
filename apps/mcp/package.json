@@ -4,7 +4,8 @@
   "private": true,
   "type": "module",
   "bin": {
-    "video-agent-mcp": "./dist/index.js"
+    "video-agent-mcp": "./dist/index.js",
+    "vg-hermes-sync": "./dist/sync.js"
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",

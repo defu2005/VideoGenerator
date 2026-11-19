@@ -46,6 +46,9 @@ export class MockLlmProvider implements LlmProvider {
     const topic = prompt.match(/^Topic:\s*(.+)$/mi)?.[1]?.trim() ?? "the supplied topic";
     const payload = parsePromptObject(prompt);
     if (req.schemaName === "KnowledgeWatch") return response({ effect: "none" }, req.model);
+    if (req.schemaName === "selfResearch_plan") return response({ questions: ["Nguồn chính thức hiện nói gì?"] }, req.model);
+    if (req.schemaName === "selfResearch_extract") return response({ facts: [] }, req.model);
+    if (req.schemaName === "selfResearch_propose") return response({ entries: [], changed: "Chưa xác nhận thay đổi.", unchanged: "Giữ tri thức hiện tại.", unconfirmed: "Dữ liệu mock không phải bằng chứng thật." }, req.model);
     if (req.schemaName === "VisionCheck") {
       const labels = req.images?.map((image) => image.label)
         ?? (Array.isArray(payload.images) ? payload.images.map((item) => String((item as { label?: string }).label ?? "img")) : ["img-0"]);

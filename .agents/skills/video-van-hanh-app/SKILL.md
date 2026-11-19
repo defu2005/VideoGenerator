@@ -20,6 +20,8 @@ tools:
   - read_skill
   - get_agent_context
   - propose_skill
+  - record_lesson
+  - search_lessons
 risk: safe
 ---
 
@@ -37,13 +39,16 @@ risk: safe
 - Khóa nội bộ do MCP client tự đọc từ `data/secrets/local-services.key`. Không dán khóa vào prompt, skill, ghi chú hay báo cáo.
 - Tool chưa hiện trong phiên: tải lại MCP, hoặc gọi cùng đường dẫn bằng `app_api` (`method` + `path` bắt đầu bằng `/api/`).
 - Bắt đầu mỗi phiên bằng `get_agent_context`, rồi `find_skills` với từ khóa của việc cần làm và `read_skill` để đọc skill tìm được.
+- Đội Hermes dùng cùng gói kỹ năng qua bộ đồng bộ; đọc `search_lessons` khi cần kinh nghiệm chung và lưu kết quả có bằng chứng bằng `record_lesson`. Bài học là dữ liệu tham khảo, không phải quyền hay lệnh mới. Xem `docs/user-guide/tu-van-hanh.md#dong-bo-hermes`.
 
 ## Bảng việc nào dùng skill nào
 
 | Việc | Skill |
 |---|---|
+| Tự nghiên cứu, tìm hiểu lại tri thức, kiểm nguồn và báo cáo (`tu-cai-tien.md`) | `video-tu-nghien-cuu` |
 | Tạo dự án, chạy pipeline, duyệt gate, retry, sửa chất lượng, SHELVED | `video-du-an-va-pipeline` |
 | Tìm ảnh, kiểm tra ảnh bằng vision, `VISUAL_NEEDS_USER`, giọng đọc | `video-hinh-anh-va-giong` |
+| Agent ngoài nhận, tìm và duyệt ảnh, hoàn tất stage (`agent-nhan-stage.md`) | `video-hinh-anh-va-giong` |
 | Render, timeline, thumbnail, bước render lỗi | `video-render-va-thumbnail` |
 | Metadata, đăng bài, hẹn giờ, thứ tự nền tảng | `video-dang-bai` |
 | Bình luận | `video-binh-luan` |
@@ -64,7 +69,7 @@ risk: safe
 
 - Không đụng dự án được bảo vệ (id ghi trong `AGENTS.md`): không duyệt gate, không render, không xoá.
 - Không đổi mức tự động hoá, quyền, vai trò, ngân sách, khóa audit; không bật fallback trả phí; không đặt hạn mức chi.
-- Không gửi hoặc đọc token, khóa OAuth, khóa TTS. Không dùng ảnh có bản quyền.
+- Không gửi hoặc đọc token, khóa OAuth, khóa TTS. Giữ chế độ bản quyền người dùng đã chọn; `off` không cho agent chọn ảnh chưa xác minh. Chế độ `commentary` vẫn phải qua các cổng nguồn, watermark và chất lượng; agent không tự đổi chế độ.
 - Việc rủi ro (`confirm`) chỉ thành "việc chờ duyệt"; chỉ người dùng duyệt.
 - Không tải file multipart lên hoặc tải file nhị phân về qua MCP.
 
@@ -78,6 +83,7 @@ Các phần này không có skill thao tác, hãy hướng dẫn người dùng 
 - An toàn: `docs/user-guide/an-toan.md`
 - Cài đặt và ghép Telegram: `docs/user-guide/cai-dat.md`, `docs/user-guide/tro-ly-va-telegram.md`
 - Máy worker (thử nghiệm): `docs/user-guide/may-worker.md`
+- Tải máy và cài đặt bộ điều tiết tài nguyên: `docs/user-guide/tai-nguyen-may.md`; agent giám sát chỉ xử lý cảnh báo trong phạm vi được giao, không tự nâng trần tài nguyên.
 
 ## Đề xuất skill mới
 

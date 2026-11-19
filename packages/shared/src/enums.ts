@@ -81,7 +81,7 @@ export const SCENE_VISUAL_STATUSES = [
 export const SceneVisualStatusSchema = z.enum(SCENE_VISUAL_STATUSES);
 export type SceneVisualStatus = z.infer<typeof SceneVisualStatusSchema>;
 
-export const CANDIDATE_ORIGINS = ["SEARCH", "CUSTOM_URL", "UPLOAD", "AI_GENERATED"] as const;
+export const CANDIDATE_ORIGINS = ["SEARCH", "CUSTOM_URL", "UPLOAD", "AI_GENERATED", "agent"] as const;
 export const CandidateOriginSchema = z.enum(CANDIDATE_ORIGINS);
 export type CandidateOrigin = z.infer<typeof CandidateOriginSchema>;
 
