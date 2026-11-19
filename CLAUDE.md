@@ -1,3 +1,5 @@
+@AGENTS.md
+
 ## Quy tắc advisor (bắt buộc, ưu tiên cao nhất)
 
 1. Chỉ tự làm các tác vụ đơn giản nhất: đọc một file, tìm một chuỗi, chạy một lệnh có sẵn, trả lời câu hỏi mà câu trả lời đã nằm trong ngữ cảnh.
