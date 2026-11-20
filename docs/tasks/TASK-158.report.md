@@ -26,7 +26,7 @@ Vì vậy test quan sát trực tiếp số lần gọi `schedule()`.
 | `WORKER_ENABLED` | WORKER_ENABLED: wake does nothing when the local worker is off | worker tắt: `start()` và `onGovernorChange()` không gọi `schedule` |
 | `stopping` | stopping: wake does nothing while stop() is in progress | trong lúc `stop()` chưa xong, `nudge()` không gọi `schedule`; `stop()` tự nó cũng không gọi `schedule` |
 
-Test 4 không gọi wake sau khi `stop()` xong. Kiểm tra guard đang mở chỉ được làm ở các test có `expect` trực tiếp (ví dụ `started`, `stopping`, `wakeQueued` trong test 1 và 3). Test 2 không kiểm `WORKER_ENABLED` riêng (bật bằng config). Bằng chứng guard nào là điều kiện duy nhất chặn là kết quả mutant ở trên, không phải assert.
+Test 4 không gọi wake sau khi `stop()` xong. Kiểm tra guard đang mở chỉ được làm ở các test có `expect` trực tiếp (ví dụ `started`, `stopping`, `wakeQueued` trong test 1 và 3). Test 2 không kiểm `WORKER_ENABLED` riêng (bật bằng config). Bằng chứng guard nào là điều kiện duy nhất chặn là kết quả mutant trong bảng bên dưới, không phải assert.
 
 ## Mutant (sửa bản sao của `worker.ts`, chạy, khôi phục, `cmp`)
 
@@ -51,7 +51,7 @@ Mỗi mutant chỉ làm đỏ đúng một test. `worker.ts` được khôi ph�
 1. `stopping` được đặt `true` tại `apps/server/src/jobs/worker.ts:301` và chỉ được đặt `false` trong `start()` (`worker.ts:212`). `stop()` không đặt lại nó; `stop()` kết thúc bằng `started = false` (`worker.ts:313`). Hệ quả: sau khi `stop()` xong, `stopping` vẫn `true`, và `wake()` bị chặn bởi cả `!started` lẫn `stopping`. Không có khóa vĩnh viễn, vì `start()` lần sau đặt `stopping = false`. Guard `stopping` chỉ độc lập với `!started` trong lúc `stop()` đang chờ.
 2. `schedule()` (`worker.ts:347`) gán `this.timer`; callback (`:349–350`) xóa `this.timer` và `wakeQueued`. Test không advance timer nên đường `schedule()` → callback → `tick()` không được kiểm.
 3. Timer của `wake()` không `unref()`: grep trong `worker.ts` cho thấy chỉ `sweepTimer` gọi `unref()` (`:239`). Chưa đo tác động, chỉ ghi nhận.
-4. Không phải phát hiện: `stop()` xóa `this.timer` tại `worker.ts:304`, sau `await this.indexTask` (`:303`). Một timer được tạo trong lúc chờ bị xóa tại đó, nên không sống sót qua `stop()`.
+4. `stop()` xóa `this.timer` tại `worker.ts:304`, sau `await this.indexTask` (`:303`). Một timer được tạo trong lúc chờ `:303` bị xóa tại đó. Nhưng từ `:304` đến `started = false` (`:313`) còn `requeueRunningJobs()` (`:311`) và `await Promise.all(...)` (`:312`), và `:304` không chạy lại. Trong khoảng `:311–:312` chỉ guard `stopping` ngăn `wake()` tạo timer; test 4 không bao phủ khoảng này (`nudge()` chạy lúc `:303` chưa xong). Đã kiểm: `requeueRunningJobs()` không gọi wake handler (`requeueInterruptedJob` trong `apps/server/src/pipeline/orchestrator.ts` không gọi `wakeWorker`); `governor.release()` (`apps/server/src/jobs/resourceGovernor.ts:278`) không gọi `onChange`, nhưng `worker.ts:291` tự gọi `wake()` trong `finally`, và guard `stopping` chặn lệnh đó. Chưa đo rằng một timer thật sống sót sau `stop()`.
 
 ## Giới hạn còn lại
 
