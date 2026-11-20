@@ -39,7 +39,7 @@ Cả bốn đều khôi phục `worker.ts` và `cmp`-identical với bản sao s
 
 1. Lỗi vẫn được mô phỏng bằng `throw` trong stub. Không có lỗi DB thật.
 2. Fake timers; không kiểm độ trễ thật.
-3. Test dùng `vi.spyOn` trên `wake()` và `sweepRemote()` (method private) và thay thân hàm bằng stub, nên không kiểm thân thật của `wake()`. Guard bên trong `wake()` (kiểm `started`, `stopping`, `wakeQueued`) vẫn không có test riêng.
+3. ~~Test dùng `vi.spyOn` trên `wake()` và `sweepRemote()` (method private) và thay thân hàm bằng stub, nên không kiểm thân thật của `wake()`. Guard bên trong `wake()` (kiểm `started`, `stopping`, `wakeQueued`) vẫn không có test riêng.~~ Đã đóng bởi TASK-158 (`workerWakeGuards.test.ts`): bốn guard của `wake()` được kiểm trên `wake()` thật, qua spy pass-through trên `schedule()`.
 
 ## Không làm (theo ràng buộc)
 
