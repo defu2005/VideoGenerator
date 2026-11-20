@@ -9,7 +9,8 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",
     "reset-password": "tsx src/cli/resetPassword.ts",
-    "export-skills": "tsx src/cli/exportSkills.ts"
+    "export-skills": "tsx src/cli/exportSkills.ts",
+    "bench:script": "tsx src/cli/benchScript.ts"
   },
   "dependencies": {
     "@better-auth/api-key": "1.7.21",

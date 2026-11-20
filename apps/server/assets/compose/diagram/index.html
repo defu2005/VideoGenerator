@@ -1,0 +1,43 @@
+<!DOCTYPE html><html><head><meta charset="utf-8"><style>
+#stage{display:block}.diagram-node{position:absolute;display:flex;align-items:center;justify-content:center;text-align:center;box-sizing:border-box;font-weight:var(--vg-w-display);letter-spacing:var(--vg-track-display)}.diagram-label{position:relative;text-wrap:balance}.diagram-edge-label{position:absolute;text-align:center;box-sizing:border-box;font-weight:var(--vg-w-body)}
+</style><script src="gsap.min.js"></script><script src="common.js"></script></head><body><div id="root" data-composition-id="main" data-start="0" data-duration="6" data-width="1920" data-height="1080" data-fps="30"><script>
+// Own implementation. Mermaid/dagre's fixed node-and-edge layout is the design reference;
+// no third-party source is copied. All visual values come from the tokens-v1 runtime.
+const V=window.VGInit(), {v,box,stage,tl,el,fitText,layout,enter,at,finish,M,portrait}=V;
+const S=V.S||V.fallbackStyle(), K=S.color,T=S.type,L=S.layout,SP=S.space;
+const nodes=(v.nodes||[]).slice(0,7),edges=(v.edges||[]).slice(0,14), n=nodes.length;
+const mode=['flow','cycle','hub'].includes(v.layout)?v.layout:'flow';
+const titleH=v.title?box.h*.14:0;
+if(v.title){const title=el('div','',stage,String(v.title));title.style.cssText=`position:absolute;left:0;top:0;width:${box.w}px;color:${K.text};font-weight:var(--vg-w-display)`;layout(()=>fitText(title,{maxW:box.w,maxH:titleH,maxFs:T.lg,minFs:T.sm,maxLines:2}));enter(title,0);}
+const area={x:0,y:titleH+(v.title?SP*.4:0),w:box.w,h:box.h-titleH-(v.title?SP*.4:0)};
+const nodeW=mode==='flow'?(portrait?area.w*.72:area.w/(Math.min(n,4)+.4)):(portrait?area.w*.34:area.w*.21);
+const nodeH=mode==='flow'?(portrait?Math.min(area.h/(n+.5),SP*2.4):area.h*.25):(portrait?Math.min(area.h*.14,SP*2.4):area.h*.2);
+const xy=nodes.map((node,i)=>{
+  if(mode==='flow'){
+    if(portrait)return{x:area.w/2,y:area.y+nodeH/2+(area.h-nodeH)*i/Math.max(1,n-1)};
+    const cols=Math.min(n,4),rows=Math.ceil(n/cols),row=Math.floor(i/cols),col=i%cols,count=Math.min(cols,n-row*cols);
+    return{x:nodeW/2+(area.w-nodeW)*(count===1?.5:col/(count-1)),y:area.y+area.h*(rows===1?.5:(row===0?.28:.74))};
+  }
+  if(mode==='hub'&&i===0)return{x:area.w/2,y:area.y+area.h/2};
+  const outer=mode==='hub'?n-1:n,index=mode==='hub'?i-1:i,angle=-Math.PI/2+index*Math.PI*2/Math.max(1,outer);
+  return{x:area.w/2+Math.cos(angle)*(area.w-nodeW)*.46,y:area.y+area.h/2+Math.sin(angle)*(area.h-nodeH)*.44};
+});
+const times=Array.isArray(v.itemTimes)&&v.itemTimes.length===n?v.itemTimes:V.times(n,undefined,{enter:M.base});
+const ns='http://www.w3.org/2000/svg',svg=document.createElementNS(ns,'svg');svg.setAttribute('viewBox',`0 0 ${box.w} ${box.h}`);svg.style.cssText='position:absolute;inset:0;width:100%;height:100%;overflow:visible';stage.appendChild(svg);
+const defs=document.createElementNS(ns,'defs'),marker=document.createElementNS(ns,'marker'),arrow=document.createElementNS(ns,'path');
+marker.setAttribute('id','diagram-arrow');marker.setAttribute('viewBox','0 0 10 10');marker.setAttribute('refX','9');marker.setAttribute('refY','5');marker.setAttribute('markerWidth','5');marker.setAttribute('markerHeight','5');marker.setAttribute('orient','auto-start-reverse');arrow.setAttribute('d','M 0 0 L 10 5 L 0 10 z');arrow.setAttribute('fill',K.accent);marker.appendChild(arrow);defs.appendChild(marker);svg.appendChild(defs);
+const stroke=Math.max(1,SP*.07*L.stroke);
+function boundary(a,b){const dx=b.x-a.x,dy=b.y-a.y,f=1/Math.max(Math.abs(dx)/(nodeW/2),Math.abs(dy)/(nodeH/2),.001);return{x:a.x+dx*f,y:a.y+dy*f};}
+edges.forEach(edge=>{
+  const from=nodes.findIndex(node=>node.id===edge.from),to=nodes.findIndex(node=>node.id===edge.to);if(from<0||to<0||from===to)return;
+  const a=boundary(xy[from],xy[to]),b=boundary(xy[to],xy[from]),line=document.createElementNS(ns,'path');
+  line.setAttribute('d',`M ${a.x} ${a.y} L ${b.x} ${b.y}`);line.setAttribute('stroke',K.accent);line.setAttribute('stroke-width',stroke);line.setAttribute('fill','none');line.setAttribute('marker-end','url(#diagram-arrow)');svg.appendChild(line);
+  const length=Math.hypot(b.x-a.x,b.y-a.y);line.style.strokeDasharray=String(length);tl.from(line,{strokeDashoffset:length,opacity:0,duration:M.base,ease:M.move},at(Math.max(times[from]||0,times[to]||0),M.base));
+  if(edge.label){const label=el('div','diagram-edge-label',stage,String(edge.label)),horizontal=Math.abs(b.x-a.x)>=Math.abs(b.y-a.y),labelY=(a.y+b.y)/2-(horizontal?nodeH/2+SP*1.4:SP*.6);label.style.cssText=`left:${(a.x+b.x)/2-SP*1.5}px;top:${labelY}px;width:${SP*3}px;background:${K.bg};color:${K.textMuted};padding:${SP*.12}px`;layout(()=>fitText(label,{maxW:SP*3,maxH:SP*1.2,maxFs:T.xs,minFs:T.xs*.75,maxLines:2}));enter(label,Math.max(times[from]||0,times[to]||0));}
+});
+nodes.forEach((node,i)=>{const point=xy[i],card=el('div','diagram-node',stage),label=el('div','diagram-label',card,String(node.label));
+ card.dataset.nodeId=node.id;card.style.cssText=`left:${point.x-nodeW/2}px;top:${point.y-nodeH/2}px;width:${nodeW}px;height:${nodeH}px;border:${stroke}px solid ${K.accent};border-radius:${SP*L.radius*.5}px;background:${K.bgAlt};color:${K.text};padding:${SP*.24}px`;
+ layout(()=>fitText(label,{maxW:nodeW-SP*.5,maxH:nodeH-SP*.5,maxFs:T.sm,minFs:T.xs*.85,maxLines:3}));enter(card,Number(times[i])||0);
+});
+finish();
+</script></div></body></html>

@@ -1,0 +1,32 @@
+<!DOCTYPE html><html><head><meta charset="utf-8"><style>
+#stage{display:block}.timeline-event{position:absolute;box-sizing:border-box}.timeline-date{font-weight:var(--vg-w-display);font-variant-numeric:tabular-nums;white-space:nowrap}.timeline-label{font-weight:var(--vg-w-body);text-wrap:balance}.timeline-point{position:absolute;box-sizing:border-box;border-radius:50%}.timeline-image{display:block;object-fit:cover}
+</style><script src="gsap.min.js"></script><script src="common.js"></script></head><body><div id="root" data-composition-id="main" data-start="0" data-duration="6" data-width="1920" data-height="1080" data-fps="30"><script>
+// Own implementation, following TimelineJS's dated rail idea without copying its source.
+// The server selects time/sequence spacing. Tokens-v1 supplies every visual style and motion value.
+const V=window.VGInit(),{v,box,stage,tl,el,fitText,layout,enter,at,finish,M,portrait,axis}=V;
+const S=V.S||V.fallbackStyle(),K=S.color,T=S.type,L=S.layout,SP=S.space;
+const events=(v.events||[]).slice(0,8),n=events.length;
+const vertical=portrait,titleH=v.title?box.h*.13:0;
+if(v.title){const title=el('div','',stage,String(v.title));title.style.cssText=`position:absolute;top:0;left:0;width:${box.w}px;color:${K.text};font-weight:var(--vg-w-display)`;layout(()=>fitText(title,{maxW:box.w,maxH:titleH,maxFs:T.lg,minFs:T.sm,maxLines:2}));enter(title,0);}
+const area={x:0,y:titleH+(v.title?SP*.4:0),w:box.w,h:box.h-titleH-(v.title?SP*.4:0)};
+const stroke=Math.max(1,SP*.065*L.stroke),dot=SP*.32,railX=vertical?SP*.65:SP*.6,padY=Math.min(SP*1.5,area.h*.12),railY=vertical?area.y+padY:area.y+area.h*.48,railH=area.h-padY*2;
+const rail=el('div','',stage);rail.style.cssText=vertical?`position:absolute;left:${railX}px;top:${railY}px;width:${stroke}px;height:${railH}px;background:${K.textMuted}`:`position:absolute;left:${railX}px;top:${railY}px;width:${area.w-SP*1.2}px;height:${stroke}px;background:${K.textMuted}`;
+enter(rail,0,{kind:'fade'});
+const times=Array.isArray(v.itemTimes)&&v.itemTimes.length===n?v.itemTimes:V.times(n,undefined,{enter:M.base}),marker=axis('marker',['solid','ring']);
+events.forEach((event,i)=>{
+ const position=Number.isFinite(event.position)?Math.max(0,Math.min(1,event.position)):i/Math.max(1,n-1);
+ const slot=vertical?railH/Math.max(1,n-1):(area.w-SP*1.2)/Math.max(1,n-1),blockH=vertical?Math.min(slot*.75,SP*2.6):area.h*.36;
+ const x=vertical?railX:railX+position*(area.w-SP*1.2),y=vertical?railY+position*railH:railY;
+ const point=el('div','timeline-point',stage);point.style.cssText=`left:${x-dot/2}px;top:${y-dot/2}px;width:${dot}px;height:${dot}px;border:${stroke}px solid ${K.accent};background:${marker==='ring'?K.bg:K.accent}`;
+ const card=el('div','timeline-event',stage),width=vertical?area.w-SP*1.7:Math.min(area.w/n*.92,SP*5.2);
+ const left=vertical?SP*1.7:Math.max(0,Math.min(area.w-width,x-width/2));
+ const top=vertical?y-blockH*.5:(i%2===0?railY-blockH-SP*.6:railY+SP*.6);
+ card.dataset.date=String(event.date);card.style.cssText=`left:${left}px;top:${top}px;width:${width}px;color:${K.text};text-align:${vertical?'left':'center'}`;
+ const date=el('div','timeline-date',card,String(event.date));date.style.cssText=`color:${K.accent};margin-bottom:${SP*.16}px`;
+ const label=el('div','timeline-label',card,String(event.label));
+ let image=null;if(typeof event.image==='string'&&/^data:image\/(?:png|jpeg|webp);base64,/.test(event.image)){image=el('img','timeline-image',card);image.src=event.image;image.alt='';image.style.cssText=`width:${width}px;height:${blockH*.35}px;margin-top:${SP*.2}px;border-radius:${SP*L.radius*.4}px`;}
+ layout(()=>{fitText(date,{maxW:width,maxH:blockH*.35,maxFs:vertical?T.sm:T.md,minFs:T.xs*.65,maxLines:1});fitText(label,{maxW:width,maxH:blockH*(image?.42:.65),maxFs:T.sm,minFs:T.xs*.75,maxLines:3});});
+ enter(point,Number(times[i])||0,{kind:'scale'});enter(card,Number(times[i])||0);
+});
+finish();
+</script></div></body></html>

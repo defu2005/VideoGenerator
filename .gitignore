@@ -22,3 +22,11 @@ provider-intelligence/reports/
 # Dev sandbox data and product instance state (docs/BRANCHES.md)
 data-dev/
 .product/
+
+# TASK-080: file dữ liệu SQLite, phiên Hermes, log tạm, cache vitest, thư mục task-132 tạm
+*.sqlite
+*.sqlite3
+/hermes-session.json
+/tmp/
+apps/server/.vitest/
+apps/server/.task132-*
