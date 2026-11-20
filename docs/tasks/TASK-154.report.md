@@ -67,7 +67,7 @@ Mỗi mutant được kiểm trong cùng một lần chạy, sau đó khôi ph�
 2. `OverdueRun` chạy không có LLM, nên kiểm tra quá hạn theo bậc thang mặc định. Test không khóa quyết định của model.
 3. `fileGc` 24 h, `cleanupFinishedUploads` và `pruneStageFeedback` trong closure `app.ts` vẫn chưa có test ở mức worker. Theo ràng buộc, không đụng `app.ts`.
 4. Timer dùng fake timers. Không kiểm độ trễ thật của `setInterval`.
-5. Chưa chạy toàn bộ suite server; chỉ các file trong bảng trên.
+5. ~~Chưa chạy toàn bộ suite server; chỉ các file trong bảng trên.~~ Đã đóng: toàn bộ suite server đã chạy ở TASK-155 (299 file, 2482 test, exit 0).
 
 ## Không làm (theo ràng buộc)
 

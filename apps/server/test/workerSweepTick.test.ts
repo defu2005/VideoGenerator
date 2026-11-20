@@ -71,6 +71,58 @@ describe("worker tick runs the agent-stage sweep and stops cleanly", () => {
   });
 });
 
+// TASK-156: wake() runs on the 10 s timer only when WORKER_ENABLED is on, and each step has its own guard.
+// wake() is stubbed so no real job processing runs; the spy only counts calls.
+describe("worker timer calls wake() on each tick, guarded per step", () => {
+  let h: ReturnType<typeof createPipelineHarness>;
+  beforeEach(() => { vi.useFakeTimers(); h = createPipelineHarness({ config: { WORKER_ENABLED: true } }); });
+  afterEach(async () => {
+    await h.worker.stop?.();
+    h.close();
+    vi.useRealTimers();
+  });
+
+  /** Spies on the private wake(), starts the worker, then clears the call start() made. */
+  async function startWithWakeSpy() {
+    const wake = vi.spyOn(h.worker as unknown as { wake: () => void }, "wake").mockImplementation(() => {});
+    await h.worker.start();
+    wake.mockClear();
+    return wake;
+  }
+
+  it("wakes the worker on the same tick when the node sweep throws", async () => {
+    h.worker.setSweep(vi.fn().mockImplementationOnce(() => { throw new Error("boom"); }));
+    const wake = await startWithWakeSpy();
+    vi.advanceTimersByTime(10_000);
+    expect(wake).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps the timer running when wake() throws once", async () => {
+    const sweep = vi.fn();
+    h.worker.setSweep(sweep);
+    const wake = await startWithWakeSpy();
+    wake.mockImplementationOnce(() => { throw new Error("boom"); });
+    vi.advanceTimersByTime(10_000);
+    vi.advanceTimersByTime(10_000);
+    expect(wake).toHaveBeenCalledTimes(2);
+    expect(sweep).toHaveBeenCalledTimes(2);
+  });
+
+  it("wakes the worker on the same tick when the agent-stage sweep throws, and keeps ticking", async () => {
+    const sweep = vi.fn();
+    const agent = vi.fn().mockImplementationOnce(() => { throw new Error("boom"); });
+    h.worker.setSweep(sweep);
+    h.worker.setAgentStages({ sweep: agent } as never);
+    const wake = await startWithWakeSpy();
+    vi.advanceTimersByTime(10_000);
+    expect(sweep).toHaveBeenCalledTimes(1);
+    expect(wake).toHaveBeenCalledTimes(1);
+    vi.advanceTimersByTime(10_000);
+    expect(agent).toHaveBeenCalledTimes(2);
+    expect(wake).toHaveBeenCalledTimes(2);
+  });
+});
+
 // TASK-129a: the worker tick must escalate an unanswered question to the duty holder after 15 min.
 describe("worker tick escalates unanswered questions", () => {
   let h: ReturnType<typeof createPipelineHarness>;
