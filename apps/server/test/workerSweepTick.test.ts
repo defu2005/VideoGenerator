@@ -31,6 +31,15 @@ describe("worker timer runs the sweeps every 10 s", () => {
     expect(sweep).toHaveBeenCalledTimes(1);
   });
 
+  it("still runs the agent-stage sweep on the same tick when the node sweep throws", async () => {
+    const agent = vi.fn();
+    h.worker.setSweep(vi.fn().mockImplementationOnce(() => { throw new Error("boom"); }));
+    h.worker.setAgentStages({ sweep: agent } as never);
+    await h.worker.start();
+    vi.advanceTimersByTime(10_000);
+    expect(agent).toHaveBeenCalledTimes(1);
+  });
+
   // A throwing node sweep is caught and logged; the timer keeps running. The same tick's later sweeps may be skipped, which is not pinned here.
   it("keeps the 10 s timer running after a node sweep throws once", async () => {
     const sweep = vi.fn().mockImplementationOnce(() => { throw new Error("boom"); });

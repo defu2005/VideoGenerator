@@ -214,13 +214,26 @@ export class JobWorker {
     if (this.sweep && !this.sweepTimer) {
       const run = this.sweep;
       this.sweepTimer = setInterval(() => {
+        // TASK-155: each sweep has its own guard, so one throw does not skip the others or wake().
         try {
           run();
-          this.agentStages?.sweep();
-          this.sweepRemote();
-          if (this.config.WORKER_ENABLED) this.wake();
         } catch (error) {
           this.logger.error({ err: error }, "node sweep failed");
+        }
+        try {
+          this.agentStages?.sweep();
+        } catch (error) {
+          this.logger.error({ err: error }, "agent-stage sweep failed");
+        }
+        try {
+          this.sweepRemote();
+        } catch (error) {
+          this.logger.error({ err: error }, "remote sweep failed");
+        }
+        try {
+          if (this.config.WORKER_ENABLED) this.wake();
+        } catch (error) {
+          this.logger.error({ err: error }, "worker wake failed");
         }
       }, 10_000);
       this.sweepTimer.unref();

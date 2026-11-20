@@ -1,6 +1,6 @@
 # TASK-154 — test nội dung của các sweep worker (báo cáo)
 
-Trạng thái: test đã viết, xanh, và đã kiểm bằng mutant. Commit cục bộ trên `dev`, **chưa push, không có `.done`**. Phạm vi chỉ là test. Không đổi `apps/server/src/jobs/worker.ts`, không đổi closure `setSweep` trong `apps/server/src/app.ts`, không chạm `apps/server/test/storageProvider.test.ts`.
+Trạng thái: test đã viết, xanh, và đã kiểm bằng mutant. Commit cục bộ `96970b3` trên `dev`, **chưa push, không có `.done`**. Phạm vi chỉ là test. Không đổi `apps/server/src/jobs/worker.ts`, không đổi closure `setSweep` trong `apps/server/src/app.ts`, không chạm `apps/server/test/storageProvider.test.ts`.
 
 ## Vì sao có task này
 
@@ -43,7 +43,7 @@ Ghi chú về `onOverdue: "abort"` trong test 1–3: worker chỉ coi riêng `no
 
 ## Mutant (mỗi test phải bắt được một lỗi cụ thể)
 
-Áp từng mutant vào `worker.ts`, chạy hai file test mới, rồi khôi phục từ bản sao `scratchpad/worker.orig.ts` và kiểm bằng `cmp`. Sau khi xong, `worker.ts` giống hệt HEAD.
+Áp từng mutant vào `worker.ts`, chạy hai file test mới (M7 được bắt bởi `workerWatchdogWiring.test.ts`, file có sẵn), rồi khôi phục từ bản sao `scratchpad/worker.orig.ts` và kiểm bằng `cmp`. Sau khi xong, `worker.ts` giống hệt HEAD.
 
 | Mutant | Bỏ | Kết quả |
 |---|---|---|
@@ -59,7 +59,7 @@ Mỗi mutant được kiểm trong cùng một lần chạy, sau đó khôi ph�
 
 ## Phát hiện (không sửa trong task này)
 
-- `worker.ts`, khối timer 10 s (dòng 218–224): `run()`, `agentStages.sweep()` và `sweepRemote()` nằm trong một `try`. Nếu node sweep ném lỗi, hai sweep còn lại bị bỏ qua tick đó, và được chạy lại sau 10 s. Test không khóa hành vi "bỏ qua" này. Đề xuất: task riêng, tách mỗi sweep vào `try` riêng nếu muốn độc lập.
+- `worker.ts`, khối timer 10 s (dòng 218–224): `run()`, `agentStages.sweep()` và `sweepRemote()` nằm trong một `try`. Nếu node sweep ném lỗi, hai sweep còn lại bị bỏ qua tick đó, và được chạy lại sau 10 s. Test không khóa hành vi "bỏ qua" này. Đã xử lý ở TASK-155: mỗi sweep có `try` riêng, và `wake()` không còn bị bỏ qua khi một sweep ném lỗi.
 
 ## Giới hạn còn lại
 

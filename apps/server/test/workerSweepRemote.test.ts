@@ -17,7 +17,7 @@ describe("worker timer runs sweepRemote for leased remote jobs", () => {
   });
 
   /** Sets up the worker and a RESEARCH job, then marks it as leased and started `startedAgoMs` ago. Setup order matters: start() requeues RUNNING jobs. */
-  async function startLeasedJob(startedAgoMs: number): Promise<string> {
+  async function startLeasedJob(startedAgoMs: number, sweep: () => void = () => {}): Promise<string> {
     const project = h.repository.getProject(h.projectId)!;
     h.sqlite.prepare("UPDATE projects SET settings = ? WHERE id = ?").run(JSON.stringify({
       ...project.settings,
@@ -25,7 +25,7 @@ describe("worker timer runs sweepRemote for leased remote jobs", () => {
       stageTimeouts: { source: "mixed", inputHash: "fixture", summary: "fixture", stages: { RESEARCH: { timeoutMs: HOUR, reason: "test", source: "user" } } },
     }), h.projectId);
     h.worker.setOverdue({ sqlite: h.sqlite });
-    h.worker.setSweep(() => {});
+    h.worker.setSweep(sweep);
     h.repository.ensureStages(h.projectId);
     const job = h.repository.createJob({ projectId: h.projectId, stage: "RESEARCH", maxAttempts: 3, previousState: "PENDING" });
     await h.worker.start();
@@ -52,6 +52,19 @@ describe("worker timer runs sweepRemote for leased remote jobs", () => {
     vi.advanceTimersByTime(10_000);
     expect(readOverdueMark(h.sqlite, id)).toBeNull();
     expect(h.repository.getJob(id)?.status).toBe("RUNNING");
+  });
+
+  it("marks the overdue job on the same tick when the node sweep throws", async () => {
+    const id = await startLeasedJob(2 * HOUR, () => { throw new Error("boom"); });
+    vi.advanceTimersByTime(10_000);
+    expect(readOverdueMark(h.sqlite, id)).not.toBeNull();
+  });
+
+  it("marks the overdue job on the same tick when the agent-stage sweep throws", async () => {
+    const id = await startLeasedJob(2 * HOUR);
+    h.worker.setAgentStages({ sweep: () => { throw new Error("boom"); } } as never);
+    vi.advanceTimersByTime(10_000);
+    expect(readOverdueMark(h.sqlite, id)).not.toBeNull();
   });
 
   it("clears the overdue mark on the next tick once the lease is gone", async () => {
