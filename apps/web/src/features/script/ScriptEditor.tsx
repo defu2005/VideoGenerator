@@ -108,7 +108,7 @@ export function ScriptEditor({
         <button className="button button-secondary" type="button" onClick={() => updateScript({ ...script, sections: [...script.sections, newSection(script.sections.length)] })}>Thêm phần</button>
       </div>
       {script.sections.map((section, index) => (
-        <fieldset className="script-section" key={section.id}>
+        <fieldset className="script-section" key={section.id} id={`section-${section.id}`}>
           <legend>{section.heading || `Phần ${index + 1}`}</legend>
           <label className="form-field"><span>Tiêu đề phần</span>
             <input value={section.heading} onChange={(event) => updateSection(index, { heading: event.target.value })} />

@@ -13,6 +13,7 @@ const LABELS: Record<string, string> = {
   account_attention: "Tài khoản cần kiểm tra kết nối",
   disk_low: "Dung lượng trống thấp",
   worker_idle: "Worker chưa nhận job",
+  skill_file_write: "Không ghi được file skill",
   topics_low: "Thiếu chủ đề đã duyệt",
   slot_at_risk: "Lịch đăng chưa có bản render",
   llm_failover_storm: "AI đổi nhà cung cấp liên tục (quota/giới hạn)",

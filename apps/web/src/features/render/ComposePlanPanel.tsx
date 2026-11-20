@@ -18,12 +18,16 @@ const KIND: Record<string, string> = {
   compare: "So sánh",
   quote_full: "Câu trích",
   list_full: "Danh sách",
+  diagram: "Sơ đồ",
+  timeline: "Dòng thời gian",
 };
 
 function otherKinds(shot: Shot): ShotKind[] {
   const seconds = shot.endSec - shot.startSec;
   return SHOT_KINDS.filter((kind) => {
     if (kind === shot.kind) return false;
+    // These kinds need extracted nodes/events; a generic kind switch has no payload to supply.
+    if (kind === "diagram" || kind === "timeline") return false;
     const bounds = graphicDurationBounds(kind);
     if (!bounds) return kind === "still" || kind === "footage";
     return seconds >= bounds.min && seconds <= bounds.max;

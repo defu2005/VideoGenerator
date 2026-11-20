@@ -11,6 +11,7 @@ import { ErrorState } from "../../components/ErrorState";
 import { ApiRequestError } from "../../services/apiClient";
 import { ResearchPanel } from "./ResearchPanel";
 import { ScriptEditor } from "./ScriptEditor";
+import { ScriptDraftPanel } from "./ScriptDraftPanel";
 import { GuidelineFindings } from "../guidelines/GuidelineFindings";
 
 function emptyScript(title: string): Script {
@@ -201,6 +202,19 @@ export function ScriptTab({ project }: { project: Project }) {
             {project.settings.stageExecutors.script === "USER" && <small>AI research and script generation are disabled for the USER executor.</small>}
             {data.stale && <span className="stale-note">Script inputs have changed; regenerate or review the script.</span>}
           </div>
+          {data.draft && (
+            <ScriptDraftPanel
+              draft={data.draft}
+              onSwitchHook={async (hookId) => {
+                await scriptQuery.switchHook(hookId);
+              }}
+              onRescore={async () => {
+                await scriptQuery.rescore();
+              }}
+              isSwitchingHook={scriptQuery.isSwitchingHook}
+              isRescoring={scriptQuery.isRescoring}
+            />
+          )}
           <ScriptEditor
             key={`${data.script?.version ?? "empty"}-${draftKey}`}
             initialValue={data.script?.data ?? emptyScript(project.title)}

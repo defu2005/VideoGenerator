@@ -12,6 +12,7 @@ import { Link } from "react-router-dom";
 import { ErrorState } from "../../components/ErrorState";
 import { Spinner } from "../../components/Spinner";
 import { LoadMore } from "../../components/ui/LoadMore";
+import { StageQualityPanel } from "./StageQualityPanel";
 import { ApiRequestError } from "../../services/apiClient";
 import {
   analyticsKeys,
@@ -603,6 +604,16 @@ export function AnalyticsPage() {
             {barData.length === 0
               ? <p className="usage-empty">Chưa có dữ liệu theo nền tảng.</p>
               : <BarChart data={barData} ariaLabel="Lượt xem theo nền tảng" />}
+          </section>
+
+          <section className="panel usage-section">
+            <div className="section-heading">
+              <div>
+                <p className="eyebrow">CHẤT LƯỢNG</p>
+                <h2>Chất lượng theo bước</h2>
+              </div>
+            </div>
+            <StageQualityPanel />
           </section>
 
           <section className="panel usage-section">

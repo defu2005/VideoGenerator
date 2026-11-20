@@ -240,7 +240,10 @@ function BriefTab({ profile }: { profile: ProfileDetail }) {
 
   function changeBrief(path: string, value: string | number | boolean) {
     setBrief((current) => {
-      if (path === "stageExecution.VISUAL_SEARCH") return { ...current, stageExecution: { ...current.stageExecution, VISUAL_SEARCH: value as NonNullable<BriefSettings["stageExecution"]>["VISUAL_SEARCH"] } };
+      if (path.startsWith("stageExecution.")) {
+        const stage = path.slice("stageExecution.".length) as keyof NonNullable<BriefSettings["stageExecution"]>;
+        return { ...current, stageExecution: { ...current.stageExecution, [stage]: value as never } };
+      }
       if (path === "subtitles.enabled") return { ...current, subtitles: { ...current.subtitles, enabled: Boolean(value) } };
       if (path === "subtitles.maxCharsPerLine") return { ...current, subtitles: { ...current.subtitles, maxCharsPerLine: Number(value) } };
       if (path === "music.enabled") return { ...current, music: { ...current.music, enabled: Boolean(value) } };
@@ -258,7 +261,12 @@ function BriefTab({ profile }: { profile: ProfileDetail }) {
 
   function resetBrief(path: string) {
     const settings = { ...brief, userSet: brief.userSet.filter((item) => item !== path) };
-    if (path === "stageExecution.VISUAL_SEARCH") settings.stageExecution = undefined;
+    if (path.startsWith("stageExecution.")) {
+      const stage = path.slice("stageExecution.".length) as keyof NonNullable<BriefSettings["stageExecution"]>;
+      const stageExecution = { ...settings.stageExecution };
+      delete stageExecution[stage];
+      settings.stageExecution = Object.keys(stageExecution).length ? stageExecution : undefined;
+    }
     if (path === "agentWaitMinutes") settings.agentWaitMinutes = undefined;
     const resolved = recommendBrief({ topic: profile.name, settings }).values.settings;
     setBrief(resolved);

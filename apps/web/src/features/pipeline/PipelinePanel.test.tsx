@@ -133,9 +133,9 @@ describe("PipelinePanel", () => {
 
     renderWithProviders(<PipelinePanel projectId={projectId} project={project} />);
 
-    expect(await screen.findByText(/Ước tính: ~11–17 lượt gọi AI/)).toBeInTheDocument();
+    expect(await screen.findByText(/Ước tính: ~13–27 lượt gọi AI/)).toBeInTheDocument();
     expect(screen.getByText("research: mock · research-model · 1–2 calls")).toBeInTheDocument();
-    expect(screen.getByText("scriptReview: mock · review-model · 1–2 calls")).toBeInTheDocument();
+    expect(screen.getByText("storyOutline: provider not configured · 1–3 calls")).toBeInTheDocument();
     expect(screen.getByText("sceneQueries: mock · scene-model · 1 calls")).toBeInTheDocument();
   });
 

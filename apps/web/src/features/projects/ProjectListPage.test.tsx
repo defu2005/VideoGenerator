@@ -358,7 +358,7 @@ describe("CreateProjectDialog", () => {
     fireEvent.click(screen.getByRole("button", { name: /Customize/ }));
     const mode = screen.getByLabelText("Chế độ AI / Budget mode");
     expect(mode).toHaveValue("BALANCED");
-    expect(screen.getByText("Ước tính: ~11–17 lượt gọi AI (BALANCED)")).toBeInTheDocument();
+    expect(screen.getByText("Ước tính: ~13–27 lượt gọi AI (BALANCED)")).toBeInTheDocument();
 
     fireEvent.change(mode, { target: { value: "ECO" } });
     expect(screen.getByText("Ước tính: ~2 lượt gọi AI (ECO)")).toBeInTheDocument();
@@ -367,10 +367,11 @@ describe("CreateProjectDialog", () => {
     expect(reviewPasses).toHaveValue("1");
     fireEvent.change(reviewPasses, { target: { value: "0" } });
     expect(reviewPasses).toHaveValue("0");
-    expect(screen.getByText("Ước tính: ~10–15 lượt gọi AI (CUSTOM)")).toBeInTheDocument();
+    expect(screen.getByText("Ước tính: ~13–27 lượt gọi AI (CUSTOM)")).toBeInTheDocument();
     fireEvent.change(reviewPasses, { target: { value: "2" } });
     expect(reviewPasses).toHaveValue("2");
-    expect(screen.getByText("Ước tính: ~12–19 lượt gọi AI (CUSTOM)")).toBeInTheDocument();
+    // TASK-145: with the story engine on (lite by default), scriptReviewPasses no longer changes the estimate.
+    expect(screen.getByText("Ước tính: ~13–27 lượt gọi AI (CUSTOM)")).toBeInTheDocument();
     expect(screen.getByText(/Kiểm tra ảnh bằng AI nhìn \(MAX\/CUSTOM\)/)).toBeInTheDocument();
     expect(screen.getByLabelText("metadata")).toBeInTheDocument();
     expect(screen.getByLabelText("musicAssist")).toBeInTheDocument();

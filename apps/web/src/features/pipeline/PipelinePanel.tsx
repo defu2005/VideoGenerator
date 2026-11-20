@@ -123,7 +123,9 @@ export function PipelinePanel({ projectId, project }: { projectId: string; proje
           return (
             <StageRow
               key={record.stage}
-              record={record}
+              record={activeJob?.invalidatedAt ? { ...record, message: state.runMode === "ALL"
+                ? "Đầu vào đã đổi. Bước này sẽ chạy lại với dữ liệu mới."
+                : "Đầu vào đã đổi. Hãy chạy lại bước này với dữ liệu mới." } : record}
               canRun={canRunStage(index)}
               busy={pipeline.isMutating}
               onRun={() => void perform({ type: "run", stage: record.stage })}

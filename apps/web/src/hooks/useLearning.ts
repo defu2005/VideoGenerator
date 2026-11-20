@@ -2,8 +2,10 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { InsightApplyField, LearningMode } from "@vg/shared";
 import {
   applyInsight,
+  decideStageNote,
   dismissInsight,
   getLearning,
+  getStageNotes,
   runInsight,
   saveLearningSettings,
   undoInsight,
@@ -59,6 +61,25 @@ export function useDismissInsight(profileId: string) {
       dismissInsight(profileId, input.insightId, input.fields),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: learningKeys.view(profileId) });
+    },
+  });
+}
+
+export function useStageNotes(profileId: string) {
+  return useQuery({
+    queryKey: ["stage-notes", profileId] as const,
+    queryFn: () => getStageNotes(profileId),
+    enabled: Boolean(profileId),
+  });
+}
+
+export function useDecideStageNote(profileId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { noteId: string; decision: "approve" | "reject" | "retire" | "undo" }) =>
+      decideStageNote(profileId, input.noteId, input.decision),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["stage-notes", profileId] });
     },
   });
 }

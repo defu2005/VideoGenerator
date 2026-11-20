@@ -17,7 +17,15 @@ export function ResearchPanel({ research }: { research: StoredResearch | null })
             {research.data.keyFacts.map((fact, index) => (
               <li key={`${fact.fact}-${index}`}>
                 <span className={`confidence-badge confidence-${fact.confidence}`}>{fact.confidence}</span>
-                <span>{fact.fact}{fact.sourceHint && <small> · {fact.sourceHint}</small>}</span>
+                <span>
+                  {fact.fact}{fact.sourceHint && !fact.source && <small> · {fact.sourceHint}</small>}
+                  {fact.source && (
+                    <small className="research-source">
+                      {" · "}{/^https?:\/\//i.test(fact.source.url) ? <a href={fact.source.url} target="_blank" rel="noopener noreferrer">{fact.source.title}</a> : <span>{fact.source.title}</span>}
+                      <q>{fact.source.quote}</q>
+                    </small>
+                  )}
+                </span>
               </li>
             ))}
           </ul>

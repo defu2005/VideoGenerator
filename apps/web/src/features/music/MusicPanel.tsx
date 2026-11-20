@@ -39,6 +39,7 @@ const PROVIDER_LABEL: Record<MusicCandidate["provider"], string> = {
   local: "Thư viện máy",
   upload: "Tải lên",
   mock: "Mock",
+  agent: "Agent tìm",
 };
 
 type MixForm = { volume: number; fadeInSec: number; fadeOutSec: number; duckingDb: number };

@@ -3,6 +3,7 @@ import { Link, useSearchParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { SelfImprovementSettingsSchema, type SelfImprovementSettings, type SelfImprovementCounter } from "@vg/shared";
 import { apiRequest } from "../../services/apiClient";
+import { getOperatorOverview, saveOperatorSettings } from "../../services/operatorApi";
 import { useCan } from "../../hooks/useCan";
 import { Button } from "../../components/ui/Button";
 import { Card } from "../../components/ui/Card";
@@ -14,11 +15,31 @@ import { useToast } from "../../components/ui/Toast";
 type Run = { id: string; skill: string; subject: string; status: string; report: string; createdAt: string; proposalIds: string[];
   budgetUsed: Partial<Record<SelfImprovementCounter, number>>; details: { pages?: Array<{ url: string }> } };
 type Overview = { runs: Run[]; settings: SelfImprovementSettings; skills: Array<{ name: string; description: string }>;
-  budget: { used: Record<SelfImprovementCounter, number>; limits: Record<SelfImprovementCounter, number> }; runtimes: Array<{ id: string; label: string }> };
+  budget: { used: Record<SelfImprovementCounter, number>; limits: Record<SelfImprovementCounter, number> }; runtimes: Array<{ id: string; label: string }>;
+  /** TASK-074c-5b: read-only self-tune stats from the server. Optional so an older server still renders. */
+  selfTune?: { window: number; decided: number; accepted: number; rate: number | null; halved: boolean; userLimit: number; effectiveLimit: number } };
+function selfTuneText(s: NonNullable<Overview["selfTune"]>) {
+  if (s.rate === null) return `Tự hiệu chỉnh: chưa đủ dữ liệu (${s.decided}/${s.window} đề xuất đã quyết).`;
+  const head = `Tỉ lệ chấp nhận ${Math.round(s.rate * 100)}% (${s.window} đề xuất gần nhất).`;
+  return s.halved && s.effectiveLimit < s.userLimit ? `${head} Hạn mức đề xuất hôm nay giảm còn ${s.effectiveLimit} (bạn đặt ${s.userLimit}).` : head;
+}
 const key = ["self-improvement"];
 const labels: Record<SelfImprovementCounter, string> = { researchRuns: "Lượt nghiên cứu", llmCalls: "Lượt gọi AI", webFetches: "Lượt đọc web", skillDrafts: "Bản nháp skill", behaviourEvals: "Lượt đánh giá", improvementRequests: "Đề xuất cải tiến" };
 const statuses: Record<string, string> = { running: "Đang nghiên cứu", completed: "Đã hoàn tất", failed: "Chưa hoàn tất", unavailable: "Thiếu nguồn hoặc kết nối", budget_limited: "Đã đạt hạn mức" };
-const skillLabels: Record<string, string> = { "research-knowledge-refresh": "Làm mới tri thức", "research-change-event": "Điều tra thay đổi", "research-market": "Thị trường", "research-monetization": "Kiếm tiền", "research-provider": "Nhà cung cấp", "research-open-source": "Mã nguồn mở" };
+const skillLabels: Record<string, string> = { "research-knowledge-refresh": "Làm mới tri thức", "research-change-event": "Điều tra thay đổi", "research-market": "Thị trường", "research-monetization": "Kiếm tiền", "research-provider-terms": "Nhà cung cấp", "research-provider": "Nhà cung cấp", "research-open-source": "Mã nguồn mở" };
+/** TASK-074b-3b: the operator's shadow recording switch. Off by default; a shadow never runs a tool. */
+function ShadowSetting() {
+  const cache = useQueryClient(), toast = useToast();
+  const overview = useQuery({ queryKey: ["operator", "overview"], queryFn: getOperatorOverview });
+  const save = useMutation({ mutationFn: (shadowEnabled: boolean) => saveOperatorSettings({ shadowEnabled }),
+    onSuccess: () => { toast.success("Đã lưu công tắc shadow."); return cache.invalidateQueries({ queryKey: ["operator"] }); } });
+  return <Card title="Ghi nhận lệnh shadow">
+    <p>Khi bật, lượt tìm skill sẽ ghi lại lệnh mà bản shadow sẽ dùng. Shadow không chạy công cụ nào. Mặc định tắt.</p>
+    {overview.isError && <p role="alert">{overview.error.message}</p>}
+    {save.error && <p role="alert">{save.error.message}</p>}
+    <label className="checkbox-field"><input type="checkbox" aria-label="Ghi nhận lệnh shadow" checked={overview.data?.settings.shadowEnabled === true} disabled={!overview.data || save.isPending} onChange={(event) => save.mutate(event.target.checked)} /> Ghi nhận lệnh shadow</label>
+  </Card>;
+}
 function Settings({ initial, runtimes }: { initial: SelfImprovementSettings; runtimes: Overview["runtimes"] }) {
   const [value, setValue] = useState(initial), cache = useQueryClient(), toast = useToast();
   const save = useMutation({ mutationFn: () => apiRequest("/research/settings", { method: "PUT", body: JSON.stringify(SelfImprovementSettingsSchema.parse(value)) }),
@@ -37,7 +58,7 @@ function Settings({ initial, runtimes }: { initial: SelfImprovementSettings; run
   </Card>;
 }
 export function ResearchPage() {
-  const [params] = useSearchParams(), cache = useQueryClient(), canWrite = useCan("settings.write");
+  const [params] = useSearchParams(), cache = useQueryClient(), canWrite = useCan("settings.write"), canOperator = useCan("operator.use");
   const [tab, setTab] = useState("research"), [subject, setSubject] = useState(params.get("subject") ?? params.get("knowledgeId") ?? "");
   const [skill, setSkill] = useState(params.has("knowledgeId") ? "research-knowledge-refresh" : "research-monetization");
   const [selected, setSelected] = useState<string | null>(params.get("run"));
@@ -53,7 +74,7 @@ export function ResearchPage() {
   return <section className="form-stack">
     <header><h1 className="text-2xl font-semibold">Tự cải tiến</h1><p>Nghiên cứu nguồn công khai, kiểm trích dẫn và đề xuất tri thức. Thay đổi rủi ro vừa/cao chờ bạn duyệt.</p></header>
     <nav aria-label="Mục tự cải tiến"><Button variant={tab === "research" ? "primary" : "secondary"} onClick={() => setTab("research")}>Nghiên cứu</Button>{" "}<Button variant={tab === "journal" ? "primary" : "secondary"} onClick={() => setTab("journal")}>Nhật ký</Button></nav>
-    <Card title="Ngân sách hôm nay"><ul className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">{(Object.keys(labels) as SelfImprovementCounter[]).map((counter) => <li key={counter}>{labels[counter]}: {data.budget.used[counter]}/{data.budget.limits[counter]}</li>)}</ul></Card>
+    <Card title="Ngân sách hôm nay"><ul className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">{(Object.keys(labels) as SelfImprovementCounter[]).map((counter) => <li key={counter}>{labels[counter]}: {data.budget.used[counter]}/{data.budget.limits[counter]}</li>)}</ul>{data.selfTune && <p>{selfTuneText(data.selfTune)}</p>}</Card>
     {tab === "research" && <Card title="Tìm hiểu một chủ đề">
       <form className="form-stack" onSubmit={submit}>
         <Field label="Kỹ năng nghiên cứu">{(field) => <select {...field} value={skill} onChange={(event) => setSkill(event.target.value)}>{data.skills.map((item) => <option key={item.name} value={item.name}>{skillLabels[item.name] ?? item.description}</option>)}</select>}</Field>
@@ -72,5 +93,6 @@ export function ResearchPage() {
       {active.proposalIds.map((id) => <p key={id}><Link to={`/settings/knowledge?tab=pending&proposal=${encodeURIComponent(id)}`}>Xem đề xuất {id}</Link></p>)}
     </Card>}
     {canWrite && tab === "research" && <Settings key={JSON.stringify(data.settings)} initial={data.settings} runtimes={data.runtimes} />}
+    {canWrite && canOperator && tab === "research" && <ShadowSetting />}
   </section>;
 }

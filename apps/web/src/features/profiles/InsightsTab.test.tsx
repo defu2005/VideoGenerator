@@ -107,6 +107,9 @@ describe("Insights tab", () => {
       if (url.endsWith(`/profiles/${profileId}`) && (!init?.method || init.method === "GET")) {
         return jsonResponse(profile);
       }
+      if (url.endsWith("/stage-notes") && (!init?.method || init.method === "GET")) {
+        return jsonResponse([]);
+      }
       if (url.endsWith("/learning") && (!init?.method || init.method === "GET")) {
         return jsonResponse(learningView());
       }
@@ -144,6 +147,9 @@ describe("Insights tab", () => {
       const url = String(input);
       if (url.endsWith(`/profiles/${profileId}`) && (!init?.method || init.method === "GET")) {
         return jsonResponse(profile);
+      }
+      if (url.endsWith("/stage-notes") && (!init?.method || init.method === "GET")) {
+        return jsonResponse([]);
       }
       if (url.endsWith("/learning") && (!init?.method || init.method === "GET")) {
         return jsonResponse(learningView({ latest: null, history: [], message: "Chưa đủ dữ liệu", insufficient: true, scoredCount: 2 }));

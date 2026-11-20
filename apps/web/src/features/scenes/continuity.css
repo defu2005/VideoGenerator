@@ -1,0 +1,9 @@
+.continuity-card { margin-block: 1rem; min-width: 0; }
+.continuity-card p { overflow-wrap: anywhere; }
+.continuity-heading { display: flex; gap: .75rem; align-items: center; justify-content: space-between; flex-wrap: wrap; }
+.continuity-fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 210px), 1fr)); gap: .75rem; }
+.continuity-card label { display: flex; flex-direction: column; gap: .35rem; min-width: 0; }
+.continuity-card input, .continuity-card select, .continuity-card textarea { max-width: 100%; min-width: 0; }
+.continuity-card fieldset { min-width: 0; margin-block: .75rem; padding: .75rem; }
+.continuity-scene-picks { display: flex; flex-wrap: wrap; gap: .5rem 1rem; }
+.continuity-scene-picks label { flex-direction: row; align-items: center; overflow-wrap: anywhere; }

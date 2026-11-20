@@ -183,9 +183,9 @@ export function RenderHistory({
       </ul>
       <ConfirmDialog
         open={pendingDeleteId !== null}
-        title="Xoá file render?"
-        message="File video của bản này sẽ bị xoá khỏi đĩa. Ghi chú của bản vẫn còn trong danh sách."
-        confirmLabel="Xoá file"
+        title="Xoá bản render?"
+        message="Bản render sẽ rời danh sách đang dùng. Tệp được dọn sau thời gian giữ trong Cài đặt Lưu trữ."
+        confirmLabel="Xoá bản"
         cancelLabel="Giữ lại"
         busy={remove.isPending}
         onCancel={() => setPendingDeleteId(null)}

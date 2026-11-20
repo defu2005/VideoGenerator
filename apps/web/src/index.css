@@ -1889,6 +1889,12 @@ fieldset.form-row > legend {
 .ai-gateway-dot-down { background: #c3434e; }
 .ai-gateway-setup { margin: 0; padding-left: 1.2rem; display: grid; gap: 0.35rem; color: var(--color-neutral-700); font-size: 0.92rem; }
 .ai-gateway-form, .ai-gateway-mappings { display: grid; gap: 0.85rem; }
+.relay-usage-scroll { min-width: 0; max-width: 100%; overflow-x: auto; }
+.relay-usage-scroll .data-table { min-width: 760px; }
+.relay-usage-scroll th, .relay-usage-scroll .text-button { white-space: nowrap; }
+.relay-usage-scroll td { min-width: 7rem; vertical-align: top; overflow-wrap: normal; word-break: normal; }
+.relay-scroll-hint { display: none; }
+@media (max-width: 760px) { .relay-scroll-hint { display: block; margin: 0; } }
 .ai-gateway-mappings-head { display: flex; justify-content: space-between; gap: 0.75rem; align-items: center; }
 .ai-gateway-mappings-head h3 { margin: 0; font-size: 1rem; }
 .ai-gateway-mapping-row { align-items: end; }
@@ -1896,6 +1902,8 @@ fieldset.form-row > legend {
 .ai-routing-form h2 { margin: 0 0 10px; color: var(--color-neutral-900); font-size: 14px; }
 .ai-presets, .ai-default-route { min-width: 0; }
 .ai-presets .button-row { display: flex; flex-wrap: wrap; gap: 8px; }
+.agent-assignment-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.agent-assignment-list { overflow-wrap: anywhere; }
 .ai-task-list { display: grid; gap: 10px; min-width: 0; }
 .ai-task-card { border: 1px solid var(--color-neutral-200); border-radius: 9px; padding: 12px 14px 2px; background: var(--color-neutral-0); min-width: 0; }
 .ai-task-head { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; margin-bottom: 10px; }
@@ -2247,3 +2255,10 @@ fieldset.form-row > legend {
 .help-doc img { max-width: 100%; }
 .help-results { display: grid; gap: 12px; margin: 0; padding-left: 18px; }
 .help-results p { margin: 4px 0 0; color: var(--color-neutral-500); font-size: 13px; }
+
+.quick-preview { display: grid; gap: 6px; min-width: 180px; }
+.quick-preview-actions { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.quick-preview-strip { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; }
+.quick-preview-strip img, .quick-preview-video { width: 100%; max-width: 360px; border-radius: 4px; background: #000; }
+.quick-preview-sheet-img { width: 100%; max-height: 70vh; object-fit: contain; }
+.quick-preview-notes ul { margin: 2px 0 0; padding-left: 16px; font-size: 11px; }

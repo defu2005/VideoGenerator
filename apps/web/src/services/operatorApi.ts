@@ -12,7 +12,7 @@ export type OperatorOverview = {
   runs: Array<{ id: string; status: string; prompt: string; result: string | null; partialText?: string; toolChips: string[]; outcome: string | null; createdAt: string; workflowId?: string | null; canResume?: boolean }>;
   audit: Array<{ id: string; source: string; tool: string; decision: string; summary: string; created_at: string }>;
   notes: Array<{ name: string; text: string }>;
-  settings: { killed: boolean; cursorPath: string; tickCron: string | null; maxRunsPerDay: number; runtimeByChannel?: Record<OperatorRuntimeChannel, string> };
+  settings: { killed: boolean; cursorPath: string; tickCron: string | null; maxRunsPerDay: number; shadowEnabled?: boolean; runtimeByChannel?: Record<OperatorRuntimeChannel, string> };
   resumeCommand: string;
   workspacePath: string;
   usage: { today: number; month: number; cap: number };

@@ -136,7 +136,7 @@ describe("ProjectDetailPage", () => {
     expect(await screen.findByText("WAITING USER")).toBeInTheDocument();
     expect(screen.getAllByText("VISUAL REVIEW")).toHaveLength(2);
     expect(screen.getByRole("heading", { name: "Production stages" })).toBeInTheDocument();
-    expect(await screen.findByText("Ước tính: ~11–17 lượt gọi AI (BALANCED)")).toBeInTheDocument();
+    expect(await screen.findByText("Ước tính: ~13–27 lượt gọi AI (BALANCED)")).toBeInTheDocument();
     expect(screen.getByText("Giải thích. Mặc định là mẫu giải thích.")).toBeInTheDocument();
   });
 

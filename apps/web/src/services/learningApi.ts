@@ -39,6 +39,37 @@ export function applyInsight(profileId: string, insightId: string, fields: Insig
   );
 }
 
+/** TASK-148a/b: lessons per stage, proposed by the weekly job and decided by a human. */
+export type StageNoteStatus = "proposed" | "approved" | "rejected" | "retired";
+export type StageNote = {
+  id: string;
+  profileId: string | null;
+  stage: string;
+  text: string;
+  evidenceIds: string[];
+  status: StageNoteStatus;
+  createdAt: string;
+  decidedAt: string | null;
+  decidedBy: string | null;
+  uses: number;
+  lastUsedAt: string | null;
+};
+
+export function getStageNotes(profileId: string): Promise<StageNote[]> {
+  return apiRequest<StageNote[]>(`/profiles/${encodeURIComponent(profileId)}/stage-notes`);
+}
+
+export function decideStageNote(
+  profileId: string,
+  noteId: string,
+  decision: "approve" | "reject" | "retire" | "undo",
+): Promise<{ status: StageNoteStatus }> {
+  return apiRequest<{ status: StageNoteStatus }>(
+    `/profiles/${encodeURIComponent(profileId)}/stage-notes/${encodeURIComponent(noteId)}/decision`,
+    { method: "POST", body: JSON.stringify({ decision }) },
+  );
+}
+
 export function dismissInsight(
   profileId: string,
   insightId: string,

@@ -85,6 +85,8 @@ function Tracks({ timeline }: { timeline: Timeline }) {
   );
 }
 
+import { ContactSheetButton, SceneQuickPreview } from "./QuickPreview";
+
 export function TimelinePanel({ project }: { project: Project }) {
   const queryClient = useQueryClient();
   const toast = useToast();
@@ -177,10 +179,11 @@ export function TimelinePanel({ project }: { project: Project }) {
           <GuidelineFindings project={project} stage="TIMELINE" />
           <ReviewChatPanel project={project} />
           <Tracks timeline={data} />
+          <ContactSheetButton projectId={project.id} />
           <section className="panel timeline-scenes">
             <table>
               <thead>
-                <tr><th>#</th><th>Cảnh</th><th>Bắt đầu</th><th>Dài</th><th>Giọng</th><th>Hình</th></tr>
+                <tr><th>#</th><th>Cảnh</th><th>Bắt đầu</th><th>Dài</th><th>Giọng</th><th>Hình</th><th>Xem trước nhanh</th></tr>
               </thead>
               <tbody>
                 {data.scenes.map((scene) => (
@@ -191,6 +194,7 @@ export function TimelinePanel({ project }: { project: Project }) {
                     <td>{scene.durationSec.toFixed(1)}s</td>
                     <td>{scene.voice ? `${scene.voice.durationSec.toFixed(1)}s` : "Im lặng"}</td>
                     <td>{scene.visuals.filter((visual) => visual.kind === "IMAGE").length}/{scene.visuals.length}</td>
+                    <td><SceneQuickPreview projectId={project.id} scene={scene} /></td>
                   </tr>
                 ))}
               </tbody>

@@ -11,6 +11,7 @@ import { useVisuals } from "../../hooks/useVisuals";
 import { DurationBar } from "./DurationBar";
 import { SceneCard } from "./SceneCard";
 import { SceneEditor } from "./SceneEditor";
+import { ContinuityCard } from "./ContinuityCard";
 
 export function SceneBoard({ project }: { project: Project }) {
   const navigate = useNavigate();
@@ -122,6 +123,7 @@ export function SceneBoard({ project }: { project: Project }) {
           {scriptStage?.state !== "DONE" && <small>Complete the Script stage first.</small>}
         </section>
       ) : (
+        <><ContinuityCard projectId={project.id} scenes={summary.scenes} envelope={summary.continuity} disabled={scenesQuery.isMutating || Boolean(pipeline.data.activeJob)} />
         <div className={`scene-board-content${selected ? " has-editor" : ""}`}>
           <div className="scene-grid" aria-label="Bảng cảnh">
             {summary.scenes.map((scene) => (
@@ -176,7 +178,7 @@ export function SceneBoard({ project }: { project: Project }) {
               onDelete={() => scenesQuery.mutate({ type: "delete", sceneId: selected.id }).then(() => setSelectedId(null))}
             />
           )}
-        </div>
+        </div></>
       )}
       <ConfirmDialog
         open={confirmOverwrite}

@@ -15,6 +15,7 @@ import {
 } from "../../services/llmApi";
 import type { LlmQuotaStatus, LlmRoute, LlmSettings } from "@vg/shared";
 import { OmniRouteGatewaySection } from "./OmniRouteGatewaySection";
+import { LlmRelaySection } from "./LlmRelaySection";
 import { ModelAdvisorPanel } from "./ModelAdvisorPanel";
 import { FallbackChainEditor, routeWithChain } from "./FallbackChainEditor";
 import { QuotaPanel } from "./QuotaPanel";
@@ -236,6 +237,7 @@ export function AiSettingsPage() {
       {tab === "routes" && <>
       <LlmHealthBadges />
       <OmniRouteGatewaySection />
+      <LlmRelaySection />
       <ModelAdvisorPanel scope="app" />
       <form className="panel ai-routing-form" onSubmit={submit}>
         <section className="ai-presets" aria-label="Mẫu cấu hình nhanh">

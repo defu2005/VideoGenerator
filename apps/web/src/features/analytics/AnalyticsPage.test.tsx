@@ -101,6 +101,9 @@ describe("AnalyticsPage", () => {
       if (url.includes("/analytics/overview")) {
         return jsonResponse(overviewFixture());
       }
+      if (url.includes("/stage-quality/trend")) {
+        return jsonResponse({ stage: "SCRIPT", metric: "quality_score", days: 14, current: { runs: 0, mean: null }, previous: { runs: 0, mean: null }, changePct: null });
+      }
       return jsonResponse({});
     });
     vi.stubGlobal("fetch", fetchMock);
@@ -132,6 +135,9 @@ describe("AnalyticsPage", () => {
       if (url.includes("/analytics/accounts")) return jsonResponse({ items: [] });
       if (url.includes("/profiles")) return jsonResponse({ items: [] });
       if (url.includes("/analytics/overview")) return jsonResponse(overviewFixture());
+      if (url.includes("/stage-quality/trend")) {
+        return jsonResponse({ stage: "SCRIPT", metric: "quality_score", days: 14, current: { runs: 0, mean: null }, previous: { runs: 0, mean: null }, changePct: null });
+      }
       return jsonResponse({});
     }));
 
@@ -176,6 +182,9 @@ describe("AnalyticsPage", () => {
       }
       if (url.includes("/profiles")) return jsonResponse({ items: [] });
       if (url.includes("/analytics/overview")) return jsonResponse(overviewFixture());
+      if (url.includes("/stage-quality/trend")) {
+        return jsonResponse({ stage: "SCRIPT", metric: "quality_score", days: 14, current: { runs: 0, mean: null }, previous: { runs: 0, mean: null }, changePct: null });
+      }
       return jsonResponse({});
     }));
 

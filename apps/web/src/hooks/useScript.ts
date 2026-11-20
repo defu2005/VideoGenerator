@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { SaveScriptInput } from "@vg/shared";
-import { getScript, saveScript } from "../services/scriptApi";
+import { getScript, rescoreScript, saveScript, switchScriptHook } from "../services/scriptApi";
 import { projectKeys } from "./useProjects";
 
 export const scriptKeys = {
@@ -21,5 +21,27 @@ export function useScript(projectId: string) {
       void queryClient.invalidateQueries({ queryKey: projectKeys.detail(projectId) });
     },
   });
-  return { ...query, save: mutation.mutateAsync, isSaving: mutation.isPending };
+  const hookMutation = useMutation({
+    mutationFn: (hookId: string) => switchScriptHook(projectId, hookId),
+    onSuccess: (data) => {
+      queryClient.setQueryData(scriptKeys.detail(projectId), data);
+      void queryClient.invalidateQueries({ queryKey: projectKeys.detail(projectId) });
+    },
+  });
+  const critiqueMutation = useMutation({
+    mutationFn: () => rescoreScript(projectId),
+    onSuccess: (data) => {
+      queryClient.setQueryData(scriptKeys.detail(projectId), data);
+      void queryClient.invalidateQueries({ queryKey: projectKeys.detail(projectId) });
+    },
+  });
+  return {
+    ...query,
+    save: mutation.mutateAsync,
+    isSaving: mutation.isPending,
+    switchHook: hookMutation.mutateAsync,
+    isSwitchingHook: hookMutation.isPending,
+    rescore: critiqueMutation.mutateAsync,
+    isRescoring: critiqueMutation.isPending,
+  };
 }

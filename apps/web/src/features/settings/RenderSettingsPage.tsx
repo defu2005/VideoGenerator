@@ -7,6 +7,7 @@ import { getRenderSettings, saveRenderSettings } from "../../services/renderApi"
 import { apiRequest } from "../../services/apiClient";
 import { WorkerNodesCard } from "./WorkerNodesCard";
 import { GovernorSettingsCard } from "./GovernorSettingsCard";
+import { DatabaseStatsCard } from "./DatabaseStatsCard";
 
 export function RenderSettingsPage() {
   const queryClient = useQueryClient();
@@ -97,6 +98,7 @@ export function RenderSettingsPage() {
       </section>
       <GovernorSettingsCard />
       <WorkerNodesCard />
+      <DatabaseStatsCard />
     </div>
   );
 }

@@ -27,6 +27,7 @@ import {
   webSearchSceneVisuals,
 } from "../../services/visualsApi";
 import { sceneTimecode } from "../scenes/SceneCard";
+import { ContinuityFindings } from "./ContinuityFindings";
 
 type Filter = "all" | "review" | "low" | "reused" | "none" | "approved";
 type VisualAction =
@@ -415,6 +416,8 @@ export function VisualReview({ project }: { project: Project }) {
   const licenseCounts = visualsQuery.data?.summary.licenseCounts ?? {};
   return (
     <section className="visual-review">
+      <ContinuityFindings projectId={project.id} revision={visualsQuery.dataUpdatedAt} disabled={mutate.isPending || Boolean(pipeline.data?.activeJob)}
+        onResearch={(sceneId, query) => mutate.mutateAsync({ type: "search", sceneId, query })} />
       {error && <p className="request-error" role="alert">{error}</p>}
       {notice && <p className="visual-notice" role="status">{notice}</p>}
       <header className="panel visual-toolbar">

@@ -17,6 +17,7 @@ const ProjectListPage = lazy(() => import("./features/projects/ProjectListPage")
 const ProjectDetailPage = lazy(() => import("./features/projects/ProjectDetailPage").then((m) => ({ default: m.ProjectDetailPage })));
 const ProfileListPage = lazy(() => import("./features/profiles/ProfileListPage").then((m) => ({ default: m.ProfileListPage })));
 const ProfileDetailPage = lazy(() => import("./features/profiles/ProfileDetailPage").then((m) => ({ default: m.ProfileDetailPage })));
+const MissionsPage = lazy(() => import("./features/missions/MissionsPage").then((m) => ({ default: m.MissionsPage })));
 const PublishCalendarPage = lazy(() => import("./features/publish/PublishCalendarPage").then((m) => ({ default: m.PublishCalendarPage })));
 const AnalyticsPage = lazy(() => import("./features/analytics/AnalyticsPage").then((m) => ({ default: m.AnalyticsPage })));
 const SkillReportsPage = lazy(() => import("./features/reports/SkillReportsPage").then((m) => ({ default: m.SkillReportsPage })));
@@ -26,6 +27,7 @@ const ExternalKnowledgePage = lazy(() => import("./features/settings/ExternalKno
 const AiSettingsPage = lazy(() => import("./features/settings/AiSettingsPage").then((m) => ({ default: m.AiSettingsPage })));
 const ProvidersPage = lazy(() => import("./features/providers/ProvidersPage").then((m) => ({ default: m.ProvidersPage })));
 const RenderSettingsPage = lazy(() => import("./features/settings/RenderSettingsPage").then((m) => ({ default: m.RenderSettingsPage })));
+const StorageSettingsPage = lazy(() => import("./features/settings/StorageSettingsPage").then((m) => ({ default: m.StorageSettingsPage })));
 const ImageSourcesSettingsPage = lazy(() => import("./features/settings/ImageSourcesSettingsPage").then((m) => ({ default: m.ImageSourcesSettingsPage })));
 const WebImageSettingsPage = lazy(() => import("./features/settings/WebImageSettingsPage").then((m) => ({ default: m.WebImageSettingsPage })));
 const NotificationsPage = lazy(() => import("./features/settings/NotificationsPage").then((m) => ({ default: m.NotificationsPage })));
@@ -80,6 +82,8 @@ export function App() {
               <Route path="profiles/:id" element={<Navigate replace to="direction" />} />
               <Route path="profiles/:id/:tab" element={<ProfileDetailPage />} />
               <Route path="publish/calendar" element={<PublishCalendarPage />} />
+              <Route path="missions" element={<MissionsPage />} />
+              <Route path="missions/:id" element={<MissionsPage />} />
               <Route path="analytics" element={<AnalyticsPage />} />
               <Route path="reports" element={<SkillReportsPage />} />
               <Route path="finance" element={<FinancePage />} />
@@ -89,6 +93,7 @@ export function App() {
               <Route path="settings/ai" element={<AiSettingsPage />} />
               <Route path="providers" element={<ProvidersPage />} />
               <Route path="settings/render" element={<RenderSettingsPage />} />
+              <Route path="settings/storage" element={<StorageSettingsPage />} />
               <Route path="settings/image-sources" element={<ImageSourcesSettingsPage />} />
               <Route path="settings/web-image" element={<WebImageSettingsPage />} />
               <Route path="settings/tts" element={<TtsSettingsPage />} />

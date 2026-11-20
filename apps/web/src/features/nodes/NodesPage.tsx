@@ -10,6 +10,7 @@ import { useToast } from "../../components/ui/Toast";
 import { usePageVisible } from "../../hooks/usePageVisible";
 import { fetchMe } from "../../services/meApi";
 import { JoinDialog } from "./JoinDialog";
+import { RelayUsageLine, useRelayStatus } from "../settings/LlmRelaySection";
 import { getNodeDetail, listNodes, listSecretGrants, patchNode, revokeNode, saveNodeSettings } from "./nodesApi";
 
 const MODE_LABEL: Record<RemoteRenderSettings["mode"], string> = {
@@ -45,6 +46,7 @@ export function NodesPage() {
     refetchInterval: visible ? 15_000 : false,
   });
   const secrets = useQuery({ queryKey: ["nodes", "secrets"], queryFn: listSecretGrants, enabled: allowed, refetchInterval: visible ? 15_000 : false });
+  const relay = useRelayStatus(allowed);
   const refresh = () => queryClient.invalidateQueries({ queryKey: ["nodes"] });
   const fail = (reason: unknown) => toast.error(reason instanceof Error ? reason.message : "Không thực hiện được");
 
@@ -164,6 +166,7 @@ export function NodesPage() {
                 {" "}· {node.runningJobs}/{node.desiredConfig.concurrency} việc
                 {node.resources && <> · {node.resources.cpus} CPU · {Math.round(node.resources.ramMb / 1024)} GB RAM · {Math.round(node.resources.freeDiskMb / 1024)} GB trống</>}
                 {node.lastSeenAt && <> · thấy <RelativeTime value={node.lastSeenAt} /></>}
+                <RelayUsageLine status={relay.data} match={(caller) => caller === `node:${node.id}`} />
                 {node.status === "version_mismatch" && <p className="muted">Máy chạy {node.version ?? "?"}, máy chính chạy {target}. Cần cập nhật.</p>}
               </li>
             );

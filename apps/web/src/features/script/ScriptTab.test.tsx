@@ -76,10 +76,15 @@ const research: NonNullable<ScriptData["research"]> = {
   createdAt: "2026-11-03T00:00:00.000Z",
 };
 
-function installFetch(data: ScriptData, state: PipelineState = pipeline, jobs: unknown[] = []) {
+function installFetch(
+  data: Omit<ScriptData, "draft"> & { draft?: ScriptData["draft"] },
+  state: PipelineState = pipeline,
+  jobs: unknown[] = [],
+) {
+  const payload: ScriptData = { draft: null, ...data };
   vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
     const url = String(input);
-    if (url.endsWith("/script")) return jsonResponse(data);
+    if (url.endsWith("/script")) return jsonResponse(payload);
     if (url.endsWith("/pipeline")) return jsonResponse(state);
     if (url.includes("/jobs")) return jsonResponse(jobs);
     return jsonResponse({});

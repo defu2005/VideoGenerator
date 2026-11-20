@@ -234,7 +234,7 @@ describe("RenderPanel", () => {
     await waitFor(() => expect(calls.some((call) => call.init?.method === "PATCH" && String(call.init.body).includes("Ghi chú mới"))).toBe(true));
 
     fireEvent.click(screen.getAllByRole("button", { name: "Xoá" })[0]!);
-    fireEvent.click(await screen.findByRole("button", { name: "Xoá file" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Xoá bản" }));
     await waitFor(() => expect(calls.some((call) => call.init?.method === "DELETE")).toBe(true));
   });
 
@@ -265,7 +265,11 @@ describe("RenderPanel", () => {
       if (url.includes("/compose-plan")) {
         return jsonResponse({
           stats: { shotsPerMin: 12.5, kindShare: { still: 0.25 }, beatCutPct: 0.5 },
-          scenes: [{ sceneId, shots: [{ id: "s1", kind: "footage", startSec: 0, endSec: 2, reason: "baseline" }] }],
+          scenes: [{ sceneId, shots: [
+            { id: "s1", kind: "footage", startSec: 0, endSec: 2, reason: "baseline" },
+            { id: "s2", kind: "diagram", startSec: 2, endSec: 8, reason: "quy trình" },
+            { id: "s3", kind: "timeline", startSec: 8, endSec: 14, reason: "mốc thời gian" },
+          ] }],
         });
       }
       if (url.includes("/clips")) return jsonResponse({ eligible: true, reason: null, renderId: "r1", options: { count: 3, minSec: 20, maxSec: 45, reframe: "center" }, proposals: [], children: [], jobs: [] });
@@ -281,5 +285,7 @@ describe("RenderPanel", () => {
     renderWithProviders(<RenderPanel project={project} />);
     expect(await screen.findByText(/12.5 cảnh\/phút/)).toBeInTheDocument();
     expect(screen.getByText(/Footage · 0.0–2.0s · baseline/)).toBeInTheDocument();
+    expect(screen.getByText(/Sơ đồ · 2.0–8.0s · quy trình/)).toBeInTheDocument();
+    expect(screen.getByText(/Dòng thời gian · 8.0–14.0s · mốc thời gian/)).toBeInTheDocument();
   });
 });

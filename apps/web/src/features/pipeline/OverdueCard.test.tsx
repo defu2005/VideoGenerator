@@ -1,4 +1,4 @@
-import { screen, waitFor } from "@testing-library/react";
+import { screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { OverdueJob } from "@vg/shared";
 import { renderWithProviders, jsonResponse } from "../../test/testUtils";
@@ -37,9 +37,8 @@ describe("OverdueCard", () => {
 
     renderWithProviders(<OverdueCard projectId={projectId} active={true} />);
 
-    await waitFor(() => {
-      expect(screen.getByRole("status")).toBeInTheDocument();
-    });
+    // Wait for the card itself: the app's LocationOutput is an <output> (implicit role "status") that is always mounted.
+    await screen.findByLabelText("Bước quá thời gian dự kiến");
 
     expect(screen.getByText(/quá dự kiến 2 phút/i)).toBeInTheDocument();
     expect(screen.getByText(/RENDER/i)).toBeInTheDocument();
@@ -52,9 +51,8 @@ describe("OverdueCard", () => {
 
     renderWithProviders(<OverdueCard projectId={projectId} active={true} />);
 
-    await waitFor(() => {
-      expect(screen.getByRole("status")).toBeInTheDocument();
-    });
+    // Wait for the card itself: the app's LocationOutput is an <output> (implicit role "status") that is always mounted.
+    await screen.findByLabelText("Bước quá thời gian dự kiến");
 
     expect(screen.getByText(/dự kiến còn ~3 phút/i)).toBeInTheDocument();
   });

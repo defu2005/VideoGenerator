@@ -31,6 +31,7 @@ export const NAV_SECTIONS: NavSection[] = [
     items: [
       { to: "/operator", label: "Agent operator", icon: "operator", needs: "operator.use" },
       { to: "/operator/journal", label: "Nhật ký tự vận hành", icon: "operator", needs: "operator.use" },
+      { to: "/missions", label: "Mission", icon: "operator", needs: "operator.use" },
       { to: "/self-improvement", label: "Tự cải tiến", icon: "globe", needs: "project.read" },
     ],
   },
@@ -64,6 +65,7 @@ export const NAV_SECTIONS: NavSection[] = [
       { to: "/settings/hermes-fleet", label: "Đội Hermes", icon: "server", needs: "operator.use" },
       { to: "/providers", label: "Nhà cung cấp AI", icon: "server", needs: "settings.write" },
       { to: "/settings/render", label: "Render", icon: "sliders" },
+      { to: "/settings/storage", label: "Lưu trữ", icon: "server", needs: "settings.write" },
       { to: "/settings/image-sources", label: "Nguồn ảnh", icon: "image" },
       { to: "/settings/web-image", label: "Nguồn ảnh web", icon: "globe" },
       { to: "/settings/tts", label: "Giọng đọc (TTS)", icon: "mic" },

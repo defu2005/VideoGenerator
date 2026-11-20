@@ -9,6 +9,7 @@ type Resources = {
   workerCap: number;
   sample: { cpuPct: number; ramPct: number; diskFreeBytes: number | null; gpuPct: number | null } | null;
   overVi: string[];
+  diskHoldVi?: string;
   classes: ResourceClass[];
 };
 
@@ -41,6 +42,7 @@ export function ResourceCard() {
         <p className="page-subtitle">Đang đo máy…</p>
       )}
       {data.overVi.length > 0 && <p role="status">Máy đang quá tải ({data.overVi.join(", ")}), hệ thống giảm bớt việc chạy cùng lúc.</p>}
+      {data.diskHoldVi && <p role="status">{data.diskHoldVi} <Link to="/settings/storage">Xem lưu trữ</Link></p>}
       {!data.enabled && <p className="page-subtitle">Bộ điều tiết đang tắt: chỉ giữ mức tối đa {data.workerCap} việc cùng lúc.</p>}
       <ul className="attention-list">
         {data.classes.map((item) => (

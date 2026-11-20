@@ -35,6 +35,12 @@ describe("BriefFields format cards", () => {
     expect(onReset).toHaveBeenCalledWith("stageExecution.VISUAL_SEARCH");
     fireEvent.change(screen.getByRole("spinbutton", { name: "Thời gian chờ agent (phút)" }), { target: { value: "" } });
     expect(onReset).toHaveBeenCalledWith("agentWaitMinutes");
+
+    expect(screen.getByRole("combobox", { name: "Ai xử lý bước kịch bản" })).toHaveValue("");
+    fireEvent.change(screen.getByRole("combobox", { name: "Ai xử lý bước kịch bản" }), { target: { value: "agent" } });
+    expect(onChange).toHaveBeenCalledWith("stageExecution.SCRIPT", "agent");
+    expect(screen.getByRole("combobox", { name: "Ai xử lý bước nghiên cứu" })).toHaveValue("");
+    expect(screen.getByRole("combobox", { name: "Ai xử lý bước tìm nhạc" })).toHaveValue("");
   });
   it("shows recipe descriptions and reports the chosen card", () => {
     const onChange = vi.fn();

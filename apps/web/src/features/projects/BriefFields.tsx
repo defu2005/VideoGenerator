@@ -1,5 +1,24 @@
-import { estimateBudget, FORMAT_RECIPES, FORMAT_RECIPE_IDS, recommendBrief, resolveBudget, type BriefSettings, type BudgetFeatures } from "@vg/shared";
+import { AGENT_CAPABLE_STAGES, estimateBudget, FORMAT_RECIPES, FORMAT_RECIPE_IDS, recommendBrief, resolveBudget, type BriefSettings, type BudgetFeatures } from "@vg/shared";
 import type { ReactNode } from "react";
+
+const STAGE_EXECUTION_META: Record<string, { label: string; desc: string }> = {
+  VISUAL_SEARCH: {
+    label: "Ai xử lý bước tìm ảnh",
+    desc: "Mặc định app làm trước; agent nhận các cảnh còn thiếu.",
+  },
+  RESEARCH: {
+    label: "Ai xử lý bước nghiên cứu",
+    desc: "Mặc định app xử lý; có thể giao cho agent ngoài.",
+  },
+  SCRIPT: {
+    label: "Ai xử lý bước kịch bản",
+    desc: "Mặc định app xử lý; có thể giao cho agent ngoài.",
+  },
+  MUSIC_SEARCH: {
+    label: "Ai xử lý bước tìm nhạc",
+    desc: "Mặc định app xử lý; có thể giao cho agent ngoài.",
+  },
+};
 
 type BriefField = keyof Omit<BriefSettings, "subtitles" | "music" | "userSet">;
 
@@ -63,6 +82,7 @@ export function BriefFields({
       knowledgeEmbeddings: "Tìm tri thức theo nghĩa (cần nhà cung cấp)",
       altQueryAssist: "Alternative visual query assistance (BALANCED/QUALITY/CUSTOM)",
       sceneQueryAssist: "Scene query assist (BALANCED/QUALITY/CUSTOM)",
+      continuityPlan: "Định hướng hình ảnh liền mạch",
       semanticImageRerank: "Semantic image rerank (QUALITY/CUSTOM)",
       scriptReviewPasses: "Script review passes",
       visionCheck: "Kiểm tra ảnh bằng AI nhìn (MAX/CUSTOM)",
@@ -176,6 +196,7 @@ export function BriefFields({
           {customFeature("scriptReviewPasses", budgetFeatures.scriptReviewPasses)}
           {customFeature("altQueryAssist", budgetFeatures.altQueryAssist)}
           {customFeature("sceneQueryAssist", budgetFeatures.sceneQueryAssist)}
+          {customFeature("continuityPlan", budgetFeatures.continuityPlan)}
           {customFeature("semanticImageRerank", budgetFeatures.semanticImageRerank)}
           {customFeature("visionCheck", budgetFeatures.visionCheck)}
           {customFeature("visionRetryRounds", budgetFeatures.visionRetryRounds)}
@@ -258,16 +279,36 @@ export function BriefFields({
       {field("music.volume", "Music volume", (
         <input aria-label="Music volume" type="number" min={0} max={1} step={0.01} value={resolved.music.volume} onChange={(event) => onChange("music.volume", Number(event.target.value))} />
       ))}
-      <label className="form-field">
-        <span>Ai xử lý bước tìm ảnh</span>
-        <select aria-label="Ai xử lý bước tìm ảnh" value={settings.stageExecution?.VISUAL_SEARCH ?? ""} onChange={(event) => event.target.value ? onChange("stageExecution.VISUAL_SEARCH", event.target.value) : onReset("stageExecution.VISUAL_SEARCH")}>
-          <option value="">{scope === "profile" ? "Mặc định" : "Theo hồ sơ / mặc định"}</option>
-          <option value="app">App xử lý</option>
-          <option value="agent">Giao cho agent ngoài</option>
-          <option value="app_then_agent">App trước, agent khi chưa xong</option>
-        </select>
-        <small>Hiện hỗ trợ bước tìm ảnh. Mặc định app làm trước; agent nhận các cảnh còn thiếu.{scope === "project" ? " Để trống để kế thừa hồ sơ." : " Dự án đang kế thừa sẽ dùng cấu hình này."}</small>
-      </label>
+      {AGENT_CAPABLE_STAGES.map((stage) => {
+        const meta = STAGE_EXECUTION_META[stage] ?? {
+          label: `Ai xử lý bước ${stage}`,
+          desc: "Mặc định app xử lý; có thể giao cho agent ngoài.",
+        };
+        const currentMode = settings.stageExecution?.[stage] ?? "";
+        return (
+          <label className="form-field" key={stage}>
+            <span>{meta.label}</span>
+            <select
+              aria-label={meta.label}
+              value={currentMode}
+              onChange={(event) =>
+                event.target.value
+                  ? onChange(`stageExecution.${stage}`, event.target.value)
+                  : onReset(`stageExecution.${stage}`)
+              }
+            >
+              <option value="">{scope === "profile" ? "Mặc định" : "Theo hồ sơ / mặc định"}</option>
+              <option value="app">App xử lý</option>
+              <option value="agent">Giao cho agent ngoài</option>
+              <option value="app_then_agent">App trước, agent khi chưa xong</option>
+            </select>
+            <small>
+              {meta.desc}
+              {scope === "project" ? " Để trống để kế thừa hồ sơ." : " Dự án đang kế thừa sẽ dùng cấu hình này."}
+            </small>
+          </label>
+        );
+      })}
       <label className="form-field">
         <span>Thời gian chờ agent (phút)</span>
         <input aria-label="Thời gian chờ agent (phút)" type="number" min={1} max={1440} placeholder="30" value={settings.agentWaitMinutes ?? ""} onChange={(event) => event.target.value ? onChange("agentWaitMinutes", Number(event.target.value)) : onReset("agentWaitMinutes")} />

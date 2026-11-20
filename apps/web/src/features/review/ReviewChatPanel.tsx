@@ -27,6 +27,7 @@ const reviewKeys = { project: (projectId: string) => ["review", projectId] as co
 
 function proposalLabel(proposal: ReviewProposal): string {
   switch (proposal.type) {
+    case "PATCH_CONTINUITY_PLAN": return "Sửa định hướng hình ảnh";
     case "EDIT_NARRATION": return `Sửa lời kể · ${proposal.sceneId.slice(0, 8)}…`;
     case "EDIT_DURATION": return `Đổi thời lượng · ${proposal.durationSec ?? "tự động"}s`;
     case "EDIT_VISUAL_QUERY": return `Đổi từ khóa ảnh · ${proposal.query}`;
@@ -90,6 +91,7 @@ function proposalDiff(proposal: ReviewProposal) {
 
 function proposalDetail(proposal: ReviewProposal): string {
   switch (proposal.type) {
+    case "PATCH_CONTINUITY_PLAN": return `${proposal.plan.characters.length} nhân vật · ${proposal.plan.motifs.length} motif · màu ${proposal.plan.palette.temperature}`;
     case "EDIT_NARRATION": return proposal.text;
     case "EDIT_DURATION": return proposal.durationSec == null ? "Bỏ ghi đè thời lượng" : `${proposal.durationSec} giây`;
     case "EDIT_VISUAL_QUERY": return proposal.query;
