@@ -28,6 +28,7 @@ export type RepairActionKind = z.infer<typeof RepairActionKindSchema>;
 export const REPAIR_ISSUE_KINDS = [
   "script_score", "script_facts", "script_guideline",
   "scene_vision_reject", "scene_vision_missing", "scene_low_relevance", "scene_source_risk",
+  "continuity_color", "continuity_motif",
   "audio_silent", "subtitle_sync", "freeze", "black", "duration_long", "duration_short", "file_missing",
 ] as const;
 export type RepairIssueKind = (typeof REPAIR_ISSUE_KINDS)[number];
@@ -61,6 +62,9 @@ export const REPAIR_LADDERS: Record<RepairIssueKind, RepairActionKind[]> = {
   scene_low_relevance: SCENE_LADDER,
   // Licence and watermark rules are never relaxed: no web search that could add another unverified find.
   scene_source_risk: ["pick_next_candidate", "research_scene", "rephrase_scene_visual", "switch_shot_type"],
+  // TASK-141 P2: lệch màu giữa hai cảnh chỉ đổi ứng viên; thiếu motif cần tìm lại rồi mới chọn.
+  continuity_color: ["pick_next_candidate"],
+  continuity_motif: ["research_scene", "pick_next_candidate"],
   audio_silent: ["rerun_voice", "rerun_music"],
   subtitle_sync: ["rerun_subtitle"],
   freeze: SCENE_LADDER,

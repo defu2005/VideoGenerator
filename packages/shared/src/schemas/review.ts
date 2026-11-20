@@ -3,8 +3,10 @@ import { PipelineStageSchema } from "../enums.js";
 import { EmphasisEffectSchema, SubtitleStyleIdSchema, TransitionTypeSchema } from "../edit/plan.js";
 import { MotionTemplateIdSchema } from "../motion/templates.js";
 import { VisualMotionSchema } from "./visual.js";
+import { ContinuityPlanSchema } from "./continuity.js";
 
 const ReviewProposalUnion = z.discriminatedUnion("type", [
+  z.object({ type: z.literal("PATCH_CONTINUITY_PLAN"), plan: ContinuityPlanSchema, weight: z.number().min(0).max(0.2).optional() }).strict(),
   z.object({
     type: z.literal("EDIT_NARRATION"),
     sceneId: z.string().uuid(),

@@ -1,4 +1,6 @@
 import { z } from "zod";
+import { BeatEmotionSchema, BeatPurposeSchema, HookCandidateSchema, StoryFrameworkSchema, StoryOutlineSchema } from "../script/outline.js";
+import { HookAssessmentSchema, ScriptCritiqueSchema, ScriptScoresSchema } from "../script/critique.js";
 
 // Deterministic normalizers for common LLM deviations (localized enum words, numeric levels,
 // string outline items). Fixing these in code avoids paying for a repair LLM call.
@@ -51,9 +53,32 @@ export const ResearchNotesSchema = z.object({
 }).strict();
 export type ResearchNotes = z.infer<typeof ResearchNotesSchema>;
 
+/** TASK-147b: source attached to a fact by a research_scout agent. Count and quote rules live in the app gate, not here. */
+export const AgentResearchSourceSchema = z.object({
+  url: z.string().url().max(2000),
+  title: z.string().trim().min(1).max(200),
+  quote: z.string().trim().min(1).max(300),
+}).strict();
+const BaseKeyFactSchema = ResearchNotesSchema.shape.keyFacts.element;
+/** Shape of what an agent submits: sourceHint may be omitted (the app sets it from source.url). */
+export const AgentResearchNotesSchema = ResearchNotesSchema.extend({
+  keyFacts: z.array(BaseKeyFactSchema.extend({
+    sourceHint: z.string().max(2000).nullable().optional(),
+    source: AgentResearchSourceSchema.nullable().default(null),
+  }).strict()).max(16),
+}).strict();
+export type AgentResearchNotes = z.infer<typeof AgentResearchNotesSchema>;
+/** Stored research superset: LLM rows (no source) and agent rows (source per fact) both parse. */
+export const StoredResearchNotesSchema = ResearchNotesSchema.extend({
+  keyFacts: z.array(BaseKeyFactSchema.extend({
+    source: AgentResearchSourceSchema.nullable().optional(),
+  }).strict()).min(5).max(16),
+}).strict();
+export type StoredResearchNotes = z.infer<typeof StoredResearchNotesSchema>;
+
 export const ScriptEnergySchema = z.preprocess(normalizeLevel, z.enum(["low", "medium", "high"]));
 
-const ScriptSectionObjectSchema = z.object({
+export const ScriptSectionObjectSchema = z.object({
   id: z.string().min(1),
   heading: z.string().min(1),
   narration: z.string(),
@@ -66,6 +91,12 @@ const ScriptSectionObjectSchema = z.object({
   energy: ScriptEnergySchema.default("medium"),
   estDurationSec: z.number().nonnegative().default(0),
   sectionKey: z.string().min(1).optional(),
+  beatPurpose: BeatPurposeSchema.optional(),
+  emotion: BeatEmotionSchema.optional(),
+  visualIntent: z.string().optional(),
+  factIds: z.array(z.string()).optional(),
+  opensLoops: z.array(z.string()).optional(),
+  closesLoops: z.array(z.string()).optional(),
 }).strict();
 
 export const ScriptSectionSchema = z.preprocess((value) => {
@@ -95,6 +126,8 @@ export const ScriptSchema = z.object({
   sections: z.array(ScriptSectionSchema).min(1),
   outro: z.string(),
   music: ScriptMusicSchema.default({ mood: "", energy: "medium", keywords: [] }),
+  centralQuestion: z.string().optional(),
+  framework: StoryFrameworkSchema.optional(),
 }).strict();
 export type Script = z.infer<typeof ScriptSchema>;
 
@@ -107,7 +140,7 @@ export const SaveScriptInputSchema = ScriptSchema;
 export type SaveScriptInput = z.infer<typeof SaveScriptInputSchema>;
 
 export const StoredResearchSchema = z.object({
-  data: ResearchNotesSchema,
+  data: StoredResearchNotesSchema,
   provider: z.string(),
   model: z.string(),
   cached: z.boolean(),
@@ -125,11 +158,30 @@ export const StoredScriptSchema = z.object({
   updatedAt: z.string().datetime({ offset: true }),
 }).strict();
 
+export const ScriptDraftPayloadSchema = z.object({
+  outline: StoryOutlineSchema.nullable().optional(),
+  hookCandidates: z.array(HookCandidateSchema),
+  chosenHookId: z.string().optional(),
+  hookAssessments: z.array(HookAssessmentSchema).optional(),
+  critique: ScriptCritiqueSchema.nullable().optional(),
+  critiqueHistory: z.array(z.object({
+    round: z.number(),
+    total: z.number(),
+    scores: ScriptScoresSchema,
+  }).strict()).optional(),
+  critiqueStale: z.boolean().default(false),
+  engineMode: z.enum(["off", "lite", "full"]),
+  inputHash: z.string(),
+  updatedAt: z.string(),
+}).strict();
+export type ScriptDraftPayload = z.infer<typeof ScriptDraftPayloadSchema>;
+
 export const ScriptDataSchema = z.object({
   script: StoredScriptSchema.nullable(),
   research: StoredResearchSchema.nullable(),
   origin: z.enum(["AGENT", "USER"]).nullable(),
   version: z.number().int().nonnegative(),
   stale: z.boolean(),
+  draft: ScriptDraftPayloadSchema.nullable().default(null),
 }).strict();
 export type ScriptData = z.infer<typeof ScriptDataSchema>;

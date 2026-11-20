@@ -80,6 +80,8 @@ export const NotificationKindSchema = z.enum([
   "daily_summary",
   "monthly_report",
   "comment_attention",
+  "mission_checkpoint",
+  "mission_waiting_user",
 ]);
 export type NotificationKind = z.infer<typeof NotificationKindSchema>;
 
@@ -182,6 +184,23 @@ export const NotificationEventSchema = z.discriminatedUnion("kind", [
     count: z.number().int().positive(),
     hourKey: z.string().min(1),
   }).strict(),
+  // TASK-129c slice 2b: a checkpoint report (2h/24h/72h/7d) for a mission's publication.
+  z.object({
+    kind: z.literal("mission_checkpoint"),
+    missionId: z.string(),
+    command: z.string(),
+    checkpoint: z.string(),
+    report: z.string(),
+  }).strict(),
+  // TASK-129c slice 2b: a mission waits at a gate the user must clear. Sent once per 6 h while it waits.
+  // `at` is the reminder's own time: the ping row alone throttles reminders, not the 6 h log dedupe.
+  z.object({
+    kind: z.literal("mission_waiting_user"),
+    missionId: z.string(),
+    command: z.string(),
+    link: z.string(),
+    at: z.string().min(1),
+  }).strict(),
 ]);
 export type NotificationEvent = z.infer<typeof NotificationEventSchema>;
 
@@ -190,7 +209,7 @@ export function notificationToggleForKind(
   kind: NotificationKind,
   unexpectedAutoStop = false,
 ): keyof NotificationEventToggle {
-  if (kind === "publish_succeeded") return "published";
+  if (kind === "publish_succeeded" || kind === "mission_checkpoint") return "published";
   if (kind === "waiting_approval" && !unexpectedAutoStop) return "waitingApproval";
   if (kind === "daily_summary" || kind === "monthly_report") return "dailySummary";
   return "attention";
@@ -221,5 +240,9 @@ export function subjectKeyForEvent(event: NotificationEvent): string {
       return `monthly_report:${event.month}`;
     case "comment_attention":
       return `comments:${event.profileId}:${event.hourKey}`;
+    case "mission_checkpoint":
+      return `mission:${event.missionId}:checkpoint:${event.checkpoint}`;
+    case "mission_waiting_user":
+      return `mission:${event.missionId}:waiting_user:${event.at}`;
   }
 }

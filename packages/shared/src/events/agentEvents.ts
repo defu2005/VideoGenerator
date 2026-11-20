@@ -12,6 +12,9 @@ export const AGENT_EVENT_TYPES = [
   "quota_wait",
   "budget_wait",
   "render_finished",
+  "mission_created",
+  "mission_state_changed",
+  "mission_owner_changed",
   "published",
   "publish_failed",
   "needs_user",
@@ -19,12 +22,29 @@ export const AGENT_EVENT_TYPES = [
   "capacity_idle",
   "ping",
   "hermes.duty_lost",
+  "hermes.duty_watchdog",
   "hermes.duty_taken",
   "lease.preempted",
   "escalation.opened",
+  // Event coverage (TASK-129a §1): analytics sync finished for one account.
+  "analytics_synced",
+  // TASK-129a §1: an overdue check was recorded for a running stage; quality repair ran out of options.
+  "stage_overdue",
+  "repair_exhausted",
+  "repair_started",
+  "publish_scheduled",
+  "quota_failover",
+  "node_online",
+  "node_offline",
+  // TASK-129a step 3: mailbox. Summaries carry sender and kind only, never the body.
+  "agent.message",
+  "agent.question_escalated",
 ] as const;
 
 export type AgentEventType = (typeof AGENT_EVENT_TYPES)[number];
+
+/** Mailbox events reach webhooks only through per-subscription routing, never the generic bus fan-out. */
+export const MAILBOX_EVENT_TYPES: readonly AgentEventType[] = ["agent.message", "agent.question_escalated"];
 
 export type AgentEvent = {
   id: string;

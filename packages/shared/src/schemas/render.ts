@@ -38,6 +38,8 @@ export const RenderIssueSchema = z.object({
 export type RenderIssue = z.infer<typeof RenderIssueSchema>;
 
 export const RenderReportSchema = z.object({
+  /** A concurrent edit superseded the input snapshot used for this version. */
+  staleInput: z.boolean().optional(),
   /** False when any ERROR issue exists. Issues never delete the output. */
   ok: z.boolean(),
   expectedDurationSec: z.number().nonnegative(),

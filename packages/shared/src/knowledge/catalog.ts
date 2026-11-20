@@ -335,7 +335,8 @@ export const CHANGE_CATEGORIES: readonly ChangeCategory[] = [
     "name": "TTS, footage, image and music sources",
     "example": "voices removed, keys paused (as Pexels did), licence or caching terms",
     "kinds": [
-      "provider_terms"
+      "provider_terms",
+      "source_note"
     ],
     "detectors": [
       "D1",

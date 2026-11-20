@@ -31,6 +31,8 @@ export const LlmCallUsageSchema = z.object({
   /** This call's own cost. When every call sets it, usage keeps these amounts. */
   costUsd: z.number().nonnegative().optional(),
   costUnknown: z.boolean().optional(),
+  /** Counts for this call are estimated, even when they are nonzero. */
+  tokensUnknown: z.boolean().optional(),
 }).strict();
 export type LlmCallUsage = z.infer<typeof LlmCallUsageSchema>;
 
@@ -49,6 +51,7 @@ export const JobUsageSchema = z.object({
 export type JobUsage = z.infer<typeof JobUsageSchema>;
 
 export const StageRecordSchema = z.object({
+  inputVersion: z.string().regex(/^[a-f0-9]{64}$/).nullable().optional(),
   stage: PipelineStageSchema,
   state: StageStateSchema,
   progress: z.number().min(0).max(100),
@@ -60,6 +63,8 @@ export const StageRecordSchema = z.object({
 export type StageRecord = z.infer<typeof StageRecordSchema>;
 
 export const JobSchema = z.object({
+  inputVersion: z.string().regex(/^[a-f0-9]{64}$/).nullable().optional(),
+  invalidatedAt: z.string().datetime({ offset: true }).nullable().optional(),
   executor: z.enum(["app", "agent"]).default("app"),
   handoffReason: z.string().nullable().optional(),
   handoffAt: z.string().datetime({ offset: true }).nullable().optional(),

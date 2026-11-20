@@ -45,6 +45,8 @@ export {
   shotVariantParams,
 } from "./graphicKind.js";
 export type { GraphicKind } from "./graphicKind.js";
+export { DiagramSourceSchema, TimelineSourceSchema, datedEvents, processLanguage, structuredGraphicTimes, timelineScale } from "./structuredGraphic.js";
+export type { DiagramSource, TimelineSource, DatedEvent } from "./structuredGraphic.js";
 export { boxesOverlap, labelFromGeometry, pointInRing, visibleLabelIndexes, visualLabelPoint } from "./mapLabel.js";
 export type { LabelBox, LngLat } from "./mapLabel.js";
 export { sceneWords, cutCandidates } from "./words.js";

@@ -1,11 +1,14 @@
 import { z } from "zod";
 import { PipelineStageSchema, type PipelineStage } from "../enums.js";
 
+export const AGENT_CAPABLE_STAGES: readonly PipelineStage[] = ["VISUAL_SEARCH", "RESEARCH", "MUSIC_SEARCH", "SCRIPT"] as const;
 export const StageExecutionModeSchema = z.enum(["app", "agent", "app_then_agent"]);
 export type StageExecutionMode = z.infer<typeof StageExecutionModeSchema>;
 export const StageExecutionSettingsSchema = z.partialRecord(PipelineStageSchema, StageExecutionModeSchema).superRefine((settings, ctx) => {
   for (const [stage, mode] of Object.entries(settings)) {
-    if (stage !== "VISUAL_SEARCH" && mode !== "app") ctx.addIssue({ code: "custom", path: [stage], message: "Hiện chỉ bước tìm ảnh hỗ trợ agent ngoài; các bước khác dùng app." });
+    if (!AGENT_CAPABLE_STAGES.includes(stage as PipelineStage) && mode !== "app") {
+      ctx.addIssue({ code: "custom", path: [stage], message: "Bước này chưa hỗ trợ agent ngoài; hãy dùng app." });
+    }
   }
 });
 export type StageExecutionSettings = z.infer<typeof StageExecutionSettingsSchema>;

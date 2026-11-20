@@ -74,9 +74,14 @@ export const LlmTaskIdSchema = z.enum([
   "research",
   "script",
   "scriptReview",
+  "storyOutline",
+  "scriptCritic",
+  "scriptRewrite",
+  "scriptLengthFit",
   "guidelineCheck",
   "factCheck",
   "sceneQueries",
+  "continuityPlan",
   "visualAltQueries",
   "visualRerank",
   "visionCheck",
@@ -125,9 +130,14 @@ export const LLM_TASKS: {
   { id: "research", label: "Nghiên cứu", stage: "RESEARCH", purpose: "Research facts and sources for the video.", tier: "strong", qualityWeight: 3, needsLongContext: true },
   { id: "script", label: "Viết kịch bản", stage: "SCRIPT", purpose: "Write narration and scene-level visual queries.", tier: "strong", qualityWeight: 3, needsLongContext: true },
   { id: "scriptReview", label: "Biên tập kịch bản", stage: "SCRIPT", purpose: "Review and improve the generated script.", tier: "strong", qualityWeight: 3, needsLongContext: true, budgetFeature: "scriptReviewPasses" },
+  { id: "storyOutline", label: "Dàn ý câu chuyện", stage: "SCRIPT", purpose: "Create a narrative outline and hook candidates from research notes.", tier: "strong", qualityWeight: 3, needsLongContext: true, budgetFeature: "storyEngine" },
+  { id: "scriptCritic", label: "Chấm điểm kịch bản", stage: "SCRIPT", purpose: "Evaluate script and hook candidates against the narrative rubric.", tier: "strong", qualityWeight: 3, needsLongContext: true, budgetFeature: "storyEngine" },
+  { id: "scriptRewrite", label: "Viết lại đoạn kịch bản", stage: "SCRIPT", purpose: "Targeted rewrite of failing script sections or hook.", tier: "strong", qualityWeight: 3, needsLongContext: true, budgetFeature: "storyEngine" },
+  { id: "scriptLengthFit", label: "Cân đối độ dài kịch bản", stage: "SCRIPT", purpose: "Adjust script length to match target duration without altering core beats.", tier: "fast", qualityWeight: 1, budgetFeature: "storyEngine" },
   { id: "guidelineCheck", label: "Kiểm tra định hướng nội dung", stage: "SCRIPT", purpose: "Check the script against platform and channel guideline packs.", tier: "strong", qualityWeight: 3, needsLongContext: true, budgetFeature: "guidelineCheck" },
   { id: "factCheck", label: "Đối chiếu fact với research", stage: "SCRIPT", purpose: "Check script claims against research notes and soften unsupported ones.", tier: "strong", qualityWeight: 3, needsLongContext: true, budgetFeature: "factCheck" },
   { id: "sceneQueries", label: "Mô tả hình + từ khóa theo scene", stage: "SCENE_PLAN", purpose: "Create concrete visual descriptions and search queries per scene.", tier: "fast", qualityWeight: 2, budgetFeature: "sceneQueryAssist" },
+  { id: "continuityPlan", label: "Định hướng hình ảnh liền mạch", stage: "SCENE_PLAN", purpose: "Plan recurring characters, palette, pacing and motifs for the whole video.", tier: "fast", qualityWeight: 2, budgetFeature: "continuityPlan" },
   { id: "visualAltQueries", label: "Gợi ý từ khóa khi thiếu ảnh", stage: "VISUAL_SEARCH", purpose: "Suggest alternative image queries when results are poor.", tier: "fast", qualityWeight: 1, budgetFeature: "altQueryAssist" },
   { id: "visualRerank", label: "Xếp hạng ảnh theo ngữ nghĩa", stage: "VISUAL_SEARCH", purpose: "Rerank candidates using text metadata, without vision.", tier: "fast", qualityWeight: 2, budgetFeature: "semanticImageRerank" },
   { id: "visionCheck", label: "Kiểm tra ảnh bằng vision", stage: "VISUAL_SEARCH", purpose: "Check candidate image content with a vision model.", tier: "fast", qualityWeight: 3, needsVision: true, budgetFeature: "visionCheck" },
@@ -169,6 +179,10 @@ function normalizeLlmSettings(value: unknown): unknown {
   if (legacy.script !== undefined) {
     if (tasks.script === undefined) tasks.script = legacy.script;
     if (tasks.scriptReview === undefined) tasks.scriptReview = legacy.script;
+    if (tasks.storyOutline === undefined) tasks.storyOutline = tasks.scriptReview ?? legacy.script;
+    if (tasks.scriptCritic === undefined) tasks.scriptCritic = tasks.scriptReview ?? legacy.script;
+    if (tasks.scriptRewrite === undefined) tasks.scriptRewrite = tasks.scriptReview ?? legacy.script;
+    if (tasks.scriptLengthFit === undefined) tasks.scriptLengthFit = tasks.scriptReview ?? legacy.script;
   }
   if (legacy.sceneplan !== undefined) {
     if (tasks.sceneQueries === undefined) tasks.sceneQueries = legacy.sceneplan;

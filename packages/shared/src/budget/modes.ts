@@ -9,12 +9,14 @@ export const BudgetFeaturesSchema = z.object({
   knowledgeContext: z.number().int().min(0).max(6000),
   knowledgeEmbeddings: z.boolean(),
   storyMode: z.enum(["merged", "separate"]),
+  storyEngine: z.enum(["off", "lite", "full"]).default("lite"),
   repairAttempts: z.union([z.literal(0), z.literal(1), z.literal(2)]),
   scriptReview: z.boolean(),
   scriptReviewPasses: z.union([z.literal(0), z.literal(1), z.literal(2)]),
   researchDepth: z.enum(["light", "standard", "deep"]),
   altQueryAssist: z.boolean(),
   sceneQueryAssist: z.boolean(),
+  continuityPlan: z.boolean().default(false),
   semanticImageRerank: z.boolean(),
   visionCheck: z.boolean(),
   /** Automatic re-search rounds when vision fit is below threshold (MAX / CUSTOM). */
@@ -33,6 +35,8 @@ export const BudgetFeaturesSchema = z.object({
   metadata: z.boolean(),
   /** LLM check against guideline packs after the script review; checkAndFix adds one fix pass. */
   guidelineCheck: z.enum(["off", "check", "checkAndFix"]),
+  /** TASK-148a: weekly stage-lesson distillation (operator job, not per-video cost). */
+  stageLearning: z.boolean().default(false),
   /**
    * Max low-relevance scenes that get a web image search (Brave / Gemini grounding).
    * 0 = off, 999 = all low scenes (MAX).
@@ -87,6 +91,7 @@ export function visualFeaturesFor(features: BudgetFeatures, quality: VisualQuali
     visualSearchBreadth: 32,
     altQueryAssist: true,
     sceneQueryAssist: true,
+    continuityPlan: true,
     semanticImageRerank: true,
     visionCheck: true,
     visionRetryRounds: 3,
@@ -117,12 +122,14 @@ const PRESETS: Record<Exclude<BudgetMode, "CUSTOM">, BudgetFeatures> = {
   ECO: {
     knowledgeContext: 600, knowledgeEmbeddings: false,
     storyMode: "merged",
+    storyEngine: "off",
     repairAttempts: 0,
     scriptReview: false,
     scriptReviewPasses: 0,
     researchDepth: "light",
     altQueryAssist: false,
     sceneQueryAssist: false,
+    continuityPlan: false,
     semanticImageRerank: false,
     visionCheck: false,
     visionRetryRounds: 0,
@@ -134,6 +141,7 @@ const PRESETS: Record<Exclude<BudgetMode, "CUSTOM">, BudgetFeatures> = {
     musicAssist: false,
     metadata: false,
     guidelineCheck: "off",
+    stageLearning: false,
     webImageSearch: 0,
     modelAdvisor: true,
     topicSuggest: true,
@@ -157,12 +165,14 @@ const PRESETS: Record<Exclude<BudgetMode, "CUSTOM">, BudgetFeatures> = {
   BALANCED: {
     knowledgeContext: 1500, knowledgeEmbeddings: true,
     storyMode: "separate",
+    storyEngine: "lite",
     repairAttempts: 1,
     scriptReview: true,
     scriptReviewPasses: 1,
     researchDepth: "standard",
     altQueryAssist: true,
     sceneQueryAssist: true,
+    continuityPlan: true,
     semanticImageRerank: true,
     visionCheck: false,
     visionRetryRounds: 0,
@@ -174,6 +184,7 @@ const PRESETS: Record<Exclude<BudgetMode, "CUSTOM">, BudgetFeatures> = {
     musicAssist: true,
     metadata: true,
     guidelineCheck: "check",
+    stageLearning: false,
     webImageSearch: 3,
     modelAdvisor: true,
     topicSuggest: true,
@@ -197,12 +208,14 @@ const PRESETS: Record<Exclude<BudgetMode, "CUSTOM">, BudgetFeatures> = {
   QUALITY: {
     knowledgeContext: 3000, knowledgeEmbeddings: true,
     storyMode: "separate",
+    storyEngine: "full",
     repairAttempts: 2,
     scriptReview: true,
     scriptReviewPasses: 2,
     researchDepth: "deep",
     altQueryAssist: true,
     sceneQueryAssist: true,
+    continuityPlan: true,
     semanticImageRerank: true,
     visionCheck: false,
     visionRetryRounds: 0,
@@ -214,6 +227,7 @@ const PRESETS: Record<Exclude<BudgetMode, "CUSTOM">, BudgetFeatures> = {
     musicAssist: true,
     metadata: true,
     guidelineCheck: "checkAndFix",
+    stageLearning: true,
     webImageSearch: 8,
     modelAdvisor: true,
     topicSuggest: true,
@@ -237,12 +251,14 @@ const PRESETS: Record<Exclude<BudgetMode, "CUSTOM">, BudgetFeatures> = {
   MAX: {
     knowledgeContext: 3000, knowledgeEmbeddings: true,
     storyMode: "separate",
+    storyEngine: "full",
     repairAttempts: 2,
     scriptReview: true,
     scriptReviewPasses: 2,
     researchDepth: "deep",
     altQueryAssist: true,
     sceneQueryAssist: true,
+    continuityPlan: true,
     semanticImageRerank: true,
     visionCheck: true,
     visionRetryRounds: 2,
@@ -254,6 +270,7 @@ const PRESETS: Record<Exclude<BudgetMode, "CUSTOM">, BudgetFeatures> = {
     musicAssist: true,
     metadata: true,
     guidelineCheck: "checkAndFix",
+    stageLearning: true,
     webImageSearch: 999,
     modelAdvisor: true,
     topicSuggest: true,
@@ -305,7 +322,21 @@ export function resolveBudget(
       : {}),
   };
   resolved.scriptReview = resolved.scriptReviewPasses > 0;
+  if (resolved.storyMode === "merged") {
+    resolved.storyEngine = "off";
+  }
   return BudgetFeaturesSchema.parse(resolved);
+}
+
+export function storyEngineForProject(project: {
+  settings: {
+    budget?: BudgetSettings;
+    researchMode?: "merged" | "separate" | "off";
+    userSet?: string[];
+  };
+}): "off" | "lite" | "full" {
+  if (storyModeForProject(project) === "merged") return "off";
+  return resolveBudget(project).storyEngine;
 }
 
 export function storyModeForProject(project: {
@@ -463,34 +494,44 @@ export function estimateBudget(
         : `Code ranks images; optional batched query assistance and semantic reranking use the selected budget features.${webReason}`,
   });
 
+  const storyEngineOn = storyMode !== "merged" && features.storyEngine !== "off";
+  const storyEngineMin = !storyEngineOn ? 0 : (features.storyEngine === "full" ? 4 : 3);
+  // Includes the narration writer: full = outline 2 + critic 4 + rewrite 2 + length fit 1 + writer 1; lite = 2 + 2 + 1 + 1 + 1 (repairs 0).
+  const storyEngineMax = !storyEngineOn ? 0 : (features.storyEngine === "full" ? 10 : 7);
   const scriptBaseCalls = storyMode === "merged"
     ? 0
-    : scriptDone ? 0 : 1;
-  const reviewCalls = scriptDone ? 0 : features.scriptReviewPasses;
+    : scriptDone ? 0 : (storyEngineOn ? 1 : 1);
+  const reviewCalls = scriptDone || storyEngineOn ? 0 : features.scriptReviewPasses;
   const factCheckCalls = scriptDone || !features.factCheck ? 0 : 1;
   const guidelineMin = scriptDone || features.guidelineCheck === "off" ? 0 : 1;
   // checkAndFix: check, then one fix review and one re-check when the check finds problems.
   const guidelineMax = guidelineMin && features.guidelineCheck === "checkAndFix" ? 3 : guidelineMin;
   const formatPickCalls = scriptDone || !features.formatPick || project.settings.format ? 0 : 1;
-  const scriptMin = scriptBaseCalls + reviewCalls + guidelineMin + factCheckCalls + formatPickCalls;
-  const repairableCalls = scriptBaseCalls + reviewCalls + guidelineMax + factCheckCalls;
+  const scriptMin = (scriptDone ? 0 : (storyEngineOn ? storyEngineMin : (scriptBaseCalls + reviewCalls))) + guidelineMin + factCheckCalls + formatPickCalls;
+  const repairableCalls = scriptDone ? 0 : ((storyEngineOn ? 1 : scriptBaseCalls + reviewCalls) + guidelineMax + factCheckCalls);
+  const scriptMax = (scriptDone ? 0 : (storyEngineOn ? storyEngineMax : (scriptBaseCalls + reviewCalls))) + guidelineMax + factCheckCalls + formatPickCalls + repairableCalls * repairs;
   perStage.push({
     stage: "SCRIPT",
-    calls: { min: scriptMin, max: scriptMin + (guidelineMax - guidelineMin) + repairableCalls * repairs },
+    calls: { min: scriptMin, max: scriptMax },
     reason: scriptDone
       ? "Script is already complete and unchanged."
-      : features.scriptReview
-        ? scriptBaseCalls
-          ? `Script generation plus ${reviewCalls} review-and-revise call(s)${factCheckCalls ? " and a fact-check pass" : ""}.`
-          : `${reviewCalls} review-and-revise call(s)${factCheckCalls ? " and a fact-check pass" : ""}.`
-        : scriptBaseCalls ? "Script is generated from the research notes." : "The merged RESEARCH call already produced the script.",
+      : storyEngineOn
+        ? features.storyEngine === "full"
+          ? "Story engine: outline, hook assessment, narration, critic, targeted rewrites, and length fit."
+          : "Story engine (lite): outline, narration, critic, and up to one targeted rewrite."
+        : features.scriptReview
+          ? scriptBaseCalls
+            ? `Script generation plus ${reviewCalls} review-and-revise call(s)${factCheckCalls ? " and a fact-check pass" : ""}.`
+            : `${reviewCalls} review-and-revise call(s)${factCheckCalls ? " and a fact-check pass" : ""}.`
+          : scriptBaseCalls ? "Script is generated from the research notes." : "The merged RESEARCH call already produced the script.",
   });
 
   const scenePlanDone = stateFor("SCENE_PLAN") === "DONE";
   const sceneAssistCalls = !scenePlanDone && features.sceneQueryAssist ? 1 : 0;
+  const continuityCalls = !scenePlanDone && features.continuityPlan ? 1 : 0;
   perStage.push({
     stage: "SCENE_PLAN",
-    calls: { min: sceneAssistCalls, max: sceneAssistCalls },
+    calls: { min: sceneAssistCalls + continuityCalls, max: sceneAssistCalls + 2 * continuityCalls },
     reason: scenePlanDone
       ? "Scene plan is already complete and unchanged."
       : sceneAssistCalls
@@ -547,11 +588,6 @@ export function estimateBudget(
     });
   }
 
-  const total = perStage.reduce((result, item) => ({
-    min: result.min + item.calls.min,
-    max: result.max + item.calls.max,
-  }), { min: 0, max: 0 });
-
   const providers = typeof provider === "string" ? [provider] : provider ?? [];
   const routes = isRouteMap(provider) ? provider : undefined;
   const providerIds = Array.isArray(provider) ? provider : typeof provider === "string" ? [provider] : Object.values(routes ?? {}).flatMap((route) => route?.provider ? [route.provider] : []);
@@ -560,9 +596,27 @@ export function estimateBudget(
     research: { min: researchCalls, max: researchCalls * (1 + repairs) },
     script: { min: scriptBaseCalls, max: scriptBaseCalls * (1 + repairs) },
     scriptReview: { min: reviewCalls, max: reviewCalls * (1 + repairs) },
+    storyOutline: {
+      min: scriptDone || !storyEngineOn ? 0 : 1,
+      // First call, its schema retries (repairs), and one semantic repair call with repairAttempts 0 (TASK-145 P2).
+      max: scriptDone || !storyEngineOn ? 0 : 2 + repairs,
+    },
+    scriptCritic: {
+      min: scriptDone || !storyEngineOn ? 0 : (features.storyEngine === "full" ? 2 : 1),
+      max: scriptDone || !storyEngineOn ? 0 : ((features.storyEngine === "full" ? 4 : 2) + repairs),
+    },
+    scriptRewrite: {
+      min: 0,
+      max: scriptDone || !storyEngineOn ? 0 : ((features.storyEngine === "full" ? 2 : 1) + repairs),
+    },
+    scriptLengthFit: {
+      min: 0,
+      max: scriptDone || !storyEngineOn ? 0 : (1 + repairs),
+    },
     factCheck: { min: factCheckCalls, max: factCheckCalls * (1 + repairs) },
     guidelineCheck: { min: guidelineMin, max: guidelineMax * (1 + repairs) },
     sceneQueries: { min: sceneAssistCalls, max: sceneAssistCalls },
+    continuityPlan: { min: continuityCalls, max: 2 * continuityCalls },
     visualAltQueries: { min: 0, max: visualAssistMax },
     visualRerank: { min: rerankCalls, max: rerankCalls },
     visionCheck: {
@@ -585,8 +639,10 @@ export function estimateBudget(
   };
   for (const stage of perStage) {
     const taskIds = stage.stage === "RESEARCH" ? ["research", "stageTimeouts"]
-      : stage.stage === "SCRIPT" ? ["script", "scriptReview", "factCheck", "guidelineCheck", "formatPick"]
-        : stage.stage === "SCENE_PLAN" ? ["sceneQueries"]
+      : stage.stage === "SCRIPT" ? (storyEngineOn
+          ? ["storyOutline", "scriptCritic", "script", "scriptRewrite", "scriptLengthFit", "factCheck", "guidelineCheck", "formatPick"]
+          : ["script", "scriptReview", "factCheck", "guidelineCheck", "formatPick"])
+        : stage.stage === "SCENE_PLAN" ? ["sceneQueries", "continuityPlan"]
           : stage.stage === "MUSIC_SEARCH" ? ["musicAssist"]
             : stage.stage === "TIMELINE" ? ["metadata", "editPlan"]
               : stage.stage === "RENDER" ? ["renderVision", "thumbnailPick"]
@@ -600,7 +656,16 @@ export function estimateBudget(
         calls: taskCalls[task] ?? { min: 0, max: 0 },
       };
     });
+    // TASK-141: story-engine calls hard-code repairAttempts: 1 and can each retry, so the SCRIPT stage
+    // max is the sum of its task maxes (BALANCED 15, QUALITY 30), not the single storyEngineMax constant.
+    if (stage.stage === "SCRIPT" && storyEngineOn) {
+      stage.calls = { min: stage.calls.min, max: stage.tasks.reduce((sum, item) => sum + item.calls.max, 0) };
+    }
   }
+  const total = perStage.reduce((result, item) => ({
+    min: result.min + item.calls.min,
+    max: result.max + item.calls.max,
+  }), { min: 0, max: 0 });
   const tokens = providerIds.length > 0 && !requestsOnly
     ? estimateBudgetTokens(project, perStage, storyMode, features, sceneCount, imagesPerCall)
     : undefined;
@@ -654,8 +719,8 @@ function estimateBudgetTokens(
       .reduce((total, item) => total + item.calls.max, 0);
 
   const researchCalls = maxCalls("research");
-  const scriptCalls = maxCalls("script") + maxCalls("scriptReview") + maxCalls("factCheck") + maxCalls("guidelineCheck");
-  const scenePlanCalls = maxCalls("sceneQueries");
+  const scriptCalls = maxCalls("script") + maxCalls("scriptReview") + maxCalls("storyOutline") + maxCalls("scriptCritic") + maxCalls("scriptRewrite") + maxCalls("scriptLengthFit") + maxCalls("factCheck") + maxCalls("guidelineCheck");
+  const scenePlanCalls = maxCalls("sceneQueries") + maxCalls("continuityPlan");
   const metadataCalls = maxCalls("metadata");
   const visualAltCalls = maxCalls("visualAltQueries");
   const visualRerankCalls = maxCalls("visualRerank");

@@ -17,7 +17,10 @@ describe("stage executor settings", () => {
   it("rejects unknown modes/stages and unbounded wait times", () => {
     expect(StageExecutionSettingsSchema.safeParse({ UNKNOWN: "app" }).success).toBe(false);
     expect(StageExecutionSettingsSchema.safeParse({ SCRIPT: "AGENT" }).success).toBe(false);
-    expect(StageExecutionSettingsSchema.safeParse({ SCRIPT: "agent" }).success).toBe(false);
+    expect(StageExecutionSettingsSchema.safeParse({ SUBTITLE: "agent" }).success).toBe(false);
+    expect(StageExecutionSettingsSchema.safeParse({ SCRIPT: "agent" }).success).toBe(true);
+    expect(StageExecutionSettingsSchema.safeParse({ RESEARCH: "agent" }).success).toBe(true);
+    expect(StageExecutionSettingsSchema.safeParse({ MUSIC_SEARCH: "app_then_agent" }).success).toBe(true);
     expect(StageExecutionSettingsSchema.safeParse({ SCRIPT: "app", VISUAL_SEARCH: "agent" }).success).toBe(true);
     for (const wait of [0, -1, 1.5, 1441, Infinity]) expect(AgentWaitMinutesSchema.safeParse(wait).success).toBe(false);
   });

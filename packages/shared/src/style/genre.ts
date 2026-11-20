@@ -12,7 +12,7 @@ import { StyleTokensPatchSchema, type StyleTokensPatch } from "./tokens.js";
  * The director reads `genreDirectives(pack)` and never compares genre or recipe ids itself.
  */
 
-export const GENRE_SHOT_KINDS = ["still", "footage", "kinetic_text", "chart", "map", "compare", "quote_full", "list_full"] as const;
+export const GENRE_SHOT_KINDS = ["still", "footage", "kinetic_text", "chart", "map", "compare", "quote_full", "list_full", "diagram", "timeline"] as const;
 
 const KindRuleSchema = z.object({
   /** The director may use this kind when the narration calls for it. */
@@ -61,7 +61,7 @@ const NO_MAP = { map: { enabled: false }, list_full: { enabled: false } };
 
 function wrap(ref: FormatRecipeId, director: GenrePackInput["director"], style: StyleTokensPatch = {}): GenrePackInput {
   const recipe = FORMAT_RECIPES[ref];
-  return { schema: 1, id: ref, nameVi: recipe.nameVi, descriptionVi: recipe.descriptionVi, recipe: { ref }, director, style };
+  return { schema: 1, id: ref, nameVi: recipe.nameVi, descriptionVi: recipe.descriptionVi, recipe: { ref }, director: { ...director, kinds: { diagram: { enabled: false }, timeline: { enabled: false }, ...director.kinds } }, style };
 }
 
 /**
@@ -70,12 +70,12 @@ function wrap(ref: FormatRecipeId, director: GenrePackInput["director"], style: 
  * The packs after them show a new genre added as data only; `top_facts` has no director code of its own.
  */
 const BUILTIN: GenrePackInput[] = [
-  wrap("explainer", { kinds: { list_full: { enabled: false } } }),
+  wrap("explainer", { kinds: { list_full: { enabled: false }, diagram: { enabled: true } } }),
   wrap("listicle", { opening: "list_after_first", kinds: { map: { enabled: false } } }),
   wrap("story", { kinds: NO_MAP }),
-  wrap("news_recap", { kinds: { list_full: { enabled: false } } }),
+  wrap("news_recap", { kinds: { list_full: { enabled: false }, timeline: { enabled: true } } }),
   wrap("myth_vs_fact", { compareFallback: true, kinds: { ...NO_MAP, compare: { force: true } } }),
-  wrap("how_to", { kinds: { map: { enabled: false } } }),
+  wrap("how_to", { kinds: { map: { enabled: false }, diagram: { enabled: true } } }),
   wrap("short_hook", { opening: "hook_every", kinds: NO_MAP }),
   {
     schema: 1,
@@ -84,7 +84,7 @@ const BUILTIN: GenrePackInput[] = [
     descriptionVi: "Kể một sự kiện lịch sử: bối cảnh, diễn biến, bước ngoặt và di sản. Có bản đồ và trích dẫn.",
     recipe: { ref: "story" },
     director: {
-      kinds: { list_full: { enabled: false } },
+      kinds: { list_full: { enabled: false }, timeline: { enabled: true }, diagram: { enabled: false } },
       llmNotes: ["Prefer a map when the scene names where the event happened, and a quote when a historical figure is cited."],
     },
     pacing: { preset: "story", paceScale: 1.1 },
@@ -135,7 +135,7 @@ const BUILTIN: GenrePackInput[] = [
 ];
 
 export const GENRE_PACKS: Record<string, GenrePack> = Object.fromEntries(
-  BUILTIN.map((pack) => [pack.id, GenrePackSchema.parse(pack)]),
+  BUILTIN.map((pack) => [pack.id, GenrePackSchema.parse({ ...pack, director: { ...pack.director, kinds: { diagram: { enabled: false }, timeline: { enabled: false }, ...pack.director.kinds } } })]),
 );
 
 /** A pack by id: user packs first, then the built-in ones. */

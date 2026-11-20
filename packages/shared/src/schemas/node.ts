@@ -4,8 +4,8 @@ import { ArtifactRefSchema, RenderBundleSchema } from "./renderBundle.js";
 export const NodeStatusSchema = z.enum(["online", "offline", "draining", "revoked", "version_mismatch"]);
 export type NodeStatus = z.infer<typeof NodeStatusSchema>;
 
-/** `render`, `media_fetch`, or `tts:<provider id>` (for example `tts:piper`, `tts:vieneu`, `tts:google`). */
-export const NodeCapabilitySchema = z.string().regex(/^(render|media_fetch|tts:[a-z0-9][a-z0-9_-]{1,29})$/);
+/** A worker can report whole-project support, local tools and configured providers. */
+export const NodeCapabilitySchema = z.string().regex(/^(render|media_fetch|project|ffmpeg|gpu|(borrow:)?(tts|llm|search):[a-z0-9][a-z0-9_-]{1,29})$/);
 export type NodeCapability = z.infer<typeof NodeCapabilitySchema>;
 /** Capability -> tool version (for example `tts:piper` -> `1.2.0`). Informational: shown on the Nodes page. */
 export const NodeCapabilityInfoSchema = z.record(z.string().max(40), z.string().max(60));
@@ -44,6 +44,8 @@ export const NodeProbeSchema = z.object({
     checkedAt: z.string().max(40),
     ms: z.number().int().nonnegative().optional(),
   }).strict(),
+  /** TASK-136: "relay" when this machine reached the server's LLM relay with its own token. */
+  llm: z.literal("relay").optional(),
 }).strict();
 export type NodeProbe = z.infer<typeof NodeProbeSchema>;
 
@@ -75,7 +77,7 @@ export const JoinRequestSchema = z.object({
   joinToken: z.string().min(8).max(200),
   name: z.string().trim().min(1).max(80),
   version: z.string().max(40),
-  capabilities: z.array(NodeCapabilitySchema).max(24),
+  capabilities: z.array(NodeCapabilitySchema).max(64),
   capabilityInfo: NodeCapabilityInfoSchema.optional(),
   resources: NodeResourcesSchema,
   probe: NodeProbeSchema.optional(),
@@ -88,7 +90,7 @@ export const JoinResponseSchema = z.object({
 
 export const HeartbeatRequestSchema = z.object({
   version: z.string().max(40),
-  capabilities: z.array(NodeCapabilitySchema).max(24),
+  capabilities: z.array(NodeCapabilitySchema).max(64),
   capabilityInfo: NodeCapabilityInfoSchema.optional(),
   resources: NodeResourcesSchema,
   probe: NodeProbeSchema.optional(),
@@ -98,11 +100,13 @@ export const HeartbeatRequestSchema = z.object({
     progress: z.number().min(0).max(100),
     message: z.string().max(300).optional(),
   }).strict()).max(16),
+  projectRuns: z.array(z.object({ runId: z.string().uuid(), leaseId: z.string().uuid() }).strict()).max(8).optional(),
 }).strict();
 export const HeartbeatResponseSchema = z.object({
   desiredConfig: NodeDesiredConfigSchema,
   targetVersion: z.string().nullable(),
   cancel: z.array(z.string()),
+  cancelRuns: z.array(z.string()).optional(),
 }).strict();
 
 /** `publicKey`: the node's X25519 public key (base64 DER), fresh per request and kept in memory, so a lease secret can be sealed for it. */
@@ -178,15 +182,42 @@ export const LeaseResponseSchema = z.object({
   leaseUntil: z.string(),
   stage: RemoteStageSchema.default("RENDER"),
   bundle: z.union([RenderBundleSchema, TtsBundleSchema, MediaBundleSchema]),
-  manifest: z.array(ArtifactRefSchema),
+  manifest: z.array(ArtifactRefSchema.extend({
+    artifactUrls: z.object({ preferredUrl: z.string().url().optional(), fallbackUrl: z.string().startsWith("/api/nodes/agent/artifacts/") }).strict().optional(),
+  })),
   secret: SealedSecretSchema.optional(),
+  storageUpload: z.literal(true).optional(),
 }).strict();
 export type LeaseResponse = z.infer<typeof LeaseResponseSchema>;
 
+export const NodeUploadTargetRequestSchema = z.object({
+  leaseId: z.string(),
+  name: z.string().min(1).max(160),
+  sha256: z.string().regex(/^[0-9a-f]{64}$/),
+  size: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),
+}).strict();
+export const NodeUploadTargetSchema = z.object({
+  url: z.string().url(),
+  headers: z.object({ "content-length": z.string(), "x-amz-checksum-sha256": z.string().optional() }).strict(),
+}).strict();
+const CompletedOutputSchema = z.object({ name: z.string(), sha256: z.string().regex(/^[0-9a-f]{64}$/) }).strict();
+export const StorageTransferStatSchema = z.object({
+  route: z.enum(["direct", "control"]),
+  bytes: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER),
+  ms: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER),
+  count: z.number().int().min(1).max(10_000),
+  error: z.literal("DIRECT_TRANSFER_FAILED").optional(),
+}).strict();
+export type StorageTransferStat = z.infer<typeof StorageTransferStatSchema>;
 export const CompleteRequestSchema = z.object({
   leaseId: z.string(),
-  outputs: z.array(z.object({ name: z.string(), sha256: z.string().regex(/^[0-9a-f]{64}$/) }).strict()).max(500),
+  outputs: z.array(z.union([
+    CompletedOutputSchema,
+    CompletedOutputSchema.extend({ provider: z.literal("s3"), size: NodeUploadTargetRequestSchema.shape.size }),
+  ])).max(500),
+  storageTransfers: z.array(StorageTransferStatSchema).max(3).optional(),
 }).strict();
+export type NodeCompleteRequest = z.infer<typeof CompleteRequestSchema>;
 export const FailRequestSchema = z.object({
   leaseId: z.string(),
   code: z.string().max(60),

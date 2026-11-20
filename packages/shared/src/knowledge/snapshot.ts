@@ -12,7 +12,7 @@ import creator_tactic from "./snapshot/creator_tactic.json" with { type: "json" 
 
 const files: Record<KnowledgeKind, unknown[]> = {
   guideline_pack, market, monetization_program, platform_capability, api_contract,
-  provider_terms, law, account_policy, dependency, creator_tactic,
+  provider_terms, law, account_policy, dependency, creator_tactic, source_note: [],
 };
 
 export const KNOWLEDGE_SNAPSHOT = Object.entries(files).flatMap(([kind, rows]) =>

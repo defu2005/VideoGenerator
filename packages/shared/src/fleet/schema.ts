@@ -20,10 +20,11 @@ export const FleetCronSchema = z.object({
   name: z.string().regex(/^[a-z0-9-]+$/), schedule: z.string().min(1).max(60),
   prompt: z.string().min(1).max(300), skill: z.string().regex(/^[a-z0-9-]+$/), command: z.string().max(600),
 }).strict();
+// TASK-136: the model endpoint is always the control server's LLM relay and the key is the machine's own VG_API_KEY; no model key on the agent machine.
 // The sync agent accepts only the hub-owned configuration surface, never arbitrary YAML keys.
 export const FleetConfigPatchSchema = z.object({
-  model: z.object({ provider: z.string().max(60), default: z.string().max(160), base_url: z.string().url() }).strict(),
-  providers: z.record(z.string().regex(/^[a-zA-Z0-9_-]{1,60}$/), z.object({ api: z.string().url(), api_mode: z.literal("chat_completions"), api_key: z.literal("${VG_HERMES_MODEL_KEY}") }).strict()),
+  model: z.object({ provider: z.string().max(60), default: z.string().max(160), base_url: z.literal("${VG_API_URL}/api/llm/relay/v1") }).strict(),
+  providers: z.record(z.string().regex(/^[a-zA-Z0-9_-]{1,60}$/), z.object({ api: z.literal("${VG_API_URL}/api/llm/relay/v1"), api_mode: z.literal("chat_completions"), api_key: z.literal("${VG_API_KEY}") }).strict()),
   mcp_servers: z.object({ "video-agent": z.object({ url: z.literal("${VG_MCP_URL}"), headers: z.object({ Authorization: z.literal("Bearer ${VG_API_KEY}") }).strict() }).strict() }).strict(),
   skills: z.object({ external_dirs: z.array(z.literal("/opt/data/vg-skills")).length(1) }).strict(),
   memory: z.object({ memory_enabled: z.boolean() }).strict(),

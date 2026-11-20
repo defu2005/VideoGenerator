@@ -38,7 +38,7 @@ describe("a new genre is data", () => {
     expect(d.genreId).toBe("top_facts");
     expect(d.listOpening).toBe(true);
     expect(d.compareFallback).toBe(true);
-    expect(d.disabledKinds).toEqual([]);
+    expect(d.disabledKinds).toEqual(["diagram", "timeline"]);
     expect(GenrePackSchema.parse({ ...GENRE_PACKS.top_facts, director: { ...GENRE_PACKS.top_facts!.director, compareFallback: undefined } }).director.compareFallback).toBe(false);
   });
 
@@ -46,7 +46,7 @@ describe("a new genre is data", () => {
     const history = genrePack("history")!;
     expect(genreRecipe(history)).toBe(FORMAT_RECIPES.story);
     const d = genreDirectives(history);
-    expect(d.disabledKinds).toEqual(["list_full"]);
+    expect(d.disabledKinds).toEqual(["list_full", "diagram"]);
     expect(d.pacing).toEqual({ preset: "story", paceScale: 1.1 });
     expect(d.llmNotes).toHaveLength(1);
     expect(layeredTokens({ genre: history.style }).motion.ease).toBe("gentle");

@@ -42,6 +42,7 @@ export const KNOWLEDGE_VALUES = {
     provider: name, availability: z.boolean().nullable().optional(), licence: nullableText.optional(),
     attribution: nullableText.optional(), caching: nullableText.optional(), price: z.json().optional(),
   }),
+  source_note: z.object({ site: z.string().toLowerCase().regex(/^[a-z0-9-]+(?:\.[a-z0-9-]+)+$/).max(253), summary: z.string().trim().min(1).max(600) }).strict(),
   law: z.looseObject({ country: market, scope: name, requires: name }),
   account_policy: z.looseObject({ platform, name, signal: name, coverage: z.enum(["api", "partial", "manual"]), verification: name }),
   dependency: z.looseObject({ name, version: nullableText.optional(), availability: z.boolean().nullable().optional() }),

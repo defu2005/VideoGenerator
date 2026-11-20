@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { ContinuityEnvelopeSchema } from "./continuity.js";
 
 export const SceneEnergySchema = z.enum(["low", "medium", "high"]);
 export const SceneKindSchema = z.enum(["hook", "section", "outro"]);
@@ -11,6 +12,7 @@ export const VisualQueriesSchema = z.object({
 
 export const StoredVisualQueriesSchema = VisualQueriesSchema.extend({
   queryVariant: z.boolean().default(false),
+  continuity: ContinuityEnvelopeSchema.optional(),
 });
 
 export const SceneSchema = z.object({
@@ -65,6 +67,7 @@ export const ScenePatchSchema = z.object({
 export type ScenePatch = z.infer<typeof ScenePatchSchema>;
 
 export const ScenePlanSummarySchema = z.object({
+  continuity: ContinuityEnvelopeSchema.optional(),
   scenes: z.array(SceneSchema),
   totalSec: z.number().nonnegative(),
   targetSec: z.number().positive(),

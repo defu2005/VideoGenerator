@@ -29,6 +29,10 @@ describe("LLM routing schemas", () => {
       tasks: {
         research: { provider: "anthropic", model: "research-model" },
         script: { provider: "gemini", model: "explicit-script-model" },
+        storyOutline: { provider: "openai", model: "script-model" },
+        scriptCritic: { provider: "openai", model: "script-model" },
+        scriptRewrite: { provider: "openai", model: "script-model" },
+        scriptLengthFit: { provider: "openai", model: "script-model" },
         scriptReview: { provider: "openai", model: "script-model" },
         sceneQueries: { provider: "ollama", model: "scene-model" },
         visualAltQueries: { provider: "ollama", model: "scene-model" },
@@ -47,7 +51,7 @@ describe("LLM routing schemas", () => {
   });
 
   it("catalogs the task tiers and budget feature controls", () => {
-    expect(LLM_TASKS).toHaveLength(37);
+    expect(LLM_TASKS).toHaveLength(42);
     expect(LLM_TASKS.find(task => task.id === "knowledgeWatch")).toMatchObject({ stage: "KNOWLEDGE", tier: "fast", qualityWeight: 1, budgetFeature: "providerIntelExtract" });
     expect(LLM_TASKS.find((task) => task.id === "research")).toMatchObject({ stage: "RESEARCH", tier: "strong", qualityWeight: 3 });
     expect(LLM_TASKS.find((task) => task.id === "sceneQueries")).toMatchObject({

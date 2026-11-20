@@ -36,6 +36,8 @@ export const OperatorSettingsSchema = z.object({
   /** Unset means: operator when the kill switch is off, assistant when it is on. */
   telegramEngine: OperatorTelegramEngineSchema.optional(),
   snapshotMaxChars: z.number().int().min(400).max(50_000).default(6000),
+  /** TASK-074b-3a: record routing hits on skills that have a shadow version. Off by default; a shadow never runs. */
+  shadowEnabled: z.boolean().default(false),
 }).strict();
 export type OperatorSettings = z.infer<typeof OperatorSettingsSchema>;
 
@@ -58,6 +60,7 @@ export const OperatorSettingsUpdateSchema = z.object({
   runTimeoutMs: z.number().int().min(1000).max(3_600_000).optional(),
   telegramEngine: OperatorTelegramEngineSchema.nullable().optional(),
   snapshotMaxChars: z.number().int().min(400).max(50_000).optional(),
+  shadowEnabled: z.boolean().optional(),
 }).strict();
 export type OperatorSettingsUpdate = z.infer<typeof OperatorSettingsUpdateSchema>;
 

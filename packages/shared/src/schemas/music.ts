@@ -2,7 +2,7 @@ import { z } from "zod";
 import { MusicAssistOutputSchema } from "./metadata.js";
 import { LicenseMetadataSchema } from "./visual.js";
 
-export const MusicProviderSchema = z.enum(["openverse", "local", "upload", "mock"]);
+export const MusicProviderSchema = z.enum(["openverse", "local", "upload", "mock", "agent"]);
 export type MusicProvider = z.infer<typeof MusicProviderSchema>;
 
 export const MusicCandidateSchema = z.object({

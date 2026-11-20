@@ -91,6 +91,20 @@ const OWN = { origin: "own" as const };
 
 /** Manifests of the templates in the repo. All six read tokens-v1. */
 export const TEMPLATE_MANIFESTS: Record<string, TemplateManifest> = {
+  diagram: {
+    id: "diagram", kind: "diagram", version: 1, contract: "tokens-v1",
+    axes: [
+      { id: "layout", role: "layout", values: [{ id: "flow" }, { id: "cycle" }, { id: "hub" }], signature: false, shared: false, sourceField: "layout" },
+      ENTRANCE_AXIS, BACKGROUND_AXIS,
+    ], attribution: OWN,
+  },
+  timeline: {
+    id: "timeline", kind: "timeline", version: 1, contract: "tokens-v1",
+    axes: [
+      { id: "marker", role: "composition", values: [{ id: "solid" }, { id: "ring" }], signature: false, shared: false },
+      ENTRANCE_AXIS, BACKGROUND_AXIS,
+    ], attribution: OWN,
+  },
   kinetic_text: {
     id: "kinetic_text",
     kind: "kinetic_text",

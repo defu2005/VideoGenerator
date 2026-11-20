@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { findContrastWord } from "./numbers.js";
 import { getLangPack } from "./lang/index.js";
+import { DiagramSourceSchema, TimelineSourceSchema, structuredGraphicTimes } from "./structuredGraphic.js";
 
 /** Same window as schema.ts MIN/MAX_GRAPHIC_SHOT_SEC. Kept here to avoid a cycle. */
 const KINETIC_MIN_SEC = 1.5;
@@ -119,14 +120,14 @@ export const ListSourceSchema = z.object({
   settle: z.boolean().optional(),
 }).strict();
 
-export const GRAPHIC_KINDS = ["kinetic_text", "chart", "map", "compare", "quote_full", "list_full"] as const;
+export const GRAPHIC_KINDS = ["kinetic_text", "chart", "map", "compare", "quote_full", "list_full", "diagram", "timeline"] as const;
 export type GraphicKind = (typeof GRAPHIC_KINDS)[number];
 
 export function isGraphicKind(kind: string): kind is GraphicKind {
   return (GRAPHIC_KINDS as readonly string[]).includes(kind);
 }
 
-type BoundsSource = { kind?: string; reveal?: string; items?: unknown[] };
+type BoundsSource = { kind?: string; reveal?: string; items?: unknown[]; nodes?: unknown[]; events?: unknown[] };
 
 export function graphicDurationBounds(kind: string, source?: BoundsSource): { min: number; max: number } | null {
   if (kind === "kinetic_text" || kind === "chart") return { min: KINETIC_MIN_SEC, max: KINETIC_MAX_SEC };
@@ -137,6 +138,10 @@ export function graphicDurationBounds(kind: string, source?: BoundsSource): { mi
     const count = Array.isArray(source?.items) ? source.items.length : 3;
     return { min: 0.8 * Math.max(3, count) + 0.8, max: 12 };
   }
+  if (kind === "diagram" || kind === "timeline") {
+    const count = kind === "diagram" ? source?.nodes?.length ?? 3 : source?.events?.length ?? 3;
+    return { min: Math.max(3.2, count * 0.65 + 1), max: 16 };
+  }
   return null;
 }
 
@@ -145,6 +150,8 @@ const graphicSchemas = {
   compare: CompareSourceSchema,
   quote_full: QuoteSourceSchema,
   list_full: ListSourceSchema,
+  diagram: DiagramSourceSchema,
+  timeline: TimelineSourceSchema,
 } as const;
 
 function asRecord(raw: unknown): Record<string, unknown> | null {
@@ -153,7 +160,7 @@ function asRecord(raw: unknown): Record<string, unknown> | null {
 }
 
 /** Null means the payload cannot be shown. The seventh list item is dropped, not rejected. */
-export function fitGraphicPayload(kind: string, raw: unknown): z.infer<typeof MapSourceSchema> | z.infer<typeof CompareSourceSchema> | z.infer<typeof QuoteSourceSchema> | z.infer<typeof ListSourceSchema> | null {
+export function fitGraphicPayload(kind: string, raw: unknown): z.infer<(typeof graphicSchemas)[keyof typeof graphicSchemas]> | null {
   const schema = graphicSchemas[kind as keyof typeof graphicSchemas];
   if (!schema) return null;
   const record = asRecord(raw) ?? {};
@@ -186,6 +193,13 @@ export function applyGraphicTiming<T extends { kind: string }>(
   durationSec: number,
   language: string,
 ): T & { rightAt?: number; wordTimes?: number[]; itemTimes?: number[] } {
+  if (source.kind === "diagram" || source.kind === "timeline") {
+    const current = source as T & { nodes?: Array<{ label: string }>; events?: Array<{ date: string }>; itemTimes?: number[] };
+    const labels = source.kind === "diagram" ? current.nodes?.map((node) => node.label) : current.events?.map((event) => event.date);
+    // Timings are facts from voice words, never model-provided timestamps.
+    const itemTimes = labels ? structuredGraphicTimes(labels, words, shotStart, durationSec) : null;
+    return { ...source, itemTimes: itemTimes ?? undefined };
+  }
   if (source.kind === "compare") {
     const current = source as T & { rightAt?: number };
     if (current.rightAt != null && Number.isFinite(current.rightAt)) return source;
@@ -262,5 +276,10 @@ export function shotVariantParams<K extends string>(shot: { id: string; kind: K;
     params.title = typeof source.title === "string" && source.title.length > 0;
     params.items = Array.isArray(source.items) ? source.items.length : 0;
   }
+  if (source.kind === "diagram") {
+    params.layout = typeof source.layout === "string" ? source.layout : "flow";
+    params.nodes = Array.isArray(source.nodes) ? source.nodes.length : 0;
+  }
+  if (source.kind === "timeline") params.events = Array.isArray(source.events) ? source.events.length : 0;
   return { shotId: shot.id, kind: shot.kind, params };
 }
