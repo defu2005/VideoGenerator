@@ -121,6 +121,19 @@ describe("worker timer calls wake() on each tick, guarded per step", () => {
     expect(agent).toHaveBeenCalledTimes(2);
     expect(wake).toHaveBeenCalledTimes(2);
   });
+
+  it("wakes the worker on the same tick when the remote sweep throws, and keeps ticking", async () => {
+    const sweep = vi.fn();
+    h.worker.setSweep(sweep);
+    const wake = await startWithWakeSpy();
+    const remote = vi.spyOn(h.worker as unknown as { sweepRemote: () => void }, "sweepRemote")
+      .mockImplementationOnce(() => { throw new Error("boom"); });
+    vi.advanceTimersByTime(10_000);
+    expect(remote).toHaveBeenCalledTimes(1);
+    expect(wake).toHaveBeenCalledTimes(1);
+    vi.advanceTimersByTime(10_000);
+    expect(sweep).toHaveBeenCalledTimes(2);
+  });
 });
 
 // TASK-129a: the worker tick must escalate an unanswered question to the duty holder after 15 min.

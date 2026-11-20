@@ -15,26 +15,31 @@ Limitation 1 của TASK-155: `wake()` có guard riêng nhưng không có test. L
 1. "wakes the worker on the same tick when the node sweep throws": node sweep ném một lần, `wake` vẫn được gọi trên tick đó.
 2. "keeps the timer running when wake() throws once": `wake` ném một lần, tick sau vẫn chạy node sweep (2 lần) và `wake` (2 lần).
 3. "wakes the worker on the same tick when the agent-stage sweep throws, and keeps ticking": agent-stage ném một lần, node sweep và `wake` vẫn chạy trên tick đó, và agent-stage vẫn được gọi ở tick sau (đóng limitation 2 của TASK-155).
+4. "wakes the worker on the same tick when the remote sweep throws, and keeps ticking": `sweepRemote` ném một lần, `wake` vẫn được gọi trên tick đó, và node sweep chạy ở tick sau.
 
 ## Mutant (áp lên bản sao của `worker.ts`, rồi khôi phục và `cmp`)
 
 | Mutant | Thay đổi | Kết quả |
 |---|---|---|
-| merge | gộp lại thành một `try` như bản gốc | đỏ 5: hai test wake, và các test overdue/agent từ TASK-154/155 |
+| merge | gộp lại thành một `try` như bản gốc | đỏ 5: ba test của TASK-155 (A: agent-stage chạy khi node ném lỗi; B và C: đánh dấu quá hạn khi node hoặc agent-stage ném lỗi) và hai test wake (1 và 3) |
 | nowaketry | bỏ `try` riêng của `wake()` | đỏ 1: "keeps the timer running when wake() throws once" |
+| foldwake | chuyển `wake()` vào `try` của `sweepRemote` | đỏ 1: test 4 |
+| rethrowremote | catch của `sweepRemote` ném lại lỗi | đỏ 1: test 4 |
 
-Cả hai đều khôi phục `worker.ts` và `cmp`-identical với bản sao sau TASK-155.
+Cả bốn đều khôi phục `worker.ts` và `cmp`-identical với bản sao sau TASK-155.
 
 ## Kết quả
 
-- Hai file timer: 14/14 xanh.
-- Sáu file hồi quy: `workerSweepTick`, `workerSweepRemote`, `workerOverdue`, `workerWatchdogWiring`, `overdueRun`, `agentStage`: 56/56 xanh, exit 0.
+- Hai file timer: 15/15 xanh.
+- Sáu file hồi quy: `workerSweepTick`, `workerSweepRemote`, `workerOverdue`, `workerWatchdogWiring`, `overdueRun`, `agentStage`: 57/57 xanh, exit 0.
 - `npx tsc --noEmit`: exit 0.
+- Mã hóa dòng: `workerSweepTick.test.ts` và `worker.ts` đều CRLF thuần (không có LF trơ); `workerSweepRemote.test.ts` đều LF.
 
 ## Giới hạn còn lại
 
 1. Lỗi vẫn được mô phỏng bằng `throw` trong stub. Không có lỗi DB thật.
 2. Fake timers; không kiểm độ trễ thật.
+3. Lỗi `wake()` vẫn được kiểm bằng `vi.spyOn` trên method private, nên test không kiểm đường gọi thật của `wake()` (đã được kiểm ở `workerWatchdogWiring.test.ts` và các test có sẵn).
 
 ## Không làm (theo ràng buộc)
 

@@ -100,11 +100,12 @@ Một dòng. Đã quyết định: có trong commit (advisor 2026-11-21). Messag
 | Đường dẫn | Lý do | Việc cần làm |
 |---|---|---|
 | `apps/server/test/storageProvider.test.ts` (??) | Dòng 15 có chuỗi dạng AWS access key ID (`AKIA` + 16 ký tự) trong literal `accessKeyId`. Không khớp mẫu `EXAMPLE`, không có `TEST`/`FAKE`, không lặp ký tự. Kiểm tra bổ sung (chỉ đếm): 2 dòng có chuỗi 40 ký tự dạng bí mật; chuỗi `AKIA` không xuất hiện trong `.env` (đếm 0). Vì số dòng 40 ký tự khác 0, không hạ xuống "fixture" được. | Advisor quyết định 2026-11-21: file này giữ ngoài commit. Đã thử thay literal bằng script: test đỏ (regex cũng thay một phần giá trị kỳ vọng của test known-answer). Đã khôi phục từ bản sao, `cmp` giống hệt. Việc thay literal không nằm trong commit này. |
-> **Đính chính 2026-11-21 (advisor):** trong dòng trên, chuỗi cuối dòng 15 kết thúc bằng `EXAMPLE` và dòng 16 kết thúc bằng `EXAMPLEKEY`, không phải mẫu bí mật thật; không chuỗi nào có trong `.env*`. Theo đó file được commit nguyên bản, riêng một commit cục bộ (`test(storage): …`), không sửa literal. Máy quét bí mật vẫn có thể báo khi push.
 | `hermes-session.json` (??) | Dump lỗi của Hermes, có khóa API đã che. Memory ghi rõ không commit. | Loại khỏi commit. Thêm vào `.gitignore` theo quyết định advisor 2026-11-21 (xem ghi chú bước 3). |
 | `tmp/` (??, khoảng 7,5 MB log) | Log review cũ, không phải mã nguồn. | Loại khỏi commit. |
 | `apps/server/.vitest/` (??) | Cache của vitest. | Loại khỏi commit. |
 | `apps/server/.task132-drizzle.config.ts`, `apps/server/.task132-migrations/` (??) | Thư mục tạm của TASK-132 (memory ghi là cố ý giữ untracked). | Loại khỏi commit. |
+
+> **Đính chính 2026-11-21 (advisor):** dòng `apps/server/test/storageProvider.test.ts` trong bảng trên có chuỗi cuối dòng 15 kết thúc bằng `EXAMPLE` và dòng 16 kết thúc bằng `EXAMPLEKEY`, không phải mẫu bí mật thật; không chuỗi nào có trong `.env*`. File được commit nguyên bản, riêng một commit cục bộ `838b617`, không sửa literal. Máy quét bí mật vẫn có thể báo khi push.
 
 ## Ghi chú cho bước 3 (kiểm tra bí mật)
 
