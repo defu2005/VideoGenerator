@@ -19,6 +19,7 @@ const r = (method: RouteRule["method"], pattern: string, action: Action | null, 
  * A `:name` segment matches any one segment. A segment ending in `*` matches the rest of the path.
  */
 export const ROUTE_RULES: RouteRule[] = [
+  r("POST", "/api/projects/:id/preview/*", "project.read", "project"),
   r("POST", "/api/stage-agents/claim", "stage.run"),
   r("POST", "/api/stage-agents/jobs/:id/*", "stage.run", "job"),
   r("READ", "/api/stage-agents/candidates/:id/image", "project.read"),
@@ -57,6 +58,12 @@ export const ROUTE_RULES: RouteRule[] = [
   r("DELETE", "/api/profiles/:id/accounts/:accountId/app-credentials", "secrets.write", "profile"),
   r("WRITE", "/api/profiles/:id/accounts*", "channel.manage", "profile"),
   r("READ", "/api/profiles/:id/accounts*", "channel.read", "profile"),
+  // TASK-148a: approving, editing or undoing a stage lesson is a channel write.
+  r("WRITE", "/api/profiles/:id/stage-notes*", "project.write", "profile"),
+  // TASK-148e: prompt variants are a channel write; agents are refused in the route.
+  r("WRITE", "/api/stage-prompt-variants*", "project.write"),
+  r("READ", "/api/stage-prompt-variants/*", "project.read"),
+  r("READ", "/api/stage-quality/*", "analytics.read"),
   r("READ", "/api/profiles/:id/learning*", "analytics.read", "profile"),
   r("POST", "/api/profiles/:id/topics/approve", "gate.approve", "profile"),
   r("WRITE", "/api/profiles/:id/topics*", "project.write", "profile"),
@@ -96,6 +103,9 @@ export const ROUTE_RULES: RouteRule[] = [
   r("READ", "/api/events", "project.read"),
   r("READ", "/api/resources", "settings.read"),
   r("READ", "/api/quality-repairs/*", "project.read"),
+  r("READ", "/api/agents/mailbox/peek", "mailbox.use"),
+  r("ANY", "/api/missions*", "operator.use"),
+  r("ANY", "/api/mission-agents/*", "mailbox.use"),
   r("READ", "/api/agents*", "settings.read"),
   r("POST", "/api/agents/instances/heartbeat", "settings.read"),
   r("POST", "/api/agents/skills/drafts", "automation.manage"),
@@ -106,6 +116,9 @@ export const ROUTE_RULES: RouteRule[] = [
   r("ANY", "/api/assistant/*", null),
 
   // operator and automation
+  r("POST", "/api/operator/skills/:name/versions/:version/behaviour-eval", "operator.use"),
+  r("POST", "/api/operator/skills/:name/versions/:version/shadow", "operator.use"),
+  r("DELETE", "/api/operator/skills/:name/shadow", "operator.use"),
   r("ANY", "/api/operator/*", "operator.use"),
   r("READ", "/api/autonomy/*", "settings.read"),
   r("WRITE", "/api/autonomy/*", "automation.manage"),
@@ -174,6 +187,10 @@ export const ROUTE_RULES: RouteRule[] = [
 
   // worker nodes (admin side; the agent routes under /api/nodes/agent/ use node tokens)
   r("ANY", "/api/nodes*", "nodes.manage"),
+
+  // TASK-143: admin db-stats
+  r("READ", "/api/admin/*", "settings.read"),
+  r("WRITE", "/api/admin/*", "settings.write"),
 
   // TASK-125: a job that ran past its expected time
   r("READ", "/api/jobs/:id/overdue-checks", "project.read", "job"),

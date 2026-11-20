@@ -26,6 +26,8 @@ import {
 import { escapeHtml, maskTelegramSecret, TelegramClient, type InlineButton } from "./telegram.js";
 import { quotaDailySummaryLine } from "../providers/llm/quota.js";
 
+export type NotifyOutcome = "sent" | "skipped" | "deduped" | "failed";
+
 const DEDUP_MS = 6 * 60 * 60 * 1000;
 const RETENTION_DAYS = 30;
 const MAX_SEND_ATTEMPTS = 3;
@@ -64,14 +66,23 @@ export class NotificationService {
 
   /** Never throws into the caller. */
   async notify(raw: NotificationEvent): Promise<void> {
+    await this.deliver(raw);
+  }
+
+  /**
+   * Never throws. Returns what happened, so a caller can decide: a reminder is marked sent on
+   * "sent" or "skipped" (toggle off, unpaired), and retried on "failed".
+   */
+  async deliver(raw: NotificationEvent): Promise<NotifyOutcome> {
     try {
-      await this.notifyInner(raw);
+      return await this.notifyInner(raw);
     } catch (error) {
       const token = this.deps.vault.loadSecret(TELEGRAM_BOT_TOKEN_KEY);
       this.deps.logger.warn(
         { err: maskTelegramSecret(error instanceof Error ? error.message : String(error), token) },
         "Notification notify failed",
       );
+      return "failed";
     }
   }
 
@@ -175,6 +186,10 @@ export class NotificationService {
         return `📈 <b>Báo cáo tháng ${escapeHtml(event.month)}</b>\n${event.text}`;
       case "comment_attention":
         return `💬 ${escapeHtml(event.profile)}: ${event.count} bình luận cần trả lời`;
+      case "mission_checkpoint":
+        return `📊 Mission <b>${escapeHtml(event.command)}</b> — mốc ${escapeHtml(event.checkpoint)}\n${escapeHtml(event.report)}`;
+      case "mission_waiting_user":
+        return `⏸ Mission <b>${escapeHtml(event.command)}</b> đang chờ bạn xác nhận.\n${escapeHtml(event.link)}`;
     }
   }
 
@@ -188,25 +203,25 @@ export class NotificationService {
     return minutes >= from || minutes < to;
   }
 
-  private async notifyInner(raw: NotificationEvent): Promise<void> {
+  private async notifyInner(raw: NotificationEvent): Promise<NotifyOutcome> {
     const event = NotificationEventSchema.parse(raw);
     const settings = getNotificationSettings(this.deps.sqlite);
     const unexpected = event.kind === "waiting_approval" && Boolean(event.unexpectedAutoStop);
     const toggle = notificationToggleForKind(event.kind, unexpected);
-    if (!settings.events[toggle]) return;
+    if (!settings.events[toggle]) return "skipped";
 
     const subjectKey = subjectKeyForEvent(event);
     const message = this.formatMessage(event);
     this.pruneOld();
 
-    if (this.wasSentRecently(subjectKey)) return;
+    if (this.wasSentRecently(subjectKey)) return "deduped";
 
     if (event.kind === "automation_warning" && alertWaitsForMorning("warn", this.now())) {
       const queue = getQuietQueue(this.deps.sqlite);
       queue.push(event);
       saveQuietQueue(this.deps.sqlite, queue);
       this.insertLog({ kind: event.kind, subjectKey, status: "skipped", message, error: "quiet_hours" });
-      return;
+      return "skipped";
     }
 
     // Quiet hours: queue published + dailySummary (+ monthly_report); attention still goes through.
@@ -224,7 +239,7 @@ export class NotificationService {
         message,
         error: "quiet_hours",
       });
-      return;
+      return "skipped";
     }
 
     const token = this.deps.vault.loadSecret(TELEGRAM_BOT_TOKEN_KEY);
@@ -237,7 +252,7 @@ export class NotificationService {
         message,
         error: !settings.telegram.enabled ? "disabled" : !token ? "no_token" : "unpaired",
       });
-      return;
+      return "skipped";
     }
 
     const client = new TelegramClient(token, this.fetchImpl);
@@ -263,7 +278,7 @@ export class NotificationService {
           message,
           error: null,
         });
-        return;
+        return "sent";
       } catch (error) {
         lastError = maskTelegramSecret(error instanceof Error ? error.message : String(error), token);
         if (attempt < MAX_SEND_ATTEMPTS) {
@@ -278,6 +293,7 @@ export class NotificationService {
       message,
       error: lastError,
     });
+    return "failed";
   }
 
   private async flushQuietQueue(): Promise<void> {

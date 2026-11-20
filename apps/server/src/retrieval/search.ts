@@ -37,6 +37,7 @@ export type KnowledgeMatch = {
 export type SearchInput = {
     profileId?: string | null;
     projectId?: string;
+    workspaceId?: string;
     query: string;
     kinds?: string[];
     limit: number;
@@ -58,8 +59,12 @@ export function searchKnowledge(db: Database.Database, input: SearchInput): {
     const off = input.profileId ? retrievalSettings(db).profiles[input.profileId]?.kindsOff ?? [] : [];
     const rows = db.prepare(`SELECT c.* FROM retrieval_chunks c WHERE (c.project_id IS NULL OR c.project_id<>@protected) AND
     ((@profile IS NOT NULL AND c.profile_id=@profile) OR (@profile IS NULL AND c.profile_id IS NULL AND c.project_id=@project))
+    AND (@workspace IS NULL OR c.project_id IS NULL OR EXISTS (
+      SELECT 1 FROM projects p WHERE p.id=c.project_id AND COALESCE(p.workspace_id,
+        (SELECT id FROM organization ORDER BY created_at,id LIMIT 1))=@workspace
+    ))
     AND NOT EXISTS(SELECT 1 FROM retrieval_exclusions e WHERE e.project_id=@project AND e.chunk_id=c.id)`)
-        .all({ profile: input.profileId ?? null, project: input.projectId ?? null, protected: PROTECTED_PROJECT_ID }) as ChunkRow[];
+        .all({ profile: input.profileId ?? null, project: input.projectId ?? null, protected: PROTECTED_PROJECT_ID, workspace: input.workspaceId ?? null }) as ChunkRow[];
     const scope = rows.filter(r => !off.includes(r.kind) && (!input.kinds || input.kinds.includes(r.kind)) && !input.excludeChunkIds?.includes(r.id));
     if (!scope.length)
         return empty;

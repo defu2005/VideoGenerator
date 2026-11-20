@@ -1,4 +1,5 @@
 import { createReadStream } from "node:fs";
+import { Readable } from "node:stream";
 import type { FastifyInstance, FastifyRequest } from "fastify";
 import type Database from "better-sqlite3";
 import { z } from "zod";
@@ -11,6 +12,8 @@ import {
   NodePatchSchema,
   NodePlacementUpdateSchema,
   NodeTargetVersionSchema,
+  NodeUploadTargetRequestSchema,
+  PipelineStageSchema,
   SecretRequestSchema,
 } from "@vg/shared";
 import type { AppConfig } from "../lib/config.js";
@@ -20,6 +23,7 @@ import type { LeaseSecretService } from "../node/leaseSecrets.js";
 import type { NodeRow, NodeService } from "../node/nodeService.js";
 import { readAppVersion } from "../render/appVersion.js";
 import { getNodePlacement, saveNodePlacement } from "../node/settings.js";
+import type { RunTransportService } from "../node/runTransport.js";
 
 const JOIN_LIMIT = 10;
 const JOIN_WINDOW_MS = 60_000;
@@ -47,6 +51,7 @@ export function registerNodeRoutes(
   nodes: NodeService,
   leases: LeaseService,
   secrets: LeaseSecretService,
+  runs?: RunTransportService,
 ): void {
   // ---- admin side: user session, rule `nodes.manage` in routePermissions.ts ----
   // `nodeTargetVersion` is fixed to "control": a render bundle is tied to the control plane's version, so a node on another
@@ -95,6 +100,7 @@ export function registerNodeRoutes(
   const attempts = new Map<string, number[]>();
   app.register(async (agent) => {
     agent.addContentTypeParser("application/octet-stream", (_request, payload, done) => done(null, payload));
+    agent.addContentTypeParser("application/offset+octet-stream", (_request, payload, done) => done(null, payload));
 
     agent.post("/api/nodes/agent/join", async (request) => {
       const now = Date.now();
@@ -116,6 +122,58 @@ export function registerNodeRoutes(
         nodeOf.set(request, node);
       });
       const current = (request: FastifyRequest): NodeRow => nodeOf.get(request)!;
+      const runTransport = () => {
+        if (!runs) throw new AppError(503, "PROJECT_RUNS_UNAVAILABLE", "Dịch vụ chạy dự án chưa sẵn sàng.");
+        return runs;
+      };
+
+      authed.get("/api/nodes/agent/project-lease", async (request, reply) => {
+        const run = runTransport().pendingFor(current(request));
+        reply.header("cache-control", "no-store");
+        return run ? { kind: "project", run } : reply.code(204).send();
+      });
+      authed.get("/api/nodes/agent/runs/:id/snapshot", async (request, reply) => {
+        const { id } = z.object({ id: z.string().uuid() }).parse(request.params);
+        reply.header("cache-control", "no-store");
+        return runTransport().snapshot(current(request), id, header(request, "x-lease-id") ?? "");
+      });
+      authed.post("/api/nodes/agent/runs/:id/checkpoint", { bodyLimit: 16 * 1024 * 1024 }, async (request) => {
+        const { id } = z.object({ id: z.string().uuid() }).parse(request.params);
+        return runTransport().checkpoints.apply(current(request), id, request.body);
+      });
+      authed.post("/api/nodes/agent/runs/:id/finish", async (request) => {
+        const { id } = z.object({ id: z.string().uuid() }).parse(request.params);
+        const input = z.object({
+          leaseId: z.string().uuid(), lastSeq: z.number().int().nonnegative(),
+          reason: z.enum(["DONE", "BOUNDARY", "BUDGET", "PAUSED", "FAILED"]),
+          blockedGate: PipelineStageSchema.optional(),
+        }).strict().parse(request.body);
+        return runTransport().finish(current(request), id, input);
+      });
+      authed.post("/api/nodes/agent/runs/:id/secrets", async (request, reply) => {
+        const { id } = z.object({ id: z.string().uuid() }).parse(request.params);
+        const input = z.object({ leaseId: z.string().uuid(), scopes: z.array(z.string().max(40)).max(24), publicKey: z.string().max(64) }).strict().parse(request.body);
+        reply.header("cache-control", "no-store");
+        return { secrets: runTransport().providerSecrets(current(request), id, input.leaseId, input.scopes, input.publicKey) };
+      });
+      authed.get("/api/nodes/agent/runs/:id/commands", async (request, reply) => {
+        const { id } = z.object({ id: z.string().uuid() }).parse(request.params);
+        const { after } = z.object({ after: z.coerce.number().int().nonnegative().default(0) }).parse(request.query);
+        reply.header("cache-control", "no-store");
+        const abort = new AbortController();
+        const disconnect = () => abort.abort();
+        reply.raw.once("close", disconnect);
+        try {
+          return { commands: await runTransport().commands.poll(current(request), id, header(request, "x-lease-id") ?? "", after, abort.signal) };
+        } finally {
+          reply.raw.off("close", disconnect);
+        }
+      });
+      authed.post("/api/nodes/agent/runs/:id/context/:kind", async (request, reply) => {
+        const { id, kind } = z.object({ id: z.string().uuid(), kind: z.string().max(40) }).parse(request.params);
+        reply.header("cache-control", "no-store");
+        return runTransport().context(current(request), id, header(request, "x-lease-id") ?? "", kind, request.body);
+      });
 
       authed.post("/api/nodes/agent/heartbeat", async (request) => {
         const body = HeartbeatRequestSchema.parse(request.body ?? {});
@@ -124,7 +182,7 @@ export function registerNodeRoutes(
 
       authed.post("/api/nodes/agent/lease", async (request, reply) => {
         const { freeSlots, publicKey } = LeaseRequestSchema.parse(request.body ?? {});
-        const lease = await leases.lease(current(request), freeSlots, publicKey);
+        const lease = await leases.lease(current(request), freeSlots, publicKey, header(request, "x-vg-storage-urls") === "1");
         void reply.header("cache-control", "no-store");
         if (!lease) return reply.code(204).send();
         return lease;
@@ -132,8 +190,10 @@ export function registerNodeRoutes(
 
       authed.get("/api/nodes/agent/artifacts/:sha256", async (request, reply) => {
         const { sha256 } = z.object({ sha256: z.string().regex(/^[0-9a-f]{64}$/) }).parse(request.params);
-        const { jobId } = z.object({ jobId: z.string() }).parse(request.query);
-        const found = leases.artifactFor(current(request), jobId, header(request, "x-lease-id"), sha256);
+        const { jobId, runId } = z.object({ jobId: z.string().optional(), runId: z.string().uuid().optional() })
+          .refine((value) => !!value.jobId !== !!value.runId, "Cần đúng một jobId hoặc runId").parse(request.query);
+        const found = runId ? runTransport().artifact(current(request), runId, header(request, "x-lease-id") ?? "", sha256)
+          : leases.artifactFor(current(request), jobId!, header(request, "x-lease-id"), sha256);
         void reply.header("content-length", found.size);
         void reply.header("content-type", "application/octet-stream");
         return reply.send(createReadStream(found.path));
@@ -156,11 +216,69 @@ export function registerNodeRoutes(
         );
       });
 
+      const outputParams = z.object({ id: z.string(), "*": z.string() });
+      const offsetHeader = z.string().regex(/^\d+$/).transform(Number).pipe(z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER));
+      authed.head("/api/nodes/agent/runs/:id/outputs/*", async (request, reply) => {
+        const { id, "*": name } = outputParams.parse(request.params);
+        const value = await runTransport().offset(current(request), id, header(request, "x-lease-id") ?? "", name);
+        reply.header("cache-control", "no-store").header("upload-offset", String(value.receivedBytes));
+        if (value.size !== undefined) reply.header("upload-length", String(value.size));
+        return reply.code(204).send();
+      });
+      authed.patch("/api/nodes/agent/runs/:id/outputs/*", async (request, reply) => {
+        if (header(request, "content-type") !== "application/offset+octet-stream") throw new AppError(415, "UPLOAD_CONTENT_TYPE", "Cần application/offset+octet-stream.");
+        const { id, "*": name } = outputParams.parse(request.params);
+        const value = await runTransport().append(current(request), {
+          jobId: id, name, leaseId: header(request, "x-lease-id") ?? "", sha256: header(request, "x-sha256") ?? "",
+          size: offsetHeader.parse(header(request, "upload-length")),
+        }, offsetHeader.parse(header(request, "upload-offset")), request.body as Readable | undefined ?? Readable.from([]));
+        return reply.header("upload-offset", String(value.receivedBytes)).code(204).send();
+      });
+      authed.post("/api/nodes/agent/runs/:id/have", async (request) => {
+        const { id } = z.object({ id: z.string().uuid() }).parse(request.params);
+        const body = z.object({ leaseId: z.string(), outputs: z.array(z.object({
+          name: z.string().max(160), sha256: z.string().regex(/^[a-f0-9]{64}$/), size: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),
+        }).strict()).max(500) }).strict().parse(request.body);
+        return { have: runTransport().have(current(request), id, body.leaseId, body.outputs) };
+      });
+      authed.head("/api/nodes/agent/jobs/:id/outputs/*", async (request, reply) => {
+        const { id, "*": name } = outputParams.parse(request.params);
+        const value = await leases.uploadOffset(current(request), id, header(request, "x-lease-id"), name);
+        reply.header("cache-control", "no-store").header("upload-offset", String(value.receivedBytes));
+        if (value.size !== undefined) reply.header("upload-length", String(value.size));
+        return reply.code(204).send();
+      });
+      authed.patch("/api/nodes/agent/jobs/:id/outputs/*", async (request, reply) => {
+        if (header(request, "content-type") !== "application/offset+octet-stream") {
+          throw new AppError(415, "UPLOAD_CONTENT_TYPE", "Cần application/offset+octet-stream.");
+        }
+        const { id, "*": name } = outputParams.parse(request.params);
+        const value = await leases.appendOutput(current(request), {
+          jobId: id, name, leaseId: header(request, "x-lease-id") ?? "", sha256: header(request, "x-sha256") ?? "",
+          size: offsetHeader.parse(header(request, "upload-length")),
+        }, offsetHeader.parse(header(request, "upload-offset")), request.body as Readable | undefined ?? Readable.from([]));
+        return reply.header("upload-offset", String(value.receivedBytes)).code(204).send();
+      });
+      authed.post("/api/nodes/agent/jobs/:id/have", async (request) => {
+        const { id } = z.object({ id: z.string() }).parse(request.params);
+        const body = z.object({ leaseId: z.string(), outputs: z.array(z.object({
+          name: z.string().max(160), sha256: z.string().regex(/^[a-f0-9]{64}$/), size: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),
+        }).strict()).max(500) }).strict().parse(request.body);
+        return { have: leases.haveOutputs(current(request), id, body.leaseId, body.outputs) };
+      });
+
       authed.post("/api/nodes/agent/jobs/:id/secret", async (request, reply) => {
         const { id } = z.object({ id: z.string() }).parse(request.params);
         const body = SecretRequestSchema.parse(request.body ?? {});
         void reply.header("cache-control", "no-store");
         return { secret: leases.refetchSecret(current(request), id, body.leaseId, body.publicKey) };
+      });
+
+      authed.post("/api/nodes/agent/jobs/:id/upload-targets", async (request, reply) => {
+        const { id } = z.object({ id: z.string() }).parse(request.params);
+        const body = NodeUploadTargetRequestSchema.parse(request.body ?? {});
+        void reply.header("cache-control", "no-store");
+        return { target: await leases.outputTarget(current(request), { jobId: id, ...body }) };
       });
 
       authed.post("/api/nodes/agent/jobs/:id/complete", async (request) => {

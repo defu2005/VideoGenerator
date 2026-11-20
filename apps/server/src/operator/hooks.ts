@@ -18,12 +18,15 @@ export type OperatorSupervisorHooks = {
   disableOrder: (id: string) => void;
   /** Sends one Telegram message through the app bot. Returns false when Telegram is off. */
   sendTelegram: (text: string) => Promise<boolean>;
+  /** Synchronous: true when Telegram has a client and an enabled chat. */
+  telegramReady: () => boolean;
 };
 
 export type OperatorToolHooks = {
   supervisor?: OperatorSupervisorHooks;
   saveStandingOrder: (input: StandingOrderDraft) => unknown;
-  findSkills: (query: string) => unknown;
+  /** runId: the assistant run that called find_skills, so its shadow rows can be counted once per run. */
+  findSkills: (query: string, runId?: string | null) => unknown;
   findTools: (query: string) => unknown;
   notifyToolProposal?: (name: string) => void;
 };

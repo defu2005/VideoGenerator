@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { stampWorkspace } from "../auth/requestContext.js";
+import { holdForPendingAction, releaseAfterPendingAction } from "../missions/checkpoints.js";
 import type Database from "better-sqlite3";
 import {
   AssistantConversationSchema,
@@ -103,6 +104,10 @@ export class AssistantService {
   private nodes: import("../node/nodeService.js").NodeService | undefined;
   private agentStages: import("../agents/stageService.js").AgentStageService | undefined;
   private agentVisuals: import("../agents/visualToolkit.js").AgentVisualToolkit | undefined;
+  private agentResearch: import("../agents/researchToolkit.js").AgentResearchToolkit | undefined;
+  private agentMusic: import("../agents/musicToolkit.js").AgentMusicToolkit | undefined;
+  private agentScript: import("../agents/scriptToolkit.js").AgentScriptToolkit | undefined;
+  private preview: import("../preview/service.js").PreviewService | undefined;
   private comments: CommentInboxService | undefined;
   private trends: import("../trends/trendService.js").TrendService | undefined;
   private translations: import("../translations/translationService.js").TranslationService | undefined;
@@ -122,9 +127,16 @@ export class AssistantService {
   setNodes(service: import("../node/nodeService.js").NodeService): void {
     this.nodes = service;
   }
-  setAgentStages(stages: import("../agents/stageService.js").AgentStageService, visuals: import("../agents/visualToolkit.js").AgentVisualToolkit): void {
+  setAgentStages(stages: import("../agents/stageService.js").AgentStageService, visuals: import("../agents/visualToolkit.js").AgentVisualToolkit, research?: import("../agents/researchToolkit.js").AgentResearchToolkit, music?: import("../agents/musicToolkit.js").AgentMusicToolkit, script?: import("../agents/scriptToolkit.js").AgentScriptToolkit): void {
     this.agentStages = stages;
     this.agentVisuals = visuals;
+    this.agentResearch = research;
+    this.agentMusic = music;
+    this.agentScript = script;
+  }
+
+  setPreview(service: import("../preview/service.js").PreviewService): void {
+    this.preview = service;
   }
 
   setClips(service: ClipService): void {
@@ -264,7 +276,8 @@ export class AssistantService {
 
     const history = this.listMessages(conversationId).items;
     const profileSummaries = await this.loadProfileSummaries();
-    const toolCtx = this.buildToolContext(options.signal);
+    // TASK-152: one id per chat send, so shadow rows from find_skills count once per turn.
+    const toolCtx = this.buildToolContext(options.signal, randomUUID());
     const newMessages: AssistantMessage[] = [
       this.toMessage({
         id: userMessageId,
@@ -448,6 +461,7 @@ export class AssistantService {
         return this.requirePendingAction(actionId);
       }
       this.pendingListener?.(actionId, "rejected");
+      releaseAfterPendingAction(this.sqlite, actionId, row.tool, row.args, this.now());
       return this.requirePendingAction(actionId);
     }
 
@@ -470,6 +484,7 @@ export class AssistantService {
         "UPDATE assistant_pending_actions SET result = ? WHERE id = ?",
       ).run(JSON.stringify(result), actionId);
       this.pendingListener?.(actionId, "confirmed");
+      releaseAfterPendingAction(this.sqlite, actionId, row.tool, row.args, this.now());
       return this.requirePendingAction(actionId);
     } catch (error) {
       const message = error instanceof AppError ? error.message : (error instanceof Error ? error.message : String(error));
@@ -513,6 +528,7 @@ export class AssistantService {
        VALUES (?, ?, ?, ?, ?, 'pending', NULL, ?, ?, ?, ?)`,
     ).run(id, conversationId, tool, JSON.stringify(args), summary, createdAt, expiresAt,
       actor.userId || null, actor.workspaceId || defaultWorkspaceId(this.sqlite));
+    holdForPendingAction(this.sqlite, tool, JSON.stringify(args), this.now());
     return AssistantPendingActionSchema.parse({
       id,
       conversationId,
@@ -547,8 +563,13 @@ export class AssistantService {
     return this.toPending(row);
   }
 
-  private buildToolContext(signal?: AbortSignal): AssistantToolContext {
+  /**
+   * TASK-152: every context gets a turn id. Callers with no turn of their own (toolContext(), pending-action
+   * execution) get a fresh one, so find_skills never logs a shadow run with a NULL run_id.
+   */
+  private buildToolContext(signal?: AbortSignal, turnId?: string): AssistantToolContext {
     return {
+      turnId: turnId ?? randomUUID(),
       research: this.research,
       db: this.db,
       sqlite: this.sqlite,
@@ -569,6 +590,10 @@ export class AssistantService {
       nodes: this.nodes,
       agentStages: this.agentStages,
       agentVisuals: this.agentVisuals,
+      agentResearch: this.agentResearch,
+      agentMusic: this.agentMusic,
+      agentScript: this.agentScript,
+      preview: this.preview,
       comments: this.comments,
       trends: this.trends,
       translations: this.translations,

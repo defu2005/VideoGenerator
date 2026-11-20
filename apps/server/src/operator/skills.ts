@@ -265,6 +265,7 @@ export function renderSkillMarkdown(skill: OperatorSkill): string {
 
 export type ParsedSkill = {
   research?: ResearchSkillMetadata;
+  roles?: string[];
   name: string;
   description: string;
   triggers: string[];
@@ -301,7 +302,8 @@ export function parseSkillMarkdown(markdown: string): ParsedSkill | null {
     if (!parsed.success) return null;
     research = parsed.data;
   }
-  return { name, description, triggers, antiTriggers, tools, risk, operator, area, shortBody, body, ...(research ? { research } : {}) };
+  const roles = [...new Set(listUnder(front, "roles"))];
+  return { name, description, triggers, antiTriggers, tools, risk, operator, area, shortBody, body, ...(research ? { research } : {}), ...(roles.length ? { roles } : {}) };
 }
 
 function scalar(front: string, key: string): string {

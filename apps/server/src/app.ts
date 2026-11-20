@@ -1,5 +1,7 @@
 import { enqueueIndex, initializeRetrieval } from "./retrieval/service.js";
+import { dependentStages, isSecretId, STAGE_ORDER } from "@vg/shared";
 import { randomUUID } from "node:crypto";
+import { findingWillOpen, publishFindingOpened } from "./operator/findingEvents.js";
 import { statfsSync } from "node:fs";
 import { AutonomySupervisor } from "./operator/supervisor.js";
 import { summarizeDigest } from "./operator/digestLine.js";
@@ -25,6 +27,9 @@ import { registerStageTimeoutRoutes } from "./api/stageTimeouts.js";
 import { registerOverdueRoutes } from "./api/overdue.js";
 import { registerPipelineRoutes } from "./api/pipeline.js";
 import { registerLlmRoutes } from "./api/llm.js";
+import { registerLlmRelayRoutes } from "./api/llmRelay.js";
+import { registerStorageSettingsRoutes } from "./api/storageSettings.js";
+import { LlmRelay } from "./providers/llm/relay.js";
 import { registerCapabilityProbeRoutes } from "./api/capabilityProbe.js";
 import { registerScriptRoutes } from "./api/script.js";
 import { registerRecommendationRoutes } from "./api/recommendations.js";
@@ -32,28 +37,32 @@ import { registerBudgetRoutes } from "./api/budget.js";
 import { PipelineEventBus } from "./jobs/eventBus.js";
 import { JobRepository } from "./jobs/jobRepository.js";
 import { projectDir } from "./storage/paths.js";
+import { BlobStore } from "./storage/blobStore.js";
+import { FileGc } from "./storage/fileGc.js";
+import { writeDiskPressure } from "./storage/diskPressure.js";
+import { StorageSettingsStore } from "./storage/settings.js";
+import { recordStorageHealth, storageHealth } from "./storage/health.js";
 import { JobWorker } from "./jobs/worker.js";
 import { ResourceGovernor, createSystemSampler } from "./jobs/resourceGovernor.js";
 import { registerResourceRoutes } from "./api/resources.js";
-import { autonomyBudgetStatus } from "./operator/autonomyBudget.js";
+import { registerAdminDbStatsRoutes } from "./api/adminDbStats.js";
+import { flushAuditQueue } from "./auth/auditLog.js";
+import { autonomyBudgetStatus, heldAutonomyUsd } from "./operator/autonomyBudget.js";
+import { readDrain } from "./operator/autopilot.js";
 import { ensureStageTimeoutPlan } from "./pipeline/stageTimeoutPlan.js";
-import { createExecutorRegistry } from "./pipeline/executorRegistry.js";
+import { createStockExecutors } from "./pipeline/stockExecutors.js";
 import { PipelineOrchestrator } from "./pipeline/orchestrator.js";
 import { LlmProviderRegistry } from "./providers/llm/registry.js";
-import { getLlmGatewaySettings } from "./providers/llm/gatewaySettings.js";
+import { applyNewInstallGatewayDefault, getLlmGatewaySettings } from "./providers/llm/gatewaySettings.js";
 import { getLlmVisionMarks } from "./providers/llm/settings.js";
 import { attachLlmQuota } from "./providers/llm/quota.js";
 import { omniRouteBaseUrl } from "./providers/llm/omnirouteCatalog.js";
 import { OmniRouteQuotaSync } from "./services/omnirouteQuotaSync.js";
 import { estimateLlmCost } from "./providers/llm/pricing.js";
-import { ResearchExecutor } from "./stages/research/researchExecutor.js";
-import { ScriptExecutor } from "./stages/script/scriptExecutor.js";
 import { ScriptService } from "./services/scriptService.js";
 import { SceneService } from "./services/sceneService.js";
 import { registerSceneRoutes } from "./api/scenes.js";
-import { ScenePlanExecutor } from "./stages/scenes/scenePlanExecutor.js";
 import { VisualService } from "./services/visualService.js";
-import { VisualSearchExecutor } from "./stages/visuals/visualSearchExecutor.js";
 import { registerVisualRoutes } from "./api/visuals.js";
 import { registerWebImageSettingsRoutes } from "./api/webImageSettings.js";
 import { registerImageSourcesSettingsRoutes } from "./api/imageSourcesSettings.js";
@@ -66,23 +75,26 @@ import { connectionsSummary, platformAccountsSummary, registerConnectionRoutes }
 import { registerSubtitleRoutes } from "./api/subtitles.js";
 import { TtsProviderRegistry } from "./providers/tts/registry.js";
 import { VoiceExecutor } from "./stages/voice/voiceExecutor.js";
-import { SubtitleExecutor } from "./stages/subtitle/subtitleExecutor.js";
-import { MusicSearchExecutor } from "./stages/music/musicSearchExecutor.js";
 import { registerMusicRoutes } from "./api/music.js";
 import { MusicService } from "./services/musicService.js";
 import { TimelineService } from "./services/timelineService.js";
-import { TimelineExecutor } from "./stages/timeline/timelineExecutor.js";
 import { registerTimelineRoutes } from "./api/timeline.js";
+import { registerPreviewRoutes } from "./api/preview.js";
+import { PreviewService } from "./preview/service.js";
+import { resolveSubtitleFontFile } from "./services/thumbnailService.js";
 import { generateEditPlanRaw } from "./edit/generateEditPlan.js";
 import { registerMotionRoutes } from "./api/motion.js";
 import { RenderService } from "./services/renderService.js";
 import { RenderExecutor } from "./stages/render/renderExecutor.js";
 import { registerRenderRoutes } from "./api/render.js";
 import { registerNodeRoutes } from "./api/nodes.js";
+import { ProjectRunService } from "./node/runService.js";
+import { ProjectPlacement, resolveProjectStageNeeds } from "./node/projectPlacement.js";
+import { RunTransportService } from "./node/runTransport.js";
 import { ArtifactService } from "./node/artifactService.js";
 import { LeaseService, providerNeedsKey } from "./node/leaseService.js";
-import { LeaseSecretService } from "./node/leaseSecrets.js";
-import { MediaFetchExecutor, MediaFetchService, parseMediaScope } from "./node/mediaFetch.js";
+import { LeaseSecretService, ProjectLeaseSecrets } from "./node/leaseSecrets.js";
+import { MediaFetchService, parseMediaScope } from "./node/mediaFetch.js";
 import { NodeService } from "./node/nodeService.js";
 import { localMayTake } from "./node/placement.js";
 import { ThumbnailService } from "./services/thumbnailService.js";
@@ -128,13 +140,23 @@ import { TelegramPoller } from "./notifications/telegram.js";
 import { registerNotificationRoutes } from "./api/notifications.js";
 import { AssistantService } from "./assistant/service.js";
 import { installAssistantTelegramHandlers } from "./assistant/telegramBridge.js";
+import { handleMissionCommand } from "./missions/telegramCommands.js";
 import { OperatorService } from "./operator/service.js";
 import { collectOperatorEvents, dispatchOperatorEvents } from "./operator/events.js";
 import { registerOperatorRoutes } from "./api/operator.js";
+import { createProposalRunner } from "./operator/proposalRunner.js";
+import { resolveProposalDraft, type ProposalDraftOption } from "./operator/proposalWiring.js";
 import { registerFleetRoutes } from "./api/fleet.js";
+import { registerMissionRoutes } from "./api/missions.js";
+import { configureFleetRelay } from "./fleet/service.js";
 import { ResearchHub } from "./research/runtime.js";
 import { registerResearchRoutes } from "./api/research.js";
 import { AgentStageService } from "./agents/stageService.js";
+import { createMusicAdapter, createResearchAdapter, createScriptAdapter, createVisualSearchAdapter } from "./agents/stageAdapters/index.js";
+import { AgentMusicToolkit } from "./agents/musicToolkit.js";
+import { AgentResearchToolkit } from "./agents/researchToolkit.js";
+import { AgentScriptToolkit } from "./agents/scriptToolkit.js";
+import { LlmCache } from "./providers/llm/cache.js";
 import { AgentVisualToolkit } from "./agents/visualToolkit.js";
 import { registerAgentStageRoutes } from "./api/agentStages.js";
 import { registerSeededStandingOrder } from "./operator/extensions.js";
@@ -148,6 +170,9 @@ import { registerKnowledgeRoutes } from "./api/knowledge.js";
 import { createDetectorRuntime } from "./knowledge/detectorRuntime.js";
 import { StatusPoller } from "./knowledge/statusPoller.js";
 import { deliverChangeAlerts } from "./knowledge/changeAlerts.js";
+import { advanceMissions } from "./missions/checkpoints.js";
+import { deliverMissionNotices } from "./missions/delivery.js";
+import { localMeasure } from "./missions/measure.js";
 import { resolveMetaCredentials } from "./publishing/metaGraph.js";
 import { DriftMonitor } from "./knowledge/driftMonitor.js";
 import { knowledgeWatchModel } from "./knowledge/watchModel.js";
@@ -167,6 +192,8 @@ import { registerFinanceRoutes } from "./api/finance.js";
 import { ensureDefaultRates } from "./finance/currencySettings.js";
 import { LearningService } from "./learning/learningService.js";
 import { registerLearningRoutes } from "./api/learning.js";
+import { registerStageLessonRoutes } from "./api/stageLessons.js";
+import { registerPromptVariantRoutes } from "./api/promptVariants.js";
 import { CommentInboxService } from "./comments/inboxService.js";
 import { registerCommentRoutes } from "./api/comments.js";
 import { createTrendService } from "./trends/trendService.js";
@@ -179,11 +206,12 @@ import { providerIntelExportRoot } from "./providerIntel/paths.js";
 import { registerProviderIntelExtensions } from "./providerIntel/register.js";
 import { setProviderIntel } from "./providerIntel/runtime.js";
 import { ProviderIntelService } from "./providerIntel/service.js";
-import { ProviderIntelExtractSchema, customSecretId } from "@vg/shared";
+import { ProviderIntelExtractSchema, customSecretId, MAILBOX_EVENT_TYPES } from "@vg/shared";
 import { managementOrigin } from "./services/omnirouteQuotaSync.js";
 import { generateStructured } from "./providers/llm/structured.js";
+import { pruneStageFeedback } from "./learning/stageFeedback.js";
 
-export function buildApp({ config, testActor }: { config: AppConfig; testActor?: AuthActor }) {
+export function buildApp({ config, testActor, proposalDraft, tasksRoot }: { config: AppConfig; testActor?: AuthActor; proposalDraft?: ProposalDraftOption; tasksRoot?: string }) {
   registerProviderIntelExtensions();
   const server = Fastify({
     logger: { level: config.LOG_LEVEL },
@@ -200,7 +228,8 @@ export function buildApp({ config, testActor }: { config: AppConfig; testActor?:
     bodyLimit: MAX_AUDIO_BYTES + 64 * 1024,
   }, (_request, body, done) => done(null, body));
 
-  const database = openDatabase(config.DATABASE_PATH);
+  const database = openDatabase(config.DATABASE_PATH, { logger: server.log });
+  database.checkpointManager.start(30_000);
   try {
     migrateDatabase(database.db, server.log, database.sqlite);
   } catch (error) {
@@ -218,7 +247,14 @@ export function buildApp({ config, testActor }: { config: AppConfig; testActor?:
   }
   initializeRetrieval(database.sqlite,server.log);
   const profileService = createProfileService(database.db,id=>enqueueIndex(database.sqlite,{scope:"profile",profileId:id}));
-  const projectService = createProjectService(database.db, config, server.log, database.sqlite, profileService);
+  const storageSettings = new StorageSettingsStore(database.sqlite, tokenVault);
+  const blobs = new BlobStore(database.sqlite, () => storageSettings.location(), () => {
+    recordStorageHealth(database.sqlite, [], new Date(), "failed");
+    server.log.warn("Không xác minh được bản sao tệp ở kho S3.");
+  }, () => new Date(), () => !storageHealth(database.sqlite).suspendedUntil);
+  const fileGc = new FileGc(database.sqlite, config.DATA_DIR, undefined, undefined,
+    () => storageSettings.location(), (work) => blobs.mutate(work));
+  const projectService = createProjectService(database.db, config, server.log, database.sqlite, profileService, fileGc);
   const knowledge = new KnowledgeService(database.sqlite);
   setExternalHttpObserver((note) => {
     new ChangeInbox(database.sqlite).observe(note);
@@ -285,7 +321,7 @@ export function buildApp({ config, testActor }: { config: AppConfig; testActor?:
     },
   );
   const ttsProviders = new TtsProviderRegistry(config);
-  const scriptService = new ScriptService(database.sqlite, jobRepository, orchestrator, config);
+  const scriptService = new ScriptService(database.sqlite, jobRepository, orchestrator, config, llmProviders);
   const sceneService = new SceneService(database.sqlite, jobRepository);
   const reviewService = new ReviewService(
     database.sqlite,
@@ -423,9 +459,9 @@ export function buildApp({ config, testActor }: { config: AppConfig; testActor?:
     refreshLive: () => quotaSync.refresh(false),
     spendToday: (dateKey) => {
       try {
-        return usageService.getAppUsage({ from: dateKey, to: dateKey, groupBy: "day" }).totals.costUsd;
+        return usageService.getAutomationSpend(dateKey, llmProviders.quota?.policyFor(null).timeZone ?? "UTC").dailyUsd;
       } catch {
-        return 0;
+        return Number.POSITIVE_INFINITY;
       }
     },
     costOf: (provider, model, inputTokens, outputTokens) => {
@@ -554,6 +590,8 @@ export function buildApp({ config, testActor }: { config: AppConfig; testActor?:
   setProviderIntel(providerIntelService);
   registerSeededStandingOrder({ id: "seed-research-weekly", title: "Rà lại tri thức mỗi tuần", enabled: false, moduleId: "self-improvement", cron: "0 9 * * 1",
     prompt: "Đọc list_stale_knowledge, chọn tối đa 3 mục quan trọng và gọi run_research với skill research-knowledge-refresh, knowledgeId, subject là ID mục và trigger schedule. Dùng ngân sách hiện tại, không tự duyệt đề xuất." });
+  registerSeededStandingOrder({ id: "seed-stage-learning-weekly", title: "Chắt lọc bài học theo bước mỗi tuần", enabled: false, moduleId: "stage-learning", cron: "0 8 * * 1",
+    prompt: "Với từng kênh có phản hồi mới, gọi list_stage_feedback theo từng bước. Chỉ đề xuất khi có ít nhất 5 dòng mới: gọi propose_stage_note với tối đa 5 bài học, mỗi bài dẫn evidenceIds là ID thật trong kết quả. Không gọi decide_stage_note; người dùng tự duyệt. Trả lời tiếng Việt: kênh nào, bước nào, đề xuất bao nhiêu." });
   const operatorService = new OperatorService({
     llmProviders,
     sqlite: database.sqlite,
@@ -571,6 +609,7 @@ export function buildApp({ config, testActor }: { config: AppConfig; testActor?:
   installAssistantTelegramHandlers(telegramPoller, assistantService, {
     sqlite: database.sqlite,
     operator: operatorService,
+    mission: (args) => handleMissionCommand(database.sqlite, args),
     getAutomationStatusText: async () => {
       const status = await automationService.getStatus();
       const paused = getAutomationPaused(database.sqlite);
@@ -592,6 +631,47 @@ export function buildApp({ config, testActor }: { config: AppConfig; testActor?:
   });
   const renderExecutor = new RenderExecutor(renderService, thumbnailService, clipService);
   const nodeService = new NodeService(database.sqlite, config, jobRepository, orchestrator);
+  const projectRuns = new ProjectRunService(database.sqlite, orchestrator, undefined, config.NODE_PROJECT_RUN_LEASE_SEC * 1000);
+  nodeService.projectRuns = projectRuns;
+  const runTransport = new RunTransportService(database.sqlite, config, projectRuns, orchestrator,
+    (run, checkpoint) => { if (checkpoint.state === "DONE") orchestrator.publishStageCompletion(run.projectId, checkpoint.stage); });
+  const projectSecrets = new ProjectLeaseSecrets(database.sqlite, (key) =>
+    isSecretId(key) ? secretStore.resolve(key) ?? null : tokenVault.loadSecret(key));
+  const projectNeeds = (project: Parameters<typeof resolveProjectStageNeeds>[2]) =>
+    resolveProjectStageNeeds(database.sqlite, llmProviders, project, ttsProviders.planVoice(project).provider);
+  runTransport.lend = (run, scopes, publicKey) => {
+    const project = jobRepository.getProject(run.projectId);
+    const node = nodeService.list().find(({ id }) => id === run.nodeId);
+    if (!project || !node) return [];
+    const needs = projectNeeds(project);
+    const excluded = new Set(run.stopBefore.flatMap((stage) => [stage, ...dependentStages(stage)]));
+    const allowed = new Set(STAGE_ORDER.slice(STAGE_ORDER.indexOf(run.fromStage))
+      .filter((stage) => !excluded.has(stage)).flatMap((stage) => needs?.[stage] ?? []));
+    const requested = scopes.filter((scope) => node.capabilities.includes(`borrow:${scope}`) && node.desiredConfig.capabilities.includes(`borrow:${scope}`));
+    return projectSecrets.seal(run, requested, allowed, publicKey);
+  };
+  const projectPlacement = new ProjectPlacement({
+    db: database.sqlite, orchestrator, runs: projectRuns, nodes: nodeService,
+    commands: runTransport.commands,
+    eligible: () => !readDrain(database.sqlite).draining,
+    needs: projectNeeds,
+    canLend: (scope) => projectSecrets.canLend(scope),
+    budget: (project, at) => {
+      const { scopes } = autonomyBudgetStatus(database.sqlite, usageService, project.profileId ?? undefined, at);
+      const remaining = scopes.flatMap(({ limits, spend }) => (["dailyUsd", "monthlyUsd"] as const)
+        .flatMap((key) => limits[key] === null ? [] : [Math.max(0, limits[key] - spend[key] - heldAutonomyUsd())]));
+      return Math.min(Number.MAX_SAFE_INTEGER, ...remaining);
+    },
+  });
+  orchestrator.setProjectPlacement(projectPlacement);
+  runTransport.onAccepted = (run) => {
+    try { projectPlacement.noteAccepted(run); }
+    catch (error) { server.log.warn({ err: error }, "Could not refresh worker input baseline"); }
+  };
+  runTransport.onBoundary = (id) => {
+    try { orchestrator.resumePlacedProject(id); }
+    catch (error) { server.log.warn({ err: error }, "Could not resume project after worker boundary"); }
+  };
   assistantService.setNodes(nodeService);
   const voiceExecutor = new VoiceExecutor(database.sqlite, ttsProviders, config);
   const leaseSecrets = new LeaseSecretService(database.sqlite, () => config.NODE_LEASE_SEC, (key) => tokenVault.loadSecret(key));
@@ -613,27 +693,16 @@ export function buildApp({ config, testActor }: { config: AppConfig; testActor?:
       planProvider: (project) => ttsProviders.planVoice(project).provider,
       media: mediaFetch,
     },
+    blobs,
   );
   const worker = new JobWorker(
     jobRepository,
     orchestrator,
-    createExecutorRegistry(
-      { delayMs: config.FAKE_STAGE_DELAY_MS },
-      {
-        RESEARCH: new ResearchExecutor(database.sqlite, llmProviders, config),
-        SCRIPT: new ScriptExecutor(database.sqlite, llmProviders, config),
-        SCENE_PLAN: new ScenePlanExecutor(database.sqlite, llmProviders, config),
-        VISUAL_SEARCH: new VisualSearchExecutor(visualService, llmProviders),
-        VOICE: voiceExecutor,
-        MEDIA_FETCH: new MediaFetchExecutor(config.DATA_DIR),
-        SUBTITLE: new SubtitleExecutor(database.sqlite, config),
-        MUSIC_SEARCH: new MusicSearchExecutor(musicService, database.sqlite, llmProviders, config, autoReportService),
-        TIMELINE: new TimelineExecutor(timelineService, guidelineService, metadataService),
-        RENDER: renderExecutor,
-        CLIP: new ClipExecutor(clipService),
-        PUBLISH: new PublishExecutor(publishService),
-      },
-    ),
+    createStockExecutors({
+      sqlite: database.sqlite, config, llm: llmProviders, visual: visualService, voice: voiceExecutor, music: musicService,
+      timeline: timelineService, guidelines: guidelineService, metadata: metadataService, autoReport: autoReportService,
+      render: renderExecutor, clip: new ClipExecutor(clipService),
+    }).set("PUBLISH", new PublishExecutor(publishService)),
     config,
     server.log,
     () => new Date(),
@@ -646,36 +715,111 @@ export function buildApp({ config, testActor }: { config: AppConfig; testActor?:
     }),
     usageService,
   );
-  const agentStages: AgentStageService = new AgentStageService({ repository: jobRepository, orchestrator,
-    context: (job) => agentVisuals.context(job),
-    validateComplete: (job) => { agentVisuals.validateComplete(job); },
-    openReason: (job) => {
-      if (job.stage !== "VISUAL_SEARCH") return null;
-      const open = visualService.agentOpenScenes(job.projectId);
-      return open.length ? `${open.length} cảnh còn mở: ${open.map((scene) => `${scene.order + 1} (${scene.attentionReason ?? (scene.selectedCandidate ? "ảnh chưa qua cổng" : "chưa có ảnh")})`).join(", ")}` : null;
+  let agentVisuals!: AgentVisualToolkit;
+  const visualAdapter = createVisualSearchAdapter({
+    visuals: {
+      context: (job) => agentVisuals.context(job),
+      validateComplete: (job) => agentVisuals.validateComplete(job),
+    },
+    visualService,
+  });
+  let agentResearch!: AgentResearchToolkit;
+  const researchAdapter = createResearchAdapter({
+    research: {
+      context: (job) => agentResearch.context(job),
+      validateComplete: (job) => agentResearch.validateComplete(job),
     },
   });
-  const agentVisuals: AgentVisualToolkit = new AgentVisualToolkit(jobRepository, agentStages, visualService, config);
+  let agentMusic!: AgentMusicToolkit;
+  const musicAdapter = createMusicAdapter({
+    music: {
+      context: (job) => agentMusic.context(job),
+      validateComplete: (job) => agentMusic.validateComplete(job),
+      prepareComplete: (job) => agentMusic.prepareComplete(job),
+    },
+  });
+  let agentScript!: AgentScriptToolkit;
+  const scriptAdapter = createScriptAdapter({
+    script: {
+      context: (job) => agentScript.context(job),
+      validateComplete: (job) => agentScript.validateComplete(job),
+    },
+  });
+  const agentStages: AgentStageService = new AgentStageService({ repository: jobRepository, orchestrator, adapters: [visualAdapter, researchAdapter, musicAdapter, scriptAdapter] });
+  agentVisuals = new AgentVisualToolkit(jobRepository, agentStages, visualService, config);
+  agentResearch = new AgentResearchToolkit(jobRepository, agentStages, config.WEB_IMAGE_DOMAIN_DENYLIST);
+  agentScript = new AgentScriptToolkit(jobRepository, agentStages, orchestrator, llmProviders, config, new LlmCache(database.sqlite, config.LLM_CACHE_ENABLED));
   orchestrator.setQueuedJobHandler((job) => { agentStages.beforeLocal(job); });
   worker.setAgentStages(agentStages);
-  assistantService.setAgentStages(agentStages, agentVisuals);
+  agentMusic = new AgentMusicToolkit(jobRepository, agentStages, musicService, new AudioStore(config.DATA_DIR, config.IMAGE_SEARCH_USER_AGENT), probeDurationSec, config.DATA_DIR, config.WEB_IMAGE_DOMAIN_DENYLIST, autoReportService);
+  assistantService.setAgentStages(agentStages, agentVisuals, agentResearch, agentMusic, agentScript);
   registerAgentStageRoutes(server, database.sqlite, agentStages, agentVisuals);
-  worker.setSweep(() => nodeService.sweep());
+  let nextFileGcSweep = 0;
+  let fileGcSweep: Promise<void> | undefined;
+  worker.setSweep(() => {
+    nodeService.sweep();
+    leaseService.cleanupFinishedUploads();
+    projectPlacement.sweep((error) => server.log.warn({ err: error }, "Could not resume placed project"));
+    if (!fileGcSweep && Date.now() >= nextFileGcSweep) {
+      nextFileGcSweep = Date.now() + 86_400_000;
+      fileGcSweep = (async () => {
+        await fileGc.runBlobs({ purge: true });
+        fileGc.run({ purge: true });
+        // TASK-148a: drop stage feedback past its 180-day retention window.
+        pruneStageFeedback(database.sqlite);
+      })().catch((error) => {
+        nextFileGcSweep = Date.now() + 60 * 60_000;
+        server.log.warn({ err: error }, "Could not collect orphaned project files");
+      }).finally(() => { fileGcSweep = undefined; });
+    }
+  });
   worker.setOverdue({
     sqlite: database.sqlite,
     registry: llmProviders,
     config,
     workDir: (projectId) => projectDir(config.DATA_DIR, projectId),
   });
+  let nextPressureSweep = 0;
+  let storagePressure = false;
   const governor = new ResourceGovernor({
     sqlite: database.sqlite,
     sampler: createSystemSampler(config.DATA_DIR),
     workerCap: config.WORKER_CONCURRENCY,
     onChange: () => worker.onGovernorChange(),
+    onDiskSample: (freePercent, now) => {
+      if (freePercent === null) return;
+      try {
+        if (freePercent >= 15) {
+          if (storagePressure) writeDiskPressure(database.sqlite, null);
+          storagePressure = false;
+          nextPressureSweep = 0;
+          return;
+        }
+        if (now.getTime() < nextPressureSweep) return;
+        storagePressure = true;
+        nextPressureSweep = now.getTime() + 5 * 60_000;
+        fileGc.run({ purge: true, ephemeralOnly: true });
+        writeDiskPressure(database.sqlite, { freePercent, at: now.toISOString(), projects: fileGc.largestProjects() });
+      } catch (error) {
+        server.log.warn({ err: error }, "Could not handle low disk space");
+      }
+    },
     budgetStopped: (profileId, at) => autonomyBudgetStatus(database.sqlite, usageService, profileId, at).state === "stop",
   });
   worker.setGovernor(governor);
+  leaseService.setDiskGuard((stage) => governor.diskBlocks(stage));
   registerResourceRoutes(server, database.sqlite, governor);
+  registerAdminDbStatsRoutes(server, database.sqlite, database.checkpointManager);
+  const previewService = new PreviewService({
+    sqlite: database.sqlite,
+    dataDir: config.DATA_DIR,
+    getProject: (id) => projectService.getProject(id),
+    timeline: (id) => timelineService.get(id).timeline ?? null,
+    governor,
+    fontFile: () => { try { return resolveSubtitleFontFile(); } catch { return null; } },
+  });
+  assistantService.setPreview(previewService);
+  registerPreviewRoutes(server, previewService);
   worker.setPlacement((job, now) => localMayTake(database.sqlite, nodeService, job, now, (candidate) => {
     if (candidate.stage === "MEDIA_FETCH") return parseMediaScope(candidate.scope) ? { capability: "media_fetch" } : null;
     const project = jobRepository.getProject(candidate.projectId);
@@ -740,6 +884,8 @@ export function buildApp({ config, testActor }: { config: AppConfig; testActor?:
   registerCommentRoutes(server, commentInbox);
   registerFinanceRoutes(server, { finance: financeService });
   registerLearningRoutes(server, learningService);
+  registerStageLessonRoutes(server, database.sqlite);
+  registerPromptVariantRoutes(server, database.sqlite);
   registerRecommendationRoutes(server);
   registerBudgetRoutes(server, projectService, jobRepository, config, llmProviders);
   registerDashboardRoutes(server, projectService, automationService, trendService);
@@ -748,10 +894,23 @@ export function buildApp({ config, testActor }: { config: AppConfig; testActor?:
   registerUsageRoutes(server, usageService, projectService);
   registerPipelineRoutes(server, projectService, jobRepository, orchestrator, events, sceneService);
   registerLlmRoutes(server, llmProviders, database.sqlite, projectService, profileService, fetch, quotaSync);
+  const llmRelay = new LlmRelay({
+    sqlite: database.sqlite,
+    config,
+    catalog: llmProviders.omnirouteCatalog,
+    quota: () => llmProviders.quota,
+    verifyApiKey: (key) => server.vgAuth.verifyApiKey(key),
+    authenticateNode: (token) => nodeService.authenticate(token),
+    recordJobUsage: (jobId, usage) => orchestrator.recordUsage(jobId, usage, { allowTerminal: true }),
+  });
+  llmRelay.recoverPending();
+  configureFleetRelay(database.sqlite, llmRelay);
+  registerLlmRelayRoutes(server, llmRelay, [config.OMNIROUTE_API_KEY]);
+  registerStorageSettingsRoutes(server, database.sqlite, storageSettings, fileGc);
   registerScriptRoutes(server, scriptService, projectService, config, guidelineService, database.sqlite);
   registerGuidelineRoutes(server, database.sqlite, projectService, guidelineService, llmProviders, config);
   registerOriginalityRoutes(server, database.sqlite);
-  registerSceneRoutes(server, sceneService);
+  registerSceneRoutes(server, sceneService, database.sqlite);
   registerVisualRoutes(server, visualService, jobRepository, llmProviders);
   registerWebImageSettingsRoutes(server, database.sqlite, config);
   registerImageSourcesSettingsRoutes(server, database.sqlite, config);
@@ -762,7 +921,8 @@ export function buildApp({ config, testActor }: { config: AppConfig; testActor?:
     poller: telegramPoller,
   });
   registerAssistantRoutes(server, assistantService);
-  registerOperatorRoutes(server, operatorService, database.sqlite);
+  registerOperatorRoutes(server, operatorService, database.sqlite, resolveProposalDraft(proposalDraft, () => createProposalRunner({ registry: llmProviders, sqlite: database.sqlite })), tasksRoot);
+  registerMissionRoutes(server, database.sqlite);
   registerFleetRoutes(server, database.sqlite, Object.entries(config).filter(([key, value]) => /KEY|TOKEN|SECRET|PASSWORD/.test(key) && typeof value === "string").map(([, value]) => value as string));
   registerResearchRoutes(server, database.sqlite, researchHub);
   registerSkillReportRoutes(server, database.sqlite, config);
@@ -777,6 +937,8 @@ export function buildApp({ config, testActor }: { config: AppConfig; testActor?:
   registerAutonomyRoutes(server, database.sqlite, config.CORS_ORIGIN);
   bindWebhookVault(tokenVault);
   const unsubscribeEvents = subscribeAgentEvents((event) => {
+    // Mailbox events reach webhooks only through per-subscription routing (129a step 2), never the generic fan-out.
+    if (MAILBOX_EVENT_TYPES.includes(event.type)) return;
     try {
       enqueueWebhookDeliveries(database.sqlite, event);
     } catch {
@@ -832,11 +994,14 @@ export function buildApp({ config, testActor }: { config: AppConfig; testActor?:
     const routeText = `${routeRows.map((row) => row.llm).join("\n")}\n${gateway?.value ?? ""}`;
     const removedOnRoute = diff.removed.filter((id) => routeText.includes(id));
     if (!removedOnRoute.length) return;
+    const findingKey = `model_removed:${removedOnRoute.sort().join(",")}`;
+    const opens = findingWillOpen(database.sqlite, findingKey);
     database.sqlite.prepare(`INSERT INTO supervisor_findings
       (id, kind, severity, dedupe_key, detail, first_seen_at, last_seen_at, status)
       VALUES (?, 'model_removed', 'info', ?, ?, ?, ?, 'open')
       ON CONFLICT(dedupe_key) DO UPDATE SET detail = excluded.detail, last_seen_at = excluded.last_seen_at, status = 'open'`)
-      .run(randomUUID(), `model_removed:${removedOnRoute.sort().join(",")}`, JSON.stringify({ summary, added: diff.added, removed: removedOnRoute }), now, now);
+      .run(randomUUID(), findingKey, JSON.stringify({ summary, added: diff.added, removed: removedOnRoute }), now, now);
+    if (opens) publishFindingOpened(database.sqlite, { summary: `Model bị gỡ khỏi route: ${removedOnRoute.join(", ")}`, profileId: null });
   };
   llmProviders.omnirouteCatalog.startBackgroundSync();
   registerVoiceRoutes(server, ttsProviders, database.sqlite, projectService, jobRepository, config);
@@ -866,13 +1031,13 @@ export function buildApp({ config, testActor }: { config: AppConfig; testActor?:
   }));
   registerMotionRoutes(server, { dataDir: config.DATA_DIR });
   registerRenderRoutes(server, renderService, projectService, database.sqlite, autoReportService, orchestrator);
-  registerNodeRoutes(server, database.sqlite, config, nodeService, leaseService, leaseSecrets);
+  registerNodeRoutes(server, database.sqlite, config, nodeService, leaseService, leaseSecrets, runTransport);
   registerThumbnailRoutes(server, thumbnailService, projectService);
   registerClipRoutes(server, clipService);
   server.decorate("vgClips", clipService);
   setEmbeddingRegistry(database.sqlite,llmProviders,config);
   registerRetrievalRoutes(server,database.sqlite);
-  registerMetadataRoutes(server, metadataService, projectService);
+  registerMetadataRoutes(server, metadataService, projectService, database.sqlite);
   registerAutoReportRoutes(server, autoReportService, projectService);
   registerReviewRoutes(server, reviewService, projectService);
 
@@ -912,13 +1077,21 @@ export function buildApp({ config, testActor }: { config: AppConfig; testActor?:
     audit: result => server.log.info(result, "knowledge detector run"),
   });
   let detectorTick: Promise<void> | undefined;
+  // TASK-129c slice 2b: one overlapping tick at most; advanceMissions also guards this in-process.
+  let missionTick: Promise<void> | undefined;
   server.addHook("onReady", async () => {
     stopQuotaSync = quotaSync.start();
+    if (config.OMNIROUTE_API_KEY) {
+      void llmProviders.omnirouteCatalog.getModels().then((models) => {
+        if (applyNewInstallGatewayDefault(database.sqlite, { hasKey: true, modelCount: models.length })) server.log.info("LLM gateway mode set to 'only' for this new install");
+      }).catch(() => undefined);
+    }
     stopIntel = providerIntelService.startScheduler();
     if (config.WORKER_ENABLED) supervisor.recordStartup((lastHeartbeat, now) => ({
       operator: operatorService.recoverSchedules(lastHeartbeat, now),
       publications: recoverMissedPublications(database.sqlite, lastHeartbeat, now),
     }));
+    await leaseService.recoverFinalizing();
     await worker.start();
     if (config.WORKER_ENABLED) governor.start();
     collectOperatorEvents(database.sqlite);
@@ -930,6 +1103,13 @@ export function buildApp({ config, testActor }: { config: AppConfig; testActor?:
         detectorTick ??= detectorScheduler.tick().then(() => deliverChangeAlerts(database.sqlite, event => notificationService.notify(event))).catch(error => {
           server.log.error({ err: error }, "knowledge detectors failed");
         }).finally(() => { detectorTick = undefined; });
+        // Missions: checkpoints and reminders. Off with WORKER_ENABLED=false, like the other scheduled work here.
+        missionTick ??= advanceMissions(database.sqlite, new Date(), localMeasure(database.sqlite))
+          .then((fired) => deliverMissionNotices(database.sqlite, notificationService, fired, new Date(), notificationService.webBaseUrl()))
+          .catch((error) => {
+            server.log.error({ err: error }, "mission tick failed");
+          })
+          .finally(() => { missionTick = undefined; });
         try {
           collectOperatorEvents(database.sqlite);
           operatorDelivery ??= dispatchOperatorEvents(database.sqlite, {
@@ -957,11 +1137,19 @@ export function buildApp({ config, testActor }: { config: AppConfig; testActor?:
     stopIntel();
     stopOperatorTick();
     await detectorTick;
+    await missionTick;
     await operatorDelivery;
     stopQuotaSync();
     await telegramPoller.stop();
     await publishTicker.stop();
     await worker.stop();
+    await fileGcSweep;
+    await blobs.drain();
+    database.checkpointManager.stop();
+    llmRelay.stop();
+    orchestrator.stop();
+    flushAuditQueue(database.sqlite);
+    database.checkpointManager.checkpoint("TRUNCATE");
     database.sqlite.close();
   });
 

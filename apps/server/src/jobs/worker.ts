@@ -13,6 +13,7 @@ import { isRetryableDownloadError } from "../services/visualService.js";
 import { JobRepository } from "./jobRepository.js";
 import { PipelineOrchestrator } from "../pipeline/orchestrator.js";
 import { effectiveAutonomy } from "../operator/autonomy.js";
+import { operatorToolHooks } from "../operator/hooks.js";
 import { readDrain } from "../operator/autopilot.js";
 import { autonomyBudgetStatus, hasAutonomySpendLimit, recordBudgetFindings, runWithAutonomyBudget } from "../operator/autonomyBudget.js";
 import type { UsageService } from "../services/usageService.js";
@@ -101,6 +102,7 @@ export class JobWorker {
     private readonly now: Clock = () => new Date(),
     private readonly planTimeouts?: (project: Project, signal: AbortSignal) => Promise<void>,
     private readonly usageService?: UsageService,
+    private readonly backgroundWork = true,
   ) {
     this.orchestrator.setAbortJobHandler((jobId) => this.abort(jobId));
     this.orchestrator.setWakeHandler(() => this.wake());
@@ -131,7 +133,7 @@ export class JobWorker {
   }
 
   private hasClassSlot(job: Job): boolean {
-    return !this.governor || this.governor.hasSlot(this.governor.classOf(job.stage));
+    return !this.governor || (!this.governor.diskBlocks(job.stage) && this.governor.hasSlot(this.governor.classOf(job.stage)));
   }
 
   /** TASK-125: wires the overdue checker (LLM registry, work dir, budget). Without it a stage past its limit is stopped as before. */
@@ -226,12 +228,34 @@ export class JobWorker {
     if (this.config.WORKER_ENABLED) this.wake();
   }
 
+  private lastQuestionSweepMs = 0;
+  /** TASK-129c: the duty watchdog measures silence from here, so a restart does not alert before agents can heartbeat. */
+  private readonly watchdogSince = new Date();
+
   async tick(): Promise<void> {
     if (this.stopping) return;
     this.agentStages?.sweep();
-    void import("../events/webhooks.js").then(({ deliverBoundWebhooks }) => deliverBoundWebhooks(this.repository.sqlite)).catch(() => undefined);
+    if (this.backgroundWork) {
+      void import("../events/webhooks.js").then(({ deliverBoundWebhooks }) => deliverBoundWebhooks(this.repository.sqlite)).catch(() => undefined);
+      // TASK-129a: escalate unanswered agent questions about once a minute (15 min to duty, 60 min to the user).
+      const sweepNow = this.now();
+      if (sweepNow.getTime() - this.lastQuestionSweepMs >= 60_000) {
+        this.lastQuestionSweepMs = sweepNow.getTime();
+        // TASK-129c: duty watchdog on the same minute throttle. Alerts the user once per outage; failover happens on the standby's next heartbeat.
+        void import("../supervision/duty.js").then(({ watchdogDuty }) => {
+          watchdogDuty(this.repository.sqlite, (text) => {
+            void operatorToolHooks()?.supervisor?.sendTelegram(text).catch(() => undefined);
+          }, sweepNow, this.watchdogSince);
+        }).catch(() => undefined);
+        void import("../supervision/mailbox.js").then(({ sweepAllQuestions }) => {
+          sweepAllQuestions(this.repository.sqlite, (text) => {
+            void operatorToolHooks()?.supervisor?.sendTelegram(text).catch(() => undefined);
+          }, sweepNow, { telegramReady: () => operatorToolHooks()?.supervisor?.telegramReady() ?? false });
+        }).catch(() => undefined);
+      }
+    }
     if (readDrain(this.repository.sqlite).draining) return;
-    if (!this.indexTask) this.indexTask = runIndexJob(this.repository.sqlite,this.indexAbort.signal).finally(()=>{this.indexTask=undefined;});
+    if (this.backgroundWork && !this.indexTask) this.indexTask = runIndexJob(this.repository.sqlite,this.indexAbort.signal).finally(()=>{this.indexTask=undefined;});
     const started: Promise<void>[] = [];
     const skipped = new Set<string>();
     while (this.running.size < this.config.WORKER_CONCURRENCY) {
@@ -469,7 +493,7 @@ export class JobWorker {
       ]);
       if (this.stopping) return;
       if (this.agentStages?.afterLocal(job)) return;
-      this.orchestrator.completeJob(job.id, result.message);
+      this.orchestrator.completeJob(job.id, result.message, result.renderId);
     } catch (error) {
       if (this.stopping) return;
       if (timedOut) {

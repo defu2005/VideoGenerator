@@ -10,7 +10,7 @@ const definitions: Array<{ name: string; question: string; outputKinds: Research
     outputKinds: ["market"], sources: ["support.google.com", "support.tiktok.com"] },
   { name: "research-monetization", question: "Chương trình hoặc nguồn thu này trả cho ai, điều kiện, quốc gia, chia sẻ doanh thu và giới hạn nội dung tự động hiện hành là gì?",
     outputKinds: ["monetization_program", "platform_capability"], sources: ["support.google.com", "support.tiktok.com", "facebook.com"] },
-  { name: "research-provider", question: "Nhà cung cấp có giá, điều khoản, giấy phép, giới hạn lưu trữ và điều kiện cấp khóa hiện hành nào?",
+  { name: "research-provider-terms", question: "Nhà cung cấp có giá, điều khoản, giấy phép, giới hạn lưu trữ và điều kiện cấp khóa hiện hành nào?",
     outputKinds: ["provider_terms", "api_contract"], sources: [] },
   { name: "research-open-source", question: "Dự án mã nguồn mở nào giải quyết nhu cầu này? Báo giấy phép, bản phát hành mới nhất, số sao và ngày kiểm; không tự thêm dependency hoặc chạy mã.",
     outputKinds: ["dependency"], sources: ["github.com"] },

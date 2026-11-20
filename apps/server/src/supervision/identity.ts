@@ -1,4 +1,5 @@
 import type Database from "better-sqlite3";
+import { AppError } from "../lib/errors.js";
 import { parseAgentIdentity, type AgentIdentity } from "../reports/agentIdentity.js";
 
 export const AGENT_KINDS = ["operator", "assistant", "hermes", "codex", "cursor", "claude", "other"] as const;
@@ -82,4 +83,16 @@ export function resolveTrustedAgent(input: {
     canSupervise: profile?.canSupervise === true,
     trusted: profile !== null,
   };
+}
+
+/**
+ * Mailbox identity for a machine key: only a key with a fixed instance name qualifies, and headers are ignored,
+ * so one key can never read another instance's mail by claiming its name.
+ */
+export function fixedKeyAgent(sqlite: Database.Database, keyId: string | null | undefined): TrustedAgent {
+  const profile = getKeyProfile(sqlite, keyId);
+  if (!profile || profile.instanceName === "unknown") {
+    throw new AppError(403, "STAGE_AGENT_KEY_REQUIRED", "Khóa máy cần tên instance cố định trước khi dùng hộp thư.");
+  }
+  return resolveTrustedAgent({ sqlite, keyId, headers: {} });
 }

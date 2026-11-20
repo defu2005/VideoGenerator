@@ -1,5 +1,6 @@
 import { createHash, randomUUID } from "node:crypto";
 import type Database from "better-sqlite3";
+import { findingWillOpen, publishFindingOpened } from "./findingEvents.js";
 import {
   PROTECTED_PROJECT_ID,
   RENDER_ACTIONS,
@@ -10,6 +11,7 @@ import {
   renderGateOk,
   scriptGateDecision,
   type RepairActionKind,
+  type ContinuityFinding,
   type RepairChoice,
   type RepairGate,
   type RepairIssue,
@@ -22,7 +24,7 @@ import { LlmCache } from "../providers/llm/cache.js";
 import { estimateLlmCost } from "../providers/llm/pricing.js";
 import { getAppLlmSettings } from "../providers/llm/settings.js";
 import { generateRoutedStructured } from "../providers/llm/structured.js";
-import { systemActorFor } from "../auth/workspaces.js";
+import { defaultWorkspaceId, systemActorFor } from "../auth/workspaces.js";
 import { invokeRegistryTool } from "../registry/invoke.js";
 import { logToolAudit } from "../registry/audit.js";
 import { createUserRequest } from "./autopilot.js";
@@ -30,6 +32,7 @@ import { effectiveAutonomy, repairSettingsFor } from "./autonomy.js";
 import { autonomyBudgetStatus, readAutonomyBudget } from "./autonomyBudget.js";
 import { recordHeld, renderGateInputs, scriptGateInputs, writeScriptRepairHint } from "./qualityGates.js";
 import { currentDuty } from "../supervision/duty.js";
+import { publishAgentEvent } from "../events/agentBus.js";
 import { openEscalation } from "../supervision/escalations.js";
 
 /**
@@ -54,6 +57,8 @@ export type SceneView = {
 export type RepairVisuals = {
   repairSceneView: (projectId: string) => SceneView[];
   repairWebAllowed: () => boolean;
+  /** TASK-141 P2: recomputed continuity findings (no model call, no stored-report read). */
+  repairContinuityFindings?: (projectId: string) => Promise<ContinuityFinding[]>;
 };
 
 export type RepairEnv = {
@@ -90,6 +95,7 @@ export type RepairStepResult =
   | { status: "exhausted"; reason: string; handled: "shelved" | "asked" | "breaker" | "agent" };
 
 const MAX_SYNC_ROUNDS = 20;
+const CONTINUITY_KINDS: ReadonlySet<RepairIssueKind> = new Set<RepairIssueKind>(["continuity_color", "continuity_motif"]);
 const BREAKER_MS = 60 * 60 * 1000;
 
 const GATE_OF: Record<string, RepairGate | undefined> = { SCRIPT: "SCRIPT", VISUAL_REVIEW: "VISUALS", RENDER: "RENDER" };
@@ -139,7 +145,7 @@ export function diagnose(
   projectId: string,
   gate: RepairGate,
   visuals?: RepairVisuals,
-  options: { maxRevise?: number } = {},
+  options: { maxRevise?: number; continuityFindings?: ContinuityFinding[] } = {},
 ): RepairIssue[] {
   const issues: RepairIssue[] = [];
   if (gate === "SCRIPT") {
@@ -176,6 +182,18 @@ export function diagnose(
         detail: `${scenes.length} cảnh: ${SCENE_DETAIL[kind] ?? kind}`,
         actions: repairActionsFor(kind, { hasPassingCandidate: scenes.some((scene) => scene.hasPassingAlternative), webAllowed }),
       });
+    }
+    // TASK-141 P2: chỉ color_jump và motif_missing có hành động. pacing và character_mismatch không sửa tự động.
+    const viewById = new Map(visuals.repairSceneView(projectId).map((scene) => [scene.sceneId, scene] as const));
+    for (const finding of options.continuityFindings ?? []) {
+      const target = finding.code === "color_jump" ? finding.sceneIds[1] : finding.code === "motif_missing" ? finding.sceneIds[0] : undefined;
+      if (!target) continue;
+      const view = viewById.get(target);
+      if (!view || view.owned || view.noVisual) continue;
+      const kind: RepairIssueKind = finding.code === "color_jump" ? "continuity_color" : "continuity_motif";
+      const actions = repairActionsFor(kind, { hasPassingCandidate: view.hasPassingAlternative, webAllowed });
+      if (actions.length === 0) continue;
+      issues.push({ gate, kind, sceneIds: [target], detail: `Liền mạch: ${finding.message}`, actions });
     }
     return issues;
   }
@@ -438,7 +456,15 @@ export async function repairStep(env: RepairEnv, projectId: string, gate: Repair
   if (!effectiveAutonomy(sqlite, { projectId }).grants.retries) return { status: "off" };
   const settings = repairSettingsFor(sqlite, project.profileId);
   const visuals = env.visuals ?? (gate === "SCRIPT" ? undefined : await defaultVisuals(env.ctx));
-  const issues = diagnose(sqlite, projectId, gate, visuals, { maxRevise: Math.max(2, settings.maxAttemptsPerProject) });
+  const continuityFindings = gate === "VISUALS" && visuals?.repairContinuityFindings ? await visuals.repairContinuityFindings(projectId) : [];
+  const diagnosed = diagnose(sqlite, projectId, gate, visuals, { maxRevise: Math.max(2, settings.maxAttemptsPerProject), continuityFindings });
+  // TASK-141 P2 (best-effort): một issue liền mạch chỉ bị bỏ khi thang của loại đó đã hết bậc chưa thử trong cửa sổ.
+  // Motif còn pick_next_candidate sau research_scene vẫn chạy; cổng không bị shelve chỉ vì lỗi liền mạch.
+  // Thang theo loại (không theo cảnh), như chooseRepair: cặp lệch màu thứ hai trong cùng cửa sổ không được thử.
+  const triedBefore: Record<string, string[]> = {};
+  for (const row of rowsSince(sqlite, projectId)) triedBefore[row.issue_kind] = [...(triedBefore[row.issue_kind] ?? []), row.action];
+  const issues = diagnosed.filter((issue) => !(CONTINUITY_KINDS.has(issue.kind)
+    && nextLadderAction(issue.kind, issue.actions, (triedBefore[issue.kind] ?? []) as RepairActionKind[]) === null));
   const snapshot = gateSnapshot(sqlite, projectId, gate, issues);
   resolvePending(sqlite, projectId, gate, issues, snapshot);
   if (issues.length === 0) {
@@ -543,8 +569,39 @@ export async function runQualityRepair(env: RepairEnv, projectId: string, gate: 
   for (let round = 0; round < MAX_SYNC_ROUNDS && result.status === "repairing" && result.sync; round += 1) {
     result = await repairStep(env, projectId, gate);
   }
+  // TASK-129a §1: announce exhaustion once per project and gate until a later round passes or repairs again.
+  const key = `${projectId}:${gate}`;
+  const announced = exhaustionAnnounced.get(env.ctx.sqlite) ?? new Set<string>();
+  exhaustionAnnounced.set(env.ctx.sqlite, announced);
+  // repair_started: once per episode, the first round that actually runs a repair (not each round or each tick).
+  const started = repairStarted.get(env.ctx.sqlite) ?? new Set<string>();
+  repairStarted.set(env.ctx.sqlite, started);
+  if (result.status === "repairing" && !started.has(key)) {
+    started.add(key);
+    const ws = env.ctx.sqlite.prepare("SELECT workspace_id AS w FROM projects WHERE id = ?").get(projectId) as { w: string | null } | undefined;
+    publishAgentEvent(
+      { type: "repair_started", projectId, stage: gate, summary: `Bắt đầu sửa lỗi ${gate} tự động.` },
+      { workspaceId: ws?.w ?? (defaultWorkspaceId(env.ctx.sqlite) ?? undefined) },
+    );
+  }
+  if (result.status === "passed" || result.status === "exhausted") started.delete(key);
+  if (result.status === "exhausted") {
+    if (!announced.has(key)) {
+      announced.add(key);
+      const ws = env.ctx.sqlite.prepare("SELECT workspace_id AS w FROM projects WHERE id = ?").get(projectId) as { w: string | null } | undefined;
+      publishAgentEvent(
+        { type: "repair_exhausted", projectId, stage: gate, summary: `Sửa lỗi ${gate} đã hết cách.` },
+        { workspaceId: ws?.w ?? (defaultWorkspaceId(env.ctx.sqlite) ?? undefined) },
+      );
+    }
+  } else {
+    announced.delete(key);
+  }
   return result;
 }
+
+const exhaustionAnnounced = new WeakMap<Database.Database, Set<string>>();
+const repairStarted = new WeakMap<Database.Database, Set<string>>();
 
 // ---------------------------------------------------------------- exhausted: shelve or ask
 
@@ -664,11 +721,14 @@ function noteShelvedAndMaybeOpenBreaker(sqlite: Database.Database, profileId: st
   const at = now.toISOString();
   sqlite.prepare(`INSERT INTO app_settings (key, value, updated_at) VALUES (?, ?, ?)
     ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at`).run(breakerKey(profileId, common), retryAt, at);
+  const breakerFindingKey = `breaker_open:${profileId}:repair-${common}`;
+  const opens = findingWillOpen(sqlite, breakerFindingKey);
   sqlite.prepare(`INSERT INTO supervisor_findings
     (id, profile_id, kind, severity, dedupe_key, detail, first_seen_at, last_seen_at, status)
     VALUES (?, ?, 'breaker_open', 'warn', ?, ?, ?, ?, 'open')
     ON CONFLICT(dedupe_key) DO UPDATE SET detail = excluded.detail, last_seen_at = excluded.last_seen_at, status = 'open', resolution = NULL`)
-    .run(randomUUID(), profileId, `breaker_open:${profileId}:repair-${common}`, JSON.stringify({ stage: `repair:${common}`, retryAt, delayMs: BREAKER_MS }), at, at);
+    .run(randomUUID(), profileId, breakerFindingKey, JSON.stringify({ stage: `repair:${common}`, retryAt, delayMs: BREAKER_MS }), at, at);
+  if (opens) publishFindingOpened(sqlite, { summary: `Cầu dao sửa lỗi mở (${common})`, profileId });
   return true;
 }
 

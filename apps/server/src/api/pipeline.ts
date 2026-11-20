@@ -6,6 +6,8 @@ import type { JobRepository } from "../jobs/jobRepository.js";
 import type { PipelineOrchestrator } from "../pipeline/orchestrator.js";
 import { AppError } from "../lib/errors.js";
 import { resetScriptReviseRound } from "../operator/qualityGates.js";
+import { resumeMissionsForProject } from "../missions/checkpoints.js";
+import { captureGateApproval, feedbackSourceFor } from "../learning/stageFeedback.js";
 import { requireProject } from "../services/projectService.js";
 import type { ProjectService } from "../services/projectService.js";
 import type { SceneService } from "../services/sceneService.js";
@@ -70,7 +72,20 @@ export function registerPipelineRoutes(
     },
   }, async (request) => {
     const { id, gate } = GateParamsSchema.parse(request.params);
-    return orchestrator.approveGate(id, gate);
+    const sqlite = repository.sqlite;
+    const opened = sqlite.prepare("SELECT updated_at AS updatedAt FROM project_stages WHERE project_id = ? AND stage = ?").get(id, gate) as { updatedAt: string } | undefined;
+    const pipeline = orchestrator.approveGate(id, gate);
+    try {
+      // Only a human clears a mission's hold. An agent API key may approve a gate, but must not resume a mission.
+      if (feedbackSourceFor(request.actor) === "user") resumeMissionsForProject(sqlite, id);
+    } catch (error) {
+      request.log.warn({ err: error, projectId: id }, "mission resume after gate approval failed");
+    }
+    if (opened) {
+      // Best-effort: a capture failure must never fail an approval that already succeeded.
+      captureGateApproval(sqlite, { projectId: id, gate, gateOpenedAt: opened.updatedAt, source: feedbackSourceFor(request.actor) }, request.log);
+    }
+    return pipeline;
   });
 
   app.post("/api/projects/:id/pipeline/cancel", {

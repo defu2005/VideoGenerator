@@ -24,6 +24,7 @@ import { sceneQueryPrompt } from "./sceneQueryPrompt.js";
 import { getAppLlmSettings } from "../../providers/llm/settings.js";
 import { GuidelineService } from "../../guidelines/service.js";
 import { getProfileDirection } from "../../services/profileService.js";
+import { buildContinuityPlan } from "../../continuity/builder.js";
 
 type ScriptRow = { data: string };
 const SYSTEM_PROMPT = "You are an image-search query editor. Return only JSON matching the requested schema.";
@@ -228,6 +229,8 @@ export class ScenePlanExecutor implements StageExecutor {
       ));
     });
     replace();
+    const continuity = await buildContinuityPlan(context.project.id, this.sqlite, this.registry, this.config, context);
+    if (continuity.note) message += ` · ${continuity.note}`;
     for (const track of oldVoiceFiles) if (existsSync(track.audio_path)) rmSync(track.audio_path, { force: true });
     context.reportProgress(100, message);
     return { outputHash: inputHash, message };

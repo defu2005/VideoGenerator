@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { stampWorkspace } from "../auth/requestContext.js";
 import type Database from "better-sqlite3";
-import { webhookRetryDelayMs, webhookUrlAllowed, type AgentEvent } from "@vg/shared";
+import { MAILBOX_EVENT_TYPES, webhookRetryDelayMs, webhookUrlAllowed, type AgentEvent } from "@vg/shared";
 import { signWebhook } from "./webhookSign.js";
 import type { TokenVault } from "../publishing/tokenVault.js";
 import { createUserRequest } from "../operator/autopilot.js";
@@ -103,6 +103,8 @@ export function deleteWebhookEndpoint(sqlite: Database.Database, vault: TokenVau
 }
 
 export function enqueueWebhookDeliveries(sqlite: Database.Database, event: AgentEvent, now = new Date()): void {
+  // Mailbox events reach webhooks only through per-subscription routing, never the generic fan-out.
+  if (MAILBOX_EVENT_TYPES.includes(event.type)) return;
   const endpoints = listWebhookEndpoints(sqlite).filter((item) => item.enabled && (item.eventTypes.length === 0 || item.eventTypes.includes(event.type)));
   const stamp = now.toISOString();
   const insert = sqlite.prepare(`INSERT INTO webhook_deliveries

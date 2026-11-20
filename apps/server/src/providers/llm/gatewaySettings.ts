@@ -14,6 +14,20 @@ export function getLlmGatewaySettings(sqlite: Database.Database): LlmGatewaySett
   return LlmGatewaySettingsSchema.parse(value);
 }
 
+/**
+ * TASK-136: a NEW install with an OmniRoute key and a working catalog starts in mode `only`. "New" means no saved
+ * gateway row and no project yet. The choice is saved once, so it never flips later and an existing install keeps `off`.
+ * Returns true when it saved the default.
+ */
+export function applyNewInstallGatewayDefault(sqlite: Database.Database, input: { hasKey: boolean; modelCount: number }): boolean {
+  if (!input.hasKey || input.modelCount < 1) return false;
+  if (sqlite.prepare("SELECT 1 AS x FROM app_settings WHERE key = ?").get(SETTINGS_KEY)) return false;
+  const projects = sqlite.prepare("SELECT COUNT(*) AS n FROM projects").get() as { n: number };
+  if (projects.n > 0) return false;
+  saveLlmGatewaySettings(sqlite, { ...defaultLlmGatewaySettings(), mode: "only" });
+  return true;
+}
+
 export function saveLlmGatewaySettings(sqlite: Database.Database, settings: LlmGatewaySettings): LlmGatewaySettings {
   const parsed = LlmGatewaySettingsSchema.parse(settings);
   sqlite.prepare(

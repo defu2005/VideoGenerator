@@ -5,6 +5,7 @@ import { migrate as runMigrations } from "drizzle-orm/better-sqlite3/migrator";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { AppDatabase } from "./client.js";
+import { copyLegacyToolProposals } from "../operator/toolProposals.js";
 
 const migrationsFolder = fileURLToPath(new URL("../../drizzle", import.meta.url));
 
@@ -22,6 +23,17 @@ export function migrateDatabase(db: AppDatabase, logger?: FastifyBaseLogger, sql
       `Database migration ${migration} failed. The development database may have been migrated by an older version of this file; delete data/app.db in development and restart.`,
       { cause: error },
     );
+  }
+  // TASK-074c-1 fix1: own try so a failed legacy copy is not reported as a migration failure. The copy is one transaction, so a failure leaves operator_tool_proposals unchanged.
+  try {
+    const copied = copyLegacyToolProposals(sqlite ?? db.$client);
+    if (copied.skipped > 0) {
+      logger?.warn({ skipped: copied.skipped }, "Legacy tool proposals skipped during copy to improvement_requests (unparseable or unknown status).");
+    }
+  } catch (error) {
+    const message = "Legacy tool proposal copy into improvement_requests failed. operator_tool_proposals was not changed; fix the cause and restart.";
+    logger?.error({ err: error }, message);
+    throw new Error(message, { cause: error });
   }
 }
 

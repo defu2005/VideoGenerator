@@ -40,6 +40,7 @@ import { AppError } from "../lib/errors.js";
 import { normalizeGuidelineSettings } from "../guidelines/settings.js";
 import { marketAccountWarning, requireMarket } from "../knowledge/markets.js";
 import { markUserTouch } from "../operator/autopilot.js";
+import { STAGE_LESSON_STAGES, stageLessons } from "../learning/stageLessons.js";
 
 function parseAutomation(value: ProfileAutomation | null | undefined): ProfileAutomation {
   return ProfileAutomationSchema.parse(value ?? DEFAULT_PROFILE_AUTOMATION);
@@ -577,6 +578,7 @@ export type ProfilePromptContext = {
 export function getProfilePromptContext(
   sqlite: Database.Database,
   profileId: string | null | undefined,
+  stage?: string,
 ): ProfilePromptContext {
   const empty: ProfilePromptContext = { topicAngles: [], avoid: [], titleAbTest: false };
   if (!profileId) return empty;
@@ -596,7 +598,12 @@ export function getProfilePromptContext(
     ? value.filter((item): item is string => typeof item === "string")
     : [];
   const direction = row.direction?.trim() || undefined;
-  const learnedNotes = row.learned_notes?.trim() || undefined;
+  // TASK-148b: approved per-stage lessons join the channel notes; only for the stage that asked.
+  const stageBlock = stage && (STAGE_LESSON_STAGES as readonly string[]).includes(stage)
+    ? stageLessons(sqlite, profileId, stage)
+    : [];
+  const learnedNotes = [row.learned_notes?.trim() ?? "", ...(stageBlock.length ? [`Bài học theo bước ${stage}:`, ...stageBlock.map((text) => `- ${text}`)] : [])]
+    .filter(Boolean).join(String.fromCharCode(10)) || undefined;
   return {
     ...(direction ? { direction } : {}),
     ...(learnedNotes ? { learnedNotes } : {}),

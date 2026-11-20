@@ -9,6 +9,7 @@ import { getAutomationPaused } from "../services/automationSettings.js";
 import { agentMayChange } from "../operator/autopilot.js";
 import { effectiveAutonomy } from "../operator/autonomy.js";
 import { claimOperatorAction, recordOperatorActionFailure } from "../operator/loopGuard.js";
+import { routeCheckRefusal } from "../operator/proposalGate.js";
 import { TOOL_GRANTS } from "@vg/shared";
 import type { AuthActor } from "../auth/actor.js";
 import { can, FORBIDDEN_MESSAGE } from "../auth/policy.js";
@@ -65,6 +66,14 @@ export async function invokeRegistryTool(input: {
       summary: blocked,
     });
     return { kind: "refused", message: blocked, risk };
+  }
+  // TASK-074c-2: refuse before execute, so no record is written and no budget is spent. Returned as a
+  // refusal, not thrown: the operator loop turns a refusal into an observation the model can act on,
+  // while a thrown error would fail the whole run.
+  const routeRefusal = input.name === "propose_missing_tool" ? routeCheckRefusal(input.runId) : null;
+  if (routeRefusal) {
+    logToolAudit(input.ctx.sqlite, { ...auditBase, args: input.args, decision: "refused", summary: routeRefusal, reason: "ROUTE_CHECK_REQUIRED" });
+    return { kind: "refused", message: routeRefusal, risk };
   }
   if (!tool) {
     logToolAudit(input.ctx.sqlite, { ...auditBase, args: input.args, decision: "refused", summary: `Công cụ không tồn tại: ${input.name}`, reason: "unknown_tool" });

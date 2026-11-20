@@ -39,6 +39,7 @@ export type LoadSample = {
   cpuPct: number;
   ramPct: number;
   diskFreeBytes: number | null;
+  diskFreePercent?: number | null;
   gpuPct: number | null;
 };
 export type LoadSampler = () => LoadSample | Promise<LoadSample>;
@@ -115,16 +116,18 @@ export function createSystemSampler(dataDir: string): LoadSampler {
     const cpuPct = total > 0 ? Math.max(0, Math.min(100, (1 - idle / total) * 100)) : 0;
     const ramPct = os.totalmem() > 0 ? (1 - os.freemem() / os.totalmem()) * 100 : 0;
     let diskFreeBytes: number | null = null;
+    let diskFreePercent: number | null = null;
     try {
       const stat = statfsSync(dataDir);
       diskFreeBytes = Number(stat.bavail) * Number(stat.bsize);
+      if (Number(stat.blocks) > 0) diskFreePercent = 100 * Number(stat.bavail) / Number(stat.blocks);
     } catch { /* keep null: unknown disk does not throttle */ }
     let gpuPct: number | null = null;
     if (gpuAvailable) {
       gpuPct = await readGpuPct();
       if (gpuPct === null) gpuAvailable = false;
     }
-    return { cpuPct, ramPct, diskFreeBytes, gpuPct };
+    return { cpuPct, ramPct, diskFreeBytes, diskFreePercent, gpuPct };
   };
 }
 
@@ -138,12 +141,12 @@ function cpuTimes(): { idle: number; total: number } {
   return { idle, total };
 }
 
-function readGpuPct(): Promise<number | null> {
+export function readGpuPct(): Promise<number | null> {
   return new Promise((resolve) => {
     try {
       execFile("nvidia-smi", ["--query-gpu=utilization.gpu", "--format=csv,noheader,nounits"], { timeout: 2_000, windowsHide: true }, (error, stdout) => {
         if (error) return resolve(null);
-        const values = String(stdout).split(/\r?\n/).map((line) => Number(line.trim())).filter((n) => Number.isFinite(n));
+        const values = String(stdout).split(/\r?\n/).map((line) => line.trim()).filter(Boolean).map(Number).filter(Number.isFinite);
         resolve(values.length ? Math.max(...values) : null);
       });
     } catch {
@@ -169,6 +172,7 @@ export type GovernorStatus = {
   sample: (LoadSample & { at: string }) | null;
   /** Names of the targets the machine is over right now (Vietnamese). */
   overVi: string[];
+  diskHoldVi?: string;
   classes: ClassStatus[];
 };
 
@@ -184,6 +188,7 @@ export type GovernorOptions = {
   cores?: number;
   /** Called when a limit changes so the worker can look for work again. */
   onChange?: () => void;
+  onDiskSample?: (freePercent: number | null, now: Date) => void;
   /** Budget gate for capacity_idle: true when the profile may not spend more today. */
   budgetStopped?: (profileId: string, now: Date) => boolean;
   voiceClass?: () => StageClass;
@@ -241,6 +246,31 @@ export class ResourceGovernor {
     return count;
   }
 
+  /**
+   * TASK-139: previews are a light class on top of the four stage classes. They never take a
+   * stage slot, so RENDER keeps its limit. A preview is refused when two are already running or
+   * when the last sample shows the machine over target while a cpu job runs.
+   */
+  private readonly previewRunning = new Set<string>();
+
+  tryAcquirePreview(id: string, maxParallel = 2): boolean {
+    if (this.previewRunning.size >= maxParallel) return false;
+    if (this.settings().enabled && this.sample && this.runningIn("cpu") > 0) {
+      const over = this.over(this.sample);
+      if (over.cpu || over.ram || over.disk) return false;
+    }
+    this.previewRunning.add(id);
+    return true;
+  }
+
+  releasePreview(id: string): void {
+    this.previewRunning.delete(id);
+  }
+
+  previewsRunning(): number {
+    return this.previewRunning.size;
+  }
+
   acquire(jobId: string, cls: StageClass): void {
     this.runningByJob.set(jobId, cls);
   }
@@ -268,14 +298,22 @@ export class ResourceGovernor {
     try {
       const sample = await this.options.sampler();
       const now = this.now();
+      const wasBlocked = this.diskBlocks("RENDER");
       this.sample = { ...sample, at: now.toISOString() };
       this.adjust(sample, now);
+      if (wasBlocked !== this.diskBlocks("RENDER")) this.options.onChange?.();
+      this.options.onDiskSample?.(sample.diskFreePercent ?? null, now);
       this.checkIdle(now);
     } catch {
       /* a failed sample leaves the limits as they are */
     } finally {
       this.sampling = false;
     }
+  }
+
+  diskBlocks(stage: PipelineStage | string): boolean {
+    const percent = this.sample?.diskFreePercent;
+    return (stage === "RENDER" || stage === "MEDIA_FETCH") && percent != null && percent < 5;
   }
 
   private over(sample: LoadSample): { cpu: boolean; ram: boolean; gpu: boolean; disk: boolean } {
@@ -387,6 +425,7 @@ export class ResourceGovernor {
       workerCap: this.options.workerCap,
       sample: this.sample,
       overVi,
+      ...(this.diskBlocks("RENDER") ? { diskHoldVi: "Ổ đĩa trống dưới 5%. Tạm ngừng nhận lượt dựng và tải clip mới." } : {}),
       classes: STAGE_CLASSES.map((cls) => ({
         class: cls,
         labelVi: STAGE_CLASS_LABELS_VI[cls],

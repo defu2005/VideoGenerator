@@ -4,6 +4,8 @@ import { mkdirSync, mkdtempSync, rmSync, statSync, writeFileSync } from "node:fs
 import { dirname, join } from "node:path";
 import { motionTelemetryEnv, type NodeProbe } from "@vg/shared";
 import { probeDurationSec, resolveFfmpegPath } from "../media/ffmpeg.js";
+import type { AppConfig } from "../lib/config.js";
+import { readGpuPct } from "../jobs/resourceGovernor.js";
 
 /*
  * Capability probe (TASK-119). Proves the machine can render by doing a tiny real render through the same
@@ -34,6 +36,40 @@ function ffmpegOk(): Promise<boolean> {
       done(false);
     }
   });
+}
+
+/**
+ * TASK-136: can this machine reach the control server's LLM relay with its own token? Only a real GET /models counts.
+ * A machine never advertises `llm:<provider>` any more: it has no LLM key and CLI logins stay on the control machine.
+ */
+export async function probeRelay(controlUrl: string, token: string | undefined, fetchImpl: typeof fetch = fetch): Promise<boolean> {
+  if (!controlUrl || !token) return false;
+  try {
+    const response = await fetchImpl(`${controlUrl.replace(/\/+$/, "")}/api/llm/relay/v1/models`, {
+      headers: { authorization: `Bearer ${token}` }, signal: AbortSignal.timeout(5_000),
+    });
+    return response.ok;
+  } catch {
+    return false;
+  }
+}
+
+/** Env overlay that points a node's LLM registry at the control server's relay, using the node token as the key. */
+export function relayEnv(controlUrl: string, token: string | undefined): Record<string, string> {
+  if (!controlUrl || !token) return {};
+  return { OMNIROUTE_BASE_URL: `${controlUrl.replace(/\/+$/, "")}/api/llm/relay/v1`, OMNIROUTE_API_KEY: token };
+}
+
+export async function probeProjectCapabilities(config: AppConfig, hasRender: boolean): Promise<string[]> {
+  const found = ["project", "search:wikimedia", "search:openverse"];
+  const [hasFfmpeg, gpuPct] = await Promise.all([hasRender || ffmpegOk(), readGpuPct()]);
+  if (hasFfmpeg) found.push("ffmpeg");
+  if (gpuPct !== null) found.push("gpu");
+  if (config.BRAVE_SEARCH_API_KEY) found.push("search:brave");
+  if (config.GEMINI_API_KEY) found.push("search:gemini");
+  if (config.PEXELS_API_KEY) found.push("search:pexels");
+  if (config.PIXABAY_API_KEY) found.push("search:pixabay");
+  return found;
 }
 
 async function realRender(workDir: string, outputPath: string, signal: AbortSignal): Promise<void> {

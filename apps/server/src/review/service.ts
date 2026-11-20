@@ -391,6 +391,8 @@ export class ReviewService {
       return saved;
     }
     switch (proposal.type) {
+      case "PATCH_CONTINUITY_PLAN":
+        return this.scenes.patchContinuity(project.id, proposal.plan, proposal.weight);
       case "EDIT_NARRATION": {
         const saved = this.scenes.patch(project.id, proposal.sceneId, { narration: proposal.text }, { staleFrom: "VOICE" });
         const voice = this.repository.getStage(project.id, "VOICE");

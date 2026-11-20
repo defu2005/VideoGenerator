@@ -1,5 +1,6 @@
 import { createHash, randomUUID } from "node:crypto";
 import {
+  continuityQueries, continuityScore,
   deriveSceneVisualStatus,
   ProjectVisualsSchema,
   ScriptSchema,
@@ -40,14 +41,19 @@ import {
   type LlmCallUsage,
   hashesMatch,
 } from "@vg/shared";
+import { readContinuity, continuityFingerprint } from "../continuity/store.js";
+import { checkContinuity, continuityLocalPath, getValidatedComposePlan } from "../continuity/check.js";
+import { averageLab } from "../continuity/color.js";
 import type Database from "better-sqlite3";
 import type { FastifyBaseLogger } from "fastify";
 import type { JobRepository } from "../jobs/jobRepository.js";
 import type { AppConfig } from "../lib/config.js";
 import { AppError } from "../lib/errors.js";
+import { captureStageFeedback } from "../learning/stageFeedback.js";
 import { ImageDownloadError, ImageStore, isVisualFileName, parseImage, type StoredImage } from "./imageStore.js";
 import { cropProjectImages, cropSceneImage, deleteSceneCrop, type CropAspect, type CropRecord } from "./imageCrop.js";
 import { hashImage } from "./imageHash.js";
+import { imageVerdictContext, visualWorkspace, writeVisualQuery } from "../agents/visualCache.js";
 import { noteMissingDistinctVisual, noteVisualSearchUnavailable, visualCopyrightMode, visualQuality } from "./visualPolicy.js";
 import { projectDir, resolveAssetPath } from "../storage/paths.js";
 import { visionSourceProblem } from "./visionSource.js";
@@ -146,11 +152,58 @@ type SceneSearchData = {
 
 const VISUAL_CHECKPOINT_MAX_AGE_MS = 6 * 60 * 60 * 1000;
 
+/** Short, non-sensitive view of a candidate for stage feedback (TASK-148a). */
+function visualFeedbackSummary(candidate: { provider: string; providerItemId: string; title: string } | null | undefined): { provider: string; id: string; title: string } | null {
+  return candidate ? { provider: candidate.provider, id: candidate.providerItemId, title: candidate.title } : null;
+}
+
 function isProtectedSelection(selection: { selectedBy?: string; status?: string } | null | undefined): boolean {
   return userOwnsVisualSelection(selection);
 }
 
 export class VisualService {
+  async checkContinuity(projectId: string, options: { registry?: LlmProviderRegistry; context?: StageContext } = {}) {
+    this.requireProject(projectId);
+    return checkContinuity(projectId, this.sqlite, this.config, options);
+  }
+
+  private async continuityRank<T extends NormalizedImageResult & { relevanceScore: number; scoreBreakdown: Record<string, unknown> }>(
+    projectId: string, scene: Scene, candidates: T[], signal?: AbortSignal): Promise<T[]> {
+    candidates = candidates.map((candidate) => {
+      if (!("continuityBonus" in candidate.scoreBreakdown)) return candidate;
+      const { continuityBonus: _bonus, continuity: _score, ...rest } = candidate.scoreBreakdown;
+      return { ...candidate, scoreBreakdown: rest };
+    });
+    const envelope = readContinuity(this.sqlite, projectId);
+    if (!envelope || envelope.note || !envelope.weight || isProtectedSelection(this.getSelection(projectId, scene.id))) return candidates;
+    const previous = this.loadScenes(projectId).find((item) => item.order === scene.order - 1);
+    const previousVisuals = previous ? this.getSceneVisuals(projectId, previous.id) : null;
+    const previousPick = previousVisuals?.candidates.find((candidate) => candidate.id === previousVisuals.selection?.candidateId);
+    const previousPath = continuityLocalPath(this.config.DATA_DIR, projectId, previousPick?.localPath ?? null);
+    const previousLab = previousPath ? await averageLab(previousPath) : null;
+    const scenePlan = getValidatedComposePlan(projectId, this.sqlite, this.config)?.scenes.find((item) => item.sceneId === scene.id);
+    const shotSpans = scenePlan?.shots.map((shot) => Math.max(0.01, shot.endSec - shot.startSec)) ?? [];
+    // Không có shot đã kiểm chứng thì dùng đúng mục tiêu nhịp: thành phần nhịp trung tính, không phạt ứng viên.
+    const shotSpan = shotSpans.length > 0 ? shotSpans.reduce((sum, span) => sum + span, 0) / shotSpans.length
+      : envelope.plan.pacing[scene.kind === "section" ? "body" : scene.kind];
+    const measured = new Map<T, number>();
+    // Bounded downloads only; all relevance/licence gates remain in the caller.
+    for (const candidate of candidates.filter((item) => item.scoreBreakdown.lowRelevance !== true && item.scoreBreakdown.invalidSource !== true).slice(0, 3)) {
+      try {
+        const saved = "localPath" in candidate && typeof candidate.localPath === "string" ? candidate.localPath : null;
+        const path = continuityLocalPath(this.config.DATA_DIR, projectId, saved)
+          ?? await this.ensureVisionLocalFile(projectId, `${candidate.provider}:${candidate.providerItemId}`, candidate.imageUrl, signal);
+        const lab = await averageLab(path);
+        // Ảnh ứng viên không có thời lượng riêng. Nhịp so với mục tiêu phải dùng độ dài shot đã kiểm chứng
+        // của cảnh (compose plan hợp lệ) khi có; nếu không thì dùng thời lượng cảnh như trước.
+        if (lab) measured.set(candidate, continuityScore(envelope.plan, lab, previousLab, shotSpan, scene.kind));
+      } catch (error) { if (signal?.aborted) throw error; }
+    }
+    const scored = candidates.map((candidate) => ({ ...candidate, scoreBreakdown: { ...candidate.scoreBreakdown,
+      ...(measured.has(candidate) ? { continuity: measured.get(candidate), continuityBonus: envelope.weight * measured.get(candidate)! } : {}) } }));
+    return scored.sort((a, b) => Number(a.scoreBreakdown.lowRelevance === true) - Number(b.scoreBreakdown.lowRelevance === true)
+      || (b.relevanceScore + Number(b.scoreBreakdown.continuityBonus ?? 0)) - (a.relevanceScore + Number(a.scoreBreakdown.continuityBonus ?? 0)));
+  }
   private readonly limiter: TokenBucketRateLimiter;
   private readonly registry: ImageProviderRegistry;
   private readonly imageStore: ImageStore;
@@ -292,6 +345,7 @@ export class VisualService {
     const { providers, limits } = this.resolveProviders(providerIds, project, sceneText);
     const stats = createSearchStats();
     const results = await this.searchAcrossProviders(
+      project.id,
       this.providerQuery(project.topic, query),
       providers,
       orientationFor(project.settings.aspectRatio),
@@ -447,7 +501,7 @@ export class VisualService {
       const brave = new BraveImageProvider(this.config);
       await this.limiter.acquire("brave", signal);
       const primary = this.webQuery(project.topic, scene, queries[0]!);
-      const braveHits = await brave.search({
+      const braveHits = await this.searchBrave(project.id, brave, {
         query: primary,
         perPage: 20,
         orientation: orientationFor(project.settings.aspectRatio),
@@ -617,8 +671,10 @@ export class VisualService {
     return this.getSceneVisuals(projectId, sceneId);
   }
 
-  async selectCandidate(projectId: string, sceneId: string, candidateId: string) {
+  async selectCandidate(projectId: string, sceneId: string, candidateId: string, source?: string | null) {
     this.requireScene(projectId, sceneId);
+    const previousSelection = this.getSelection(projectId, sceneId);
+    const previousCandidate = previousSelection ? this.findCandidate(previousSelection.candidateId) : null;
     const candidate = this.findCandidate(candidateId);
     if (!candidate || candidate.projectId !== projectId || candidate.sceneId !== sceneId || candidate.discardedAt) {
       throw new AppError(404, "VISUAL_CANDIDATE_NOT_FOUND", "Visual candidate not found");
@@ -643,8 +699,20 @@ export class VisualService {
       this.markTimelineStale(projectId);
       this.repository.emitVisualUpdated(projectId, sceneId, "selected");
     });
+    // Capture only for a caller that passes a source (HTTP route). Internal auto-selection passes none.
+    if (source && previousCandidate && previousCandidate.id !== candidate.id) {
+      captureStageFeedback(this.sqlite, {
+        projectId, stage: "VISUAL_REVIEW", kind: "swap", target: this.sceneTarget(sceneId),
+        before: visualFeedbackSummary(previousCandidate), after: visualFeedbackSummary(candidate), source,
+      }, this.logger);
+    }
     await this.pingUnsplashDownload(candidate);
     return this.getSceneVisuals(projectId, sceneId);
+  }
+
+  private sceneTarget(sceneId: string): string {
+    const row = this.sqlite.prepare("SELECT \"order\" AS o FROM scenes WHERE id = ?").get(sceneId) as { o: number } | undefined;
+    return row ? `scene:${row.o}` : `scene:${sceneId}`;
   }
 
   discardCandidate(projectId: string, sceneId: string, candidateId: string) {
@@ -680,7 +748,7 @@ export class VisualService {
     return this.getSceneVisuals(projectId, sceneId, true);
   }
 
-  rejectSceneVisual(projectId: string, sceneId: string) {
+  rejectSceneVisual(projectId: string, sceneId: string, reason?: string | null, source?: string | null) {
     this.requireScene(projectId, sceneId);
     const selection = this.getSelection(projectId, sceneId);
     if (!selection) throw new AppError(404, "VISUAL_SELECTION_NOT_FOUND", "This scene has no selected image.");
@@ -688,6 +756,10 @@ export class VisualService {
     if (!candidate || candidate.projectId !== projectId || candidate.sceneId !== sceneId) {
       throw new AppError(404, "VISUAL_CANDIDATE_NOT_FOUND", "Selected visual candidate not found.");
     }
+    if (source) captureStageFeedback(this.sqlite, {
+      projectId, stage: "VISUAL_REVIEW", kind: "gate_reject", target: this.sceneTarget(sceneId),
+      before: visualFeedbackSummary(candidate), after: null, reason: reason ?? null, source,
+    }, this.logger);
     const now = new Date().toISOString();
     this.repository.atomic(() => {
       this.sqlite.prepare("UPDATE visual_candidates SET discarded_at = ? WHERE id = ?").run(now, candidate.id);
@@ -835,11 +907,12 @@ export class VisualService {
     input: { visualQueries?: { primary: string; alternatives: string[] }; visualDescription?: string },
   ) {
     const scene = this.requireScene(projectId, sceneId);
+    const continuity = readContinuity(this.sqlite, projectId);
     this.repository.atomic(() => {
       this.sqlite.prepare(
         "UPDATE scenes SET visual_queries = ?, visual_description = ?, edited = 1, updated_at = ? WHERE project_id = ? AND id = ?",
       ).run(
-        JSON.stringify(input.visualQueries ?? scene.visualQueries),
+        JSON.stringify({ ...(input.visualQueries ?? scene.visualQueries), ...(continuity && scene.order === 0 ? { continuity } : {}) }),
         input.visualDescription ?? scene.visualDescription,
         new Date().toISOString(),
         projectId,
@@ -1016,6 +1089,11 @@ export class VisualService {
     return { changed: true };
   }
 
+  /** TASK-141 P2: recompute findings without a context (no model call, no stored-report write). */
+  async repairContinuityFindings(projectId: string) {
+    return (await checkContinuity(projectId, this.sqlite, this.config)).findings;
+  }
+
   /** True when the profile's source policy already allows web image sources. */
   repairWebAllowed(): boolean {
     const settings = getWebImageSettings(this.sqlite, this.config);
@@ -1037,8 +1115,9 @@ export class VisualService {
     const generic = kept.length >= 3 ? kept.join(" ") : `Minh họa chung: ${scene.narration.split(/\s+/).slice(0, 10).join(" ")}`;
     const next = generic === scene.visualDescription ? `${project.topic} ${generic}`.slice(0, 300) : generic.slice(0, 300);
     const now = new Date().toISOString();
+    const continuity = readContinuity(this.sqlite, projectId);
     this.sqlite.prepare("UPDATE scenes SET visual_description = ?, visual_queries = ?, updated_at = ? WHERE id = ?")
-      .run(next, JSON.stringify({ ...scene.visualQueries, primary: next, alternatives: [] }), now, sceneId);
+      .run(next, JSON.stringify({ ...scene.visualQueries, primary: next, alternatives: [], ...(continuity && scene.order === 0 ? { continuity } : {}) }), now, sceneId);
     const meta = this.getVisionMeta(sceneId) ?? {};
     this.writeVisionMeta(sceneId, projectId, { ...meta, repair: "rephrase" });
     return { changed: true, previous: scene.visualDescription, next };
@@ -1091,7 +1170,9 @@ export class VisualService {
         if (leftFit != null && rightFit != null && leftFit !== rightFit) return rightFit - leftFit;
         if (leftFit != null && rightFit == null) return -1;
         if (leftFit == null && rightFit != null) return 1;
-        if (right.relevanceScore !== left.relevanceScore) return right.relevanceScore - left.relevanceScore;
+        const rightScore = right.relevanceScore + Number(right.scoreBreakdown.continuityBonus ?? 0);
+        const leftScore = left.relevanceScore + Number(left.scoreBreakdown.continuityBonus ?? 0);
+        if (rightScore !== leftScore) return rightScore - leftScore;
         return left.rank - right.rank;
       });
   }
@@ -1114,7 +1195,8 @@ export class VisualService {
     approved: VisualCandidate | null;
     downloadFailures: { id: string; host: string | null; status: number | null }[];
   }> {
-    const ordered = this.rankedCandidates(candidates).slice(0, maxAttempts);
+    const ranked = await this.continuityRank(projectId, this.requireScene(projectId, sceneId), this.rankedCandidates(candidates), signal);
+    const ordered = this.rankedCandidates(ranked).slice(0, maxAttempts);
     const downloadFailures: { id: string; host: string | null; status: number | null }[] = [];
     for (const pick of ordered) {
       if (signal?.aborted) throw signal.reason ?? new Error("Visual auto-resolve was aborted");
@@ -1487,8 +1569,10 @@ export class VisualService {
       const locked = selection && userOwnsVisualSelection(selection)
         ? this.findCandidate(selection.candidateId)
         : null;
-      const candidates = this.listActiveCandidates(project.id, scene.id)
-        .filter((candidate) => this.candidatePassesGate(candidate, visionOn));
+      const candidates = this.rankedCandidates(
+        this.listActiveCandidates(project.id, scene.id)
+          .filter((candidate) => this.candidatePassesGate(candidate, visionOn)),
+      );
       return {
         sceneId: scene.id,
         order: scene.order,
@@ -1720,6 +1804,7 @@ export class VisualService {
     const scenes = this.loadScenes(project.id);
     const enabledProviders = this.resolveProviders(undefined, project).providers;
     const featureSettings = resolveFeatures(this.sqlite, project);
+    const budgetFeatures = visualFeaturesFor(resolveBudget(project), this.visualsQualityFor(project));
     const stats = createSearchStats();
     let llmCalls = 0;
     let inputTokens = 0;
@@ -1734,7 +1819,10 @@ export class VisualService {
     for (const [index, scene] of scenes.entries()) {
       if (context.signal.aborted) throw context.signal.reason ?? new Error("Visual search was aborted");
       const searchHash = createHash("sha256").update(JSON.stringify([
+        continuityFingerprint(readContinuity(this.sqlite, project.id)), readContinuity(this.sqlite, project.id)?.weight,
         scene.visualQueries,
+        imageVerdictContext({ narration: scene.narration, visualDescription: scene.visualDescription || scene.visualNotes,
+          aspectRatio: project.settings.aspectRatio, visionThreshold: budgetFeatures.visionThreshold }),
         scene.queryVariant,
         scene.visualDescription,
         scene.visualNotes,
@@ -1864,6 +1952,7 @@ export class VisualService {
               enabledProviders.map((provider) => provider.id),
             ) >= featureSettings.visualSearchBreadth) break;
             item.candidates.push(...await this.searchAcrossProviders(
+              project.id,
               this.providerQuery(project.topic, query),
               enabledProviders.filter((provider) => provider.id !== "openverse"),
               orientationFor(project.settings.aspectRatio),
@@ -1966,7 +2055,6 @@ export class VisualService {
       }
     }
 
-    const budgetFeatures = visualFeaturesFor(resolveBudget(project), this.visualsQualityFor(project));
     let braveImageSearchRequests = 0;
     let webImageGroundingCalls = 0;
     const webCap = webImageSearchSceneCap(budgetFeatures, rankedScenes.length);
@@ -2019,7 +2107,7 @@ export class VisualService {
               const brave = new BraveImageProvider(this.config);
               await this.limiter.acquire("brave", context.signal);
               if (!allowsOptionalWebSearch()) break;
-              const hits = await brave.search({
+              const hits = await this.searchBrave(project.id, brave, {
                 query: this.webQuery(project.topic, entry.item.scene, entry.item.queries[0] ?? entry.item.scene.visualQueries.primary),
                 perPage: 20,
                 orientation: orientationFor(project.settings.aspectRatio),
@@ -2178,6 +2266,7 @@ export class VisualService {
             sceneId: entry.item.scene.id,
             narration: entry.item.scene.narration,
             visualDescription: entry.item.scene.visualDescription || entry.item.scene.visualNotes,
+            subjectKey: entry.item.scene.visualDescription || entry.item.scene.visualQueries.primary,
             queries: [entry.item.scene.visualQueries.primary, ...entry.item.scene.visualQueries.alternatives],
             candidates: labeled.map(({ id, label, localPath, relevanceScore, textRerank }) => ({
               id, label, localPath, relevanceScore, textRerank,
@@ -2194,6 +2283,7 @@ export class VisualService {
             const found: VisionCandidateInput[] = [];
             for (const query of queries) {
               const results = await this.searchAcrossProviders(
+                project.id,
                 this.providerQuery(project.topic, query),
                 enabledProviders,
                 orientationFor(project.settings.aspectRatio),
@@ -2276,7 +2366,7 @@ export class VisualService {
           try {
             const brave = new BraveImageProvider(this.config);
             await this.limiter.acquire("brave", context.signal);
-            const hits = await brave.search({
+            const hits = await this.searchBrave(project.id, brave, {
               query: this.webQuery(project.topic, entry.item.scene, entry.item.queries[0] ?? entry.item.scene.visualQueries.primary),
               perPage: 20,
               orientation: orientationFor(project.settings.aspectRatio),
@@ -2351,6 +2441,7 @@ export class VisualService {
               sceneId,
               narration: entry.item.scene.narration,
               visualDescription: entry.item.scene.visualDescription || entry.item.scene.visualNotes,
+              subjectKey: entry.item.scene.visualDescription || entry.item.scene.visualQueries.primary,
               queries: [entry.item.scene.visualQueries.primary, ...entry.item.scene.visualQueries.alternatives],
               candidates: labeled,
             },
@@ -2493,7 +2584,7 @@ export class VisualService {
       };
     };
     for (const entry of rankedScenes) {
-      entry.ranked = dedupeCandidates(entry.ranked);
+      entry.ranked = await this.continuityRank(project.id, entry.item.scene, dedupeCandidates(entry.ranked), context.signal);
     }
     let selections = assignDistinct(rankedScenes.map(({ item, ranked }) => assignPool(item, ranked)));
     const extraRounds: Array<{ sceneId: string; queries: string[]; found: number }> = [];
@@ -2510,6 +2601,7 @@ export class VisualService {
         const found: NormalizedImageResult[] = [];
         for (const query of extras) {
           found.push(...await this.searchAcrossProviders(
+            project.id,
             this.providerQuery(project.topic, query),
             enabledProviders,
             orientationFor(project.settings.aspectRatio),
@@ -2532,7 +2624,7 @@ export class VisualService {
         entry.item.queries.push(...extras);
       }
       for (const entry of rankedScenes) {
-        entry.ranked = dedupeCandidates(entry.ranked);
+        entry.ranked = await this.continuityRank(project.id, entry.item.scene, dedupeCandidates(entry.ranked), context.signal);
       }
       selections = assignDistinct(rankedScenes.map(({ item, ranked }) => assignPool(item, ranked)));
     }
@@ -2769,7 +2861,8 @@ export class VisualService {
     const seenQueries = new Set<string>();
     const entity = workEntity(topic);
     const rawPrimary = stripQueryModifiers(scene.visualQueries.primary);
-    const rawAlternatives = scene.visualQueries.alternatives.map(stripQueryModifiers).filter(Boolean);
+    const rawAlternatives = continuityQueries(readContinuity(this.sqlite, scene.projectId)?.plan, scene.id,
+      [scene.visualQueries.primary, ...scene.visualQueries.alternatives]).slice(1).map(stripQueryModifiers).filter(Boolean);
     const primary = ensureEntityPrefix(rawPrimary, entity);
     const alternatives = rawAlternatives.map((query) => ensureEntityPrefix(query, entity));
     const search = async (query: string, ladderStep: number): Promise<void> => {
@@ -2791,6 +2884,7 @@ export class VisualService {
         ? providers
         : providers.filter((provider) => provider.id !== "openverse");
       results.push(...await this.searchAcrossProviders(
+        scene.projectId,
         cleanQuery,
         queryProviders,
         orientationFor(aspectRatio),
@@ -2825,7 +2919,21 @@ export class VisualService {
     ).filter((candidate) => candidate.scoreBreakdown.keyword > 0).length;
   }
 
+  private async searchBrave(projectId: string, brave: BraveImageProvider, input: Parameters<BraveImageProvider["search"]>[0]) {
+    const results = await brave.search(input);
+    this.cacheSearchResults(projectId, "brave", input.query, results);
+    return results;
+  }
+
+  private cacheSearchResults(projectId: string, source: string, query: string, results: NormalizedImageResult[]) {
+    writeVisualQuery(this.sqlite, visualWorkspace(this.sqlite, projectId), source, query, results.map((result) => ({
+      imageUrl: result.imageUrl, sourcePageUrl: result.sourcePageUrl ?? result.sourceUrl, sourceSite: result.sourceSite,
+      title: result.title, width: result.width || undefined, height: result.height || undefined,
+    })));
+  }
+
   private async searchAcrossProviders(
+    projectId: string,
     query: string,
     providers: ImageSearchProvider[],
     orientation: ImageOrientation,
@@ -2859,6 +2967,7 @@ export class VisualService {
           && (item.fileType.toLowerCase() === "svg"
             || ["jpg", "jpeg", "png", "webp", "gif"].includes(item.fileType.toLowerCase())));
         this.putCached(cacheKey, provider.id, query, filtered);
+        this.cacheSearchResults(projectId, provider.id, query, filtered);
         return filtered;
       } catch (error) {
         if (signal?.aborted) throw signal.reason ?? error;

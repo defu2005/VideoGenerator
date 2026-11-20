@@ -2,6 +2,7 @@ import {
   ApiErrorSchema,
   MergedStorySchema,
   ResearchNotesSchema,
+  StoredResearchNotesSchema,
   SaveScriptInputSchema,
   ScriptDataSchema,
   ScriptSchema,
@@ -18,9 +19,11 @@ import { deeperResearchDepth, scriptPrompt } from "../stages/script/prompt.js";
 import type { AppConfig } from "../lib/config.js";
 import type { GuidelineService } from "../guidelines/service.js";
 import { getProfilePromptContext } from "../services/profileService.js";
+import { captureScriptEdit, feedbackSourceFor } from "../learning/stageFeedback.js";
 import type Database from "better-sqlite3";
 
 const ParamsSchema = z.object({ id: z.string().uuid() }).strict();
+const SwitchHookBodySchema = z.object({ hookId: z.string().min(1) }).strict();
 const PromptParamsSchema = z.object({
   id: z.string().uuid(),
   stage: z.enum(["RESEARCH", "SCRIPT", "STORY"]),
@@ -60,18 +63,52 @@ export function registerScriptRoutes(
     },
   }, async (request) => {
     const { id } = ParamsSchema.parse(request.params);
-    return service.save(id, SaveScriptInputSchema.parse(request.body));
+    const next = SaveScriptInputSchema.parse(request.body);
+    const previous = service.get(id).script;
+    const saved = await service.save(id, next);
+    if (sqlite) {
+      // Best-effort: a capture failure must never fail a save that already succeeded.
+      try {
+        const row = sqlite.prepare("SELECT profile_id AS profileId FROM projects WHERE id = ?").get(id) as { profileId: string | null } | undefined;
+        captureScriptEdit(sqlite, { projectId: id, profileId: row?.profileId ?? null, before: previous?.data ?? null, after: next, source: feedbackSourceFor(request.actor) });
+      } catch (error) {
+        request.log.warn({ err: error, projectId: id }, "stage feedback capture failed");
+      }
+    }
+    return saved;
   });
 
   app.put("/api/projects/:id/research", {
     schema: {
       params: ParamsSchema,
-      body: ResearchNotesSchema,
+      body: StoredResearchNotesSchema,
       response: { 200: ScriptDataSchema, 400: ApiErrorSchema, 404: ApiErrorSchema, 409: ApiErrorSchema },
     },
   }, async (request) => {
     const { id } = ParamsSchema.parse(request.params);
-    return service.saveResearch(id, ResearchNotesSchema.parse(request.body));
+    return service.saveResearch(id, StoredResearchNotesSchema.parse(request.body));
+  });
+
+  app.post("/api/projects/:id/script/hook", {
+    schema: {
+      params: ParamsSchema,
+      body: SwitchHookBodySchema,
+      response: { 200: ScriptDataSchema, 400: ApiErrorSchema, 404: ApiErrorSchema, 409: ApiErrorSchema },
+    },
+  }, async (request) => {
+    const { id } = ParamsSchema.parse(request.params);
+    const { hookId } = SwitchHookBodySchema.parse(request.body);
+    return service.switchHook(id, hookId);
+  });
+
+  app.post("/api/projects/:id/script/critique", {
+    schema: {
+      params: ParamsSchema,
+      response: { 200: ScriptDataSchema, 404: ApiErrorSchema, 409: ApiErrorSchema, 503: ApiErrorSchema },
+    },
+  }, async (request) => {
+    const { id } = ParamsSchema.parse(request.params);
+    return service.rescoreCritique(id);
   });
 
   app.get("/api/projects/:id/prompts/:stage", {
@@ -86,7 +123,7 @@ export function registerScriptRoutes(
     const researchMode = storyModeForProject(project);
     const research = researchMode !== "off" ? data?.research?.data : undefined;
     const storyGuidance = guidelines.guidanceFor(project, ["script", "subtitles"]);
-    const promptContext = sqlite ? getProfilePromptContext(sqlite, project.profileId) : undefined;
+    const promptContext = sqlite ? getProfilePromptContext(sqlite, project.profileId, stage === "RESEARCH" ? "RESEARCH" : "SCRIPT") : undefined;
     const channelDirection = promptContext?.direction;
     const learnedNotes = promptContext?.learnedNotes;
     const researchDepth = deeperResearchDepth("standard", project);

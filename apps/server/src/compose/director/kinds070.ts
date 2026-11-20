@@ -8,10 +8,11 @@ import {
 } from "@vg/shared";
 import { directivesOf, type DirectorInput } from "../director.js";
 import { mapCatalog } from "../render/mapGeo.js";
+import { timelinePiece } from "./kinds099.js";
 
 /** A graphic the rule director may insert. The variety pass still enforces the 30 % cap. */
 export type GraphicPiece = {
-  kind: "map" | "compare" | "quote_full" | "list_full";
+  kind: "map" | "compare" | "quote_full" | "list_full" | "timeline";
   start: number;
   end: number;
   reason: string;
@@ -265,6 +266,6 @@ function overlaps(start: number, end: number, taken: { start: number; end: numbe
 
 /** First matching kind that does not sit on a graphic already chosen for this scene. */
 export function graphicKindPiece(input: DirectorInput, lang: ComposeLangPack, taken: { start: number; end: number }[] = []): GraphicPiece | null {
-  const candidates = [quotePiece(input, lang), listPiece(input, lang), comparePiece(input, lang), mapPiece(input)].filter((item): item is GraphicPiece => item !== null);
+  const candidates = [timelinePiece(input), quotePiece(input, lang), listPiece(input, lang), comparePiece(input, lang), mapPiece(input)].filter((item): item is GraphicPiece => item !== null);
   return candidates.find((item) => !overlaps(item.start, item.end, taken)) ?? null;
 }

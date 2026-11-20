@@ -1039,12 +1039,6 @@ export class FinanceService {
       ).all(query.profileId) as Array<{ id: string }>).map((p) => p.id)
       : null;
 
-    const usage = this.deps.usage.getAppUsage({
-      from: query.from,
-      to: query.to,
-      groupBy: "day",
-    });
-
     // Per-project usage for allocation.
     const projectRows = this.deps.sqlite.prepare(
       `SELECT DISTINCT j.project_id AS projectId, p.profile_id AS profileId,
@@ -1101,8 +1095,13 @@ export class FinanceService {
       });
     }
 
-    // Also surface unused aggregated usage when no project rows (for profile-level totals).
-    void usage;
+    // Relay calls with a surviving job are already allocated above. Unassigned
+    // calls remain workspace overhead, without inventing a project or profile.
+    if (!query.profileId) for (const relay of this.deps.usage.getUnassignedRelayUsage(query)) {
+      if (!(relay.costUsd !== null && relay.costUsd > 0)) continue;
+      usageCosts.push({ id: `relay:${relay.id}`, profileId: null, projectId: null, kind: "llm",
+        date: relay.createdAt.slice(0, 10), amount: relay.costUsd, currency: "USD", source: "usage_auto" });
+    }
 
     return [...manual, ...usageCosts];
   }

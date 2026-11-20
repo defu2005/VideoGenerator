@@ -29,11 +29,16 @@ function shiftTime(value: string): string {
   return `${String(Math.floor(total / 60)).padStart(2, "0")}:${String(total % 60).padStart(2, "0")}`;
 }
 
-export function runStandingPlans(db: Database.Database, now: Date): { planner: boolean; review: boolean; digest: boolean } {
+/** Reference time for buildDigest. The 07:00 digest reports the day that just closed (its clock is 12 h earlier, 19:00 the evening before in Vietnam time); the 21:00 digest reports today. */
+export function digestReferenceTime(now: Date, morning: boolean): Date {
+  return morning ? new Date(now.getTime() - 12 * 60 * 60_000) : now;
+}
+
+export function runStandingPlans(db: Database.Database, now: Date): { planner: boolean; review: boolean; digest: boolean; morningDigest: boolean } {
   const parts = zonedParts(now, ZONE);
   const day = localDay(now);
   const at = now.toISOString();
-  const result = { planner: false, review: false, digest: false };
+  const result = { planner: false, review: false, digest: false, morningDigest: false };
   if (parts.hour === 5 && !already(db, firedKey("planner", day))) {
     const goals = db.prepare("SELECT profile_id FROM operator_goals WHERE status = 'active' AND profile_id IS NOT NULL")
       .all() as Array<{ profile_id: string }>;
@@ -79,6 +84,11 @@ export function runStandingPlans(db: Database.Database, now: Date): { planner: b
     buildDigest(db, () => now);
     remember(db, firedKey("digest", day), at);
     result.digest = true;
+  }
+  // TASK-129c slice 3: morning digest with the same builder and mission section.
+  if (parts.hour === 7 && !already(db, firedKey("digest-morning", day))) {
+    remember(db, firedKey("digest-morning", day), at);
+    result.morningDigest = true;
   }
   return result;
 }

@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { publishFindingOpened } from "./findingEvents.js";
 import type Database from "better-sqlite3";
 import { OVERDUE_NOTICE_AFTER_MS, PROTECTED_PROJECT_ID, ProfileAutomationSchema, enumerateSlots, overdueCheckSpacingMs, resolveStageTimeoutMs, timeoutBriefFromSettings } from "@vg/shared";
 import { lastOverdueCheck } from "../jobs/overdueStore.js";
@@ -7,7 +8,7 @@ import type { JobRepository } from "../jobs/jobRepository.js";
 import type { UsageService } from "../services/usageService.js";
 import { buildDigest, cleanupTempCache } from "./autopilot.js";
 import { runPlaybooks, setGatewayBypass } from "./playbooks.js";
-import { runStandingPlans } from "./planner.js";
+import { digestReferenceTime, runStandingPlans } from "./planner.js";
 import { autonomyBudgetStatus, hasAutonomySpendLimit, recordBudgetFindings } from "./autonomyBudget.js";
 import { effectiveAutonomy } from "./autonomy.js";
 import { canReadStageFinding, stageReleaseLoops } from "../agents/releaseMonitor.js";
@@ -272,6 +273,8 @@ export class AutonomySupervisor {
       .get(PROTECTED_PROJECT_ID) as { count: number };
     let nudge = false;
     const notifications: { id: string; profileId: string | null; message: string }[] = [];
+    // TASK-129a §1 anomaly: one bus event per finding that is newly opened or reopened (not per tick).
+    const opened: { kind: string; summary: string; profileId: string | null; projectId?: string }[] = [];
     this.db.transaction(() => {
       const seen = new Set<string>();
       for (const finding of detected) {
@@ -282,6 +285,10 @@ export class AutonomySupervisor {
         const label = finding.kind in ALERTS ? ALERTS[finding.kind as keyof typeof ALERTS] : undefined;
         if (label && (!prior || prior.status === "resolved")) {
           notifications.push({ id: `${key}:${at}`, profileId: finding.profileId ?? null, message: label });
+        }
+        if (!prior || prior.status === "resolved") {
+          const projectId = typeof (finding.detail as { projectId?: unknown } | null)?.projectId === "string" ? (finding.detail as { projectId: string }).projectId : undefined;
+          opened.push({ kind: finding.kind, summary: (label ?? `Phát hiện ${finding.kind}`).slice(0, 200), profileId: finding.profileId ?? null, projectId });
         }
         if (finding.kind === "worker_idle") {
           const claimed = this.db.prepare("UPDATE supervisor_findings SET status = 'healing' WHERE dedupe_key = ? AND status = 'open'")
@@ -308,6 +315,8 @@ export class AutonomySupervisor {
       this.db.prepare("DELETE FROM supervisor_heartbeats WHERE observed_at < ?")
         .run(new Date(now.getTime() - RETENTION).toISOString());
     }).immediate();
+    // A finding is scoped to its profile's workspace; findings without a profile stay global, like quota_failover.
+    for (const item of opened) publishFindingOpened(this.db, { summary: item.summary, profileId: item.profileId, projectId: item.projectId });
     if (this.options.tempRoot && detected.some((finding) => finding.kind === "disk_low")) {
       cleanupTempCache(this.options.tempRoot, now);
     }
@@ -319,19 +328,30 @@ export class AutonomySupervisor {
     }
     try {
       const plans = runStandingPlans(this.db, now);
-      if (plans.digest) {
-        const digest = buildDigest(this.db, () => now);
-        const fallback = `Bản tin ${digest.day}: ${digest.requests.length} việc cần bạn, ${digest.goals.length} mục tiêu.`;
+      if (plans.digest || plans.morningDigest) {
+        const isMorning = plans.morningDigest && !plans.digest;
+        const digestAt = digestReferenceTime(now, isMorning);
+        const digest = buildDigest(this.db, () => digestAt);
+        const label = isMorning ? "Bản tin sáng" : "Bản tin";
+        const digestId = `${plans.morningDigest && !plans.digest ? "digest-morning" : "digest"}:${digest.day}`;
+        const fallback = `${label} ${digest.day}: ${digest.requests.length} việc cần bạn, ${digest.goals.length} mục tiêu.`;
         const weekly = `\nTự cải tiến 7 ngày: ${digest.selfImprovementWeek.researched} lượt nghiên cứu, ${digest.selfImprovementWeek.knowledgeProposals} đề xuất tri thức.`;
+        const m = digest.missions;
+        const dayWord = isMorning ? "hôm qua" : "hôm nay";
+        const missionLine = m.inFlight.length || m.endedToday.length || m.publishedToday
+          ? `
+Mission: ${m.inFlight.length} đang chạy, ${m.waitingUser} chờ bạn, ${m.publishedToday} video đã đăng ${dayWord}, ${m.endedToday.length} kết thúc ${dayWord} (${m.failedToday} lỗi).`
+          : "";
+        const digestTail = weekly + missionLine;
         const summarize = this.options.summarize;
         if (summarize) {
           void summarize(fallback).then((line) => {
-            this.options.notify?.({ id: `digest:${digest.day}`, profileId: null, message: (line || fallback) + weekly });
+            this.options.notify?.({ id: digestId, profileId: null, message: (line || fallback) + digestTail });
           }).catch(() => {
-            this.options.notify?.({ id: `digest:${digest.day}`, profileId: null, message: fallback + weekly });
+            this.options.notify?.({ id: digestId, profileId: null, message: fallback + digestTail });
           });
         } else {
-          this.options.notify?.({ id: `digest:${digest.day}`, profileId: null, message: fallback + weekly });
+          this.options.notify?.({ id: digestId, profileId: null, message: fallback + digestTail });
         }
       }
     } catch (error) {

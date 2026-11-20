@@ -54,7 +54,7 @@ export class ResearchExecutor implements StageExecutor {
       let effectiveMode = mode;
       usageFeature = mode === "merged" ? "story" : "research";
       const guidelines = new GuidelineService(this.sqlite);
-      const promptContext = getProfilePromptContext(this.sqlite, project.profileId);
+      const promptContext = getProfilePromptContext(this.sqlite, project.profileId, "RESEARCH");
       const channelDirection = promptContext.direction;
       const researchDepth = deeperResearchDepth(budget.researchDepth, project);
       let promptInput = mode === "merged"

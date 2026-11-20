@@ -309,7 +309,7 @@ export function buildAdvisorTaskInputs(): AdvisorTaskInput[] {
 }
 
 function typicalTokensForTask(id: LlmTaskId, qualityWeight: 1 | 2 | 3): { input: number; output: number } {
-  if (id === "research" || id === "script" || id === "scriptReview" || id === "factCheck" || id === "guidelineCheck" || id === "reviewChat" || id === "translateScript") {
+  if (id === "research" || id === "script" || id === "scriptReview" || id === "storyOutline" || id === "scriptCritic" || id === "scriptRewrite" || id === "scriptLengthFit" || id === "factCheck" || id === "guidelineCheck" || id === "reviewChat" || id === "translateScript") {
     return { input: 4_000 + qualityWeight * 500, output: 1_500 + qualityWeight * 300 };
   }
   if (id === "visionCheck" || id === "visionConsistency" || id === "renderVision" || id === "thumbnailPick") {

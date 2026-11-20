@@ -1,6 +1,7 @@
 import type Database from "better-sqlite3";
 import { publishAgentEvent } from "../events/agentBus.js";
 import type { TrustedAgent } from "./identity.js";
+import { handOverMissions } from "../missions/missions.js";
 
 export const DUTY_TTL_MS = 3 * 60 * 1000;
 
@@ -66,6 +67,8 @@ export function dutyHeartbeat(
     if (stale) publishAgentEvent({ type: "hermes.duty_lost", summary: `${stale.instance} hết hạn trực.` });
     publishAgentEvent({ type: "hermes.duty_taken", summary: `${agent.instance} nhận trực.` });
   }
+  // TASK-129c: open missions whose owner is not the holder follow the holder (runs every heartbeat, so it also covers sweepDuty clearing on_duty first).
+  handOverMissions(sqlite, agent.instance, now);
   return { onDuty: true, holder: agent.instance, expiresAt: new Date(now.getTime() + DUTY_TTL_MS).toISOString() };
 }
 
@@ -93,4 +96,33 @@ export function listInstances(sqlite: Database.Database, now = new Date()): Arra
 export function lastDutyAt(sqlite: Database.Database): string | null {
   const row = sqlite.prepare("SELECT MAX(duty_heartbeat_at) AS at FROM agent_instances").get() as { at: string | null };
   return row.at;
+}
+
+/** TASK-129c: a duty holder silent for this long means the watchdog alerts the user once. */
+export const DUTY_WATCHDOG_MS = 5 * 60 * 1000;
+const WATCHDOG_KEY = "duty.watchdog.alertedFor";
+
+/**
+ * Duty watchdog. With no live holder for 5 min it alerts the user once per outage (marked by the last heartbeat seen).
+ * Failover needs no extra step: a standby key with canSupervise takes duty on its next heartbeat (dutyHeartbeat),
+ * and open missions keep running on app machinery meanwhile. Returns true when it alerted.
+ */
+export function watchdogDuty(sqlite: Database.Database, notifyUser: (text: string) => void, now = new Date(), startedAt: Date = new Date(0)): boolean {
+  if (currentDuty(sqlite, now)) return false;
+  const last = lastDutyAt(sqlite);
+  // Nothing ever held duty: no outage to report.
+  if (!last) return false;
+  // Silence counts from the later of the last heartbeat and this process's start, so a restart gives agents 5 min to beat.
+  const since = Math.max(Date.parse(last), startedAt.getTime());
+  if (now.getTime() - since < DUTY_WATCHDOG_MS) return false;
+  const marked = sqlite.prepare("SELECT value FROM app_settings WHERE key = ?").get(WATCHDOG_KEY) as { value: string } | undefined;
+  if (marked && JSON.parse(marked.value) === last) return false;
+  const text = "Agent trực không gửi nhịp sống quá 5 phút. Mission đang chạy tiếp; agent dự phòng sẽ nhận trực khi có nhịp đầu tiên.";
+  sqlite.transaction(() => {
+    sqlite.prepare("INSERT INTO app_settings (key,value,updated_at) VALUES (?,?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value,updated_at=excluded.updated_at")
+      .run(WATCHDOG_KEY, JSON.stringify(last), now.toISOString());
+    notifyUser(text);
+    publishAgentEvent({ type: "hermes.duty_watchdog", summary: text });
+  })();
+  return true;
 }

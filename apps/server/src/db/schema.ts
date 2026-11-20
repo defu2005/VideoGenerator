@@ -224,6 +224,8 @@ export type PlatformAppCredentialRow = typeof platformAppCredentials.$inferSelec
 
 export const publications = sqliteTable("publications", {
   id: text("id").primaryKey(),
+  /** TASK-129c slice 2b: set when a mission schedules this publication; null for ordinary publications. */
+  missionId: text("mission_id"),
   projectId: text("project_id").notNull().references(() => projects.id, { onDelete: "cascade" }),
   renderId: text("render_id").notNull().references(() => renders.id, { onDelete: "cascade" }),
   accountId: text("account_id").notNull().references(() => platformAccounts.id, { onDelete: "cascade" }),
@@ -253,6 +255,7 @@ export const publications = sqliteTable("publications", {
   index("publications_account_idx").on(table.accountId),
   index("publications_status_scheduled_idx").on(table.status, table.scheduledFor),
   index("publications_render_account_idx").on(table.renderId, table.accountId),
+  index("publications_mission_idx").on(table.missionId),
 ]);
 
 export type PublicationRow = typeof publications.$inferSelect;
@@ -327,6 +330,8 @@ export const comments = sqliteTable("comments", {
 export type CommentRow = typeof comments.$inferSelect;
 
 export const projects = sqliteTable("projects", {
+  executionMode: text("execution_mode", { enum: ["control", "node"] }).notNull().default("control"),
+  executionNode: text("execution_node").references((): AnySQLiteColumn => nodes.id, { onDelete: "set null" }),
   workspaceId: text("workspace_id"),
   id: text("id").primaryKey(),
   title: text("title").notNull(),
@@ -359,6 +364,50 @@ export const projects = sqliteTable("projects", {
 ]);
 
 export type ProjectRow = typeof projects.$inferSelect;
+
+/** TASK-135a: a fenced segment of a project executed by one worker. */
+export const projectRuns = sqliteTable("project_runs", {
+  id: text("id").primaryKey(),
+  projectId: text("project_id").notNull().references(() => projects.id, { onDelete: "cascade" }),
+  workspaceId: text("workspace_id").notNull(),
+  nodeId: text("node_id").notNull().references((): AnySQLiteColumn => nodes.id),
+  leaseId: text("lease_id").notNull(),
+  leaseUntil: text("lease_until").notNull(),
+  heartbeatAt: text("heartbeat_at").notNull(),
+  status: text("status", { enum: ["GRANTED", "RUNNING", "PAUSED_AT_GATE", "DONE", "LOST", "CANCELLED", "FAILED"] }).notNull(),
+  fromStage: text("from_stage").notNull(),
+  stopBefore: text("stop_before").notNull(),
+  baseVersion: text("base_version").notNull(),
+  lastSeq: integer("last_seq").notNull().default(0),
+  budgetCapUsd: real("budget_cap_usd").notNull(),
+  createdAt: text("created_at").notNull(),
+  endedAt: text("ended_at"),
+  endReason: text("end_reason"),
+}, (table) => [index("project_runs_project_status_idx").on(table.projectId, table.status), index("project_runs_node_lease_idx").on(table.nodeId, table.leaseUntil)]);
+
+export const runCheckpoints = sqliteTable("run_checkpoints", {
+  runId: text("run_id").notNull().references(() => projectRuns.id, { onDelete: "cascade" }),
+  seq: integer("seq").notNull(),
+  stage: text("stage").notNull(),
+  inputVersion: text("input_version").notNull(),
+  appliedAt: text("applied_at").notNull(),
+  rows: integer("rows").notNull(),
+  bytes: integer("bytes").notNull(),
+  result: text("result", { enum: ["applied", "rebase", "rejected"] }).notNull(),
+  contentHash: text("content_hash").notNull(),
+}, (table) => [primaryKey({ columns: [table.runId, table.seq] })]);
+
+export const runUploads = sqliteTable("run_uploads", {
+  runId: text("run_id").notNull().references(() => projectRuns.id, { onDelete: "cascade" }),
+  leaseId: text("lease_id").notNull(),
+  name: text("name").notNull(),
+  sha256: text("sha256").notNull(),
+  size: integer("size").notNull(),
+  path: text("path").notNull(),
+  receivedBytes: integer("received_bytes").notNull().default(0),
+  status: text("status", { enum: ["partial", "ready", "linked"] }).notNull(),
+  createdAt: text("created_at").notNull(),
+}, (table) => [primaryKey({ columns: [table.runId, table.leaseId, table.name] })]);
 
 /** One proposal batch for Shorts/Reels cut from a long render or an external file. */
 export const clipSets = sqliteTable("clip_sets", {
@@ -419,10 +468,17 @@ export const notificationLog = sqliteTable("notification_log", {
 export type NotificationLogRow = typeof notificationLog.$inferSelect;
 
 export const jobs = sqliteTable("jobs", {
+  inputVersion: text("input_version"),
+  invalidatedAt: text("invalidated_at"),
+  inputRetry: integer("input_retry", { mode: "boolean" }).notNull().default(false),
+  finalizingAt: text("finalizing_at"),
   executor: text("executor").notNull().default("app"),
   handoffReason: text("handoff_reason"),
   handoffAt: text("handoff_at"),
   agentInstance: text("agent_instance"),
+  /** TASK-147d: failed script submits counted for the lease in agentHoldLeaseId; a new lease resets it. */
+  agentHoldCount: integer("agent_hold_count"),
+  agentHoldLeaseId: text("agent_hold_lease_id"),
   id: text("id").primaryKey(),
   /** Null for assistant-chat usage, which is not tied to one video. */
   projectId: text("project_id").references(() => projects.id, { onDelete: "cascade" }),
@@ -502,6 +558,7 @@ export const stageOverdueChecks = sqliteTable("stage_overdue_checks", {
 ]);
 
 export const projectStages = sqliteTable("project_stages", {
+  inputVersion: text("input_version"),
   projectId: text("project_id").notNull().references(() => projects.id, { onDelete: "cascade" }),
   stage: text("stage").notNull(),
   state: text("state").notNull(),
@@ -540,6 +597,19 @@ export const scripts = sqliteTable("scripts", {
   qualityScore: real("quality_score"),
   blockingFacts: integer("blocking_facts").notNull().default(0),
   reviseRound: integer("revise_round").notNull().default(0),
+});
+
+export const scriptDrafts = sqliteTable("script_drafts", {
+  projectId: text("project_id").primaryKey().references(() => projects.id, { onDelete: "cascade" }),
+  outline: text("outline", { mode: "json" }),
+  hookCandidates: text("hook_candidates", { mode: "json" }),
+  critique: text("critique", { mode: "json" }),
+  critiqueHistory: text("critique_history", { mode: "json" }),
+  engineMode: text("engine_mode").notNull(),
+  inputHash: text("input_hash").notNull(),
+  updatedAt: text("updated_at").notNull(),
+  /** TASK-147d: "agent:<instance>" when an agent wrote the draft; null when the app did. */
+  author: text("author"),
 });
 
 export const scenes = sqliteTable("scenes", {
@@ -1218,6 +1288,41 @@ export const operatorToolProposals = sqliteTable("operator_tool_proposals", {
   index("operator_tool_proposals_status_idx").on(table.status, table.createdAt),
 ]);
 
+/** TASK-074c-1: one table for every improvement request. Tool requests are copied from operator_tool_proposals. */
+export const improvementRequests = sqliteTable("improvement_requests", {
+  id: text("id").primaryKey(),
+  kind: text("kind").notNull(),
+  title: text("title").notNull(),
+  problem: text("problem").notNull(),
+  proposal: text("proposal").notNull(),
+  evidence: text("evidence").notNull(),
+  acceptance: text("acceptance").notNull(),
+  dataVsCode: text("data_vs_code"),
+  expectedImpact: text("expected_impact"),
+  effort: text("effort"),
+  risk: text("risk"),
+  openSource: text("open_source"),
+  status: text("status").notNull(),
+  weight: integer("weight").notNull().default(1),
+  fingerprint: text("fingerprint").notNull(),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+  // TASK-074c-4b-3a: IMP number is assigned once to an accepted tool row; drafted_at stays null until a draft is written.
+  impNumber: integer("imp_number"),
+  draftedAt: text("drafted_at"),
+  // TASK-074c-6e: the TASK-… name the user confirmed with a .done file. Set only together with status 'done'.
+  taskRef: text("task_ref"),
+  // TASK-074c-5e: when check-done moved the row to done (same UPDATE, same timestamp). NULL unless set by check-done.
+  doneAt: text("done_at"),
+  // TASK-074c-5e-2a-1: stored result of the acceptance check (JSON array of verdicts) and when it was written. NULL until recorded.
+  acceptanceResult: text("acceptance_result"),
+  acceptanceCheckedAt: text("acceptance_checked_at"),
+}, (table) => [
+  index("improvement_requests_status_idx").on(table.status, table.createdAt),
+  index("improvement_requests_fingerprint_idx").on(table.fingerprint, table.status),
+  uniqueIndex("improvement_requests_imp_number_idx").on(table.impNumber),
+]);
+
 export const operatorEvents = sqliteTable("operator_events", {
   id: text("id").primaryKey(),
   kind: text("kind").notNull(),
@@ -1269,6 +1374,22 @@ export const operatorRoutingLog = sqliteTable("operator_routing_log", {
 }, (table) => [
   index("operator_routing_log_created_idx").on(table.createdAt),
   index("operator_routing_log_run_idx").on(table.runId),
+]);
+
+/** TASK-074b-3a: routing hits on a shadow skill version. Records only; the shadow version never runs. */
+export const operatorSkillShadowRuns = sqliteTable("operator_skill_shadow_runs", {
+  id: text("id").primaryKey(),
+  skillName: text("skill_name").notNull(),
+  shadowVersion: integer("shadow_version").notNull(),
+  activeVersion: integer("active_version"),
+  runId: text("run_id"),
+  query: text("query").notNull(),
+  rank: integer("rank"),
+  planned: text("planned", { mode: "json" }).$type<string[]>().notNull(),
+  createdAt: text("created_at").notNull(),
+}, (table) => [
+  index("operator_skill_shadow_runs_skill_idx").on(table.skillName, table.shadowVersion),
+  index("operator_skill_shadow_runs_run_idx").on(table.runId),
 ]);
 
 export const operatorToolAudit = sqliteTable("operator_tool_audit", {
@@ -1923,6 +2044,7 @@ export const auditLog = sqliteTable("audit_log", {
 
 /** TASK-118: a machine that joined to render. Only token hashes are stored. */
 export const nodes = sqliteTable("nodes", {
+  workspaceId: text("workspace_id"),
   id: text("id").primaryKey(),
   name: text("name").notNull(),
   tokenHash: text("token_hash"),
@@ -1965,8 +2087,22 @@ export const nodeLeaseSecrets = sqliteTable("node_lease_secrets", {
   index("node_lease_secrets_node_idx").on(table.nodeId, table.createdAt),
 ]);
 
+/** Durable upload progress and verified output descriptors, fenced to a particular node lease. */
+export const nodeUploads = sqliteTable("node_uploads", {
+  jobId: text("job_id").notNull().references(() => jobs.id, { onDelete: "cascade" }),
+  leaseId: text("lease_id").notNull(),
+  name: text("name").notNull(),
+  sha256: text("sha256").notNull(),
+  size: integer("size").notNull(),
+  path: text("path").notNull(),
+  receivedBytes: integer("received_bytes").notNull().default(0),
+  status: text("status", { enum: ["partial", "ready", "linked"] }).notNull(),
+  createdAt: text("created_at").notNull(),
+}, (table) => [primaryKey({ columns: [table.jobId, table.leaseId, table.name] })]);
+
 /** TASK-118: one-time token that lets a machine join. Single use, one hour. */
 export const nodeJoinTokens = sqliteTable("node_join_tokens", {
+  workspaceId: text("workspace_id"),
   id: text("id").primaryKey(),
   tokenHash: text("token_hash").notNull(),
   createdBy: text("created_by"),
@@ -1988,6 +2124,42 @@ export const artifacts = sqliteTable("artifacts", {
 }, (table) => [
   index("artifacts_path_idx").on(table.path),
 ]);
+
+/** TASK-137: verified copies outside the local project tree. */
+export const blobs = sqliteTable("blobs", {
+  sha256: text("sha256").primaryKey(),
+  size: integer("size").notNull(),
+  provider: text("provider", { enum: ["local", "s3"] }).notNull(),
+  key: text("key").notNull(),
+  locationId: text("location_id").notNull(),
+  storedAt: text("stored_at").notNull(),
+  verifiedAt: text("verified_at").notNull(),
+  orphanedAt: text("orphaned_at"),
+  purgeAfter: text("purge_after"),
+});
+
+/** Local paths retain their grace period when the owning project row is removed. */
+export const fileGcMarks = sqliteTable("file_gc_marks", {
+  path: text("path").primaryKey(),
+  projectOwnerId: text("project_owner_id").notNull(),
+  kind: text("kind", { enum: ["project", "ephemeral"] }).notNull(),
+  size: integer("size").notNull(),
+  stamp: text("stamp").notNull(),
+  orphanedAt: text("orphaned_at").notNull(),
+  purgeAfter: text("purge_after").notNull(),
+}, (table) => [index("file_gc_marks_purge_idx").on(table.purgeAfter)]);
+
+export const fileGcRuns = sqliteTable("file_gc_runs", {
+  id: text("id").primaryKey(),
+  startedAt: text("started_at").notNull(),
+  durationMs: integer("duration_ms").notNull(),
+  dryRun: integer("dry_run", { mode: "boolean" }).notNull(),
+  marked: integer("marked").notNull(),
+  cleared: integer("cleared").notNull(),
+  purged: integer("purged").notNull(),
+  bytes: integer("bytes").notNull(),
+  error: text("error"),
+});
 
 /** TASK-122: who a machine key belongs to. Kept beside Better Auth's apikey table, which we do not alter. */
 export const agentKeyProfiles = sqliteTable("agent_key_profiles", {
@@ -2064,6 +2236,65 @@ export const agentLessons = sqliteTable("agent_lessons", {
   retiredReason: text("retired_reason"),
 }, (table) => [uniqueIndex("agent_lessons_workspace_scope_text_uidx").on(table.workspaceId, table.scope, table.normalizedText)]);
 
+/** TASK-128b: user-configured scopes for external agents. */
+export const agentAssignments = sqliteTable("agent_assignments", {
+  id: text("id").primaryKey(),
+  workspaceId: text("workspace_id").notNull(),
+  instance: text("instance").notNull(),
+  role: text("role").notNull(),
+  profileId: text("profile_id").references(() => profiles.id, { onDelete: "cascade" }),
+  projectId: text("project_id").references(() => projects.id, { onDelete: "cascade" }),
+  stage: text("stage"),
+  maxConcurrent: integer("max_concurrent").notNull().default(1),
+  active: integer("active", { mode: "boolean" }).notNull().default(true),
+  createdBy: text("created_by").notNull(),
+}, (table) => [index("agent_assignments_workspace_active_idx").on(table.workspaceId, table.active, table.instance)]);
+
+export const imageVerdicts = sqliteTable("image_verdicts", {
+  workspaceId: text("workspace_id").notNull(),
+  phash: text("phash").notNull(),
+  subjectKey: text("subject_key").notNull(),
+  verdict: text("verdict").notNull(),
+  reason: text("reason").notNull(),
+  checkedBy: text("checked_by").notNull(),
+  model: text("model").notNull(),
+  visionCheck: text("vision_check").notNull(),
+  createdAt: text("created_at").notNull(),
+}, (table) => [primaryKey({ columns: [table.workspaceId, table.phash, table.subjectKey] })]);
+
+/** TASK-148d: accept/reject counts per query shape and topic, for the visual scout hints. */
+export const visualQueryPatterns = sqliteTable("visual_query_patterns", {
+  workspaceId: text("workspace_id").notNull(),
+  channel: text("channel").notNull().default(""),
+  topicTag: text("topic_tag").notNull(),
+  shape: text("shape").notNull(),
+  accepted: integer("accepted").notNull().default(0),
+  rejected: integer("rejected").notNull().default(0),
+  exampleQuery: text("example_query").notNull(),
+  updatedAt: text("updated_at").notNull(),
+}, (table) => [primaryKey({ columns: [table.workspaceId, table.channel, table.topicTag, table.shape, table.exampleQuery] })]);
+
+/** TASK-148e: prompt variants per stage. Only the user can promote one; trial evidence is stored with it. */
+export const stagePromptVariants = sqliteTable("stage_prompt_variants", {
+  id: text("id").primaryKey(),
+  stage: text("stage").notNull(),
+  textHash: text("text_hash").notNull(),
+  text: text("text").notNull(),
+  status: text("status").notNull(),
+  evidence: text("evidence", { mode: "json" }).$type<unknown[]>().notNull().default([]),
+  createdAt: text("created_at").notNull(),
+  decidedAt: text("decided_at"),
+  decidedBy: text("decided_by"),
+}, (table) => [uniqueIndex("stage_prompt_variants_stage_hash").on(table.stage, table.textHash)]);
+
+export const searchQueryCache = sqliteTable("search_query_cache", {
+  workspaceId: text("workspace_id").notNull(),
+  source: text("source").notNull(),
+  normalizedQuery: text("normalized_query").notNull(),
+  results: text("results").notNull(),
+  createdAt: text("created_at").notNull(),
+}, (table) => [primaryKey({ columns: [table.workspaceId, table.source, table.normalizedQuery] })]);
+
 /** TASK-074a: fixed research pipeline audit, scoped to the caller's workspace. */
 export const researchRuns = sqliteTable("research_runs", {
   id: text("id").primaryKey(), workspaceId: text("workspace_id"),
@@ -2097,4 +2328,168 @@ export const agentEscalations = sqliteTable("agent_escalations", {
 }, (table) => [
   index("agent_escalations_status_idx").on(table.status, table.toKind),
   index("agent_escalations_object_idx").on(table.kind, table.objectRef),
+]);
+
+/** TASK-129a: agent ↔ agent mailbox. `toKind` is instance | role | duty; role and duty resolve at read time, first ack wins. */
+export const agentMessages = sqliteTable("agent_messages", {
+  id: text("id").primaryKey(),
+  workspaceId: text("workspace_id").notNull(),
+  threadId: text("thread_id").notNull(),
+  fromInstance: text("from_instance").notNull(),
+  toKind: text("to_kind").notNull(),
+  toValue: text("to_value").notNull(),
+  kind: text("kind").notNull(),
+  missionId: text("mission_id"),
+  projectId: text("project_id"),
+  body: text("body").notNull(),
+  attachments: text("attachments", { mode: "json" }).$type<string[]>().notNull().default(sql`'[]'`),
+  createdAt: text("created_at").notNull(),
+  deliveredAt: text("delivered_at"),
+  ackedAt: text("acked_at"),
+  ackedBy: text("acked_by"),
+  expiresAt: text("expires_at").notNull(),
+  escalatedDutyAt: text("escalated_duty_at"),
+  escalatedUserAt: text("escalated_user_at"),
+}, (table) => [
+  index("agent_messages_thread_idx").on(table.threadId, table.createdAt),
+  index("agent_messages_to_idx").on(table.workspaceId, table.toKind, table.toValue, table.ackedAt),
+  index("agent_messages_sender_idx").on(table.workspaceId, table.fromInstance, table.createdAt),
+]);
+
+/** TASK-129a: per-instance push subscription. `webhookEndpointId` reuses webhook_endpoints and webhook_deliveries for retry. */
+export const agentSubscriptions = sqliteTable("agent_subscriptions", {
+  id: text("id").primaryKey(),
+  workspaceId: text("workspace_id").notNull(),
+  instance: text("instance").notNull(),
+  kinds: text("kinds", { mode: "json" }).$type<string[]>().notNull().default(sql`'[]'`),
+  scope: text("scope", { mode: "json" }).$type<{ profileId?: string; projectId?: string; stage?: string }>().notNull().default(sql`'{}'`),
+  delivery: text("delivery").notNull(),
+  webhookEndpointId: text("webhook_endpoint_id").references(() => webhookEndpoints.id, { onDelete: "cascade" }),
+  enabled: integer("enabled", { mode: "boolean" }).notNull().default(true),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+}, (table) => [index("agent_subscriptions_instance_idx").on(table.workspaceId, table.instance, table.enabled)]);
+
+/** TASK-136: per-caller policy for the LLM relay (LiteLLM-style virtual key policy). `*` is the default row. */
+export const llmRelayGrants = sqliteTable("llm_relay_grants", {
+  caller: text("caller").notNull(),
+  workspaceId: text("workspace_id"),
+  models: text("models", { mode: "json" }).$type<string[]>().notNull().default(sql`'[]'`),
+  rpm: integer("rpm").notNull().default(30),
+  tpm: integer("tpm").notNull().default(200000),
+  dailyUsdCap: real("daily_usd_cap").notNull().default(2),
+  enabled: integer("enabled", { mode: "boolean" }).notNull().default(true),
+  updatedAt: text("updated_at").notNull(),
+}, (table) => [
+  uniqueIndex("llm_relay_grants_workspace_caller_uq").on(table.workspaceId, table.caller),
+  uniqueIndex("llm_relay_grants_legacy_caller_uq").on(table.caller).where(sql`${table.workspaceId} is null`),
+]);
+
+/** TASK-136: one row per relayed call. Never holds a key or a prompt. */
+export const llmRelayUsage = sqliteTable("llm_relay_usage", {
+  id: text("id").primaryKey(),
+  caller: text("caller").notNull(),
+  workspaceId: text("workspace_id"),
+  model: text("model").notNull(),
+  jobId: text("job_id"),
+  inputTokens: integer("input_tokens").notNull().default(0),
+  outputTokens: integer("output_tokens").notNull().default(0),
+  costUsd: real("cost_usd"),
+  estimated: integer("estimated", { mode: "boolean" }).notNull().default(false),
+  /** ok | refused | error */
+  status: text("status").notNull(),
+  /** Stable refusal or error code, when status is not ok. */
+  code: text("code"),
+  latencyMs: integer("latency_ms").notNull().default(0),
+  createdAt: text("created_at").notNull(),
+}, (table) => [
+  index("llm_relay_usage_caller_created_idx").on(table.caller, table.createdAt),
+  index("llm_relay_usage_job_idx").on(table.jobId),
+]);
+
+// TASK-148a: user edits and gate rejections, and distilled per-stage notes.
+export const stageFeedback = sqliteTable("stage_feedback", {
+  id: text("id").primaryKey(),
+  createdAt: text("created_at").notNull(),
+  projectId: text("project_id").notNull().references(() => projects.id, { onDelete: "cascade" }),
+  profileId: text("profile_id"),
+  stage: text("stage").notNull(),
+  kind: text("kind").notNull(),
+  target: text("target").notNull(),
+  before: text("before"),
+  after: text("after"),
+  reason: text("reason"),
+  source: text("source").notNull(),
+  distilledAt: text("distilled_at"),
+}, (table) => [
+  index("stage_feedback_project_stage_idx").on(table.projectId, table.stage),
+  index("stage_feedback_profile_stage_idx").on(table.profileId, table.stage, table.createdAt),
+]);
+
+/** TASK-148c: one row per finished stage run (written once, in the orchestrator completion path). */
+export const stageQuality = sqliteTable("stage_quality", {
+  id: text("id").primaryKey(),
+  createdAt: text("created_at").notNull(),
+  projectId: text("project_id").notNull().references(() => projects.id, { onDelete: "cascade" }),
+  profileId: text("profile_id"),
+  stage: text("stage").notNull(),
+  jobId: text("job_id"),
+  executor: text("executor").notNull().default("app"),
+  modelRoute: text("model_route"),
+  retries: integer("retries").notNull().default(0),
+  durationMs: integer("duration_ms").notNull().default(0),
+  costUsd: real("cost_usd").notNull().default(0),
+  /** Stage-specific numbers, e.g. { quality_score } for SCRIPT. */
+  metrics: text("metrics", { mode: "json" }).$type<Record<string, number | string | boolean | null>>().notNull(),
+}, (table) => [
+  index("stage_quality_stage_created_idx").on(table.stage, table.profileId, table.createdAt),
+]);
+
+export const stageNotes = sqliteTable("stage_notes", {
+  id: text("id").primaryKey(),
+  profileId: text("profile_id"),
+  stage: text("stage").notNull(),
+  text: text("text").notNull(),
+  evidenceIds: text("evidence_ids", { mode: "json" }).$type<string[]>().notNull(),
+  status: text("status").notNull(),
+  createdAt: text("created_at").notNull(),
+  decidedAt: text("decided_at"),
+  decidedBy: text("decided_by"),
+  uses: integer("uses").notNull().default(0),
+  lastUsedAt: text("last_used_at"),
+}, (table) => [
+  index("stage_notes_profile_stage_status_idx").on(table.profileId, table.stage, table.status),
+]);
+
+/** TASK-129c: a mission turns one user command into planned stages, a publish and later analytics. Owner = duty instance. */
+export const missions = sqliteTable("missions", {
+  id: text("id").primaryKey(),
+  workspaceId: text("workspace_id").notNull(),
+  createdBy: text("created_by").notNull(),
+  command: text("command").notNull(),
+  channelProfileId: text("channel_profile_id"),
+  projectIds: text("project_ids", { mode: "json" }).$type<string[]>().notNull().default(sql`'[]'`),
+  plan: text("plan", { mode: "json" }).$type<Array<Record<string, unknown>>>().notNull().default(sql`'[]'`),
+  state: text("state").notNull().default("planning"),
+  owner: text("owner"),
+  autonomyLevel: text("autonomy_level").notNull(),
+  deadline: text("deadline"),
+  budgetUsd: real("budget_usd"),
+  report: text("report"),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+}, (table) => [
+  index("missions_workspace_state_idx").on(table.workspaceId, table.state),
+  index("missions_owner_idx").on(table.owner, table.state),
+]);
+
+/** TASK-129c slice 2: one row per checkpoint (`published`, `2h`, `24h`, `72h`, `7d`) and one `ping` row per mission. */
+export const missionCheckpoints = sqliteTable("mission_checkpoints", {
+  missionId: text("mission_id").notNull(),
+  kind: text("kind").notNull(),
+  at: text("at").notNull(),
+  metrics: text("metrics", { mode: "json" }).$type<Record<string, unknown> | null>(),
+  report: text("report"),
+}, (table) => [
+  primaryKey({ columns: [table.missionId, table.kind] }),
 ]);

@@ -3,6 +3,7 @@ import {
   ProjectVisualsSchema,
   SceneVisualsSchema,
   VisualMotionSchema,
+  ContinuityReportSchema,
 } from "@vg/shared";
 import { z } from "zod";
 import type { FastifyInstance } from "fastify";
@@ -11,6 +12,7 @@ import { AppError } from "../lib/errors.js";
 import type { JobRepository } from "../jobs/jobRepository.js";
 import type { LlmProviderRegistry } from "../providers/llm/registry.js";
 import type { VisualService } from "../services/visualService.js";
+import { feedbackSourceFor } from "../learning/stageFeedback.js";
 
 const ProjectParams = z.object({ id: z.string().uuid() }).strict();
 const SceneParams = z.object({ id: z.string().uuid(), sceneId: z.string().uuid() }).strict();
@@ -58,6 +60,9 @@ export function registerVisualRoutes(
   repository: JobRepository,
   llmProviders?: LlmProviderRegistry,
 ): void {
+  app.get("/api/projects/:id/visuals/continuity", {
+    schema: { params: ProjectParams, response: { 200: ContinuityReportSchema, 404: ApiErrorSchema } },
+  }, async (request) => service.checkContinuity(ProjectParams.parse(request.params).id));
   const ensureNoActiveJob = (projectId: string) => {
     if (repository.getActiveJob(projectId)) {
       throw new AppError(409, "JOB_ACTIVE", "Visuals cannot be changed while a project job is active.");
@@ -193,7 +198,7 @@ export function registerVisualRoutes(
     const { id, sceneId } = SceneParams.parse(request.params);
     const { candidateId } = z.object({ candidateId: z.string().uuid() }).strict().parse(request.body);
     ensureSceneMutationAllowed(id, sceneId);
-    return await service.selectCandidate(id, sceneId, candidateId);
+    return await service.selectCandidate(id, sceneId, candidateId, feedbackSourceFor(request.actor));
   });
 
   app.post("/api/projects/:id/scenes/:sceneId/visuals/:candidateId/discard", {
@@ -219,8 +224,9 @@ export function registerVisualRoutes(
     schema: { params: SceneParams, response: { 200: SceneVisualsSchema, ...Errors } },
   }, async (request) => {
     const { id, sceneId } = SceneParams.parse(request.params);
+    const { reason } = z.object({ reason: z.string().max(1000).optional() }).strict().parse(request.body ?? {});
     ensureSceneMutationAllowed(id, sceneId);
-    return service.rejectSceneVisual(id, sceneId);
+    return service.rejectSceneVisual(id, sceneId, reason ?? null, feedbackSourceFor(request.actor));
   });
 
   app.post("/api/projects/:id/scenes/:sceneId/visuals/custom-url", {

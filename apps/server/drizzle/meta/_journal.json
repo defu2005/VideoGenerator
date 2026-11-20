@@ -561,6 +561,174 @@
       "when": 1794693883859,
       "tag": "0079_common_dexter_bennett",
       "breakpoints": true
+    },
+    {
+      "idx": 80,
+      "version": "6",
+      "when": 1794791070575,
+      "tag": "0080_sharp_guardian",
+      "breakpoints": true
+    },
+    {
+      "idx": 81,
+      "version": "6",
+      "when": 1794793690870,
+      "tag": "0081_tiresome_quicksilver",
+      "breakpoints": true
+    },
+    {
+      "idx": 82,
+      "version": "6",
+      "when": 1794798638356,
+      "tag": "0082_lonely_darkstar",
+      "breakpoints": true
+    },
+    {
+      "idx": 83,
+      "version": "6",
+      "when": 1794823660402,
+      "tag": "0083_furry_strong_guy",
+      "breakpoints": true
+    },
+    {
+      "idx": 84,
+      "version": "6",
+      "when": 1794825822546,
+      "tag": "0084_milky_betty_ross",
+      "breakpoints": true
+    },
+    {
+      "idx": 85,
+      "version": "6",
+      "when": 1794853437921,
+      "tag": "0085_complete_colonel_america",
+      "breakpoints": true
+    },
+    {
+      "idx": 86,
+      "version": "6",
+      "when": 1794854883941,
+      "tag": "0086_zippy_johnny_storm",
+      "breakpoints": true
+    },
+    {
+      "idx": 87,
+      "version": "6",
+      "when": 1794907463703,
+      "tag": "0087_right_catseye",
+      "breakpoints": true
+    },
+    {
+      "idx": 88,
+      "version": "6",
+      "when": 1794951355387,
+      "tag": "0088_optimal_thundra",
+      "breakpoints": true
+    },
+    {
+      "idx": 89,
+      "version": "6",
+      "when": 1794955927373,
+      "tag": "0089_stage_quality",
+      "breakpoints": true
+    },
+    {
+      "idx": 90,
+      "version": "6",
+      "when": 1794959498923,
+      "tag": "0090_mighty_gertrude_yorkes",
+      "breakpoints": true
+    },
+    {
+      "idx": 91,
+      "version": "6",
+      "when": 1794959567537,
+      "tag": "0091_absurd_proemial_gods",
+      "breakpoints": true
+    },
+    {
+      "idx": 92,
+      "version": "6",
+      "when": 1794976433567,
+      "tag": "0092_agent_bus",
+      "breakpoints": true
+    },
+    {
+      "idx": 93,
+      "version": "6",
+      "when": 1794990115012,
+      "tag": "0093_missions",
+      "breakpoints": true
+    },
+    {
+      "idx": 94,
+      "version": "6",
+      "when": 1794991384575,
+      "tag": "0094_mission_checkpoints",
+      "breakpoints": true
+    },
+    {
+      "idx": 95,
+      "version": "6",
+      "when": 1794992496967,
+      "tag": "0095_publication_mission",
+      "breakpoints": true
+    },
+    {
+      "idx": 96,
+      "version": "6",
+      "when": 1795063679293,
+      "tag": "0096_visual_query_channel",
+      "breakpoints": true
+    },
+    {
+      "idx": 97,
+      "version": "6",
+      "when": 1795076578125,
+      "tag": "0097_script_agent_author",
+      "breakpoints": true
+    },
+    {
+      "idx": 98,
+      "version": "6",
+      "when": 1795103919990,
+      "tag": "0098_operator_skill_shadow_runs",
+      "breakpoints": true
+    },
+    {
+      "idx": 99,
+      "version": "6",
+      "when": 1795120408767,
+      "tag": "0099_improvement_requests",
+      "breakpoints": true
+    },
+    {
+      "idx": 100,
+      "version": "6",
+      "when": 1795164268122,
+      "tag": "0100_improvement_imp_number",
+      "breakpoints": true
+    },
+    {
+      "idx": 101,
+      "version": "6",
+      "when": 1795191675653,
+      "tag": "0101_improvement_task_ref",
+      "breakpoints": true
+    },
+    {
+      "idx": 102,
+      "version": "6",
+      "when": 1795196313531,
+      "tag": "0102_improvement_done_at",
+      "breakpoints": true
+    },
+    {
+      "idx": 103,
+      "version": "6",
+      "when": 1795198452556,
+      "tag": "0103_acceptance_result",
+      "breakpoints": true
     }
   ]
 }

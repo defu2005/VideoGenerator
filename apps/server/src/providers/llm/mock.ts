@@ -1,5 +1,11 @@
 import { mockVector } from "../../retrieval/embeddings.js";
 import { createHash } from "node:crypto";
+import {
+  formatRecipe,
+  hookTacticsForRecipe,
+  STORY_FRAMEWORKS_BY_RECIPE,
+  type FormatRecipeId,
+} from "@vg/shared";
 import type { LlmProvider, LlmRequest } from "./types.js";
 
 let assistantChatScriptQueue: unknown[] = [];
@@ -263,6 +269,93 @@ export class MockLlmProvider implements LlmProvider {
     };
     if (req.schemaName === "ResearchNotes") return response(research, req.model);
     if (req.schemaName === "MergedStory") return response({ research, script: scriptFixture }, req.model);
+    if (req.schemaName === "StoryOutlineResponse") {
+      const recipeKey = (prompt.match(/Recipe format:\s*([a-z_]+)/i)?.[1] ?? "explainer") as FormatRecipeId;
+      const rec = formatRecipe(recipeKey) ?? formatRecipe("explainer")!;
+      const framework = STORY_FRAMEWORKS_BY_RECIPE[rec.id]?.[0] ?? "question_driven";
+      const tactics = hookTacticsForRecipe(rec);
+      const beatPurposes: Array<"hook" | "setup" | "reveal" | "evidence" | "tension" | "explanation" | "payoff" | "reflection" | "transition" | "cta"> = [
+        "hook", "setup", "explanation", "payoff", "cta", "reveal", "evidence", "tension", "reflection", "transition",
+      ];
+      const beats = rec.script.structure.map((sec, idx) => {
+        const beatSec = Math.max(1, Math.round(sec.shareOfDuration * targetSeconds));
+        return {
+          id: `b${idx + 1}`,
+          sectionKey: sec.key,
+          purpose: beatPurposes[idx % beatPurposes.length]!,
+          emotion: "curious" as const,
+          concreteMoment: `Khoảnh khắc cho ${sec.nameVi}`,
+          newInformation: `Thông tin mới về ${sec.nameVi}`,
+          opensLoops: idx === 0 ? ["l1"] : [],
+          closesLoops: idx === rec.script.structure.length - 1 ? ["l1"] : [],
+          factIds: idx === 0 ? ["f1"] : [],
+          visualIntent: `Hình ảnh tài liệu về ${sec.nameVi}`,
+          targetSec: beatSec,
+        };
+      });
+      const currentBeatsTotal = beats.reduce((s, b) => s + b.targetSec, 0);
+      if (beats.length > 0 && currentBeatsTotal !== targetSeconds) {
+        beats[beats.length - 1]!.targetSec += (targetSeconds - currentBeatsTotal);
+      }
+      const firstBeatId = beats[0]!.id;
+      const lastBeatId = beats[beats.length - 1]!.id;
+      return response({
+        outline: {
+          centralQuestion: `Bí mật thực sự đằng sau ${topic}?`,
+          promise: `Giải mã toàn bộ câu chuyện về ${topic}.`,
+          framework,
+          surprises: [
+            { fact: `Sự thật không ngờ 1 về ${topic}`, factIds: ["f1"] },
+            { fact: `Sự thật không ngờ 2 về ${topic}`, factIds: ["f2"] },
+          ],
+          beats,
+          loops: [{ id: "l1", question: `Điều gì tiếp theo cho ${topic}?`, opensAtBeatId: firstBeatId, closesAtBeatId: lastBeatId }],
+          setupPayoffs: [{ setupBeatId: firstBeatId, payoffBeatId: lastBeatId, detail: `Lời giải cuối cùng cho ${topic}` }],
+        },
+        hooks: [
+          { id: "h1", tactic: tactics[0] ?? "question", text: `Bạn có biết điều bí mật về ${topic}?`, promise: `Khám phá ngay` },
+          { id: "h2", tactic: tactics[1] ?? tactics[0] ?? "cold_open", text: `Một khám phá chấn động về ${topic} vừa được công bố.`, promise: `Theo dõi tiếp` },
+          { id: "h3", tactic: tactics[2] ?? tactics[0] ?? "curiosity_gap", text: `Tại sao ${topic} lại khiến cả thế giới kinh ngạc?`, promise: `Xem đến cuối` },
+        ],
+      }, req.model);
+    }
+    if (req.schemaName === "HookAssessments") {
+      return response({
+        hooks: [
+          { hookId: "h1", scores: { clarity: 5, curiosity: 5, accuracy: 5, audienceFit: 4, payoff: 5 } },
+          { hookId: "h2", scores: { clarity: 4, curiosity: 4, accuracy: 4, audienceFit: 4, payoff: 4 } },
+          { hookId: "h3", scores: { clarity: 4, curiosity: 4, accuracy: 4, audienceFit: 4, payoff: 4 } },
+        ],
+      }, req.model);
+    }
+    if (req.schemaName === "ScriptCritique") {
+      return response({
+        total: 88,
+        scores: {
+          structure: 5,
+          hook: 5,
+          accuracy: 5,
+          ttsNatural: 4,
+          visualizable: 4,
+          originality: 4,
+        },
+        hookPaidOff: true,
+        unclosedLoops: [],
+        sectionIssues: [],
+      }, req.model);
+    }
+    if (req.schemaName === "RewriteOutput") {
+      return response({}, req.model);
+    }
+    if (req.schemaName === "HookSwitchRewrite") {
+      return response({
+        hook: `Một khám phá chấn động về ${topic} vừa được công bố.`,
+        revisedSectionNarration: `Mở đầu câu chuyện về ${topic}.`,
+      }, req.model);
+    }
+    if (req.schemaName === "ScriptLengthFit") {
+      return response(scriptFixture, req.model);
+    }
     if (req.schemaName === "Script") {
       if (/Bản trước chưa đạt/.test(prompt)) scriptFixture.title = `${scriptFixture.title} (sửa)`;
       return response(scriptFixture, req.model);

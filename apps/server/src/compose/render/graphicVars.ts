@@ -1,4 +1,6 @@
-import { quoteWords, type RenderTarget, type Shot, type StylePack } from "@vg/shared";
+import { readFileSync, statSync } from "node:fs";
+import { extname } from "node:path";
+import { quoteWords, timelineScale, type RenderTarget, type Shot, type StylePack } from "@vg/shared";
 import { styleForShot, type VideoGraphicStyle } from "./graphicStyle.js";
 import { prepareMapGeo } from "./mapGeo.js";
 
@@ -145,6 +147,7 @@ export function graphicVariables(
     grain?: boolean;
     stylePack?: StylePack | null;
     videoStyle?: VideoGraphicStyle;
+    resolvePath?: (path: string) => string;
   },
 ): Record<string, unknown> {
   const colors = graphicColors(ctx.brandColor, ctx.accentColor);
@@ -164,6 +167,12 @@ export function graphicVariables(
     style,
   };
   if (shot.source.kind === "chart") return deliver({ ...shot.source, ...common }, shot.source);
+  if (shot.source.kind === "diagram") return { ...shot.source, ...common };
+  if (shot.source.kind === "timeline") {
+    const scale = timelineScale(shot.source.events);
+    const events = shot.source.events.map(({ imagePath, ...event }, index) => ({ ...event, position: scale.positions[index], image: timelineImage(imagePath, ctx.resolvePath) }));
+    return { ...shot.source, events, scale: scale.scale, ...common };
+  }
   if (shot.source.kind === "map") {
     const prepared = prepareMapGeo(shot.source);
     const { geo: _geo, pin: _pin, ...source } = shot.source;
@@ -187,4 +196,14 @@ export function graphicVariables(
   const times = kineticWordTimes(texts.length, durationSec, wordTimes);
   const words = texts.map((text, index) => ({ text, t: Math.round((times[index] ?? 0) * 1000) / 1000 }));
   return deliver({ ...source, words, ...common }, source);
+}
+
+/** Render only verified local assets; the template never downloads an image named by a model. */
+function timelineImage(image: string | undefined, resolvePath: ((path: string) => string) | undefined): string | undefined {
+  if (!image || !resolvePath || /^(?:https?:|data:|javascript:)/i.test(image)) return undefined;
+  try {
+    const path = resolvePath(image), type = ({ ".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".webp": "image/webp" } as Record<string, string>)[extname(path).toLowerCase()];
+    if (!type || statSync(path).size > 5 * 1024 * 1024) return undefined;
+    return `data:${type};base64,${readFileSync(path).toString("base64")}`;
+  } catch { return undefined; }
 }

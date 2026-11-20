@@ -1,0 +1,1 @@
+ALTER TABLE `improvement_requests` ADD `done_at` text;

@@ -129,6 +129,14 @@ function renderOne(shot: Shot, target: RenderTarget, ctx: ComposeRenderContext) 
   return renderStill(shot, target, ctx);
 }
 
+/**
+ * TASK-139: renders one shot with the same renderer RENDER uses (no scene concat, no scene cache).
+ * Previews call this at a small target size.
+ */
+export function renderSingleShot(shot: Shot, target: RenderTarget, ctx: ComposeRenderContext) {
+  return renderOne(shot, target, ctx);
+}
+
 function assetHash(path: string): string {
   if (!path || !existsSync(path)) return path;
   return createHash("sha256").update(readFileSync(path)).digest("hex");

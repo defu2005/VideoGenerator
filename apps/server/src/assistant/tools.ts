@@ -68,6 +68,7 @@ import type { CommentInboxService } from "../comments/inboxService.js";
 import { clearLlmCooldown, readQuotaStatus } from "../providers/llm/quota.js";
 import { searchGuide } from "../help/loadGuide.js";
 import { operatorToolHooks } from "../operator/hooks.js";
+import { recordRouteCheck } from "../operator/proposalGate.js";
 import { autonomyBudgetStatus } from "../operator/autonomyBudget.js";
 import { listCircuitBreakers } from "../operator/circuitBreaker.js";
 import { autonomyJobCounts } from "../operator/autonomyJobLimits.js";
@@ -86,13 +87,18 @@ import { DecideOverdueArgsSchema, estimateRenderSeconds, resolveBudget } from "@
 import { projectDir } from "../storage/paths.js";
 import { hardBlockMessage, type ToolSource } from "../registry/policy.js";
 import { knowledgeToolDefs } from "../knowledge/toolDefs.js";
+import { stageToolDefs } from "../learning/stageToolDefs.js";
 import { originalityToolDefs } from "../originality/toolDefs.js";
 import { providerIntelToolDefs } from "../providerIntel/toolDefs.js";
 import { styleToolDefs } from "../style/toolDefs.js";
 import { supervisionToolDefs } from "../supervision/toolDefs.js";
+import { mailboxToolDefs } from "../supervision/mailbox.js";
 import { fleetToolDefs } from "../fleet/toolDefs.js";
 import { researchToolDefs } from "../research/toolDefs.js";
 import { agentStageToolDefs } from "../agents/toolDefs.js";
+import { previewToolDefs } from "../preview/toolDefs.js";
+import { storageToolDefs } from "../storage/toolDefs.js";
+import { continuityToolDefs } from "../continuity/toolDefs.js";
 import { ComputerActArgs, ComputerObserveArgs, computerAct, computerObserve, computerUseStatus } from "../computerUse/service.js";
 import { stageTimeoutMinutes, writeStageTimeoutStages } from "../pipeline/stageTimeoutOverrides.js";
 
@@ -101,6 +107,12 @@ const emptyObject = z.object({}).strict();
 export type AssistantToolContext = {
   agentStages?: import("../agents/stageService.js").AgentStageService;
   agentVisuals?: import("../agents/visualToolkit.js").AgentVisualToolkit;
+  agentResearch?: import("../agents/researchToolkit.js").AgentResearchToolkit;
+  agentMusic?: import("../agents/musicToolkit.js").AgentMusicToolkit;
+  /** TASK-147d: SCRIPT stage agent submit gate. */
+  agentScript?: import("../agents/scriptToolkit.js").AgentScriptToolkit;
+  /** TASK-139: fast previews. */
+  preview?: import("../preview/service.js").PreviewService;
   research?: import("../research/runtime.js").ResearchHub;
   db: AppDatabase;
   sqlite: Database.Database;
@@ -134,6 +146,8 @@ export type AssistantToolContext = {
   signal?: AbortSignal;
   /** Operator run that made the call, when there is one. */
   runId?: string | null;
+  /** TASK-152: one id per chat send, used only to count shadow rows once per turn. Not an operator run; Computer Use and audit never read it. */
+  turnId?: string | null;
   /** True when a grant ran the tool without a pending card. Never taken from tool arguments. */
   autonomyRun?: boolean;
   /** True for an unattended grant or an MCP agent call. User clicks and approved cards stay false. */
@@ -1051,6 +1065,51 @@ const toolDefs: AssistantToolDef[] = [
     execute: async (args, ctx) => executeRepairScript(repairScriptArgs.parse(args), ctx),
   }),
   defineTool({
+    name: "get_script_draft",
+    description: "Xem dàn ý câu chuyện (outline), các móc câu ứng viên (hooks), điểm chấm rubric và trạng thái loop của kịch bản.",
+    risk: "read",
+    argsSchema: z.object({ projectId: z.string().uuid() }).strict(),
+    summarize: (args) => `Xem dàn ý & chấm điểm kịch bản dự án ${(args as { projectId: string }).projectId}`,
+    execute: async (args, ctx) => {
+      const { projectId } = z.object({ projectId: z.string().uuid() }).strict().parse(args);
+      const { JobRepository } = await import("../jobs/jobRepository.js");
+      const { PipelineEventBus } = await import("../jobs/eventBus.js");
+      const { ScriptService } = await import("../services/scriptService.js");
+      const service = new ScriptService(ctx.sqlite, new JobRepository(ctx.sqlite, new PipelineEventBus()), ctx.orchestrator, ctx.config, ctx.registry);
+      return service.get(projectId).draft;
+    },
+  }),
+  defineTool({
+    name: "switch_script_hook",
+    description: "Đổi móc câu (hook) của kịch bản sang một ứng viên khác và viết lại câu mở đầu cảnh 1 để nối mạch.",
+    risk: "confirm",
+    argsSchema: z.object({ projectId: z.string().uuid(), hookId: z.string().min(1) }).strict(),
+    summarize: (args) => `Đổi hook kịch bản sang candidate ${(args as { hookId: string }).hookId}`,
+    execute: async (args, ctx) => {
+      const { projectId, hookId } = z.object({ projectId: z.string().uuid(), hookId: z.string().min(1) }).strict().parse(args);
+      const { JobRepository } = await import("../jobs/jobRepository.js");
+      const { PipelineEventBus } = await import("../jobs/eventBus.js");
+      const { ScriptService } = await import("../services/scriptService.js");
+      const service = new ScriptService(ctx.sqlite, new JobRepository(ctx.sqlite, new PipelineEventBus()), ctx.orchestrator, ctx.config, ctx.registry);
+      return service.switchHook(projectId, hookId);
+    },
+  }),
+  defineTool({
+    name: "rescore_script",
+    description: "Chấm lại kịch bản hiện tại theo thang điểm rubric 6 tiêu chí (cấu trúc, hook, độ chính xác, giọng đọc, hình ảnh, tính độc đáo).",
+    risk: "confirm",
+    argsSchema: z.object({ projectId: z.string().uuid() }).strict(),
+    summarize: (args) => `Chấm lại kịch bản dự án ${(args as { projectId: string }).projectId}`,
+    execute: async (args, ctx) => {
+      const { projectId } = z.object({ projectId: z.string().uuid() }).strict().parse(args);
+      const { JobRepository } = await import("../jobs/jobRepository.js");
+      const { PipelineEventBus } = await import("../jobs/eventBus.js");
+      const { ScriptService } = await import("../services/scriptService.js");
+      const service = new ScriptService(ctx.sqlite, new JobRepository(ctx.sqlite, new PipelineEventBus()), ctx.orchestrator, ctx.config, ctx.registry);
+      return service.rescoreCritique(projectId);
+    },
+  }),
+  defineTool({
     name: "repair_scene",
     description: "Tự sửa ảnh cảnh không đạt cổng. Bỏ qua cảnh người dùng đã chọn.",
     risk: "confirm",
@@ -1237,7 +1296,7 @@ const toolDefs: AssistantToolDef[] = [
   }),
   defineTool({
     name: "get_llm_health",
-    description: "Xem nhà cung cấp AI nào đang nghỉ (quota/giới hạn tốc độ) đến mấy giờ và các lần tự chuyển sang model dự phòng gần đây. Chỉ đọc; muốn đổi route dùng công cụ cài đặt model.",
+    description: "Xem thời gian nghỉ vì quota/rate limit và lịch sử chuyển model. Đổi route qua cài đặt model.",
     risk: "read",
     argsSchema: emptyObject,
     summarize: () => "Xem sức khoẻ nhà cung cấp AI",
@@ -1614,11 +1673,13 @@ const toolDefs: AssistantToolDef[] = [
       const parsed = z.object({ query: z.string() }).parse(args);
       return `Tìm kỹ năng: ${parsed.query.slice(0, 80)}`;
     },
-    execute: async (args) => {
+    execute: async (args, ctx) => {
       const hooks = operatorToolHooks();
       if (!hooks) throw new AppError(503, "OPERATOR_UNAVAILABLE", "Operator chưa sẵn sàng");
       const parsed = z.object({ query: z.string() }).parse(args);
-      return hooks.findSkills(parsed.query);
+      const result = hooks.findSkills(parsed.query, ctx.runId ?? ctx.turnId ?? null);
+      if (ctx.runId) recordRouteCheck(ctx.runId, "find_skills");
+      return result;
     },
   }),
   defineTool({
@@ -1871,16 +1932,18 @@ const toolDefs: AssistantToolDef[] = [
       const parsed = z.object({ query: z.string() }).parse(args);
       return `Tìm công cụ: ${parsed.query.slice(0, 80)}`;
     },
-    execute: async (args) => {
+    execute: async (args, ctx) => {
       const hooks = operatorToolHooks();
       if (!hooks) throw new AppError(503, "OPERATOR_UNAVAILABLE", "Operator chưa sẵn sàng");
       const parsed = z.object({ query: z.string() }).parse(args);
-      return hooks.findTools(parsed.query);
+      const result = hooks.findTools(parsed.query);
+      if (ctx.runId) recordRouteCheck(ctx.runId, "find_tools");
+      return result;
     },
   }),
   defineTool({
     name: "propose_missing_tool",
-    description: "Ghi đề xuất khi find_tools không tìm thấy công cụ được cấp quyền. Chỉ lập đề xuất, không cài MCP hoặc đổi quyền.",
+    description: "Ghi đề xuất khi find_tools không tìm thấy công cụ được cấp quyền. Trước đó phải gọi find_tools và find_skills trong cùng lượt, nếu thiếu thì bị từ chối. Chỉ lập đề xuất, không cài MCP hoặc đổi quyền.",
     risk: "safe",
     argsSchema: ToolProposalArgs,
     summarize: () => "Đề xuất công cụ còn thiếu",
@@ -1965,7 +2028,7 @@ const toolDefs: AssistantToolDef[] = [
   }),
   defineTool({
     name: "compose_plan_preview",
-    description: "Xem thống kê và kiểu từng cảnh quay của bản dựng compose. Không đổi gì.",
+    description: "Xem thống kê và kiểu cảnh quay của bản dựng compose.",
     risk: "read",
     argsSchema: z.object({ projectId: z.string().uuid() }).strict(),
     summarize: () => "Xem kế hoạch cảnh quay",
@@ -2032,7 +2095,7 @@ const toolDefs: AssistantToolDef[] = [
   }),
   defineTool({
     name: "list_nodes",
-    description: "Liệt kê các máy worker dựng video: tên, trạng thái, phiên bản, tài nguyên, số việc đang chạy, kết quả dựng thử. Không bao giờ trả về token hay mã băm token.",
+    description: "Máy worker cùng trạng thái, phiên bản, tài nguyên, việc đang chạy và kết quả dựng thử. Ẩn token và mã băm.",
     risk: "read",
     argsSchema: z.object({}).strict(),
     summarize: () => "Xem các máy worker",
@@ -2068,11 +2131,16 @@ const toolDefs: AssistantToolDef[] = [
   ...providerIntelToolDefs,
   ...styleToolDefs,
   ...supervisionToolDefs,
+  ...mailboxToolDefs(),
   ...fleetToolDefs,
   ...researchToolDefs,
   ...agentStageToolDefs,
   ...knowledgeToolDefs,
+  ...stageToolDefs,
   ...originalityToolDefs,
+  ...previewToolDefs,
+  ...continuityToolDefs,
+  ...storageToolDefs,
 ];
 
 export const ASSISTANT_TOOLS: Record<string, AssistantToolDef> = Object.fromEntries(

@@ -21,6 +21,7 @@ import {
 import { directivesOf, type Director, type DirectorInput } from "../director.js";
 import { CHART_MAX_ITEMS, CHART_MIN_ITEMS, LINE_MAX_POINTS } from "./labels.js";
 import { applyGraphicsMode, applyVariety, directByRules, kineticPayload, spanSec, usableFootage, type DirectorOptions } from "./rules.js";
+import { structuredListFallback, structuredPayloadIsSpoken } from "./kinds099.js";
 
 /** Quality-mode director: the rule plan plus one LLM call for the whole video. Anything invalid keeps the rule result. */
 
@@ -29,6 +30,9 @@ export type LlmDirectorOptions = DirectorOptions & {
   onWarning?: (message: string) => void;
   /** Set in QUALITY mode only. Without it the prompt has no variant field. */
   variants?: VariantHook;
+  /** BALANCED: use this call only for process diagrams and keep unchanged scenes on the rule plan. */
+  structuredOnly?: boolean;
+  allowTimeline?: boolean;
 };
 
 /** chars / 4 estimate; the scene texts are trimmed so the whole prompt stays under this. */
@@ -41,6 +45,7 @@ const LINE_MAX_CHARS = 60;
 const CODE: Record<ShotKind, string> = {
   kinetic_text: "k", chart: "c", footage: "f", still: "s",
   map: "m", compare: "v", quote_full: "q", list_full: "l",
+  diagram: "d", timeline: "t",
 };
 
 /** The genre's own rules for the graphic kinds, from its directives instead of a recipe id. */
@@ -57,6 +62,8 @@ function kindRules(directives: GenreDirectives): string {
   parts.push(off("list_full")
     ? "Do not use l: this format has no list cards."
     : `Use l for ${directives.listOpening ? "list items and numbered steps" : "a list or numbered steps"} with 3 to 6 items of at most 36 characters, lasting 0.8×n+0.8 seconds up to 12.`);
+  parts.push(off("diagram") ? "Do not use d." : "Use d only for a spoken process or cause: payload nodes [{id,label}] (2-7), edges [{from,to,label?}], layout flow|cycle|hub. Labels <=36 characters, edge labels <=24; every label must be a literal phrase in this scene. 3.2-16 seconds.");
+  parts.push(off("timeline") ? "Do not use t." : "Use t only for >=3 distinct dated events: payload events [{date,label}] (3-8), label <=36 characters; use only literal dates and phrases in this scene, no images or invented events. 3.2-16 seconds.");
   return parts.join(" ");
 }
 
@@ -202,6 +209,7 @@ function sceneSpans(
   rule: KindSpan[],
   lang: ComposeLangPack,
   warn: (message: string) => void,
+  options: LlmDirectorOptions,
 ): KindSpan[] | string {
   const count = input.words.length;
   if (count === 0) return "cảnh không có từ";
@@ -245,6 +253,22 @@ function sceneSpans(
             style: parsed.data.style ?? "bold",
           },
         });
+      }
+    } else if (item.kind === "diagram" || item.kind === "timeline") {
+      const sec = spanSec(input, start, end);
+      const fitted = fitGraphicPayload(item.kind, item.payload ?? {});
+      const bounds = fitted ? graphicDurationBounds(item.kind, fitted) : null;
+      const permitted = !directivesOf(input).disabledKinds.includes(item.kind) && !(item.kind === "timeline" && (options.allowTimeline === false || options.structuredOnly));
+      const spokenWords = input.words.slice(start, end);
+      const spoken = { ...input, words: spokenWords, scene: { ...input.scene, text: spokenWords.map((word) => word.text).join(" ") } };
+      const valid = permitted && fitted && bounds && sec >= bounds.min && sec <= bounds.max && structuredPayloadIsSpoken(spoken, fitted);
+      if (valid) spans.push({ kind: item.kind, wordStart: start, wordEnd: end, reason, payload: fitted });
+      else {
+        const list = structuredListFallback(input, start, end), listBounds = list ? graphicDurationBounds("list_full", list) : null;
+        warn(`Cảnh ${input.scene.sceneId}: ${item.kind} không hợp lệ, dùng danh sách từ lời thoại.`);
+        spans.push(list && listBounds && sec >= listBounds.min && sec <= listBounds.max
+          ? { kind: "list_full", wordStart: start, wordEnd: end, reason: "llm+bad-structure", payload: list }
+          : { kind: plainKind(input), wordStart: start, wordEnd: end, reason: "llm+bad-structure" });
       }
     } else if (item.kind === "map" || item.kind === "compare" || item.kind === "quote_full" || item.kind === "list_full") {
       const sec = spanSec(input, start, end);
@@ -324,7 +348,8 @@ export function mergeLlmAnswer(
       warn("LLM đạo diễn: bỏ một cảnh sai định dạng hoặc sai sceneId.");
       continue;
     }
-    const spans = sceneSpans(inputs[index]!, parsed.data, rule[index] ?? [], lang, warn);
+    if (options.structuredOnly && !parsed.data.spans.some((span) => span.kind === "diagram")) continue;
+    const spans = sceneSpans(inputs[index]!, parsed.data, rule[index] ?? [], lang, warn, options);
     if (typeof spans === "string") {
       warn(`Cảnh ${parsed.data.sceneId}: ${spans}, dùng kết quả luật.`);
       continue;
@@ -384,7 +409,9 @@ export function createLlmDirector(llm: LlmCall, options: LlmDirectorOptions = {}
       const variantOptions = options.variants ? options.variants.optionsFor(graphicShotsOf(inputs, rule)).filter((item) => item.options.length > 1) : [];
       let raw: string;
       try {
-        raw = await llm(buildDirectorPrompt(inputs, rule, options, variantOptions));
+        const restriction = options.structuredOnly ? "\nThis is BALANCED mode: change only scenes needing a process diagram d; leave every other scene out. Do not use t or change other kinds."
+          : options.allowTimeline === false ? "\nDo not extract timeline t in this budget mode." : "";
+        raw = await llm(buildDirectorPrompt(inputs, rule, options, variantOptions) + restriction);
       } catch (error) {
         options.onWarning?.(`LLM đạo diễn lỗi (${error instanceof Error ? error.message : String(error)}), dùng kết quả luật.`);
         return rule;

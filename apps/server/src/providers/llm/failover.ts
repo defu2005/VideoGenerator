@@ -1,3 +1,4 @@
+import { publishAgentEvent } from "../../events/agentBus.js";
 import type { LlmError } from "./types.js";
 
 /**
@@ -52,6 +53,7 @@ export class FailoverTracker {
   private readonly cooldowns = new Map<string, CooldownEntry>();
   private readonly streaks = new Map<string, number>();
   private events: FailoverEvent[] = [];
+  private readonly announcedUntil = new Map<string, number>();
 
   private keyOf(provider: string, model: string | null | undefined, error?: LlmError): string {
     // A model-specific problem only rests that model, not the whole provider.
@@ -110,6 +112,12 @@ export class FailoverTracker {
   recordFailover(event: Omit<FailoverEvent, "at">): void {
     this.events.push({ at: Date.now(), ...event });
     if (this.events.length > EVENT_LIMIT) this.events = this.events.slice(-EVENT_LIMIT);
+    // TASK-129a §1: at most one event per failing provider per storm window, so a quota storm cannot flood the bus.
+    // The reason is an LlmError code (a fixed set), never error text. Restarts clear this in-memory window.
+    const now = Date.now();
+    if ((this.announcedUntil.get(event.from) ?? 0) > now) return;
+    this.announcedUntil.set(event.from, now + FAILOVER_STORM_WINDOW_MS);
+    publishAgentEvent({ type: "quota_failover", summary: `Chuyển LLM từ ${event.from} sang ${event.to} (${event.reason}).`.slice(0, 200) });
   }
 
   recentFailovers(windowMs = FAILOVER_STORM_WINDOW_MS): FailoverEvent[] {

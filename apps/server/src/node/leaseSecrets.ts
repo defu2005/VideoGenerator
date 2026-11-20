@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from "node:crypto";
 import type Database from "better-sqlite3";
-import { ttsCatalogEntry, type NodeSecretGrant, type SealedSecret } from "@vg/shared";
+import { SECRET_ENV_NAMES, ttsCatalogEntry, type NodeSecretGrant, type ProjectRun, type SealedSecret, type StaticSecretId } from "@vg/shared";
 import { writeAudit } from "../auth/auditLog.js";
 import { AppError } from "../lib/errors.js";
 import { ttsSecretKey } from "../settings/tts.js";
@@ -15,6 +15,72 @@ const SENDABLE_KEY = /^tts\.[a-z0-9_-]{2,30}\.apiKey$/;
 
 export function isSendableKeyName(name: string): boolean {
   return SENDABLE_KEY.test(name);
+}
+
+// TASK-136: no `llm:*` scope here any more. LLM calls from other machines go through the server's relay, so no
+// machine ever holds an LLM key. Search keys keep their lending rules.
+const PROJECT_PROVIDER_KEYS: Record<string, StaticSecretId> = {
+  "search:brave": "web.brave.apiKey", "search:pexels": "image.pexels.apiKey", "search:pixabay": "image.pixabay.apiKey",
+};
+
+export function projectProviderKey(scope: string): string | undefined {
+  if (Object.hasOwn(PROJECT_PROVIDER_KEYS, scope)) return PROJECT_PROVIDER_KEYS[scope];
+  const provider = scope.startsWith("tts:") ? scope.slice(4) : "";
+  const key = ttsSecretKey(provider);
+  return isSendableKeyName(key) && ttsCatalogEntry(provider) ? key : undefined;
+}
+
+export function projectProviderEnv(scope: string): string | undefined {
+  const key = Object.hasOwn(PROJECT_PROVIDER_KEYS, scope) ? PROJECT_PROVIDER_KEYS[scope] : undefined;
+  return key ? SECRET_ENV_NAMES[key][0] : undefined;
+}
+
+/** Explicit opt-in per provider. Calls are made only after the transport validates
+ * the active run, and scopes are restricted to that segment's resolved needs. */
+export class ProjectLeaseSecrets {
+  private notedLlmLoan = false;
+
+  constructor(private readonly db: Database.Database, private readonly load: (key: string) => string | null) {}
+
+  private permitted(scope: string): string | null {
+    const stored = this.db.prepare("SELECT value FROM app_settings WHERE key='execution.lendProviders'").get() as { value: string } | undefined;
+    if (stored) this.noteIgnoredLlmLoan(stored.value);
+    const key = projectProviderKey(scope);
+    if (!key || getLocalOnlyKeys(this.db).includes(key)) return null;
+    if (!stored) return null;
+    let allowed: unknown;
+    try { allowed = JSON.parse(stored.value); } catch { return null; }
+    return Array.isArray(allowed) && allowed.includes(scope) ? this.load(key) : null;
+  }
+
+  /** An old setting that still lists `llm:*` is ignored. One audit row says so, so nobody wonders why a key stays home. */
+  private noteIgnoredLlmLoan(raw: string): void {
+    if (this.notedLlmLoan) return;
+    let list: unknown;
+    try { list = JSON.parse(raw); } catch { return; }
+    const llm = Array.isArray(list) ? list.filter((scope): scope is string => typeof scope === "string" && scope.startsWith("llm:")) : [];
+    if (!llm.length) return;
+    this.notedLlmLoan = true;
+    writeAudit(this.db, {
+      action: "llm.lend_ignored", targetType: "setting", targetId: "execution.lendProviders", source: "system", outcome: "ok",
+      summary: `Bỏ qua ${llm.join(", ")} trong execution.lendProviders: khoá LLM không còn cho mượn, các máy dùng cổng LLM của máy chủ.`,
+    });
+  }
+
+  canLend(scope: string): boolean { return Boolean(this.permitted(scope)); }
+
+  seal(run: ProjectRun, scopes: readonly string[], allowed: ReadonlySet<string>, publicKey: string): SealedSecret[] {
+    if (!isBoxPublicKey(publicKey)) throw new AppError(400, "PUBLIC_KEY_REQUIRED", "Thiếu publicKey hợp lệ.");
+    return [...new Set(scopes)].flatMap((scope) => {
+      if (!allowed.has(scope)) return [];
+      const plain = this.permitted(scope);
+      if (!plain) return [];
+      const sealed = sealSecret(plain, publicKey, { scope, label: scope, expiresAt: run.leaseUntil });
+      writeAudit(this.db, { action: "node.run_secret_granted", targetType: "project_run", targetId: run.id,
+        workspaceId: run.workspaceId, source: "api", outcome: "ok", payload: { provider: scope, nodeId: run.nodeId } });
+      return [sealed];
+    });
+  }
 }
 
 type GrantRow = {

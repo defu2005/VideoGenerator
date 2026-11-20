@@ -38,29 +38,125 @@ export function redactedPayload(value: unknown): string | null {
   return text.length > PAYLOAD_LIMIT ? `${text.slice(0, PAYLOAD_LIMIT - 12)}…[cắt bớt]` : text;
 }
 
-export function writeAudit(sqlite: Database.Database, row: AuditRow): void {
-  sqlite.prepare(
-    `INSERT INTO audit_log
-      (id, at, workspace_id, actor_kind, actor_user_id, actor_key_id, action, target_type, target_id,
-       outcome, status_code, source, summary, payload, request_id)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-  ).run(
-    randomUUID(),
-    row.at ?? new Date().toISOString(),
-    row.workspaceId ?? null,
-    row.actor?.kind ?? null,
-    row.actor?.userId ?? null,
-    row.actor?.keyId ?? null,
-    row.action.slice(0, 200),
-    row.targetType ?? null,
-    row.targetId ?? null,
-    row.outcome,
-    row.statusCode ?? null,
-    row.source,
-    row.summary ? redactOperatorText(row.summary).slice(0, 500) : null,
-    redactedPayload(row.payload),
-    row.requestId ?? null,
-  );
+const pendingAuditRows = new Map<Database.Database, AuditRow[]>();
+let auditFlushTimer: NodeJS.Timeout | null = null;
+
+export function getPendingAuditCount(sqlite?: Database.Database): number {
+  if (sqlite) return pendingAuditRows.get(sqlite)?.length ?? 0;
+  let total = 0;
+  for (const list of pendingAuditRows.values()) total += list.length;
+  return total;
+}
+
+export function clearAuditQueue(sqlite?: Database.Database): void {
+  if (sqlite) pendingAuditRows.delete(sqlite);
+  else pendingAuditRows.clear();
+}
+
+export function flushAuditQueue(targetSqlite?: Database.Database): number {
+  let totalFlushed = 0;
+  const targets = targetSqlite ? [[targetSqlite, pendingAuditRows.get(targetSqlite) ?? []] as const] : [...pendingAuditRows.entries()];
+
+  for (const [sqlite, rows] of targets) {
+    if (!rows || rows.length === 0) continue;
+    pendingAuditRows.delete(sqlite);
+
+    try {
+      sqlite.transaction(() => {
+        const stmt = sqlite.prepare(
+          `INSERT INTO audit_log
+            (id, at, workspace_id, actor_kind, actor_user_id, actor_key_id, action, target_type, target_id,
+             outcome, status_code, source, summary, payload, request_id)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        );
+        for (const row of rows) {
+          stmt.run(
+            randomUUID(),
+            row.at ?? new Date().toISOString(),
+            row.workspaceId ?? null,
+            row.actor?.kind ?? null,
+            row.actor?.userId ?? null,
+            row.actor?.keyId ?? null,
+            row.action.slice(0, 200),
+            row.targetType ?? null,
+            row.targetId ?? null,
+            row.outcome,
+            row.statusCode ?? null,
+            row.source,
+            row.summary ? redactOperatorText(row.summary).slice(0, 500) : null,
+            redactedPayload(row.payload),
+            row.requestId ?? null,
+          );
+          totalFlushed++;
+        }
+      })();
+    } catch (error) {
+      // Put rows back on transaction failure
+      const existing = pendingAuditRows.get(sqlite) ?? [];
+      pendingAuditRows.set(sqlite, [...rows, ...existing]);
+      throw error;
+    }
+  }
+
+  return totalFlushed;
+}
+
+function ensureAuditTimer(): void {
+  if (!auditFlushTimer) {
+    auditFlushTimer = setInterval(() => {
+      try {
+        flushAuditQueue();
+      } catch {
+        // flush errors in background tick are ignored
+      }
+    }, 1000);
+    if (typeof auditFlushTimer.unref === "function") {
+      auditFlushTimer.unref();
+    }
+  }
+}
+
+export function writeAudit(
+  sqlite: Database.Database,
+  row: AuditRow,
+  options?: { immediate?: boolean; batch?: boolean },
+): void {
+  const isTest = process.env.NODE_ENV === "test" || Boolean(process.env.VITEST);
+  const shouldBatch = options?.batch ?? (!isTest && !options?.immediate);
+
+  if (!shouldBatch) {
+    sqlite.prepare(
+      `INSERT INTO audit_log
+        (id, at, workspace_id, actor_kind, actor_user_id, actor_key_id, action, target_type, target_id,
+         outcome, status_code, source, summary, payload, request_id)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    ).run(
+      randomUUID(),
+      row.at ?? new Date().toISOString(),
+      row.workspaceId ?? null,
+      row.actor?.kind ?? null,
+      row.actor?.userId ?? null,
+      row.actor?.keyId ?? null,
+      row.action.slice(0, 200),
+      row.targetType ?? null,
+      row.targetId ?? null,
+      row.outcome,
+      row.statusCode ?? null,
+      row.source,
+      row.summary ? redactOperatorText(row.summary).slice(0, 500) : null,
+      redactedPayload(row.payload),
+      row.requestId ?? null,
+    );
+    return;
+  }
+
+  let list = pendingAuditRows.get(sqlite);
+  if (!list) {
+    list = [];
+    pendingAuditRows.set(sqlite, list);
+  }
+  list.push(row);
+  ensureAuditTimer();
 }
 
 export function purgeOldAudit(sqlite: Database.Database, now = new Date()): number {

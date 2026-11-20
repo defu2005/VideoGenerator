@@ -1,34 +1,49 @@
-import { createHash, type KeyObject } from "node:crypto";
+import { createHash, randomUUID, type KeyObject } from "node:crypto";
 import {
   chmodSync, copyFileSync, createReadStream, createWriteStream, existsSync, linkSync, mkdirSync, readFileSync, readdirSync,
   renameSync, rmSync, statSync, statfsSync, symlinkSync, utimesSync, writeFileSync,
 } from "node:fs";
 import { hostname, cpus, totalmem } from "node:os";
 import { dirname, join, resolve as resolvePath } from "node:path";
-import { Readable } from "node:stream";
+import { Readable, Transform } from "node:stream";
+import { pipeline } from "node:stream/promises";
 import { fileURLToPath } from "node:url";
 import { spawn } from "node:child_process";
 import {
   HeartbeatResponseSchema,
   JoinResponseSchema,
   LeaseResponseSchema,
+  NodeUploadTargetSchema,
+  ProjectRunSchema,
+  SealedSecretSchema,
   type ExecuteReport,
   type LeaseResponse,
   type NodeDesiredConfig,
+  type NodeCompleteRequest,
+  type StorageTransferStat,
   type NodeProbe,
   type RenderBundle,
+  type ProjectRun,
 } from "@vg/shared";
+import { AppError } from "../lib/errors.js";
 import { executeRender } from "../render/executeRender.js";
 import { readAppVersion } from "../render/appVersion.js";
 import type { ExecFfmpeg, ExecuteIo } from "../render/types.js";
 import { runFfmpeg, resolveFfmpegPath } from "../media/ffmpeg.js";
 import { sha256File } from "./artifactService.js";
-import { PROBE_INTERVAL_MS, runRenderProbe } from "./probe.js";
+import { PROBE_INTERVAL_MS, probeProjectCapabilities, probeRelay, relayEnv, runRenderProbe } from "./probe.js";
 import { newBoxKeyPair, openSecret } from "./secretBox.js";
-import { SecretHolder, createNodeTtsRegistry, detectTtsCapabilities, runMediaBundle, runVoiceBundle } from "./remoteRunners.js";
+import { SecretHolder, createNodeTtsRegistry, detectTtsCapabilities, nodeConfig, runMediaBundle, runVoiceBundle } from "./remoteRunners.js";
+import { runProjectLease, WarmProjectRuns } from "./projectRunner.js";
+import { ProjectSnapshotSchema } from "./projectSnapshot.js";
+import type { RunCommand } from "./runCommands.js";
+import type { searchKnowledge } from "../retrieval/search.js";
+import { projectProviderEnv, projectProviderKey } from "./leaseSecrets.js";
 
 /** Exit code used with VG_EXIT_FOR_UPDATE=1 so a restart policy (restart: on-failure) can bring the container back on the new image. */
 export const EXIT_FOR_UPDATE_CODE = 75;
+/** TASK-150 C: liveness marker in DATA_DIR, read by the Dockerfile HEALTHCHECK when VG_ROLE=worker. Keep in sync with deploy/docker/Dockerfile. */
+export const LIVENESS_FILE = "worker-alive";
 
 /*
  * Worker node agent (VG_ROLE=worker). No database, no LLM keys, no vault, no user auth:
@@ -115,9 +130,23 @@ type Running = {
   controller: AbortController;
   cancelled: boolean;
   promise: Promise<void>;
+  projectRun?: boolean;
 };
 
+function recordTransfer(stats: StorageTransferStat[] | undefined, route: StorageTransferStat["route"], bytes: number, started: number, fallback = false) {
+  if (!stats) return;
+  const error = fallback ? "DIRECT_TRANSFER_FAILED" : undefined;
+  const found = stats.find((item) => item.route === route && item.error === error);
+  const ms = Math.max(0, Math.round(performance.now() - started));
+  if (found) {
+    found.count = Math.min(10_000, found.count + 1);
+    found.bytes = Math.min(Number.MAX_SAFE_INTEGER, found.bytes + bytes);
+    found.ms = Math.min(Number.MAX_SAFE_INTEGER, found.ms + ms);
+  } else stats.push({ route, bytes, ms, count: 1, ...(error ? { error } : {}) });
+}
+
 export class NodeAgent {
+  private readonly warmProjects: WarmProjectRuns;
   private readonly base: string;
   private readonly dataDir: string;
   private readonly fetcher: typeof fetch;
@@ -149,6 +178,8 @@ export class NodeAgent {
     this.pollMs = deps.pollMs ?? 3_000;
     this.cacheMaxBytes = Math.max(1, Number(env.NODE_CACHE_MAX_GB ?? 20)) * 1024 ** 3;
     this.graceMs = Math.max(0, Number(env.NODE_SHUTDOWN_GRACE_SEC ?? 120)) * 1000;
+    const warmSec = Number(env.NODE_PROJECT_WARM_SEC ?? 1800);
+    this.warmProjects = new WarmProjectRuns(Number.isFinite(warmSec) ? Math.min(86400, Math.max(0, warmSec)) * 1000 : undefined);
   }
 
   private get tokenFile(): string {
@@ -172,13 +203,14 @@ export class NodeAgent {
     this.capabilities = await (this.deps.checkCapabilities ?? defaultCapabilities)();
     if (!this.capabilities.includes("render")) this.log("Máy này chưa dựng được video (thiếu ffmpeg hoặc HyperFrames). Vẫn có thể nhận việc khác nếu khai báo.");
     else await this.runProbe();
-    this.capabilities = [...this.capabilities, ...this.extraCapabilities()];
+    this.capabilities = [...new Set([...this.capabilities, ...this.extraCapabilities(), ...await this.projectCapabilities()])];
     try {
       this.token = existsSync(this.tokenFile) ? readFileSync(this.tokenFile, "utf8").trim() : undefined;
       if (!this.token) {
         const joined = await this.join();
         if (joined === "fatal") return 1;
       }
+      await this.checkRelay();
       await Promise.all([this.heartbeatLoop(), this.leaseLoop()]);
     } catch (error) {
       if (!(error instanceof Revoked)) throw error;
@@ -199,6 +231,21 @@ export class NodeAgent {
     const extra = detectTtsCapabilities(this.env, createNodeTtsRegistry(this.env, () => null));
     if ((this.env.VG_NODE_MEDIA ?? "true").toLowerCase() !== "false") extra.push("media_fetch");
     return extra;
+  }
+
+  private async projectCapabilities(): Promise<string[]> {
+    if (!["1", "true"].includes((this.env.VG_NODE_PROJECT ?? "").toLowerCase())) return [];
+    const probed = await probeProjectCapabilities(nodeConfig(this.env), this.capabilities.includes("render"));
+    const loans = (this.env.VG_NODE_LEND ?? "").split(",").map((scope) => scope.trim()).filter((scope) => projectProviderKey(scope));
+    return [...probed, ...loans.map((scope) => `borrow:${scope}`)];
+  }
+
+  /** TASK-136: with the node's own token, can this machine reach the control server's LLM relay? Then it may take LLM work. */
+  private async checkRelay(): Promise<void> {
+    if (!["1", "true"].includes((this.env.VG_NODE_PROJECT ?? "").toLowerCase())) return;
+    if (!(await probeRelay(this.base, this.token, this.fetcher))) return;
+    this.capabilities = [...new Set([...this.capabilities, "llm:relay"])];
+    if (this.probe) this.probe = { ...this.probe, llm: "relay" };
   }
 
   private capabilityInfo(): Record<string, string> {
@@ -308,6 +355,19 @@ export class NodeAgent {
     return response;
   }
 
+  /**
+   * TASK-150 C: the Docker HEALTHCHECK for a worker (VG_ROLE=worker) reads the mtime of this file.
+   * Written only after a successful heartbeat, so a control-plane outage makes the container unhealthy by design.
+   * A failed write is logged and never fails the heartbeat.
+   */
+  private writeLiveness(): void {
+    try {
+      writeFileSync(join(this.dataDir, LIVENESS_FILE), new Date().toISOString());
+    } catch (error) {
+      this.log(`Không ghi được tệp sống ${LIVENESS_FILE}: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+
   private async heartbeatLoop(): Promise<void> {
     let failures = 0;
     while (!this.stopping) {
@@ -321,26 +381,32 @@ export class NodeAgent {
             capabilityInfo: this.capabilityInfo(),
             resources: this.resources(),
             ...(this.probe ? { probe: this.probe } : {}),
-            running: [...this.running.values()].filter((job) => !job.cancelled).map((job) => ({
+            running: [...this.running.values()].filter((job) => !job.cancelled && !job.projectRun).map((job) => ({
               jobId: job.jobId, leaseId: job.leaseId, progress: job.progress, ...(job.message ? { message: job.message.slice(0, 300) } : {}),
             })),
+            ...(this.capabilities.includes("project") ? { projectRuns: [...this.running.values()]
+              .filter((job) => job.projectRun && !job.cancelled).map((job) => ({ runId: job.jobId, leaseId: job.leaseId })) } : {}),
           }),
         });
         if (!response.ok) throw new Error(`heartbeat ${response.status}`);
         const reply = HeartbeatResponseSchema.parse(await response.json());
         this.desired = reply.desiredConfig;
         failures = 0;
+        this.writeLiveness();
         if (this.exitForUpdate() && reply.targetVersion && reply.targetVersion !== readAppVersion() && !this.updateRequested) {
           this.updateRequested = true;
           this.log(`Phiên bản điều khiển là ${reply.targetVersion}, máy này đang ${readAppVersion()}. Ngừng nhận việc, chờ việc đang chạy xong rồi thoát (mã ${EXIT_FOR_UPDATE_CODE}) để cập nhật.`);
           this.wake?.();
         }
-        for (const jobId of reply.cancel) {
+        for (const jobId of [...reply.cancel, ...(reply.cancelRuns ?? [])]) {
           const job = this.running.get(jobId);
           if (job && !job.cancelled) {
             job.cancelled = true;
             job.controller.abort();
           }
+        }
+        if (this.capabilities.includes("project") && ![...this.running.values()].some((job) => job.projectRun)) {
+          try { this.warmProjects.prune(this.dataDir); } catch { /* A locked local file can be retried on the next heartbeat. */ }
         }
         if (this.probeDue()) await this.runProbe();
         await this.sleep(this.heartbeatMs);
@@ -373,11 +439,23 @@ export class NodeAgent {
         continue;
       }
       try {
+        if (this.capabilities.includes("project") && this.desired.capabilities.includes("project")
+          && ![...this.running.values()].some((job) => job.projectRun)) {
+          const response = await this.call("/api/nodes/agent/project-lease", {});
+          if (response.ok && response.status !== 204) {
+            const payload = await response.json() as { kind?: unknown; run?: unknown };
+            if (payload.kind !== "project") throw new Error("Unknown project lease");
+            failures = 0;
+            this.startProject(ProjectRunSchema.parse(payload.run));
+            continue;
+          }
+          if (!response.ok && response.status !== 404) throw new Error(`project lease ${response.status}`);
+        }
         // A fresh key pair per request. The private half stays in this process and goes away with the job.
         const pair = newBoxKeyPair();
         const response = await this.call("/api/nodes/agent/lease", {
           method: "POST",
-          headers: { "content-type": "application/json" },
+          headers: { "content-type": "application/json", "x-vg-storage-urls": "1" },
           body: JSON.stringify({ freeSlots: Math.min(8, free), publicKey: pair.publicKey }),
         });
         if (response.status === 204) {
@@ -413,7 +491,86 @@ export class NodeAgent {
     this.running.set(lease.jobId, job);
   }
 
-  private async download(lease: LeaseResponse, sha256: string, signal: AbortSignal): Promise<string> {
+  private startProject(run: ProjectRun): void {
+    if (this.running.has(run.id)) return;
+    const controller = new AbortController();
+    const job: Running = { jobId: run.id, leaseId: run.leaseId, projectRun: true, progress: 0, message: "", controller, cancelled: false, promise: Promise.resolve() };
+    job.promise = this.executeProjectRun(run, controller.signal).catch((error: unknown) => {
+      if (!controller.signal.aborted && !(error instanceof Revoked)) {
+        const code = error instanceof AppError ? error.code : "PROJECT_RUN_FAILED";
+        this.log(`Đoạn chạy ${run.id.slice(0, 8)} lỗi: ${code}`);
+      }
+    }).finally(() => { this.running.delete(run.id); this.wake?.(); });
+    this.running.set(run.id, job);
+  }
+
+  private async executeProjectRun(run: ProjectRun, signal: AbortSignal): Promise<void> {
+    const [{ createStockRunner }, { default: Fastify }] = await Promise.all([import("./stockRunner.js"), import("fastify")]);
+    const logger = Fastify({ logger: { level: "silent" } }).log;
+    const root = `/api/nodes/agent/runs/${run.id}`;
+    const request = async (path: string, options: RequestInit) => {
+      const response = await this.call(`${root}/${path}`, {
+        ...options, headers: { ...options.headers, "x-lease-id": run.leaseId },
+      });
+      const body = await response.json() as { error?: { code: string; details?: unknown } };
+      if (!response.ok) throw new AppError(response.status, body.error?.code ?? "PROJECT_RUN_HTTP", "Yêu cầu đoạn chạy bị từ chối.", body.error?.details);
+      return body;
+    };
+    const post = (path: string, body: unknown, requestSignal: AbortSignal) => request(path, {
+      method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body), signal: requestSignal,
+    });
+    const held = new Map<string, SecretHolder>();
+    try {
+      const requested = this.capabilities.filter((scope) => scope.startsWith("borrow:") && this.desired.capabilities.includes(scope))
+        .map((scope) => scope.slice(7));
+      if (requested.length) {
+        const pair = newBoxKeyPair();
+        const wire = await post("secrets", { leaseId: run.leaseId, scopes: requested, publicKey: pair.publicKey }, signal) as { secrets?: unknown[] };
+        for (const raw of wire.secrets ?? []) {
+          const sealed = SealedSecretSchema.parse(raw);
+          if (!requested.includes(sealed.scope) || held.has(sealed.scope) || Date.parse(sealed.expiresAt) <= Date.now()) continue;
+          held.set(sealed.scope, new SecretHolder(openSecret(sealed, pair.privateKey), sealed.scope, sealed.expiresAt));
+        }
+      }
+    await runProjectLease({
+      nodeDataDir: this.dataDir, run, signal, warm: this.warmProjects,
+      buildRuntime: (opened, stopBefore, generationSignal) => {
+        const env = { ...this.env, ...relayEnv(this.base, this.token) };
+        for (const [scope, holder] of held) {
+          const key = projectProviderEnv(scope);
+          if (key && !env[key]) env[key] = holder.get() ?? undefined;
+        }
+        return createStockRunner({
+          sqlite: opened.sqlite, config: { ...nodeConfig(env), DATABASE_PATH: opened.databasePath, DATA_DIR: opened.dataDir },
+          logger, projectId: run.projectId, stopBefore, ttsSecret: (provider) => held.get(`tts:${provider}`)?.get() ?? null,
+          retrieve: async (input) => await post("context/retrieve", {
+            ...input, query: input.query.slice(0, 5000), tokenBudget: Math.min(input.tokenBudget, 8000),
+          }, generationSignal) as unknown as ReturnType<typeof searchKnowledge>,
+        });
+      },
+      transport: {
+        snapshot: async (requestSignal) => ProjectSnapshotSchema.parse(await request("snapshot", { signal: requestSignal })),
+        download: (file, requestSignal) => this.download(run, file.sha256, requestSignal),
+        commands: async (after, requestSignal) => {
+          const payload = await request(`commands?after=${after}`, { signal: requestSignal }) as { commands?: RunCommand[] };
+          return payload.commands ?? [];
+        },
+        checkpoint: async (checkpoint, files, requestSignal) => {
+          if (files.length) await this.uploadOutputs(run, files, requestSignal);
+          await post("checkpoint", checkpoint, requestSignal);
+        },
+        finish: async (reason, lastSeq, requestSignal, blockedGate) => {
+          await post("finish", { leaseId: run.leaseId, reason, lastSeq, blockedGate }, requestSignal);
+        },
+      },
+    });
+    } finally {
+      for (const holder of held.values()) holder.wipe();
+      held.clear();
+    }
+  }
+
+  private async download(lease: LeaseResponse | ProjectRun, sha256: string, signal: AbortSignal, stats?: StorageTransferStat[]): Promise<string> {
     const cacheDir = join(this.dataDir, "cache", "artifacts");
     mkdirSync(cacheDir, { recursive: true });
     const target = join(cacheDir, sha256);
@@ -422,31 +579,61 @@ export class NodeAgent {
       utimesSync(target, now, now);
       return target;
     }
-    const response = await this.call(`/api/nodes/agent/artifacts/${sha256}?jobId=${encodeURIComponent(lease.jobId)}`, {
+    const file = "jobId" in lease ? lease.manifest.find((item) => item.sha256 === sha256) : undefined;
+    const urls = file?.artifactUrls;
+    const started = performance.now();
+    if (urls?.preferredUrl) {
+      for (let attempt = 0; attempt < 2; attempt++) {
+        signal.throwIfAborted();
+        try {
+          const url = new URL(urls.preferredUrl);
+          if (!["http:", "https:"].includes(url.protocol) || url.username || url.password) throw new Error("Invalid storage URL");
+          const requestSignal = AbortSignal.any([signal, AbortSignal.timeout(300_000)]);
+          const response = await this.fetcher(url, { redirect: "error", signal: requestSignal });
+          await this.installArtifact(response, target, sha256, requestSignal, file?.size);
+          recordTransfer(stats, "direct", file?.size ?? 0, started);
+          return target;
+        } catch {
+          // Fall back after two direct attempts. Fetch errors can contain the signed URL.
+          signal.throwIfAborted();
+        }
+      }
+    }
+    const scope = "jobId" in lease ? `jobId=${encodeURIComponent(lease.jobId)}` : `runId=${encodeURIComponent(lease.id)}`;
+    const response = await this.call(urls?.fallbackUrl ?? `/api/nodes/agent/artifacts/${sha256}?${scope}`, {
       headers: { "x-lease-id": lease.leaseId },
       signal,
     });
-    if (!response.ok || !response.body) throw new Error(`Không tải được tệp ${sha256.slice(0, 8)} (${response.status})`);
-    const temp = `${target}.${process.pid}.tmp`;
-    const hash = createHash("sha256");
-    const out = createWriteStream(temp);
-    try {
-      for await (const chunk of Readable.fromWeb(response.body as never)) {
-        hash.update(chunk as Buffer);
-        if (!out.write(chunk)) await new Promise<void>((done) => out.once("drain", () => done()));
-      }
-      await new Promise<void>((done, fail) => out.end((error?: Error | null) => (error ? fail(error) : done())));
-    } catch (error) {
-      out.destroy();
-      rmSync(temp, { force: true });
-      throw error;
-    }
-    if (hash.digest("hex") !== sha256) {
-      rmSync(temp, { force: true });
-      throw new Error(`Tệp ${sha256.slice(0, 8)} tải về bị sai mã sha256`);
-    }
-    renameSync(temp, target);
+    await this.installArtifact(response, target, sha256, signal, file?.size);
+    recordTransfer(stats, "control", file?.size ?? statSync(target).size, started, !!urls?.preferredUrl);
     return target;
+  }
+
+  private async installArtifact(response: Response, target: string, sha256: string, signal: AbortSignal, size?: number): Promise<void> {
+    if (!response.ok || !response.body) {
+      await response.body?.cancel().catch(() => undefined);
+      throw new Error(`Không tải được tệp ${sha256.slice(0, 8)} (${response.status})`);
+    }
+    const temp = `${target}.${randomUUID()}.tmp`;
+    const hash = createHash("sha256");
+    let bytes = 0;
+    try {
+      const checked = new Transform({
+        transform(chunk: Buffer, _encoding, done) {
+          bytes += chunk.length;
+          if (size !== undefined && bytes > size) return done(new Error("Tệp tải về vượt kích thước đã khai báo."));
+          hash.update(chunk);
+          done(null, chunk);
+        },
+      });
+      await pipeline(Readable.fromWeb(response.body as never), checked, createWriteStream(temp), { signal });
+      if ((size !== undefined && bytes !== size) || hash.digest("hex") !== sha256) {
+        throw new Error(`Tệp ${sha256.slice(0, 8)} tải về bị sai kích thước hoặc mã sha256`);
+      }
+      renameSync(temp, target);
+    } finally {
+      rmSync(temp, { force: true });
+    }
   }
 
   private placeFile(cached: string, destination: string): void {
@@ -459,18 +646,112 @@ export class NodeAgent {
     }
   }
 
-  private async upload(lease: LeaseResponse, name: string, file: string, signal: AbortSignal): Promise<string> {
-    const sha256 = await sha256File(file);
-    const size = statSync(file).size;
-    const response = await this.call(`/api/nodes/agent/jobs/${lease.jobId}/outputs/${name}`, {
+  private async uploadOutputs(lease: LeaseResponse | ProjectRun, files: Array<{ name: string; path: string }>, signal: AbortSignal, stats?: StorageTransferStat[]) {
+    const outputs = [];
+    for (const file of files) outputs.push({ name: file.name, sha256: await sha256File(file.path), size: statSync(file.path).size });
+    const root = "jobId" in lease ? `/api/nodes/agent/jobs/${lease.jobId}` : `/api/nodes/agent/runs/${lease.id}`;
+    const probe = await this.call(`${root}/have`, {
+      method: "POST", headers: { "content-type": "application/json" },
+      body: JSON.stringify({ leaseId: lease.leaseId, outputs }), signal,
+    });
+    const legacy = "jobId" in lease && (probe.status === 404 || probe.status === 405);
+    if (!probe.ok && !legacy) throw new Error(`Kiểm kho kết quả lỗi (${probe.status})`);
+    const have = new Set<string>(legacy ? [] : (await probe.json() as { have: string[] }).have);
+    const completed: NodeCompleteRequest["outputs"] = [];
+    for (const [index, output] of outputs.entries()) {
+      const { name, sha256, size } = output;
+      if (have.has(name)) {
+        completed.push({ name, sha256 });
+        continue;
+      }
+      const path = files[index]!.path;
+      const started = performance.now();
+      const direct = "jobId" in lease && lease.storageUpload
+        ? await this.uploadDirect(root, lease.leaseId, path, output, signal) : "unavailable";
+      if (direct === "uploaded") {
+        recordTransfer(stats, "direct", size, started);
+        completed.push({ name, sha256, size, provider: "s3" });
+        continue;
+      }
+      const url = `${root}/outputs/${name}`;
+      if (legacy) await this.uploadLegacy(url, lease.leaseId, path, output, signal);
+      else await this.uploadResumable(url, lease.leaseId, path, output, signal);
+      recordTransfer(stats, "control", size, started, direct === "failed");
+      completed.push({ name, sha256 });
+    }
+    return completed;
+  }
+
+  private async uploadDirect(root: string, leaseId: string, file: string, output: { name: string; size: number; sha256: string }, signal: AbortSignal): Promise<"uploaded" | "failed" | "unavailable"> {
+    try {
+      const response = await this.call(`${root}/upload-targets`, {
+        method: "POST", headers: { "content-type": "application/json" },
+        body: JSON.stringify({ leaseId, ...output }), signal,
+      });
+      if (!response.ok) {
+        await response.body?.cancel().catch(() => undefined);
+        return "failed";
+      }
+      const { target } = await response.json() as { target?: unknown };
+      if (!target) return "unavailable";
+      const signed = NodeUploadTargetSchema.parse(target);
+      const url = new URL(signed.url);
+      if (!["http:", "https:"].includes(url.protocol) || url.username || url.password || signed.headers["content-length"] !== String(output.size)) return "failed";
+      const stream = output.size ? createReadStream(file) : undefined;
+      try {
+        const uploaded = await this.fetcher(url, {
+          method: "PUT", headers: signed.headers, redirect: "error",
+          body: stream ? Readable.toWeb(stream) as never : undefined,
+          duplex: "half", signal: AbortSignal.any([signal, AbortSignal.timeout(3600_000)]),
+        } as RequestInit);
+        await uploaded.body?.cancel().catch(() => undefined);
+        return uploaded.ok ? "uploaded" : "failed";
+      } finally {
+        stream?.destroy();
+      }
+    } catch (error) {
+      if (error instanceof Revoked) throw error;
+      signal.throwIfAborted();
+      return "failed";
+    }
+  }
+
+  private async uploadLegacy(url: string, leaseId: string, file: string, output: { name: string; size: number; sha256: string }, signal: AbortSignal) {
+    const response = await this.call(url, {
       method: "PUT",
-      headers: { "x-lease-id": lease.leaseId, "x-sha256": sha256, "content-type": "application/octet-stream", "content-length": String(size) },
+      headers: { "x-lease-id": leaseId, "x-sha256": output.sha256, "content-type": "application/octet-stream", "content-length": String(output.size) },
       body: Readable.toWeb(createReadStream(file)) as never,
       duplex: "half",
       signal,
     } as RequestInit);
-    if (!response.ok) throw new Error(`Tải ${name} lên lỗi (${response.status})`);
-    return sha256;
+    if (!response.ok) throw new Error(`Tải ${output.name} lên lỗi (${response.status})`);
+  }
+
+  private async uploadResumable(url: string, leaseId: string, file: string, output: { name: string; size: number; sha256: string }, signal: AbortSignal) {
+    for (let attempt = 0; attempt < 3; attempt++) {
+      signal.throwIfAborted();
+      try {
+        const head = await this.call(url, { method: "HEAD", headers: { "x-lease-id": leaseId }, signal });
+        if (!head.ok) throw new Error(`HEAD tải ${output.name} lỗi (${head.status})`);
+        const raw = head.headers.get("upload-offset");
+        const offset = raw && /^\d+$/.test(raw) ? Number(raw) : NaN;
+        if (!Number.isSafeInteger(offset) || offset > output.size) throw new Error("Upload-Offset không hợp lệ");
+        const response = await this.call(url, {
+          method: "PATCH",
+          headers: { "x-lease-id": leaseId, "x-sha256": output.sha256, "content-type": "application/offset+octet-stream",
+            "content-length": String(output.size - offset), "upload-length": String(output.size), "upload-offset": String(offset) },
+          body: offset < output.size ? Readable.toWeb(createReadStream(file, { start: offset })) as never : new Uint8Array(0),
+          duplex: "half", signal,
+        } as RequestInit);
+        if (!response.ok || response.headers.get("upload-offset") !== String(output.size)) {
+          throw new Error(`Tải ${output.name} lên lỗi (${response.status})`);
+        }
+        return;
+      } catch (error) {
+        if (signal.aborted || error instanceof Revoked || attempt === 2) throw error;
+        await this.sleep(this.backoff(attempt));
+      }
+    }
   }
 
   /** VOICE and MEDIA_FETCH. Own work dir, the lent key lives in memory and is wiped when the job ends. */
@@ -509,12 +790,12 @@ export class NodeAgent {
       }
       if (job.cancelled) return;
       job.message = "Gửi kết quả";
-      const outputs: Array<{ name: string; sha256: string }> = [];
-      for (const file of files) outputs.push({ name: file.name, sha256: await this.upload(lease, file.name, file.path, signal) });
+      const storageTransfers = lease.storageUpload ? [] as StorageTransferStat[] : undefined;
+      const outputs = await this.uploadOutputs(lease, files, signal, storageTransfers);
       const done = await this.call(`/api/nodes/agent/jobs/${lease.jobId}/complete`, {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ leaseId: lease.leaseId, outputs }),
+        body: JSON.stringify({ leaseId: lease.leaseId, outputs, storageTransfers }),
       });
       if (done.status === 409 || done.status === 410) this.log(`Việc ${lease.jobId.slice(0, 8)} đã được giao lại, bỏ kết quả.`);
       else if (!done.ok) throw new Error(`complete ${done.status}`);
@@ -536,6 +817,7 @@ export class NodeAgent {
 
   private async runJob(lease: LeaseResponse, job: Running): Promise<void> {
     const { signal } = job.controller;
+    const storageTransfers = lease.storageUpload ? [] as StorageTransferStat[] : undefined;
     const renderBundle = lease.bundle as RenderBundle;
     const workDir = join(this.dataDir, "work", lease.jobId);
     rmSync(workDir, { recursive: true, force: true });
@@ -543,7 +825,7 @@ export class NodeAgent {
     try {
       for (const file of lease.manifest) {
         job.message = "Tải dữ liệu";
-        const cached = await this.download(lease, file.sha256, signal);
+        const cached = await this.download(lease, file.sha256, signal, storageTransfers);
         this.placeFile(cached, join(workDir, file.name));
       }
       const renderDir = join(workDir, "render");
@@ -573,14 +855,13 @@ export class NodeAgent {
       job.message = "Gửi kết quả";
       const reportFile = join(workDir, "report.json");
       writeFileSync(reportFile, JSON.stringify(result.report));
-      const outputs = [
-        { name: "final.mp4", sha256: await this.upload(lease, "final.mp4", result.outputPath, signal) },
-        { name: "report.json", sha256: await this.upload(lease, "report.json", reportFile, signal) },
-      ];
+      const outputs = await this.uploadOutputs(lease, [
+        { name: "final.mp4", path: result.outputPath }, { name: "report.json", path: reportFile },
+      ], signal, storageTransfers);
       const done = await this.call(`/api/nodes/agent/jobs/${lease.jobId}/complete`, {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ leaseId: lease.leaseId, outputs }),
+        body: JSON.stringify({ leaseId: lease.leaseId, outputs, storageTransfers }),
       });
       if (done.status === 409) this.log(`Việc ${lease.jobId.slice(0, 8)} đã được giao lại, bỏ kết quả.`);
       else if (!done.ok) throw new Error(`complete ${done.status}`);
@@ -654,9 +935,12 @@ export async function runWorkerAgent(env: AgentEnv = process.env, deps: AgentDep
   const onSignal = () => agent.stop();
   process.once("SIGTERM", onSignal);
   process.once("SIGINT", onSignal);
+  // sleep() uses unref'd timers; without a ref'd handle Node exits while the worker idles between heartbeats.
+  const keepAlive = setInterval(() => undefined, 60_000);
   try {
     return await agent.run();
   } finally {
+    clearInterval(keepAlive);
     process.off("SIGTERM", onSignal);
     process.off("SIGINT", onSignal);
   }

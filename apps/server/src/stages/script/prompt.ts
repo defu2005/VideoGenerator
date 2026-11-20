@@ -1,5 +1,6 @@
-import { appendChannelDirection, fallbackFormat, resolveFormat, type Project, type ResearchNotes } from "@vg/shared";
+import { appendChannelDirection, fallbackFormat, resolveFormat, type FormatRecipe, type Project, type ResearchNotes } from "@vg/shared";
 import { appendGuidelineGuidance } from "../../guidelines/promptText.js";
+import { narrationRulesBlock, WRITER_SYSTEM } from "./narrationRules.js";
 
 const audienceRegions = new Intl.DisplayNames("en", { type: "region" });
 
@@ -20,12 +21,7 @@ export function scriptPrompt(
   const pace = project.settings.wordsPerMinute ?? wordsPerMinute;
   const pacing = project.settings.aspectRatio === "9:16" ? " (vertical, fast pacing)" : "";
   return {
-    system: [
-      "You are a documentary video scriptwriter.",
-      "Write natural spoken narration in the requested language, with a compelling but accurate storytelling style.",
-      "Do not present uncertain claims as verified facts.",
-      "Return compact JSON only, matching the Script schema.",
-    ].join(" "),
+    system: `${WRITER_SYSTEM} Return compact JSON only, matching the Script schema.`,
     prompt: appendGuidelineGuidance(appendChannelDirection([
       `Topic: ${project.topic}`,
       `Description: ${project.description || "(none)"}`,
@@ -34,6 +30,8 @@ export function scriptPrompt(
       `Style: ${project.settings.style}; tone: ${project.settings.tone}; audience: ${project.settings.audience}; platform: ${project.settings.platform}${pacing}`,
       `Target duration: ${project.settings.targetDurationSec} seconds (the total narration should be within 20% of this target)`,
       formatLine(project),
+      formatGuidance(project),
+      narrationRulesBlock(),
       `Speaking pace: ${pace} words per minute`,
       research ? `Research notes (unverified; preserve uncertainty):\n${JSON.stringify(research)}` : "No research notes are available; use the topic only.",
       "Script fields: title, hook, sections[{id,heading,narration,visualQueries:{primary,alternatives},visualNotes,musicMood,energy}], outro, music:{mood,energy,keywords}.",
@@ -58,6 +56,29 @@ export function formatLine(project: Project): string {
     ? " Name the source in sourceHint; it is shown on screen."
     : "";
   return `Format ${picked.recipe.id} (${picked.recipe.nameVi}): ${reason} Sections in order: ${keys}. Tag each section with sectionKey. Hook under ${picked.recipe.script.hookMaxSec}s. Sentences under ${picked.recipe.script.sentenceMaxWords} words.${cite}`;
+}
+
+export function projectRecipe(project: Project): FormatRecipe {
+  return resolveFormat({
+    topic: project.topic,
+    aspectRatio: project.settings.aspectRatio,
+    targetDurationSec: project.settings.targetDurationSec,
+    format: project.settings.format,
+  }).recipe;
+}
+
+/** Per-section purpose, hook tactics and reading level of the chosen recipe (Vietnamese text quoted as is). */
+export function formatGuidance(project: Project): string {
+  const recipe = projectRecipe(project);
+  const sections = recipe.script.structure
+    .map((section) => `- ${section.key} — ${section.nameVi}: ${section.purposeVi} (≈${Math.round(section.shareOfDuration * 100)}%${section.required ? "" : ", optional"})`)
+    .join("\n");
+  return [
+    `Format guidance (${recipe.id}): ${recipe.descriptionVi}`,
+    `Each section must do its job:\n${sections}`,
+    `Allowed hook tactics: ${recipe.script.hookStyles.join(", ")}.`,
+    `Reading level: ${recipe.script.readingLevelVi}`,
+  ].join("\n");
 }
 
 const RESEARCH_DEPTH_RANK = { light: 0, standard: 1, deep: 2 } as const;

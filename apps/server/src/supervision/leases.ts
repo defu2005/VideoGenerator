@@ -24,8 +24,10 @@ export const RESOURCE_MAP: Record<string, Spec> = {
   // Stage writes carry TASK-118 job fences, not pipeline-control profile/project leases.
   // A channel manager must not block a scout already working on an assigned job.
   stage_claim_next: "global", stage_heartbeat: "global", stage_complete: "global", stage_release: "global",
-  visual_submit_candidates: "global", visual_record_verdict: "global", visual_select: "global",
+  agent_send: "global", agent_ack: "global",
+  visual_submit_candidates: "global", visual_record_verdict: "global", visual_select: "global", research_submit_notes: "global", script_submit_draft: "global", music_submit_candidates: "global",
   update_stage_timeouts: project(), run_pipeline: project(), approve_gate: project(), repair_script: project(),
+  switch_script_hook: project(), rescore_script: project(),
   repair_scene: project(), repair_render_stage: project(), publish_project: project(), make_shorts: project(),
   make_translation: project(), research_scene_visuals: project(), crop_scene_images: project(), dedupe_scene_visuals: project(),
   delete_project: project(), apply_review_proposal: project(), undo_timeline_edit: project(),
@@ -48,6 +50,10 @@ export const RESOURCE_MAP: Record<string, Spec> = {
   operator_enqueue: "global", operator_order_upsert: "global", operator_order_disable: "global", operator_override: "global",
   escalation_claim: "global", escalation_resolve: "global", escalation_forward_to_user: "global", notify_user: "global",
   record_lesson: "global", retire_lesson: "global", run_research: "global",
+  propose_stage_note: "global", decide_stage_note: "global",
+  // TASK-129c: mission writes are owner-gated per mission (duty + owner check), not project or profile leases.
+  mission_set_plan: "global", mission_attach_project: "global", mission_move: "global",
+  mission_create: "global", mission_resume: "global", mission_cancel: "global",
 };
 
 /** The object a tool call changes, or null when it is global or not a known writer. */

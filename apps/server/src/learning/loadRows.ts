@@ -1,6 +1,7 @@
 import type Database from "better-sqlite3";
 import {
   CostKindSchema,
+  GRAPHIC_KINDS,
   RevenueKindSchema,
 } from "@vg/shared";
 import { getAppCurrency, listCurrencyRates } from "../finance/currencySettings.js";
@@ -186,7 +187,6 @@ export function loadFeatureRows(sqlite: Database.Database, profileId: string): F
   return buildFeatureRows(sources);
 }
 
-const GRAPHIC_KINDS = ["kinetic_text", "chart", "map", "compare", "quote_full", "list_full"];
 
 function composeOf(reportJson: string | undefined): Pick<LearningSource, "engine" | "shotsPerMin" | "stillShare" | "graphicShare" | "beatCutPct" | "hookShotKind" | "kindEntropyBits"> {
   const empty = {

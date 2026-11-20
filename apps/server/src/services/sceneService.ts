@@ -2,6 +2,8 @@ import { randomUUID } from "node:crypto";
 import { existsSync, rmSync } from "node:fs";
 import {
   ScenePlanSummarySchema,
+  ContinuityPlanSchema,
+  type ContinuityPlan,
   SceneSchema,
   StoredVisualQueriesSchema,
   splitSentences,
@@ -14,8 +16,11 @@ import type Database from "better-sqlite3";
 import type { JobRepository } from "../jobs/jobRepository.js";
 import { markStaleFrom } from "../pipeline/invalidation.js";
 import { AppError } from "../lib/errors.js";
+import { readContinuity, reconcileContinuity, writeContinuity } from "../continuity/store.js";
 
 export type SceneMutateOptions = {
+  continuityRemap?: Record<string, string[]>;
+  replaceContinuity?: boolean;
   /** Stage after which later DONE stages become STALE. Defaults to SCENE_PLAN. */
   staleFrom?: PipelineStage;
 };
@@ -104,6 +109,7 @@ export class SceneService {
     const project = this.requireProject(projectId);
     const scenes = this.list(projectId);
     return ScenePlanSummarySchema.parse({
+      ...(readContinuity(this.sqlite, projectId) ? { continuity: readContinuity(this.sqlite, projectId) } : {}),
       scenes,
       totalSec: this.totalDuration(scenes),
       targetSec: project.settings.targetDurationSec,
@@ -132,6 +138,19 @@ export class SceneService {
       this.saveScene(next);
       return this.recompute(projectId, project);
     }, options);
+  }
+
+  patchContinuity(projectId: string, plan: ContinuityPlan, weight = 0.05) {
+    return this.mutate(projectId, () => {
+      const parsed = ContinuityPlanSchema.parse(plan);
+      const ids = new Set(this.list(projectId).map((scene) => scene.id));
+      if ([...parsed.characters.flatMap((item) => item.appearsInScenes), ...parsed.motifs.flatMap((item) => item.scenes)].some((id) => !ids.has(id))) {
+        throw new AppError(400, "INVALID_CONTINUITY_SCENE", "Định hướng chứa cảnh không thuộc dự án.");
+      }
+      if (!Number.isFinite(weight) || weight < 0 || weight > 0.2) throw new AppError(400, "INVALID_CONTINUITY_WEIGHT", "Trọng số phải trong khoảng 0–0.2.");
+      writeContinuity(this.sqlite, projectId, { version: 1, plan: parsed, weight, sourceHash: "user" });
+      return this.get(projectId);
+    }, { replaceContinuity: true });
   }
 
   reorder(projectId: string, sceneIds: string[], options?: SceneMutateOptions) {
@@ -168,6 +187,7 @@ export class SceneService {
         "INSERT INTO scenes (id, project_id, \"order\", kind, section_id, label, narration, visual_notes, visual_description, visual_queries, music_mood, energy, est_duration_sec, duration_override_sec, start_sec, transition_note, origin, edited, input_hash, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, 'USER', 1, ?, ?, ?)",
       );
       const moved = this.list(projectId).filter((item) => item.order > scene.order);
+      const preceding = this.list(projectId).filter((item) => item.order < scene.order);
       this.setTemporaryOrder(projectId, this.list(projectId).length);
       this.saveScene({
         ...scene,
@@ -185,6 +205,7 @@ export class SceneService {
         this.estimate(secondText, project), scene.startSec, scene.transitionNote, scene.inputHash, now, now,
       );
       const updateOrder = this.sqlite.prepare("UPDATE scenes SET \"order\" = ? WHERE id = ? AND project_id = ?");
+      preceding.forEach((item) => updateOrder.run(item.order, item.id, projectId));
       moved.forEach((item, index) => updateOrder.run(scene.order + index + 2, item.id, projectId));
       return this.recompute(projectId, project);
     });
@@ -214,7 +235,7 @@ export class SceneService {
       this.sqlite.prepare("DELETE FROM scenes WHERE id = ? AND project_id = ?").run(right.id, projectId);
       this.compactOrders(projectId, scenes.length);
       return this.recompute(projectId, project);
-    });
+    }, { continuityRemap: { [sceneIds[1]]: [sceneIds[0]] } });
     if (deletedTrack && existsSync(deletedTrack)) rmSync(deletedTrack, { force: true });
     return result;
   }
@@ -249,7 +270,20 @@ export class SceneService {
       if (this.repository.getActiveJob(projectId)) {
         throw new AppError(409, "INVALID_PIPELINE_STATE", "A job is already active for this project.");
       }
+      const envelope = readContinuity(this.sqlite, projectId);
+      const before = this.list(projectId);
       const result = operation();
+      if (envelope && !options?.replaceContinuity) {
+        const after = this.list(projectId);
+        const born = after.filter((scene) => !before.some((old) => old.id === scene.id));
+        const remap = { ...options?.continuityRemap };
+        for (const scene of born) {
+          const previous = after[scene.order - 1];
+          if (previous) remap[previous.id] = [previous.id, scene.id];
+        }
+        reconcileContinuity(this.sqlite, projectId, envelope, remap);
+        if (result && typeof result === "object" && "scenes" in result) Object.assign(result, { continuity: readContinuity(this.sqlite, projectId) });
+      }
       this.repository.updateStage(projectId, "SCENE_PLAN", {
         state: "DONE",
         progress: 100,

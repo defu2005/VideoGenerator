@@ -1,4 +1,6 @@
 import { enqueueIndex } from "../retrieval/service.js";
+import { publishAgentEvent } from "../events/agentBus.js";
+import { defaultWorkspaceId } from "../auth/workspaces.js";
 import { scopeSql } from "../auth/requestContext.js";
 import { randomUUID } from "node:crypto";
 import type Database from "better-sqlite3";
@@ -358,6 +360,8 @@ export class AnalyticsSyncService {
       await this.maybeSyncChannelDaily(account, fetcher, tokens, signal);
 
       this.setAnalyticsStatus(accountId, "ok", null);
+      // Only real work reaches the bus: a tick with nothing due must not fill the 500-entry buffer.
+      if (duePubs.length > 0) publishAgentEvent({ type: "analytics_synced", summary: `Đã đồng bộ thống kê ${account.platform}` }, { workspaceId: this.workspaceOf(accountId) });
       this.sqlite.prepare(
         "UPDATE platform_accounts SET analytics_synced_at = ?, updated_at = ? WHERE id = ?",
       ).run(this.now().toISOString(), this.now().toISOString(), accountId);
@@ -548,6 +552,8 @@ export class AnalyticsSyncService {
           );
           await this.maybeSyncChannelDaily(account, fetcher, refreshed, signal);
           this.setAnalyticsStatus(account.id, "ok", null);
+          // Same rule as the main path: only a refresh that led to real work is announced.
+          publishAgentEvent({ type: "analytics_synced", summary: `Đã đồng bộ thống kê ${account.platform}` }, { workspaceId: this.workspaceOf(account.id) });
           this.sqlite.prepare(
             "UPDATE platform_accounts SET analytics_synced_at = ?, updated_at = ? WHERE id = ?",
           ).run(this.now().toISOString(), this.now().toISOString(), account.id);
@@ -629,6 +635,14 @@ export class AnalyticsSyncService {
     const refreshed = await publisher.oauth.refresh(tokens, signal, accountId);
     this.vault.storeTokens(accountId, refreshed, refreshed.scopes);
     return refreshed;
+  }
+
+  /** Workspace of the account's profile, for scoping bus events. Undefined only if the row is gone. */
+  private workspaceOf(accountId: string): string | undefined {
+    const row = this.sqlite.prepare(
+      "SELECT p.workspace_id AS w FROM platform_accounts a JOIN profiles p ON p.id = a.profile_id WHERE a.id = ?",
+    ).get(accountId) as { w: string | null } | undefined;
+    return row?.w ?? (defaultWorkspaceId(this.sqlite) ?? undefined);
   }
 
   private setAnalyticsStatus(

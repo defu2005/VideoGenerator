@@ -7,6 +7,7 @@ import {
   JobUsageSchema,
   PipelineStageSchema,
   ProjectSchema,
+  ProjectSettingsSchema,
   JobSchema,
   StageRecordSchema,
   STAGE_ORDER,
@@ -44,6 +45,8 @@ type ProjectRow = {
 };
 
 type JobRow = {
+  input_version?: string | null;
+  invalidated_at?: string | null;
   id: string;
   project_id: string;
   stage: string;
@@ -70,6 +73,7 @@ type JobRow = {
 };
 
 type StageRow = {
+  input_version?: string | null;
   project_id: string;
   stage: string;
   state: string;
@@ -167,16 +171,17 @@ export class JobRepository {
       .run(runMode, this.now().toISOString(), projectId);
   }
 
-  updateProject(projectId: string, updates: { status?: Project["status"]; stage?: Project["stage"]; runMode?: "ALL" | "SINGLE" | null }): Project {
+  updateProject(projectId: string, updates: { status?: Project["status"]; stage?: Project["stage"]; runMode?: "ALL" | "SINGLE" | null; settings?: Project["settings"] }): Project {
     const current = this.getProject(projectId);
     if (!current) throw new Error(`Project ${projectId} disappeared during pipeline transition`);
     const status = updates.status ?? current.status;
     const stage = updates.stage ?? current.stage;
     const runMode = updates.runMode === undefined ? this.getRunMode(projectId) : updates.runMode;
     const updatedAt = this.now().toISOString();
-    this.sqlite.prepare("UPDATE projects SET status = ?, stage = ?, run_mode = ?, updated_at = ? WHERE id = ?")
-      .run(status, stage, runMode, updatedAt, projectId);
-    const project = { ...current, status, stage, updatedAt };
+    const settings = updates.settings === undefined ? current.settings : ProjectSettingsSchema.parse(updates.settings);
+    this.sqlite.prepare("UPDATE projects SET status = ?, stage = ?, run_mode = ?, updated_at = ?, settings = COALESCE(?, settings) WHERE id = ?")
+      .run(status, stage, runMode, updatedAt, updates.settings === undefined ? null : JSON.stringify(settings), projectId);
+    const project = { ...current, status, stage, settings, updatedAt };
     this.emit({ type: "project.updated", projectId, data: project, at: updatedAt });
     return project;
   }
@@ -194,15 +199,7 @@ export class JobRepository {
     const rows = this.sqlite.prepare(
       "SELECT * FROM project_stages WHERE project_id = ? ORDER BY rowid",
     ).all(projectId) as StageRow[];
-    return rows.map((row) => StageRecordSchema.parse({
-      stage: row.stage,
-      state: row.state,
-      progress: row.progress,
-      message: row.message,
-      jobId: row.job_id,
-      updatedAt: row.updated_at,
-      error: JobErrorSchema.nullable().parse(parseJson(row.error)),
-    }));
+    return rows.map((row) => this.toStage(row));
   }
 
   getStage(projectId: string, stage: PipelineStage): StageRecord {
@@ -217,8 +214,8 @@ export class JobRepository {
     const current = this.getStage(projectId, stage);
     const next = StageRecordSchema.parse({ ...current, ...updates, updatedAt: this.now().toISOString() });
     this.sqlite.prepare(
-      "UPDATE project_stages SET state = ?, progress = ?, message = ?, job_id = ?, updated_at = ?, error = ? WHERE project_id = ? AND stage = ?",
-    ).run(next.state, next.progress, next.message, next.jobId, next.updatedAt, next.error ? JSON.stringify(next.error) : null, projectId, stage);
+      "UPDATE project_stages SET state = ?, progress = ?, message = ?, job_id = ?, updated_at = ?, error = ?, input_version = ? WHERE project_id = ? AND stage = ?",
+    ).run(next.state, next.progress, next.message, next.jobId, next.updatedAt, next.error ? JSON.stringify(next.error) : null, next.inputVersion ?? null, projectId, stage);
     this.emit({ type: "stage.updated", projectId, data: next, at: next.updatedAt });
     return next;
   }
@@ -231,6 +228,8 @@ export class JobRepository {
     previousState: StageState;
     runAfter?: Date;
     scope?: string | null;
+    inputVersion?: string;
+    inputRetry?: boolean;
   }): Job {
     const timestamp = this.now().toISOString();
     const job = JobSchema.parse({
@@ -238,6 +237,7 @@ export class JobRepository {
       projectId: input.projectId,
       stage: input.stage,
       scope: input.scope ?? null,
+      inputVersion: input.inputVersion,
       status: "QUEUED",
       progress: 0,
       message: null,
@@ -251,8 +251,8 @@ export class JobRepository {
       runAfter: (input.runAfter ?? this.now()).toISOString(),
     });
     this.sqlite.prepare(
-      "INSERT INTO jobs (id, project_id, stage, scope, status, progress, message, attempt, max_attempts, error, usage, created_at, started_at, finished_at, run_after, previous_state) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-    ).run(job.id, job.projectId, job.stage, job.scope, job.status, job.progress, job.message, job.attempt, job.maxAttempts, null, null, job.createdAt, job.startedAt, job.finishedAt, job.runAfter, input.previousState);
+      "INSERT INTO jobs (id, project_id, stage, scope, status, progress, message, attempt, max_attempts, error, usage, created_at, started_at, finished_at, run_after, previous_state, input_version, input_retry) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+    ).run(job.id, job.projectId, job.stage, job.scope, job.status, job.progress, job.message, job.attempt, job.maxAttempts, null, null, job.createdAt, job.startedAt, job.finishedAt, job.runAfter, input.previousState, job.inputVersion ?? null, Number(input.inputRetry ?? false));
     this.emit({ type: "job.updated", projectId: job.projectId, data: job, at: timestamp });
     return job;
   }
@@ -262,15 +262,26 @@ export class JobRepository {
     return row ? this.toJob(row) : undefined;
   }
 
+  flagInvalidatedJobs(projectId: string, stage: PipelineStage): void {
+    for (const job of this.getActiveJobs(projectId)) {
+      if (job.stage === stage && !job.invalidatedAt) this.updateJob(job.id, { invalidatedAt: this.now().toISOString() });
+    }
+  }
+
+  isInputRetry(jobId: string): boolean {
+    const row = this.sqlite.prepare("SELECT input_retry FROM jobs WHERE id=?").get(jobId) as { input_retry: number } | undefined;
+    return row?.input_retry === 1;
+  }
+
   updateJob(jobId: string, updates: Partial<Omit<Job, "id" | "projectId" | "stage" | "createdAt">>): Job {
     const current = this.getJob(jobId);
     if (!current) throw new Error(`Job ${jobId} disappeared during pipeline transition`);
     const next = JobSchema.parse({ ...current, ...updates });
     this.sqlite.prepare(
-      "UPDATE jobs SET status = ?, progress = ?, message = ?, attempt = ?, max_attempts = ?, error = ?, usage = ?, started_at = ?, finished_at = ?, run_after = ? WHERE id = ?",
+      "UPDATE jobs SET status = ?, progress = ?, message = ?, attempt = ?, max_attempts = ?, error = ?, usage = ?, started_at = ?, finished_at = ?, run_after = ?, input_version = ?, invalidated_at = ? WHERE id = ?",
     ).run(next.status, next.progress, next.message, next.attempt, next.maxAttempts,
       next.error ? JSON.stringify(next.error) : null, next.usage ? JSON.stringify(next.usage) : null,
-      next.startedAt, next.finishedAt, next.runAfter, jobId);
+      next.startedAt, next.finishedAt, next.runAfter, next.inputVersion ?? null, next.invalidatedAt ?? null, jobId);
     this.emit({ type: "job.updated", projectId: next.projectId, data: next, at: this.now().toISOString() });
     return next;
   }
@@ -280,7 +291,7 @@ export class JobRepository {
     if (!lease) {
       // Ending a lease keeps node_id on a finished job so the history still says which machine ran it.
       this.sqlite.prepare(
-        "UPDATE jobs SET node_id = CASE WHEN status IN ('QUEUED', 'RUNNING') THEN NULL ELSE node_id END, agent_instance = CASE WHEN status IN ('QUEUED', 'RUNNING') THEN NULL ELSE agent_instance END, lease_id = NULL, lease_until = NULL, heartbeat_at = NULL WHERE id = ?",
+        "UPDATE jobs SET node_id = CASE WHEN status IN ('QUEUED', 'RUNNING') THEN NULL ELSE node_id END, agent_instance = CASE WHEN status IN ('QUEUED', 'RUNNING') THEN NULL ELSE agent_instance END, lease_id = NULL, lease_until = NULL, heartbeat_at = NULL, finalizing_at = NULL WHERE id = ?",
       ).run(jobId);
       return;
     }
@@ -406,6 +417,7 @@ export class JobRepository {
       jobId: row.job_id,
       updatedAt: row.updated_at,
       error: JobErrorSchema.nullable().parse(parseJson(row.error)),
+      ...(row.input_version ? { inputVersion: row.input_version } : {}),
     });
   }
 
@@ -445,6 +457,8 @@ export class JobRepository {
       agentInstance: row.agent_instance ?? null,
       leaseUntil: row.lease_until ?? null,
       heartbeatAt: row.heartbeat_at ?? null,
+      ...(row.input_version ? { inputVersion: row.input_version } : {}),
+      ...(row.invalidated_at ? { invalidatedAt: row.invalidated_at } : {}),
     });
   }
 

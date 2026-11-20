@@ -1,6 +1,8 @@
 import { shelvedDigestLines } from "./repairDigest.js";
 import { stampWorkspace, workspaceOfProfile, currentWorkspaceId } from "../auth/requestContext.js";
 import { randomInt, randomUUID, timingSafeEqual } from "node:crypto";
+import { publishFindingOpened, workspaceForProfile } from "./findingEvents.js";
+import { publishAgentEvent } from "../events/agentBus.js";
 import { rmSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
 import type Database from "better-sqlite3";
@@ -230,6 +232,16 @@ export function createUserRequest(sqlite: Database.Database, input: {
     id, input.profileId ?? null, kind, input.title, input.whyVi, input.actionUrl, input.dedupeKey, at,
     input.checkKind, JSON.stringify(input.checkArgs ?? {}),
   );
+  // TASK-149: publish only for a new row (not the dedupe hit, Hermes escalation or QUESTION_CAP exits). Guarded.
+  try {
+    publishAgentEvent({
+      type: "needs_user",
+      summary: `${input.profileId ? "[kênh]" : "[toàn ứng dụng]"} ${input.title}`.slice(0, 200),
+      link: input.actionUrl,
+    }, { workspaceId: workspaceForProfile(sqlite, input.profileId ?? null) });
+  } catch (err) {
+    console.error("[needs_user] publish failed", err);
+  }
   return { id, created: true };
 }
 
@@ -403,7 +415,7 @@ export function consumeRaiseCode(sqlite: Database.Database, code: string, now: C
     sqlite.prepare(`INSERT INTO app_settings (key, value, updated_at) VALUES ('autonomy.raiseCode', ?, ?)
       ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at`)
       .run(JSON.stringify(parsed), at.toISOString());
-    sqlite.prepare(`INSERT INTO supervisor_findings
+    const raised = sqlite.prepare(`INSERT INTO supervisor_findings
       (id, profile_id, kind, severity, dedupe_key, detail, first_seen_at, last_seen_at, status)
       VALUES (?, NULL, 'raise_code', 'warn', 'raise-code:lockout', ?, ?, ?, 'open')
       ON CONFLICT(dedupe_key) DO NOTHING`).run(
@@ -412,6 +424,7 @@ export function consumeRaiseCode(sqlite: Database.Database, code: string, now: C
       at.toISOString(),
       at.toISOString(),
     );
+    if (raised.changes) publishFindingOpened(sqlite, { summary: "Năm mã sai trong 10 phút; tạm khóa 10 phút", profileId: null });
     return false;
   }
   const left = Buffer.from(parsed.code);
@@ -485,6 +498,22 @@ export function buildDigest(sqlite: Database.Database, now: Clock = () => new Da
     const plan = (goal.spec as { plan?: { videos?: number } } | undefined)?.plan;
     return plan?.videos ? `${goal.text}: ${plan.videos} video` : goal.text;
   });
+  // TASK-129c: missions in flight, what ended or failed today, and what was published today (Vietnam day, workspace-scoped).
+  const missionWs = currentWorkspaceId(sqlite);
+  const missionRows = readRows(sqlite, "SELECT id, command, state, updated_at FROM missions WHERE workspace_id IS ?", missionWs);
+  const ZONE = "Asia/Ho_Chi_Minh";
+  const dayOf = (iso: string) => localDateString(new Date(iso), ZONE);
+  const missionPublishRows = readRows(sqlite, `SELECT c.at AS at FROM mission_checkpoints c JOIN missions m ON m.id = c.mission_id
+    WHERE c.kind = 'published' AND m.workspace_id IS ?`, missionWs);
+  const missions = {
+    inFlight: missionRows.filter((row) => !["done", "failed", "cancelled"].includes(String(row.state)))
+      .map((row) => ({ id: String(row.id), command: String(row.command), state: String(row.state) })),
+    endedToday: missionRows.filter((row) => ["done", "failed", "cancelled"].includes(String(row.state)) && dayOf(String(row.updated_at)) === day)
+      .map((row) => ({ id: String(row.id), state: String(row.state) })),
+    failedToday: missionRows.filter((row) => row.state === "failed" && dayOf(String(row.updated_at)) === day).length,
+    waitingUser: missionRows.filter((row) => row.state === "waiting_user").length,
+    publishedToday: missionPublishRows.filter((row) => dayOf(String(row.at)) === day).length,
+  };
   const researchWeek = readRows(sqlite, "SELECT proposal_ids FROM research_runs WHERE workspace_id IS ? AND created_at >= ?", currentWorkspaceId(sqlite), new Date(at.getTime() - 7 * 86_400_000).toISOString());
   return {
     day,
@@ -499,6 +528,7 @@ export function buildDigest(sqlite: Database.Database, now: Clock = () => new Da
     spendNote: "Chi tiết chi phí nằm ở Mức dùng.",
     shelved: shelvedDigestLines(sqlite, day),
     selfImprovementWeek: { researched: researchWeek.length, knowledgeProposals: researchWeek.reduce((sum, row) => sum + (JSON.parse(String(row.proposal_ids)) as unknown[]).length, 0) },
+    missions,
     tomorrow,
   };
 }

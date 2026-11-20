@@ -63,6 +63,7 @@ const ConfigSchema = z.object({
   RENDER_CONCURRENCY: z.coerce.number().int().positive().max(4).default(1),
   STAGE_TIMEOUT_MS: z.coerce.number().int().positive().default(600_000),
   NODE_LEASE_SEC: z.coerce.number().int().min(10).max(600).default(60),
+  NODE_PROJECT_RUN_LEASE_SEC: z.coerce.number().int().min(20).max(600).default(90),
   NODE_MAX_UPLOAD_MB: z.coerce.number().int().positive().default(4096),
   NODE_SHUTDOWN_GRACE_SEC: z.coerce.number().int().min(0).max(3600).default(120),
   NODE_CACHE_MAX_GB: z.coerce.number().positive().default(20),
@@ -216,6 +217,7 @@ export type AppConfig = {
   RENDER_CONCURRENCY: number;
   STAGE_TIMEOUT_MS: number;
   NODE_LEASE_SEC: number;
+  NODE_PROJECT_RUN_LEASE_SEC: number;
   NODE_MAX_UPLOAD_MB: number;
   NODE_SHUTDOWN_GRACE_SEC: number;
   NODE_CACHE_MAX_GB: number;

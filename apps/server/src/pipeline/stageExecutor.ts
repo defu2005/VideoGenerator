@@ -12,7 +12,7 @@ export interface StageContext {
   logger: FastifyBaseLogger;
 }
 
-export type StageResult = { outputHash?: string; message?: string };
+export type StageResult = { outputHash?: string; message?: string; renderId?: string };
 
 export interface StageExecutor {
   stage: PipelineStage;

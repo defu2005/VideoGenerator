@@ -1,5 +1,5 @@
 import { OperatorSettingsUpdateSchema, StandingOrderInputSchema } from "@vg/shared";
-import type { FastifyInstance } from "fastify";
+import type { FastifyInstance, FastifyRequest } from "fastify";
 import { z } from "zod";
 import type { OperatorService } from "../operator/service.js";
 import type Database from "better-sqlite3";
@@ -9,7 +9,9 @@ import { currentDuty, listInstances } from "../supervision/duty.js";
 import { listEscalations } from "../supervision/escalations.js";
 import { listLiveLeases } from "../supervision/leases.js";
 import { getOperatorPause } from "../supervision/pause.js";
-import { dismissToolProposal, listToolProposals } from "../operator/toolProposals.js";
+import { acceptToolProposal, checkToolProposalDone, dismissToolProposal, listAcceptedToolProposals, listDoneToolProposals, listInProgressToolProposals, listToolProposals, startToolProposal, ToolProposalTaskRef } from "../operator/toolProposals.js";
+import { draftProposal, type DraftRunner } from "../operator/proposalDraft.js";
+import { LlmError } from "../providers/llm/types.js";
 import { computerUseStatus, saveComputerUseSettings, stopComputerUse } from "../computerUse/service.js";
 import { collectOperatorEvents, listOperatorEvents, listOperatorEventRules, OperatorEventRule, operatorEventTrace, saveOperatorEventRule } from "../operator/events.js";
 
@@ -18,7 +20,16 @@ const IdParams = z.object({ id: z.string().min(1).max(80) }).strict();
 const MemoryParams = z.object({ profileId: z.string().uuid(), id: z.string().uuid() }).strict();
 const MemoryBody = z.object({ text: z.string().trim().min(1).max(4000) }).strict();
 
-export function registerOperatorRoutes(app: FastifyInstance, operator: OperatorService, sqlite: Database.Database): void {
+// TASK-074c-3c-2: the draft runner (the model) and the target root are injected by the server wiring. Without them the draft route refuses.
+// TASK-074c-6e: tasksRoot is the folder of TASK-….done files. Without it the check-done route refuses.
+export function registerOperatorRoutes(
+  app: FastifyInstance, operator: OperatorService, sqlite: Database.Database, proposalDraft?: { runner: DraftRunner; root: string }, tasksRoot?: string,
+): void {
+  // TASK-074b-4: only a signed-in user may write a user_edit draft or activate a skill by hand. An API key bound to an
+  // owner would otherwise pass operator.use and skip the behaviour gate, which exempts user_edit drafts.
+  const userOnly = (request: FastifyRequest) => {
+    if (request.actor?.kind !== "user") throw new AppError(403, "OPERATOR_SKILL_USER_ONLY", "Chỉ người dùng đăng nhập qua giao diện được sửa hoặc kích hoạt skill.");
+  };
   app.get("/api/operator/overview", async () => operator.overview());
   app.get("/api/operator/supervision", async () => {
     const now = new Date();
@@ -58,7 +69,13 @@ export function registerOperatorRoutes(app: FastifyInstance, operator: OperatorS
     stopComputerUse(sqlite);
     return computerUseStatus(sqlite);
   });
-  app.get("/api/operator/tool-proposals", async () => ({ items: listToolProposals(sqlite) }));
+  app.get("/api/operator/tool-proposals", async () => ({ items: listToolProposals(sqlite, app.log) }));
+  // TASK-074c-4b-2: reading is not a decision, so there is no user-only check here. Accepting stays user-only.
+  app.get("/api/operator/tool-proposals/accepted", async () => ({ items: listAcceptedToolProposals(sqlite, app.log) }));
+  // TASK-074c-6b: read-only, no user-only check, same as the accepted list.
+  app.get("/api/operator/tool-proposals/in-progress", async () => ({ items: listInProgressToolProposals(sqlite, app.log) }));
+  // TASK-074c-6g: read-only, no user-only check, same as the other lists. The done rows are the first reader of task_ref.
+  app.get("/api/operator/tool-proposals/done", async () => ({ items: listDoneToolProposals(sqlite, app.log) }));
   app.get("/api/operator/skills", async () => ({
     items: operator.skillVersions(),
     repo: operator.repoSkillSummaries(),
@@ -70,22 +87,84 @@ export function registerOperatorRoutes(app: FastifyInstance, operator: OperatorS
     return { name: skill.name, area: skill.area, risk: skill.risk, tools: skill.tools, markdown: skill.markdown };
   });
   app.put("/api/operator/skills/:name/draft", async (request) => {
-    const { name } = z.object({ name: z.string().regex(/^[a-z0-9][a-z0-9-]{1,79}$/) }).strict().parse(request.params);
+    userOnly(request);
+    const { name } =z.object({ name: z.string().regex(/^[a-z0-9][a-z0-9-]{1,79}$/) }).strict().parse(request.params);
     const { markdown, baseVersion } = z.object({ markdown: z.string().min(1).max(12_000), baseVersion: z.number().int().positive().optional() }).strict().parse(request.body);
     return operator.saveSkillEdit(name, markdown, baseVersion);
   });
   app.get("/api/operator/learning-report", async () => operator.learningReport());
   app.post("/api/operator/skills/:name/versions/:version/activate", async (request) => {
+    userOnly(request);
     const { name, version } = z.object({
       name: z.string().regex(/^[a-z0-9][a-z0-9-]{1,79}$/), version: z.coerce.number().int().positive(),
     }).strict().parse(request.params);
     operator.activateSkill(name, version);
     return { ok: true };
   });
+  // TASK-074b-3b: eval only stores a result; shadow only records routing matches. Neither runs a skill.
+  app.post("/api/operator/skills/:name/versions/:version/behaviour-eval", async (request) => {
+    const { name, version } = z.object({
+      name: z.string().regex(/^[a-z0-9][a-z0-9-]{1,79}$/), version: z.coerce.number().int().positive(),
+    }).strict().parse(request.params);
+    return operator.runSkillBehaviourEval(name, version);
+  });
+  app.post("/api/operator/skills/:name/versions/:version/shadow", async (request) => {
+    const { name, version } = z.object({
+      name: z.string().regex(/^[a-z0-9][a-z0-9-]{1,79}$/), version: z.coerce.number().int().positive(),
+    }).strict().parse(request.params);
+    operator.setShadowSkill(name, version);
+    return { ok: true };
+  });
+  app.delete("/api/operator/skills/:name/shadow", async (request) => {
+    const { name } = z.object({ name: z.string().regex(/^[a-z0-9][a-z0-9-]{1,79}$/) }).strict().parse(request.params);
+    return { ok: true, cleared: operator.clearShadowSkill(name) };
+  });
+  // TASK-074c-6k: dismissing is the human's decision, like accept, so an API key (e.g. the MCP key) must not dismiss.
   app.post("/api/operator/tool-proposals/:id/dismiss", async (request) => {
+    if (request.actor?.kind !== "user") throw new AppError(403, "OPERATOR_TOOL_PROPOSAL_USER_ONLY", "Chỉ người dùng đăng nhập qua giao diện được bỏ đề xuất.");
     const { id } = z.object({ id: z.string().uuid() }).strict().parse(request.params);
     dismissToolProposal(sqlite, id);
     return { ok: true };
+  });
+  // TASK-074c-4b-1: accepting is the human's decision, so the operator must not be able to accept its own request.
+  app.post("/api/operator/tool-proposals/:id/accept", async (request) => {
+    if (request.actor?.kind !== "user") throw new AppError(403, "OPERATOR_TOOL_PROPOSAL_USER_ONLY", "Chỉ người dùng đăng nhập qua giao diện được chấp nhận đề xuất.");
+    const { id } = z.object({ id: z.string().uuid() }).strict().parse(request.params);
+    acceptToolProposal(sqlite, id);
+    return { ok: true };
+  });
+  // TASK-074c-6a: starting work is the human's call too. Only a drafted accepted row moves (the store checks that).
+  app.post("/api/operator/tool-proposals/:id/start", async (request) => {
+    if (request.actor?.kind !== "user") throw new AppError(403, "OPERATOR_TOOL_PROPOSAL_USER_ONLY", "Chỉ người dùng đăng nhập qua giao diện được đánh dấu đang làm.");
+    const { id } = z.object({ id: z.string().uuid() }).strict().parse(request.params);
+    startToolProposal(sqlite, id);
+    return { ok: true };
+  });
+  // TASK-074c-6e: the user confirms a task is done. Only an in_progress tool row moves, and only when its .done file exists under tasksRoot.
+  app.post("/api/operator/tool-proposals/:id/check-done", async (request) => {
+    if (request.actor?.kind !== "user") throw new AppError(403, "OPERATOR_TOOL_PROPOSAL_USER_ONLY", "Chỉ người dùng đăng nhập qua giao diện được xác nhận task đã xong.");
+    const { id } = z.object({ id: z.string().uuid() }).strict().parse(request.params);
+    if (!tasksRoot) throw new AppError(503, "OPERATOR_TASKS_ROOT_UNAVAILABLE", "Chưa cấu hình thư mục task.");
+    const { task } = z.object({ task: ToolProposalTaskRef }).strict().parse(request.body);
+    checkToolProposalDone(sqlite, id, task, tasksRoot);
+    return { ok: true };
+  });
+  // TASK-074c-3c-2: drafting spends the model budget, so it is the human's call too. The absolute path never leaves the server.
+  app.post("/api/operator/tool-proposals/:id/draft", async (request) => {
+    if (request.actor?.kind !== "user") throw new AppError(403, "OPERATOR_TOOL_PROPOSAL_USER_ONLY", "Chỉ người dùng đăng nhập qua giao diện được soạn bản nháp.");
+    const { id } = z.object({ id: z.string().uuid() }).strict().parse(request.params);
+    if (!proposalDraft) throw new AppError(503, "OPERATOR_PROPOSAL_DRAFT_UNAVAILABLE", "Chưa cấu hình nơi soạn bản nháp.");
+    // An LLM failure becomes a coded error with a fixed message. The runner's text never reaches the body; the row stays accepted with its number.
+    const result = await draftProposal(sqlite, id, proposalDraft).catch((error: unknown): never => {
+      if (!(error instanceof LlmError)) throw error;
+      request.log.warn({ err: error, code: error.code }, "Proposal draft LLM failure");
+      if (error.code === "AUTONOMY_BUDGET_WAIT") {
+        throw new AppError(429, "OPERATOR_PROPOSAL_DRAFT_BUDGET_WAIT", "Hạn mức chi của hệ thống đã hết. Chờ kỳ ngân sách mới rồi soạn lại.", { retryAt: error.retryAt ?? null });
+      }
+      throw new AppError(502, "OPERATOR_PROPOSAL_DRAFT_LLM_FAILED", "Model không soạn được bản nháp. Thử lại sau.");
+    });
+    if (result.status === "drafted") return { status: "drafted", impNumber: result.impNumber };
+    return result;
   });
 
   app.post("/api/operator/runs/:id/resume", async (request) => {

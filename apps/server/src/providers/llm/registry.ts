@@ -25,6 +25,10 @@ const CLAUDE_MODELS = [
   "claude-opus-4-5", "claude-sonnet-4-5", "claude-haiku-4-5",
 ];
 
+export function isRelayBaseUrl(url: string | undefined): boolean {
+  return Boolean(url && /\/api\/llm\/relay\/v1\/?$/.test(url));
+}
+
 export class LlmProviderRegistry {
   private readonly providers = new Map<string, LlmProvider & { configured?: boolean; hint?: string }>();
   private readonly modelCache = new Map<string, { expiresAt: number; models: string[] }>();
@@ -44,6 +48,8 @@ export class LlmProviderRegistry {
     private readonly options: { copilotHome?: string; fetchImpl?: typeof fetch } = {},
   ) {
     this.omnirouteCatalog = new OmniRouteCatalogService(config, options.fetchImpl ?? fetch);
+    // TASK-136: a machine whose "OmniRoute" address is the control server's relay can only reach LLMs through it.
+    if (isRelayBaseUrl(config.OMNIROUTE_BASE_URL)) this.loadGatewaySettings = () => ({ ...defaultLlmGatewaySettings(), mode: "only" });
     this.build();
   }
 

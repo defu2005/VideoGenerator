@@ -1,5 +1,6 @@
 import type Database from "better-sqlite3";
 import { currentWorkspaceId } from "../auth/requestContext.js";
+import { publishBudgetWait, publishFindingOpened } from "./findingEvents.js";
 import { AsyncLocalStorage } from "node:async_hooks";
 import { randomUUID } from "node:crypto";
 import { AutonomyBudgetSchema, DEFAULT_AUTONOMY_BUDGET, localDateString, type AutonomyBudget } from "@vg/shared";
@@ -39,7 +40,7 @@ export function selfImprovementBudgetStatus(db: Database.Database, now = new Dat
   return { day, limits: settings.budget, used };
 }
 /** Reserve before each operation, atomically across concurrent runs; failed attempts still consume budget. */
-export function consumeSelfImprovementBudget(db: Database.Database, counter: SelfImprovementCounter, options: { manual?: boolean; now?: Date } = {}) {
+export function consumeSelfImprovementBudget(db: Database.Database, counter: SelfImprovementCounter, options: { manual?: boolean; now?: Date; limit?: number } = {}) {
   return db.transaction(() => {
     const now = options.now ?? new Date(), settings = selfImprovementSettings(db);
     if (!options.manual && ((settings.eco && ["researchRuns", "skillDrafts"].includes(counter))
@@ -47,7 +48,9 @@ export function consumeSelfImprovementBudget(db: Database.Database, counter: Sel
       throw new AppError(409, "SELF_IMPROVEMENT_DISABLED", "Chế độ hiện tại không cho phép tự nghiên cứu hoặc soạn skill.");
     }
     const status = selfImprovementBudgetStatus(db, now);
-    if (status.used[counter] >= status.limits[counter]) throw new AppError(429, "SELF_IMPROVEMENT_BUDGET_LIMIT", "Đã đạt giới hạn tự cải tiến trong ngày.");
+    // TASK-074c-5a: a caller cap can only lower the user's limit. A non-finite cap is ignored, so it cannot disable the budget.
+    const cap = options.limit !== undefined && Number.isFinite(options.limit) ? Math.max(0, options.limit) : Infinity;
+    if (status.used[counter] >= Math.min(status.limits[counter], cap)) throw new AppError(429, "SELF_IMPROVEMENT_BUDGET_LIMIT", "Đã đạt giới hạn tự cải tiến trong ngày.");
     status.used[counter]++;
     improvementPut(db, improvementKey(db, `used.${status.day}`), status.used, now);
     return status;
@@ -172,6 +175,8 @@ export function recordBudgetFindings(db: Database.Database, status: ReturnType<t
       const at = now.toISOString();
       if (insert.run(id, scope.profileId, kind, dedupe, JSON.stringify({ period, limit, spent: scope.spend[key], message }), at, at).changes) {
         findings.push({ id, profileId: scope.profileId, message });
+        publishFindingOpened(db, { summary: message, profileId: scope.profileId });
+        if (stop) publishBudgetWait(db, { profileId: scope.profileId, key });
       }
     }
   }

@@ -38,6 +38,9 @@ export function validateReviewOutput(
 
 function dropReason(proposal: ReviewProposal, context: ReviewValidationContext): string | null {
   switch (proposal.type) {
+    case "PATCH_CONTINUITY_PLAN":
+      return [...proposal.plan.characters.flatMap((item) => item.appearsInScenes), ...proposal.plan.motifs.flatMap((item) => item.scenes)]
+        .every((id) => context.sceneIds.has(id)) ? null : "định hướng chứa cảnh không hợp lệ";
     case "EDIT_NARRATION":
     case "EDIT_DURATION":
     case "EDIT_VISUAL_QUERY":

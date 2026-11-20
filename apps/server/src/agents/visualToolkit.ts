@@ -5,7 +5,7 @@ import { promisify } from "node:util";
 import ffmpegPath from "ffmpeg-static";
 import { z } from "zod";
 import {
-  VisualCandidateSchema, VisionCheckSchema, hashesMatch, normalizeWikimediaLicense,
+  VisualCandidateSchema, VisionCheckSchema, hashesMatch, normalizeWikimediaLicense, resolveBudget, visualFeaturesFor,
   normalizePexelsLicense, normalizePixabayLicense, normalizeUnsplashLicense,
   type Job, type LicenseMetadata, type VisualCandidate,
 } from "@vg/shared";
@@ -17,17 +17,22 @@ import { currentActor } from "../auth/requestContext.js";
 import type { TrustedAgent } from "../supervision/identity.js";
 import type { VisualService } from "../services/visualService.js";
 import { hashImage } from "../services/imageHash.js";
-import { ImageStore, MAX_IMAGE_BYTES, readBoundedBody } from "../services/imageStore.js";
-import { visualCopyrightMode } from "../services/visualPolicy.js";
+import { ImageStore, MAX_IMAGE_BYTES, parseImage, readBoundedBody } from "../services/imageStore.js";
+import { visualCopyrightMode, visualQuality } from "../services/visualPolicy.js";
 import { resolveAssetPath } from "../storage/paths.js";
 import { StyleService } from "../style/service.js";
+import { KnowledgeService } from "../knowledge/service.js";
+import { readContinuity } from "../continuity/store.js";
 import { fetchResponseSafely, validatePublicHttpUrl, unknownWebLicense, type SafeFetchDependencies } from "../providers/images/webCrawl.js";
 import type { AgentStageService } from "./stageService.js";
+import { imageVerdictContext, readImageVerdict, visualSubjectKey, visualWorkspace, writeImageVerdict, writeVisualQuery } from "./visualCache.js";
+import { queryHints, recordQueryOutcome } from "../learning/queryPatterns.js";
 
 export const AgentVisualItemSchema = z.object({
   imageUrl: z.string().url().max(4000), sourcePageUrl: z.string().url().max(4000),
   title: z.string().trim().min(1).max(500), why: z.string().trim().min(1).max(2000),
   licenseNote: z.string().trim().max(1000).optional(),
+  searchQuery: z.string().trim().min(1).max(300).optional(),
 }).strict();
 export const AgentVisualVerdictSchema = z.object({
   verdict: z.enum(["pass", "reject"]), subjectMatch: z.boolean(),
@@ -71,12 +76,18 @@ export class AgentVisualToolkit {
     this.stage(job);
     const project = this.repo.getProject(job.projectId)!;
     const linked = project.profileId ? new StyleService(this.repo.sqlite).linkedPack(project.profileId) : null;
+    // TASK-148d: queries that the agent's own pass verdicts marked accepted for this topic in this workspace (not the owner's choices). Exact normalised topic match only; the key is omitted when empty.
+    const hints = queryHints(this.repo.sqlite, visualWorkspace(this.repo.sqlite, job.projectId), project.topic, project.profileId ?? "");
     return {
+      ...(hints.length ? { queryHints: hints } : {}),
       projectId: job.projectId, stage: job.stage, aspectRatio: project.settings.aspectRatio,
       limits: { maxBytes: MAX_IMAGE_BYTES, minShortSide: 320, previewMaxSide: 768, maxItems: 12 },
       copyrightMode: visualCopyrightMode(this.repo.sqlite, project.profileId),
       stylePack: linked?.found ? { pack: linked.pack, tokens: linked.tokens } : null,
       styleNotes: { style: project.settings.visualStyle, tone: project.settings.tone },
+      continuity: readContinuity(this.repo.sqlite, job.projectId) ?? null,
+      sourceNotes: new KnowledgeService(this.repo.sqlite).list({ kind: "source_note" }).slice(0, 20)
+        .map(({ entry }) => ({ id: entry.id, value: entry.value })),
       budgetHint: { mode: project.settings.budget?.mode ?? "BALANCED", usage: "Dùng model và công cụ riêng; báo usage khi hoàn tất." },
       openScenes: this.visuals.agentOpenScenes(job.projectId).map((scene) => {
         const detail = this.visuals.getSceneVisuals(job.projectId, scene.sceneId, true);
@@ -84,7 +95,8 @@ export class AgentVisualToolkit {
         let initialQueries: string[] = [];
         try { const parsed: unknown = JSON.parse(checkpoint?.queries ?? "[]"); if (Array.isArray(parsed)) initialQueries = parsed.filter((value): value is string => typeof value === "string"); } catch { /* Older damaged checkpoints do not hide the current scene. */ }
         return { sceneId: scene.sceneId, order: scene.order, narration: scene.narration,
-          subject: scene.visualDescription || scene.visualQueries.primary, queries: scene.visualQueries,
+          subject: scene.visualDescription || scene.visualQueries.primary,
+          subjectKey: visualSubjectKey(scene.visualDescription || scene.visualQueries.primary), queries: scene.visualQueries,
           reason: scene.attentionReason ?? (scene.selectedCandidate ? "Ảnh đã chọn chưa qua cổng chất lượng" : "Chưa có ảnh"),
           queriesUsed: [...new Set([...initialQueries, ...detail.candidates.map((candidate) => candidate.query), ...(detail.visionMeta?.reSearchHistory ?? []).flatMap((round) => round.queries)].filter(Boolean))],
           consistencyFlags: detail.visionMeta?.consistencyFlags ?? [],
@@ -97,6 +109,18 @@ export class AgentVisualToolkit {
     this.stage(job);
     return this.visuals.agentPostCheck(job.projectId);
   }
+  private async downloadImage(url: string) {
+    const { response } = await fetchResponseSafely(url, { ...this.deps.fetch, method: "GET" });
+    if (!/^image\/(jpeg|png|webp|gif)(?:;|$)/i.test(response.headers.get("content-type") ?? "")) {
+      await response.body?.cancel();
+      throw new AppError(422, "VISUAL_IMAGE_TYPE", "Nguồn phải trả về ảnh JPEG, PNG, WebP hoặc GIF.");
+    }
+    if (Number(response.headers.get("content-length")) > MAX_IMAGE_BYTES) {
+      await response.body?.cancel();
+      throw new AppError(422, "VISUAL_IMAGE_SIZE", "Ảnh vượt giới hạn 25 MB.");
+    }
+    return readBoundedBody(response, MAX_IMAGE_BYTES);
+  }
   async submit(agent: TrustedAgent, jobId: string, leaseId: string, sceneId: string, rawItems: unknown) {
     const items = z.array(AgentVisualItemSchema).min(1).max(12).parse(rawItems);
     const job = this.stages.withLease(agent, jobId, leaseId, (job) => { this.open(job, sceneId); return job; });
@@ -104,14 +128,7 @@ export class AgentVisualToolkit {
     for (const item of items) {
       this.stages.withLease(agent, jobId, leaseId, (job) => this.open(job, sceneId));
       const source = await validatePublicHttpUrl(item.sourcePageUrl, this.deps.fetch?.resolveHost);
-      const { response } = await fetchResponseSafely(item.imageUrl, { ...this.deps.fetch, method: "GET" });
-      if (!/^image\/(jpeg|png|webp|gif)(?:;|$)/i.test(response.headers.get("content-type") ?? "")) {
-        await response.body?.cancel(); throw new AppError(422, "VISUAL_IMAGE_TYPE", "Nguồn phải trả về ảnh JPEG, PNG, WebP hoặc GIF.");
-      }
-      if (Number(response.headers.get("content-length")) > MAX_IMAGE_BYTES) {
-        await response.body?.cancel(); throw new AppError(422, "VISUAL_IMAGE_SIZE", "Ảnh vượt giới hạn 25 MB.");
-      }
-      const bytes = await readBoundedBody(response, MAX_IMAGE_BYTES);
+      const bytes = await this.downloadImage(item.imageUrl);
       // Both storage and hash happen after the download, with a fresh fence before publishing a row.
       this.stages.withLease(agent, jobId, leaseId, (job) => this.open(job, sceneId));
       const stored = this.imageStore.storeBuffer(job.projectId, bytes);
@@ -130,14 +147,16 @@ export class AgentVisualToolkit {
         const { license, verified } = agentLicense(source.hostname, item.licenseNote);
         const candidate = VisualCandidateSchema.parse({
           id: randomUUID(), projectId: job.projectId, sceneId, origin: "agent", provider: `agent:${agent.instance}`,
-          providerItemId: stored.sha256, query: scene.visualQueries.primary, title: item.title,
+          providerItemId: stored.sha256, query: item.searchQuery ?? scene.visualQueries.primary, title: item.title,
           description: "", tags: [], previewUrl: item.imageUrl, imageUrl: item.imageUrl,
           sourceUrl: source.toString(), sourcePageUrl: source.toString(), sourceSite: source.hostname,
           width: stored.width, height: stored.height, aspectRatio: stored.width / stored.height, fileType: stored.fileType,
           watermark: "UNKNOWN", relevanceScore: 0, scoreBreakdown: {}, license, licenseVerified: verified,
           why: item.why, rank: 0, discardedAt: null, createdAt: stored.downloadedAt,
         });
-        return { candidateId: this.visuals.agentStoreCandidate(candidate, stored, hashed).id };
+        const saved = this.visuals.agentStoreCandidate(candidate, stored, hashed);
+        writeVisualQuery(this.repo.sqlite, visualWorkspace(this.repo.sqlite, job.projectId), source.hostname, candidate.query, [candidate]);
+        return { candidateId: saved.id };
       }));
     }
     return { items: results, candidateIds: results.flatMap((item) => item.candidateId ? [item.candidateId] : []) };
@@ -147,25 +166,56 @@ export class AgentVisualToolkit {
     if (input.verdict === "pass" && !input.subjectMatch) throw new AppError(422, "VISUAL_SUBJECT_MISMATCH", "Không được duyệt ảnh sai chủ thể.");
     return this.stages.withLease(agent, jobId, leaseId, (job) => {
       const candidate = this.candidate(job, candidateId), { sha256 } = this.bytes(candidate);
-      return this.visuals.agentRecordVerdict(candidateId, VisionCheckSchema.parse({
+      const scene = this.open(job, candidate.sceneId);
+      const check = VisionCheckSchema.parse({
         fit: input.verdict === "pass" ? 9 : 0, depicts: input.reason,
         issues: input.verdict === "pass" ? [] : [input.subjectMatch ? "low_quality" : "wrong_subject"],
         cropOk: input.verdict === "pass", checkedAt: new Date().toISOString(), model: input.model,
         checkedBy: { kind: "agent", instance: agent.instance, model: input.model }, sha256,
         verdict: input.verdict, subjectMatch: input.subjectMatch,
-      }));
+      });
+      const saved = this.visuals.agentRecordVerdict(candidateId, check);
+      if (candidate.phash) {
+        const project = this.repo.getProject(job.projectId)!;
+        const notes = this.repo.sqlite.prepare("SELECT visual_notes FROM scenes WHERE id=? AND project_id=?").get(candidate.sceneId, job.projectId) as { visual_notes: string };
+        const features = visualFeaturesFor(resolveBudget(project), project.settings.visuals?.quality ?? visualQuality(this.repo.sqlite, project.profileId));
+        const context = imageVerdictContext({ narration: scene.narration, visualDescription: scene.visualDescription || notes.visual_notes,
+          aspectRatio: project.settings.aspectRatio, visionThreshold: features.visionThreshold });
+        writeImageVerdict(this.repo.sqlite, visualWorkspace(this.repo.sqlite, job.projectId), candidate.phash,
+          scene.visualDescription || scene.visualQueries.primary, check, new Date(), context);
+        // TASK-148d: learn which query shapes this topic accepts (code only).
+        recordQueryOutcome(this.repo.sqlite, { workspaceId: visualWorkspace(this.repo.sqlite, job.projectId), channel: project.profileId ?? "", topic: project.topic, query: candidate.query, accepted: input.verdict === "pass" });
+      }
+      return saved;
     });
   }
   async select(agent: TrustedAgent, jobId: string, leaseId: string, sceneId: string, candidateId: string) {
     const job = this.stages.withLease(agent, jobId, leaseId, (job) => { const candidate = this.candidate(job, candidateId); if (candidate.sceneId !== sceneId) throw new AppError(404, "VISUAL_CANDIDATE_NOT_FOUND", "Ảnh không thuộc cảnh này."); return job; });
     return this.visuals.agentSelectCandidate(job.projectId, sceneId, candidateId, () => this.stages.withLease(agent, jobId, leaseId, () => {}));
   }
-  async image(candidateId: string, maxSide = 768) {
-    z.number().int().min(64).max(2048).parse(maxSide);
+  private readableCandidate(candidateId: string) {
     const candidate = this.visuals.agentCandidate(candidateId);
     const row = candidate ? this.repo.sqlite.prepare("SELECT workspace_id,profile_id FROM projects WHERE id=?").get(candidate.projectId) as { workspace_id: string | null; profile_id: string | null } | undefined : undefined;
     const actor = currentActor();
     if (!candidate || !row || !actor || (row.workspace_id === null && !actor.ownsUnassigned) || !can(actor, "project.read", { workspaceId: row.workspace_id, profileId: row.profile_id }).ok) throw new AppError(404, "VISUAL_CANDIDATE_NOT_FOUND", "Không thấy ảnh trong phạm vi được phép.");
+    return candidate;
+  }
+  async lookupVerdict(input: { subjectKey: string; phash?: string; candidateId?: string; imageUrl?: string }) {
+    let phash = input.phash;
+    if (input.candidateId) {
+      const candidate = this.readableCandidate(input.candidateId);
+      const { path } = this.bytes(candidate);
+      phash = candidate.phash ?? (await (this.deps.hash ?? hashImage)(path))?.phash;
+    } else if (input.imageUrl) {
+      const bytes = await this.downloadImage(input.imageUrl);
+      parseImage(bytes);
+      phash = (await hashImage(bytes))?.phash;
+    }
+    return phash ? readImageVerdict(this.repo.sqlite, currentActor()?.workspaceId ?? null, phash, input.subjectKey) : null;
+  }
+  async image(candidateId: string, maxSide = 768) {
+    z.number().int().min(64).max(2048).parse(maxSide);
+    const candidate = this.readableCandidate(candidateId);
     const { path, sha256 } = this.bytes(candidate);
     const data = await (this.deps.resize ?? resizeStoredImage)(path, maxSide);
     this.bytes(candidate); // A changed source file cannot silently produce a preview of different content.

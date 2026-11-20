@@ -1,4 +1,5 @@
 import { publishAgentEvent } from "../events/agentBus.js";
+import { defaultWorkspaceId } from "../auth/workspaces.js";
 import {
   GATES,
   STAGE_DEPENDS,
@@ -30,8 +31,15 @@ import { markStaleFrom } from "./invalidation.js";
 import { effectiveAutonomy } from "../operator/autonomy.js";
 import { breakerAllowsStart, claimBreakerTrial, recordBreakerOutcome } from "../operator/circuitBreaker.js";
 import { jobWithinAutonomyLimit, reserveAutonomyJob } from "../operator/autonomyJobLimits.js";
+import { StageInputVersions } from "./inputVersion.js";
+import { checkStageQualityAlerts, recordStageQuality, scriptQualityMetrics } from "../learning/stageQuality.js";
+import { holdMissionsForProject } from "../missions/checkpoints.js";
 
 export type ApprovalCheck = (project: Project, gate: PipelineStage) => { allowed: true } | { allowed: false; message: string };
+export type PipelineRuntime = {
+  allowedStage?: (project: Project, stage: PipelineStage) => boolean;
+  publishEvent?: (event: Parameters<typeof publishAgentEvent>[0], options?: Parameters<typeof publishAgentEvent>[1]) => void;
+};
 type Clock = () => Date;
 
 function mergeFeatureUsage(
@@ -46,6 +54,7 @@ function mergeFeatureUsage(
 }
 
 export const LANE_CANCELLED_MESSAGE = "Đã hủy làn này";
+export const STALE_INPUT_MESSAGE = "Đầu vào đã đổi trong lúc chạy";
 
 export function deriveProjectStatus(input: {
   activeJob: Pick<Job, "stage"> | null;
@@ -62,10 +71,18 @@ export function deriveProjectStatus(input: {
 }
 
 export class PipelineOrchestrator {
+  readonly inputVersions: StageInputVersions;
   private abortJob: (jobId: string) => void = () => undefined;
   private wakeWorker: () => void = () => undefined;
   private routeQueuedJob: (job: Job) => void = () => undefined;
+  private projectPlacement?: {
+    dispatch(project: Project, candidates: readonly PipelineStage[]): boolean;
+    active(projectId: string): PipelineStage | undefined;
+    cancel(projectId: string): boolean;
+  };
   private notifications: NotificationService | null = null;
+  private pendingUsage = new Map<string, { usage: Partial<JobUsage>; allowTerminal: boolean }>();
+  private usageFlushTimer: NodeJS.Timeout | null = null;
 
   constructor(
     readonly repository: JobRepository,
@@ -74,7 +91,14 @@ export class PipelineOrchestrator {
     private readonly now: Clock = () => new Date(),
     private readonly canApprove: ApprovalCheck = () => ({ allowed: true }),
     private readonly autoBlock: (project: Project, gate: PipelineStage) => string | null = () => null,
-  ) {}
+    private readonly runtime: PipelineRuntime = {},
+  ) {
+    this.inputVersions = new StageInputVersions(repository.sqlite, config.DATA_DIR);
+  }
+
+  private emitAgentEvent(event: Parameters<typeof publishAgentEvent>[0], options?: Parameters<typeof publishAgentEvent>[1]): void {
+    (this.runtime.publishEvent ?? publishAgentEvent)(event, options);
+  }
 
   setAbortJobHandler(handler: (jobId: string) => void): void {
     this.abortJob = handler;
@@ -87,6 +111,16 @@ export class PipelineOrchestrator {
   /** Route external execution before waking local workers, including control-plane-only apps. */
   setQueuedJobHandler(handler: (job: Job) => void): void {
     this.routeQueuedJob = handler;
+  }
+
+  setProjectPlacement(placement: NonNullable<PipelineOrchestrator["projectPlacement"]>): void {
+    this.projectPlacement = placement;
+  }
+
+  resumePlacedProject(projectId: string): void {
+    this.repository.atomic(() => {
+      if (this.repository.getRunMode(projectId) === "ALL") this.continueAll(projectId);
+    }, "immediate");
   }
 
   setNotificationService(service: NotificationService | null): void {
@@ -176,6 +210,7 @@ export class PipelineOrchestrator {
         if (this.repository.getStage(projectId, stage).state === "DONE") markStaleFrom(this.repository, projectId, stage);
         this.repository.updateStage(projectId, stage, {
           state: "DONE",
+          inputVersion: this.inputVersions.inputVersion(projectId, stage),
           progress: 100,
           message: "Provided by user",
           jobId: null,
@@ -224,6 +259,7 @@ export class PipelineOrchestrator {
         projectId,
         stage: "RENDER",
         scope: renderJobScope(aspectRatio),
+        inputVersion: this.inputVersions.inputVersion(projectId, "RENDER"),
         maxAttempts: this.config.JOB_MAX_ATTEMPTS,
         previousState: previousState === "DONE" || previousState === "STALE" ? previousState : previousState,
         runAfter: this.now(),
@@ -267,6 +303,7 @@ export class PipelineOrchestrator {
       }
       this.repository.updateStage(projectId, stage, {
         state: "DONE",
+        inputVersion: this.inputVersions.inputVersion(projectId, stage),
         progress: 100,
         message: "Provided by user",
         jobId: null,
@@ -294,6 +331,7 @@ export class PipelineOrchestrator {
       if (!approval.allowed) this.invalid(approval.message);
       this.repository.updateStage(projectId, gate, {
         state: "DONE",
+        inputVersion: this.inputVersions.inputVersion(projectId, gate),
         progress: 100,
         message: "Approved by user",
         error: null,
@@ -310,9 +348,18 @@ export class PipelineOrchestrator {
   }
 
   cancel(projectId: string, stage?: PipelineStage): PipelineState {
+    if (!stage && this.projectPlacement?.active(projectId)) {
+      return this.repository.atomic(() => {
+        if (this.projectPlacement?.cancel(projectId)) this.repository.setRunMode(projectId, null);
+        this.refreshLaneStatus(projectId);
+        return this.requirePipeline(projectId);
+      });
+    }
     const jobs = this.repository.getActiveJobs(projectId);
     const targets = stage ? jobs.filter((job) => job.stage === stage) : jobs;
     if (targets.length === 0) this.invalid("There is no active job to cancel.");
+    // Commit batched usage while the job is still RUNNING; flushUsage skips terminal jobs.
+    for (const job of targets) this.flushUsage(job.id);
     for (const job of targets) {
       if (job.status === "RUNNING") this.abortJob(job.id);
     }
@@ -321,6 +368,7 @@ export class PipelineOrchestrator {
       for (const target of targets) {
         const job = this.repository.getJob(target.id);
         if (!job || (job.status !== "QUEUED" && job.status !== "RUNNING")) continue;
+        if (this.repository.sqlite.prepare("SELECT 1 FROM jobs WHERE id=? AND finalizing_at IS NOT NULL").get(job.id)) continue;
         const previousState = this.repository.getPreviousState(job.id);
         this.repository.updateJob(job.id, {
           status: "CANCELLED",
@@ -418,6 +466,7 @@ export class PipelineOrchestrator {
         || resumeMessage.startsWith("Queued for resume after shutdown");
       const running = this.repository.updateJob(jobId, {
         status: "RUNNING",
+        ...(!isSideJobStage(job.stage) ? { inputVersion: this.inputVersions.inputVersion(job.projectId, job.stage), invalidatedAt: null } : {}),
         startedAt: now.toISOString(),
         finishedAt: null,
         error: null,
@@ -425,7 +474,7 @@ export class PipelineOrchestrator {
           ? resumeMessage
           : isPublishStage(job.stage) ? "Publish started" : job.stage === "CLIP" ? "Đang cắt Short" : "Stage started",
       });
-      publishAgentEvent({ type: "stage_started", projectId: job.projectId, stage: job.stage, summary: `Bắt đầu ${job.stage}` });
+      this.emitAgentEvent({ type: "stage_started", projectId: job.projectId, stage: job.stage, summary: `Bắt đầu ${job.stage}` });
       if (!isSideJobStage(job.stage)) {
         this.repository.updateStage(job.projectId, job.stage, {
           state: "RUNNING",
@@ -457,49 +506,222 @@ export class PipelineOrchestrator {
     });
   }
 
-  recordUsage(jobId: string, usage: Partial<JobUsage>): void {
-    this.repository.atomic(() => {
-      const job = this.repository.getJob(jobId);
-      if (!job || job.status !== "RUNNING") return;
-      const previous = job.usage ?? { llmCalls: 0, inputTokens: 0, outputTokens: 0, costUsd: 0 };
-      this.repository.updateJob(jobId, {
-        usage: {
-          llmCalls: previous.llmCalls + (usage.llmCalls ?? 0),
-          inputTokens: previous.inputTokens + (usage.inputTokens ?? 0),
-          outputTokens: previous.outputTokens + (usage.outputTokens ?? 0),
-          costUsd: previous.costUsd + (usage.costUsd ?? 0),
-          ...(usage.costUnknown || previous.costUnknown ? { costUnknown: true } : {}),
-          ...(usage.provider ?? previous.provider ? { provider: usage.provider ?? previous.provider } : {}),
-          ...(usage.model ?? previous.model ? { model: usage.model ?? previous.model } : {}),
-          ...(usage.tokensUnknown || previous.tokensUnknown ? { tokensUnknown: true } : {}),
-          ...((usage.features || previous.features) ? {
-            features: mergeFeatureUsage(previous.features, usage.features),
-          } : {}),
-          ...((usage.calls || previous.calls) ? {
-            calls: [...(previous.calls ?? []), ...(usage.calls ?? [])],
-          } : {}),
-        },
-      });
-    });
+  getPendingUsageCount(): number {
+    return this.pendingUsage.size;
   }
 
-  completeJob(jobId: string, message?: string): void {
+  clearPendingUsage(): void {
+    this.pendingUsage.clear();
+  }
+
+  flushUsage(specificJobId?: string): void {
+    if (this.pendingUsage.size === 0) return;
+    const toFlush: Array<[string, { usage: Partial<JobUsage>; allowTerminal: boolean }]> = [];
+    if (specificJobId) {
+      const entry = this.pendingUsage.get(specificJobId);
+      if (entry) toFlush.push([specificJobId, { usage: { ...entry.usage }, allowTerminal: entry.allowTerminal }]);
+    } else {
+      for (const [id, entry] of this.pendingUsage) {
+        toFlush.push([id, { usage: { ...entry.usage }, allowTerminal: entry.allowTerminal }]);
+      }
+    }
+    if (toFlush.length === 0) return;
+
+    this.repository.atomic(() => {
+      for (const [jobId, { usage, allowTerminal }] of toFlush) {
+        const job = this.repository.getJob(jobId);
+        if (!job || (job.status !== "RUNNING" && !(allowTerminal && ["SUCCEEDED", "FAILED", "CANCELLED"].includes(job.status)))) continue;
+        const previous = job.usage ?? { llmCalls: 0, inputTokens: 0, outputTokens: 0, costUsd: 0 };
+        this.repository.updateJob(jobId, {
+          usage: {
+            llmCalls: previous.llmCalls + (usage.llmCalls ?? 0),
+            inputTokens: previous.inputTokens + (usage.inputTokens ?? 0),
+            outputTokens: previous.outputTokens + (usage.outputTokens ?? 0),
+            costUsd: previous.costUsd + (usage.costUsd ?? 0),
+            ...(usage.costUnknown || previous.costUnknown ? { costUnknown: true } : {}),
+            ...(usage.provider ?? previous.provider ? { provider: usage.provider ?? previous.provider } : {}),
+            ...(usage.model ?? previous.model ? { model: usage.model ?? previous.model } : {}),
+            ...(usage.tokensUnknown || previous.tokensUnknown ? { tokensUnknown: true } : {}),
+            ...((usage.features || previous.features) ? {
+              features: mergeFeatureUsage(previous.features, usage.features),
+            } : {}),
+            ...((usage.calls || previous.calls) ? {
+              calls: [...(previous.calls ?? []), ...(usage.calls ?? [])],
+            } : {}),
+          },
+        });
+      }
+    });
+
+    // Dequeue only after successful commit:
+    for (const [jobId, flushed] of toFlush) {
+      const current = this.pendingUsage.get(jobId);
+      if (!current) continue;
+      if (
+        current.usage.llmCalls === flushed.usage.llmCalls &&
+        current.usage.inputTokens === flushed.usage.inputTokens &&
+        current.usage.outputTokens === flushed.usage.outputTokens &&
+        current.usage.costUsd === flushed.usage.costUsd &&
+        (current.usage.calls?.length ?? 0) === (flushed.usage.calls?.length ?? 0)
+      ) {
+        this.pendingUsage.delete(jobId);
+      } else {
+        // Newer usage was appended; subtract only the committed slice to prevent double charging
+        current.usage = {
+          ...current.usage,
+          llmCalls: Math.max(0, (current.usage.llmCalls ?? 0) - (flushed.usage.llmCalls ?? 0)),
+          inputTokens: Math.max(0, (current.usage.inputTokens ?? 0) - (flushed.usage.inputTokens ?? 0)),
+          outputTokens: Math.max(0, (current.usage.outputTokens ?? 0) - (flushed.usage.outputTokens ?? 0)),
+          costUsd: Math.max(0, (current.usage.costUsd ?? 0) - (flushed.usage.costUsd ?? 0)),
+          calls: (current.usage.calls && flushed.usage.calls)
+            ? current.usage.calls.slice(flushed.usage.calls.length)
+            : current.usage.calls,
+        };
+      }
+    }
+  }
+
+  stop(): void {
+    if (this.usageFlushTimer) {
+      clearInterval(this.usageFlushTimer);
+      this.usageFlushTimer = null;
+    }
+    this.flushUsage();
+  }
+
+  recordUsage(jobId: string, usage: Partial<JobUsage>, options: { allowTerminal?: boolean; immediate?: boolean; batch?: boolean } = {}): void {
+    const isTest = process.env.NODE_ENV === "test" || Boolean(process.env.VITEST);
+    const shouldImmediate = options.immediate || options.allowTerminal || (isTest && !options.batch);
+
+    if (shouldImmediate) {
+      this.repository.atomic(() => {
+        const job = this.repository.getJob(jobId);
+        if (!job || (job.status !== "RUNNING" && !(options.allowTerminal && ["SUCCEEDED", "FAILED", "CANCELLED"].includes(job.status)))) return;
+        const previous = job.usage ?? { llmCalls: 0, inputTokens: 0, outputTokens: 0, costUsd: 0 };
+        this.repository.updateJob(jobId, {
+          usage: {
+            llmCalls: previous.llmCalls + (usage.llmCalls ?? 0),
+            inputTokens: previous.inputTokens + (usage.inputTokens ?? 0),
+            outputTokens: previous.outputTokens + (usage.outputTokens ?? 0),
+            costUsd: previous.costUsd + (usage.costUsd ?? 0),
+            ...(usage.costUnknown || previous.costUnknown ? { costUnknown: true } : {}),
+            ...(usage.provider ?? previous.provider ? { provider: usage.provider ?? previous.provider } : {}),
+            ...(usage.model ?? previous.model ? { model: usage.model ?? previous.model } : {}),
+            ...(usage.tokensUnknown || previous.tokensUnknown ? { tokensUnknown: true } : {}),
+            ...((usage.features || previous.features) ? {
+              features: mergeFeatureUsage(previous.features, usage.features),
+            } : {}),
+            ...((usage.calls || previous.calls) ? {
+              calls: [...(previous.calls ?? []), ...(usage.calls ?? [])],
+            } : {}),
+          },
+        });
+      });
+      return;
+    }
+
+    const existing = this.pendingUsage.get(jobId);
+    if (!existing) {
+      this.pendingUsage.set(jobId, {
+        usage: { ...usage },
+        allowTerminal: Boolean(options.allowTerminal),
+      });
+    } else {
+      existing.allowTerminal = existing.allowTerminal || Boolean(options.allowTerminal);
+      const prev = existing.usage;
+      existing.usage = {
+        llmCalls: (prev.llmCalls ?? 0) + (usage.llmCalls ?? 0),
+        inputTokens: (prev.inputTokens ?? 0) + (usage.inputTokens ?? 0),
+        outputTokens: (prev.outputTokens ?? 0) + (usage.outputTokens ?? 0),
+        costUsd: (prev.costUsd ?? 0) + (usage.costUsd ?? 0),
+        ...(usage.costUnknown || prev.costUnknown ? { costUnknown: true } : {}),
+        ...(usage.provider ?? prev.provider ? { provider: usage.provider ?? prev.provider } : {}),
+        ...(usage.model ?? prev.model ? { model: usage.model ?? prev.model } : {}),
+        ...(usage.tokensUnknown || prev.tokensUnknown ? { tokensUnknown: true } : {}),
+        ...((usage.features || prev.features) ? {
+          features: mergeFeatureUsage(prev.features, usage.features),
+        } : {}),
+        ...((usage.calls || prev.calls) ? {
+          calls: [...(prev.calls ?? []), ...(usage.calls ?? [])],
+        } : {}),
+      };
+    }
+
+    if (!this.usageFlushTimer) {
+      this.usageFlushTimer = setInterval(() => {
+        try {
+          this.flushUsage();
+        } catch (error) {
+          // usage stays queued and is retried on the next tick; log so the failure is visible
+          this.logger.warn({ err: error }, "usage flush failed; will retry");
+        }
+      }, 1000);
+      if (typeof this.usageFlushTimer.unref === "function") {
+        this.usageFlushTimer.unref();
+      }
+    }
+  }
+
+  /** TASK-148c: one ledger row per finished stage run. Best effort: a ledger failure never fails a stage. */
+  private recordStageQuality(job: Job, finishedAt: string): void {
+    try {
+      const profile = this.repository.sqlite.prepare("SELECT profile_id AS profileId FROM projects WHERE id = ?").get(job.projectId) as { profileId: string | null } | undefined;
+      const durationMs = job.startedAt ? Math.max(0, Date.parse(finishedAt) - Date.parse(job.startedAt)) : 0;
+      const metrics = job.stage === "SCRIPT" ? scriptQualityMetrics(this.repository.sqlite, job.projectId) : {};
+      recordStageQuality(this.repository.sqlite, {
+        projectId: job.projectId,
+        profileId: profile?.profileId ?? null,
+        stage: job.stage,
+        jobId: job.id,
+        retries: Math.max(0, (job.attempt ?? 1) - 1),
+        durationMs,
+        metrics,
+        now: new Date(finishedAt),
+      });
+      // TASK-148c: re-check the trend after each run; the escalation is deduped per stage, metric and week.
+      checkStageQualityAlerts(this.repository.sqlite, { stages: [job.stage], now: new Date(finishedAt) });
+    } catch (error) {
+      this.logger.warn({ err: error, jobId: job.id, stage: job.stage }, "stage quality capture failed");
+    }
+  }
+
+  completeJob(jobId: string, message?: string, renderId?: string): void {
+    this.flushUsage(jobId);
     this.repository.atomic(() => {
       const job = this.repository.getJob(jobId);
       if (!job || job.status !== "RUNNING") return;
       const finishedAt = this.now().toISOString();
       const profileId = this.breakerProfile(job);
       if (profileId) this.recordBreakerResult(profileId, job, true);
+      const inputVersion = isSideJobStage(job.stage) ? undefined : this.inputVersions.inputVersion(job.projectId, job.stage);
+      const inputsChanged = !!inputVersion && (!!job.invalidatedAt || (!!job.inputVersion && job.inputVersion !== inputVersion));
+      if (job.stage === "RENDER" && renderId) {
+        const mark = inputsChanged
+          ? "json_set(report, '$.staleInput', json('true'))"
+          : "json_remove(report, '$.staleInput')";
+        this.repository.sqlite.prepare(`UPDATE renders SET report=${mark} WHERE id=? AND project_id=?`).run(renderId, job.projectId);
+      }
       this.repository.updateJob(jobId, {
         status: "SUCCEEDED",
         progress: 100,
-        message: message ?? `${job.stage} completed`,
+        message: inputsChanged ? STALE_INPUT_MESSAGE : message ?? `${job.stage} completed`,
         finishedAt,
       });
-      publishAgentEvent({
-        type: job.stage === "RENDER" ? "render_finished" : isPublishStage(job.stage) ? "published" : "stage_finished",
-        projectId: job.projectId, stage: job.stage, summary: `${job.stage} xong`,
-      });
+      if (inputsChanged) {
+        this.repository.updateStage(job.projectId, job.stage, {
+          state: "STALE", progress: 0, message: STALE_INPUT_MESSAGE, jobId: null, error: null, inputVersion: null,
+        });
+        markStaleFrom(this.repository, job.projectId, job.stage);
+        if (this.repository.getRunMode(job.projectId) === "ALL" && !this.repository.isInputRetry(job.id)) {
+          this.continueAll(job.projectId);
+        } else {
+          this.repository.setRunMode(job.projectId, null);
+          this.updateProjectStatus(job.projectId, job.stage);
+        }
+        return;
+      }
+      if (!isSideJobStage(job.stage)) this.recordStageQuality(job, finishedAt);
+      this.publishStageCompletion(job.projectId, job.stage);
       if (isSideJobStage(job.stage)) {
         const durationMs = job.startedAt ? Date.parse(finishedAt) - Date.parse(job.startedAt) : 0;
         this.logger.info({ jobId, projectId: job.projectId, stage: job.stage, attempt: job.attempt, durationMs }, isPublishStage(job.stage) ? "Publish job finished" : "Clip job finished");
@@ -507,6 +729,7 @@ export class PipelineOrchestrator {
       }
       this.repository.updateStage(job.projectId, job.stage, {
         state: "DONE",
+        inputVersion,
         progress: 100,
         message: message ?? `${job.stage} completed`,
         error: null,
@@ -524,7 +747,16 @@ export class PipelineOrchestrator {
     });
   }
 
+  /** Shared control-side completion signal for local jobs and committed node checkpoints. */
+  publishStageCompletion(projectId: string, stage: PipelineStage): void {
+    this.emitAgentEvent({
+      type: stage === "RENDER" ? "render_finished" : isPublishStage(stage) ? "published" : "stage_finished",
+      projectId, stage, summary: `${stage} xong`,
+    });
+  }
+
   failJob(jobId: string, error: JobError): void {
+    this.flushUsage(jobId);
     this.repository.atomic(() => {
       const job = this.repository.getJob(jobId);
       // An agent may never arrive: finish its bounded queue wait through the same error path,
@@ -552,6 +784,14 @@ export class PipelineOrchestrator {
           });
         }
         this.logger.warn({ jobId, projectId: job.projectId, stage: job.stage, attempt: job.attempt, runAfter: error.retryAt }, "Pipeline job waiting for quota reset");
+        // TASK-129a §1: one quota_wait per RUNNING→QUEUED transition (each wait is a new transition, not a tick).
+        if (error.code === "LLM_QUOTA_WAIT") {
+          const waitWs = this.repository.sqlite.prepare("SELECT workspace_id AS w FROM projects WHERE id = ?").get(job.projectId) as { w: string | null } | undefined;
+          this.emitAgentEvent(
+            { type: "quota_wait", projectId: job.projectId, stage: job.stage, summary: `Bước ${job.stage} chờ LLM reset quota (đến ${error.retryAt}).`.slice(0, 200) },
+            { workspaceId: waitWs?.w ?? (defaultWorkspaceId(this.repository.sqlite) ?? undefined) },
+          );
+        }
         return;
       }
       const profileId = this.breakerProfile(job);
@@ -586,7 +826,7 @@ export class PipelineOrchestrator {
         return;
       }
       this.repository.updateJob(jobId, { status: "FAILED", error, finishedAt, message: error.message });
-      publishAgentEvent({
+      this.emitAgentEvent({
         type: isPublishStage(job.stage) ? "publish_failed" : "stage_failed",
         projectId: job.projectId, stage: job.stage, summary: error.message,
       });
@@ -648,7 +888,9 @@ export class PipelineOrchestrator {
   /** Worker nodes and external agents keep their existing job fence across a server restart. */
   private heldByNode(job: Job): boolean {
     const lease = this.repository.getExecutionLease(job.id);
-    return Boolean(lease && Date.parse(lease.leaseUntil) > this.now().getTime());
+    if (!lease) return false;
+    if (Date.parse(lease.leaseUntil) > this.now().getTime()) return true;
+    return !!this.repository.sqlite.prepare("SELECT 1 FROM jobs WHERE id=? AND node_id IS NOT NULL AND finalizing_at IS NOT NULL").get(job.id);
   }
 
   private requeueInterruptedJob(job: Job, prefix: string): void {
@@ -702,12 +944,14 @@ export class PipelineOrchestrator {
     return progress;
   }
 
-  private enqueue(projectId: string, stage: PipelineStage): Job {
+  private enqueue(projectId: string, stage: PipelineStage, inputRetry = false): Job {
     const previousState = this.repository.getStage(projectId, stage).state;
     const previous = previousState === "DONE" ? "STALE" : previousState;
     const job = this.repository.createJob({
       projectId,
       stage,
+      inputVersion: this.inputVersions.inputVersion(projectId, stage),
+      inputRetry,
       maxAttempts: this.config.JOB_MAX_ATTEMPTS,
       previousState: previous,
       runAfter: this.now(),
@@ -752,6 +996,7 @@ export class PipelineOrchestrator {
     const candidates: PipelineStage[] = [];
     for (const stage of STAGE_ORDER) {
       const record = byStage.get(stage);
+      if (this.runtime.allowedStage?.(project, stage) === false) continue;
       const state = record?.state ?? "PENDING";
       if (state === "DONE" || state === "SKIPPED" || state === "QUEUED" || state === "RUNNING" || state === "WAITING_USER" || state === "FAILED") continue;
       if (record?.message === LANE_CANCELLED_MESSAGE) continue;
@@ -766,6 +1011,7 @@ export class PipelineOrchestrator {
       candidates.push(stage);
     }
     if (candidates.length === 0) return false;
+    if (this.projectPlacement?.dispatch(project, candidates)) return false;
     for (const stage of candidates) this.startReadyStage(projectId, project, stage);
     return true;
   }
@@ -790,6 +1036,7 @@ export class PipelineOrchestrator {
       }
       this.repository.updateStage(projectId, "VOICE", {
         state: "DONE",
+        inputVersion: this.inputVersions.inputVersion(projectId, "VOICE"),
         progress: 100,
         message: "Provided by user",
         jobId: null,
@@ -813,6 +1060,7 @@ export class PipelineOrchestrator {
       if (stage === "SCRIPT" && userScriptExists) {
         this.repository.updateStage(projectId, "SCRIPT", {
           state: "DONE",
+          inputVersion: this.inputVersions.inputVersion(projectId, "SCRIPT"),
           progress: 100,
           message: "Provided by user",
           jobId: null,
@@ -835,6 +1083,7 @@ export class PipelineOrchestrator {
       if (autoApprove && approval.allowed && !blockReason) {
         this.repository.updateStage(projectId, stage, {
           state: "DONE",
+          inputVersion: this.inputVersions.inputVersion(projectId, stage),
           progress: 100,
           message: "Auto-approved (AUTO mode)",
           jobId: null,
@@ -852,10 +1101,15 @@ export class PipelineOrchestrator {
       this.emitWaitingApproval(project, stage);
       return;
     }
-    this.enqueue(projectId, stage);
+    this.enqueue(projectId, stage, this.repository.getStage(projectId, stage).message === STALE_INPUT_MESSAGE);
   }
 
   private refreshLaneStatus(projectId: string): void {
+    const remote = this.projectPlacement?.active(projectId);
+    if (remote) {
+      this.repository.updateProject(projectId, { stage: remote, status: remote === "RENDER" ? "RENDERING" : "GENERATING" });
+      return;
+    }
     const stages = this.repository.getStages(projectId);
     const waiting = STAGE_ORDER.find((stage) => stages.find((item) => item.stage === stage)?.state === "WAITING_USER");
     const active = this.repository.getActiveJobs(projectId).find((job) => !isSideJobStage(job.stage));
@@ -887,6 +1141,7 @@ export class PipelineOrchestrator {
   }
 
   private assertCanStart(projectId: string, stage: PipelineStage): void {
+    if (this.projectPlacement?.active(projectId)) this.invalid("A node is already running this project.");
     const active = this.repository.getActiveJobs(projectId).filter((job) => !isSideJobStage(job.stage));
     if (active.length === 0) return;
     const lane = jobLane(stage);
@@ -928,6 +1183,11 @@ export class PipelineOrchestrator {
       });
       return;
     }
+    try {
+      holdMissionsForProject(this.repository.sqlite, project.id);
+    } catch {
+      // A mission bookkeeping error must never block the project's own approval notice.
+    }
     safeNotify(this.notifications, {
       kind: "waiting_approval",
       projectId: project.id,
@@ -935,7 +1195,7 @@ export class PipelineOrchestrator {
       gate,
       link,
     });
-    publishAgentEvent({
+    this.emitAgentEvent({
       type: "waiting_approval", projectId: project.id, projectTitle: project.title, gate, link, summary: `Chờ duyệt ${gate}`,
     });
   }

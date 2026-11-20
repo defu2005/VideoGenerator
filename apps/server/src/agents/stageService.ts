@@ -9,22 +9,50 @@ import type { PipelineOrchestrator } from "../pipeline/orchestrator.js";
 import { publishAgentEvent } from "../events/agentBus.js";
 import { recordStageRelease } from "./releaseMonitor.js";
 import { stageAgentUsage, type AgentUsage } from "./usage.js";
+import { captureStageFeedback } from "../learning/stageFeedback.js";
+import { listAgentAssignments, matchingStageAssignment } from "./assignments.js";
+import { sendMessage } from "../supervision/mailbox.js";
+import { getKeyProfile } from "../supervision/identity.js";
+import { type StageAgentAdapter, VISUAL_HANDOFF_ERRORS } from "./stageAdapters/index.js";
 
 export const STAGE_AGENT_LEASE_MS = 10 * 60_000;
 export type StageClaimFilter = { stages?: PipelineStage[]; projectId?: string; profileId?: string };
 type Deps = {
   repository: JobRepository; orchestrator: PipelineOrchestrator; now?: () => Date;
-  context: (job: Job) => unknown;
-  validateComplete: (job: Job) => void | Promise<void>;
+  adapters?: readonly StageAgentAdapter[];
+  context?: (job: Job) => unknown;
+  validateComplete?: (job: Job) => void | Promise<void>;
   openReason?: (job: Pick<Job, "projectId" | "stage">) => string | null;
-  /** TASK-128b extends this with explicit scope/role assignments. */
-  eligible?: (agent: TrustedAgent, project: Project, stage: PipelineStage) => boolean;
   supportedStages?: readonly PipelineStage[];
 };
 
 /** Agent jobs use exactly TASK-118's job fencing columns, never a parallel lease table. */
 export class AgentStageService {
-  constructor(private readonly deps: Deps) {}
+  private readonly adapters: Map<PipelineStage, StageAgentAdapter>;
+  constructor(private readonly deps: Deps) {
+    if (deps.adapters) {
+      this.adapters = new Map(deps.adapters.map((adapter) => [adapter.stage, adapter]));
+    } else {
+      const stages = deps.context && deps.validateComplete ? (deps.supportedStages ?? ["VISUAL_SEARCH"]) : [];
+      this.adapters = new Map();
+      for (const stage of stages) {
+        this.adapters.set(stage, {
+          stage,
+          role: stage === "VISUAL_SEARCH" ? "visual_scout" : `${stage.toLowerCase()}_scout`,
+          buildContext: deps.context ?? (() => ({})),
+          validateComplete: deps.validateComplete ?? (() => {}),
+          openReason: deps.openReason,
+          handoffErrors: VISUAL_HANDOFF_ERRORS,
+        });
+      }
+    }
+  }
+  get supportedStages(): readonly PipelineStage[] {
+    return Array.from(this.adapters.keys());
+  }
+  adapterFor(stage: PipelineStage): StageAgentAdapter | undefined {
+    return this.adapters.get(stage);
+  }
   private now() { return this.deps.now?.() ?? new Date(); }
   private profile(project: Project): StageExecutionBrief {
     if (!project.profileId) return {};
@@ -42,13 +70,16 @@ export class AgentStageService {
   }
   afterError(job: Job, error: JobError) {
     if (this.mode(job) !== "app_then_agent") return false;
-    const exhausted = ["LLM_ALL_PROVIDERS_EXHAUSTED", "LLM_QUOTA_EXHAUSTED", "VISION_PROVIDER_REQUIRED", "VISION_UNAVAILABLE", "VISUAL_NEEDS_USER"].includes(error.code);
-    const providerQuota = /(?:BRAVE|IMAGE|VISUAL).*(?:QUOTA|RATE_LIMIT)/.test(error.code) && job.attempt >= job.maxAttempts;
-    return (exhausted || providerQuota) && Boolean(this.handoff(job.id, `${error.code}: ${error.message}`));
+    const adapter = this.adapterFor(job.stage);
+    if (!adapter) return false;
+    const matchesHandoff = adapter.handoffErrors.includes(error.code);
+    const providerQuota = adapter.stage === "VISUAL_SEARCH" && /(?:BRAVE|IMAGE|VISUAL).*(?:QUOTA|RATE_LIMIT)/.test(error.code) && job.attempt >= job.maxAttempts;
+    return (matchesHandoff || providerQuota) && Boolean(this.handoff(job.id, `${error.code}: ${error.message}`));
   }
   afterLocal(job: Job) {
     if (this.mode(job) !== "app_then_agent") return false;
-    const reason = this.deps.openReason?.(job);
+    const adapter = this.adapterFor(job.stage);
+    const reason = adapter?.openReason?.(job);
     return Boolean(reason && this.handoff(job.id, reason));
   }
   /** TASK-121 has exhausted its image repairs. Reuse its normal rerun-and-continue path,
@@ -65,7 +96,7 @@ export class AgentStageService {
       const last = repo.sqlite.prepare("SELECT id FROM jobs WHERE project_id=? AND stage='VISUAL_SEARCH' ORDER BY created_at DESC,rowid DESC LIMIT 1").get(projectId) as { id: string } | undefined;
       // One rescue per app attempt. A returned/taken-back job must not be delegated repeatedly by repair ticks.
       if (last && repo.getJob(last.id)?.handoffAt) return null;
-      const open = this.deps.openReason?.({ projectId, stage: "VISUAL_SEARCH" });
+      const open = this.adapterFor("VISUAL_SEARCH")?.openReason?.({ projectId, stage: "VISUAL_SEARCH" });
       if (!open) return null;
       repo.ensureStages(projectId);
       if (STAGE_DEPENDS.VISUAL_SEARCH.some((stage) => !["DONE", "SKIPPED"].includes(repo.getStage(projectId, stage).state))) return null;
@@ -132,7 +163,7 @@ export class AgentStageService {
     return this.deps.repository.atomic(() => {
       const repo = this.deps.repository, job = repo.getJob(jobId);
       if (!job || job.projectId === PROTECTED_PROJECT_ID || !["QUEUED", "RUNNING"].includes(job.status) || job.executor === "agent") return null;
-      if (!(this.deps.supportedStages ?? ["VISUAL_SEARCH"]).includes(job.stage)) return null;
+      if (!this.supportedStages.includes(job.stage)) return null;
       const at = this.now().toISOString(), note = redactExportText(reason).slice(0, 500);
       repo.sqlite.prepare("UPDATE jobs SET executor='agent',handoff_reason=?,handoff_at=?,agent_instance=NULL,node_id=NULL,lease_id=NULL,lease_until=NULL,heartbeat_at=NULL WHERE id=?")
         .run(note, at, job.id);
@@ -146,19 +177,30 @@ export class AgentStageService {
     this.agent(agent);
     const claimed = this.deps.repository.atomic(() => {
       const repo = this.deps.repository, now = this.now();
-      // Until assignments in 128b, each trusted instance is a workspace pool with one slot.
-      const active = repo.sqlite.prepare("SELECT j.id FROM jobs j JOIN projects p ON p.id=j.project_id WHERE j.executor='agent' AND j.agent_instance=? AND j.status='RUNNING' AND j.lease_until>? AND (p.workspace_id IS ? OR (p.workspace_id IS NULL AND ?)) LIMIT 1")
-        .get(agent.instance, now.toISOString(), currentActor()!.workspaceId, currentActor()!.ownsUnassigned ? 1 : 0);
-      if (active) return null;
+      const actor = currentActor()!;
+      const assignments = listAgentAssignments(repo.sqlite, actor.workspaceId);
+      const active = (repo.sqlite.prepare(`SELECT j.project_id AS projectId, p.profile_id AS profileId, j.stage
+        FROM jobs j JOIN projects p ON p.id=j.project_id WHERE j.executor='agent' AND j.agent_instance=?
+        AND j.status='RUNNING' AND j.lease_until>? AND (p.workspace_id=? OR (p.workspace_id IS NULL AND ?))`)
+        .all(agent.instance, now.toISOString(), actor.workspaceId, actor.ownsUnassigned ? 1 : 0)) as Array<{ projectId: string; profileId: string | null; stage: PipelineStage }>;
+      // A more permissive assignment on a new job cannot override the cap of a job already held.
+      const activeLimit = active.reduce((limit, job) => {
+        const adapter = this.adapterFor(job.stage);
+        const assignment = matchingStageAssignment(assignments, agent.instance, { id: job.projectId, profileId: job.profileId }, job.stage, adapter?.role);
+        return Math.min(limit, assignment?.maxConcurrent ?? 1);
+      }, Infinity);
+      if (active.length >= activeLimit) return null;
       const rows = repo.sqlite.prepare("SELECT id FROM jobs WHERE executor='agent' AND project_id != ? AND (status='QUEUED' OR (status='RUNNING' AND lease_until<=?)) ORDER BY handoff_at,created_at,rowid")
         .all(PROTECTED_PROJECT_ID, now.toISOString()) as Array<{ id: string }>;
       for (const { id } of rows) {
         let job = repo.getJob(id)!;
-        if (!(this.deps.supportedStages ?? ["VISUAL_SEARCH"]).includes(job.stage) || (filter.stages && !filter.stages.includes(job.stage)) || (filter.projectId && filter.projectId !== job.projectId)) continue;
+        const adapter = this.adapterFor(job.stage);
+        if (!adapter || !this.supportedStages.includes(job.stage) || (filter.stages && !filter.stages.includes(job.stage)) || (filter.projectId && filter.projectId !== job.projectId)) continue;
         let project: Project;
         try { project = this.project(job); } catch (error) { if (error instanceof AppError && error.statusCode === 404) continue; throw error; }
         if (filter.profileId && project.profileId !== filter.profileId) continue;
-        if (this.deps.eligible && !this.deps.eligible(agent, project, job.stage)) continue;
+        const assignment = matchingStageAssignment(assignments, agent.instance, project, job.stage, adapter.role);
+        if (!assignment || active.length >= assignment.maxConcurrent) continue;
         const leaseId = randomUUID(), until = new Date(now.getTime() + STAGE_AGENT_LEASE_MS).toISOString();
         // One guarded UPDATE reserves the existing job fence; the pipeline transition is in the same transaction.
         const reserved = repo.sqlite.prepare(`UPDATE jobs SET status='QUEUED',node_id=NULL,agent_instance=?,lease_id=?,lease_until=?,heartbeat_at=?
@@ -170,13 +212,40 @@ export class AgentStageService {
         job = started;
         this.deps.orchestrator.reportProgress(id, job.progress, `Agent ${agent.instance} đang xử lý ${job.stage}`);
         const claimedJob = repo.getJob(id)!;
-        const context = this.deps.context(claimedJob); // Context failure rolls back the reservation too.
+        const context = adapter.buildContext(claimedJob); // Context failure rolls back the reservation too.
         publishAgentEvent({ type: "stage_claimed", projectId: job.projectId, stage: job.stage, summary: `${agent.instance} nhận ${job.stage}.` });
         return { job: claimedJob, leaseId, leaseUntil: until, context };
       }
       return null;
     }, "immediate");
+    if (claimed) this.reportStage(agent, claimed.job, `nhận ${claimed.job.stage}`);
     return claimed;
+  }
+  /**
+   * TASK-129a step 5: one `report` to the duty agent per successful claim/finish/release. Sent after the
+   * transition commits, so a mailbox failure (rate limit, no workspace) never rolls the transition back.
+   * `from` is the key's fixed instance; the workspace comes from the job's project and fails closed.
+   */
+  private reportStage(agent: TrustedAgent, job: Job, action: string) {
+    try {
+      const sqlite = this.deps.repository.sqlite;
+      const row = sqlite.prepare("SELECT workspace_id FROM projects WHERE id=?").get(job.projectId) as { workspace_id: string | null } | undefined;
+      if (!row?.workspace_id) return false;
+      // The sender is the key's fixed instance, never the x-agent-name header (an unnamed key is trusted but unnamed).
+      const keyId = currentActor()?.kind === "apikey" ? currentActor()!.keyId : null;
+      const profile = getKeyProfile(sqlite, keyId);
+      if (!profile || profile.instanceName === "unknown") return false;
+      const from = `${profile.agentKind}/${profile.instanceName}`;
+      sendMessage(sqlite, {
+        workspaceId: row.workspace_id, from, to: "duty", kind: "report", projectId: job.projectId,
+        body: `${from} ${action} (job ${job.id}).`,
+      }, this.now());
+      return true;
+    } catch (error) {
+      // Log the error code only: a dropped report must not be silent, and the message may carry user text.
+      console.warn(`[stage-report] không gửi được báo cáo ${action}: ${(error as { code?: string })?.code ?? "UNKNOWN"}`);
+      return false;
+    }
   }
   heartbeat(agent: TrustedAgent, jobId: string, leaseId: string, progress?: number, note?: string) {
     return this.deps.repository.atomic(() => {
@@ -189,8 +258,11 @@ export class AgentStageService {
   }
   async complete(agent: TrustedAgent, jobId: string, leaseId: string, summary: string, usage?: AgentUsage) {
     const job = this.holding(agent, jobId, leaseId);
-    await this.deps.validateComplete(job);
-    return this.deps.repository.atomic(() => {
+    const adapter = this.adapterFor(job.stage);
+    if (!adapter) throw new AppError(422, "STAGE_ADAPTER_NOT_FOUND", "Stage không hỗ trợ agent ngoài.");
+    await adapter.validateComplete(job);
+    await adapter.prepareComplete?.(job);
+    const done = this.deps.repository.atomic(() => {
       this.holding(agent, jobId, leaseId); // Fence again after any asynchronous post-stage validation.
       this.deps.orchestrator.recordUsage(jobId, stageAgentUsage(agent, usage));
       this.deps.orchestrator.completeJob(jobId, redactExportText(summary).slice(0, 1000));
@@ -199,9 +271,11 @@ export class AgentStageService {
       publishAgentEvent({ type: "stage_completed_by_agent", projectId: job.projectId, stage: job.stage, summary: `${agent.instance}: ${redactExportText(summary).slice(0, 500)}` });
       return this.deps.repository.getJob(jobId)!;
     }, "immediate");
+    this.reportStage(agent, done, `hoàn tất ${done.stage}`);
+    return done;
   }
   release(agent: TrustedAgent, jobId: string, leaseId: string, reason: string) {
-    return this.deps.repository.atomic(() => {
+    const done = this.deps.repository.atomic(() => {
       const job = this.holding(agent, jobId, leaseId);
       const repo = this.deps.repository, executor = reason === "cannot_do" ? "app" : "agent";
       repo.setJobLease(jobId, null);
@@ -209,9 +283,18 @@ export class AgentStageService {
       repo.updateJob(jobId, { status: "QUEUED", message: `Agent trả việc: ${redactExportText(reason).slice(0, 500)}` });
       repo.updateStage(job.projectId, job.stage, { state: "QUEUED", jobId, message: "Agent đã trả việc về hàng đợi." });
       recordStageRelease(repo.sqlite, jobId, this.now());
+      if (reason === "cannot_do") {
+        // TASK-148a: an agent that cannot do a stage is feedback for the stage's lessons.
+        captureStageFeedback(repo.sqlite, {
+          projectId: job.projectId, stage: job.stage, kind: "agent_release", target: "job",
+          before: null, after: null, reason, source: "agent",
+        });
+      }
       publishAgentEvent({ type: "stage_released", projectId: job.projectId, stage: job.stage, summary: `${agent.instance}: ${redactExportText(reason).slice(0, 500)}` });
       return repo.getJob(jobId)!;
     }, "immediate");
+    this.reportStage(agent, done, `trả ${done.stage}`);
+    return done;
   }
   takeBack(jobId: string) {
     return this.deps.repository.atomic(() => {

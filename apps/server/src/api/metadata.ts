@@ -8,6 +8,8 @@ import type { Project } from "@vg/shared";
 import { z } from "zod";
 import { AppError } from "../lib/errors.js";
 import type { MetadataService } from "../services/metadataService.js";
+import type Database from "better-sqlite3";
+import { captureStageFeedback, feedbackSourceFor } from "../learning/stageFeedback.js";
 
 const ProjectParams = z.object({ id: z.string().uuid() }).strict();
 
@@ -15,6 +17,7 @@ export function registerMetadataRoutes(
   app: FastifyInstance,
   metadata: MetadataService,
   projectService: { getProject: (id: string) => Promise<Project | undefined> },
+  sqlite?: Database.Database,
 ): void {
   app.get("/api/projects/:id/metadata", {
     schema: {
@@ -38,7 +41,16 @@ export function registerMetadataRoutes(
     const project = await projectService.getProject(id);
     if (!project) throw new AppError(404, "PROJECT_NOT_FOUND", "Project not found");
     const body = VideoMetadataDraftSchema.parse(request.body);
-    return metadata.saveEdits(project, body);
+    const before = sqlite ? metadata.get(project).metadata : null;
+    const saved = metadata.saveEdits(project, body);
+    if (sqlite) {
+      // TASK-148a: the user's metadata edit is feedback. Best-effort; never fails the save.
+      captureStageFeedback(sqlite, {
+        projectId: id, stage: "FINAL_APPROVAL", kind: "user_edit", target: "metadata",
+        before, after: saved.metadata, source: feedbackSourceFor(request.actor),
+      }, request.log);
+    }
+    return saved;
   });
 
   app.post("/api/projects/:id/metadata/generate", {

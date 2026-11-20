@@ -19,6 +19,7 @@ export function isAuthAllowlisted(method: string, path: string): boolean {
   if (method === "GET" && path === "/api/settings/llm-providers/openrouter/callback") return true;
   if (method === "POST" && path === "/api/knowledge/webhooks/tiktok") return true;
   if (path.startsWith("/api/nodes/agent/")) return true; // worker nodes: authenticated by node token in the route
+  if (path.startsWith("/api/llm/relay/")) return true; // LLM relay (TASK-136): agent key or node token, checked in the route
   return false;
 }
 

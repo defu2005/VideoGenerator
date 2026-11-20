@@ -17,6 +17,8 @@ export type SkillScenario = { id: string; prompt: string; expect: "pick" | "skip
 export type SkillEvalResult = {
   score: number;
   scenarios: Array<SkillScenario & { ok: boolean; rank: number | null }>;
+  /** Set when the skill cannot be evaluated at all (for example no triggers), so the score is 0 and the reason is shown. */
+  reason?: string;
 };
 
 /** Prompts that no skill should be picked for. Every skill is checked against them. */
@@ -38,6 +40,27 @@ export function skillScenarios(markdown: string): SkillScenario[] {
     })),
     ...OFF_TOPIC_SCENARIOS,
   ];
+}
+
+/** TASK-074b-2: at most this many scenarios per behaviour run; triggers come first, then anti-triggers, then off-topic. */
+export const BEHAVIOUR_SCENARIO_MAX = 8;
+
+/**
+ * Scenarios for the behaviour dry run. Chosen from skillScenarios only; no new prompts are written here.
+ * The off-topic prompts always stay (they catch over-activation), so picks and skips share the rest of the cap:
+ * up to 2 skips are kept first, then picks fill the room, then any remaining room goes to skips.
+ */
+export function behaviourScenarios(markdown: string): SkillScenario[] {
+  const all = skillScenarios(markdown);
+  const offTopic = all.slice(all.length - OFF_TOPIC_SCENARIOS.length);
+  const body = all.slice(0, all.length - OFF_TOPIC_SCENARIOS.length);
+  const room = BEHAVIOUR_SCENARIO_MAX - offTopic.length;
+  const picks = body.filter((item) => item.expect === "pick");
+  const skips = body.filter((item) => item.expect === "skip");
+  const skipFirst = Math.min(skips.length, 2);
+  const pickKeep = Math.min(picks.length, room - skipFirst);
+  const skipKeep = Math.min(skips.length, room - pickKeep);
+  return [...picks.slice(0, pickKeep), ...skips.slice(0, skipKeep), ...offTopic];
 }
 
 function builtinCandidates(): RouteCandidate[] {
@@ -67,6 +90,10 @@ function builtinCandidates(): RouteCandidate[] {
 export function evaluateSkill(markdown: string): SkillEvalResult {
   const parsed = parseSkillMarkdown(markdown);
   if (!parsed) return { score: 0, scenarios: [] };
+  // Without triggers there is no "pick" scenario, so the score would come only from the off-topic skips and read 100.
+  if (parsed.triggers.length === 0) {
+    return { score: 0, scenarios: [], reason: "skill chưa có trigger nên không định tuyến được" };
+  }
   const self: RouteCandidate = {
     id: "candidate", name: parsed.name, description: parsed.description, body: parsed.body,
     triggers: parsed.triggers, antiTriggers: parsed.antiTriggers, area: "user", shortBody: parsed.shortBody,

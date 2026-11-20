@@ -1,4 +1,7 @@
 import { notePublicationClaim } from "../operator/qualityGates.js";
+import { publishAgentEvent } from "../events/agentBus.js";
+import { defaultWorkspaceId } from "../auth/workspaces.js";
+import { markMissionScheduled, recordPublicationPublished } from "../missions/checkpoints.js";
 import { scopeSql } from "../auth/requestContext.js";
 import { enqueueIndex } from "../retrieval/service.js";
 import { randomUUID } from "node:crypto";
@@ -178,9 +181,21 @@ export class PublishService {
     return publication;
   }
 
-  async createForProject(projectId: string, body: CreatePublicationsBody): Promise<Publication[]> {
+  /**
+   * `missionId` (optional, set only by the mission scheduler) links the new publications to a mission.
+   * Once every project in the mission has a live publication, the mission moves to scheduled.
+   */
+  async createForProject(projectId: string, body: CreatePublicationsBody, opts: { missionId?: string | null } = {}): Promise<Publication[]> {
     const project = this.sqlite.prepare("SELECT * FROM projects WHERE id = ?").get(projectId) as ProjectRow | undefined;
     if (!project) throw new AppError(404, "PROJECT_NOT_FOUND", "Project not found");
+    if (opts.missionId) {
+      const mission = this.sqlite.prepare("SELECT project_ids AS projectIds FROM missions WHERE id = ?")
+        .get(opts.missionId) as { projectIds: string } | undefined;
+      if (!mission) throw new AppError(404, "MISSION_NOT_FOUND", "Mission not found");
+      if (!(JSON.parse(mission.projectIds) as string[]).includes(projectId)) {
+        throw new AppError(422, "MISSION_PROJECT_NOT_IN_MISSION", "Dự án không thuộc mission này.");
+      }
+    }
 
     const created: Publication[] = [];
     for (const accountId of body.accountIds) {
@@ -196,6 +211,10 @@ export class PublishService {
       const render = await this.resolveRenderForAccount(project, account);
       const existing = this.findActive(render.id, accountId);
       if (existing && !body.force) {
+        // A reused publication with no mission joins this mission, so it counts toward scheduled. One already in another mission stays put.
+        if (opts.missionId) {
+          this.sqlite.prepare("UPDATE publications SET mission_id = ? WHERE id = ? AND mission_id IS NULL").run(opts.missionId, existing.id);
+        }
         created.push(existing);
         continue;
       }
@@ -223,8 +242,8 @@ export class PublishService {
           id, project_id, render_id, account_id, status,
           visibility_requested, visibility_used, guardrail_reason, scheduled_for,
           external_id, external_url, attempts, last_error, progress, warnings,
-          created_at, updated_at, published_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, 0, NULL, 0, ?, ?, ?, NULL)`,
+          created_at, updated_at, published_at, mission_id
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, 0, NULL, 0, ?, ?, ?, NULL, ?)`,
       ).run(
         id,
         projectId,
@@ -238,6 +257,7 @@ export class PublishService {
         JSON.stringify((await import("../services/visualPolicy.js")).copyrightChecklist(this.sqlite, projectId)),
         nowIso,
         nowIso,
+        opts.missionId ?? null,
       );
 
       enqueueIndex(this.sqlite,{scope:"source",kind:"result",sourceId:id});
@@ -245,7 +265,22 @@ export class PublishService {
       if (status === "QUEUED") {
         this.enqueuePublishJob(projectId, id);
       }
+      // TASK-129a §1: one event per publication row actually created (reused rows return early above).
+      const wsRow = this.sqlite.prepare("SELECT workspace_id AS w FROM projects WHERE id = ?").get(projectId) as { w: string | null } | undefined;
+      publishAgentEvent(
+        { type: "publish_scheduled", projectId, summary: `Đã xếp lịch đăng (${status === "QUEUED" ? "vào hàng đợi" : "theo lịch"}).`, link: `/projects/${projectId}/publish` },
+        { workspaceId: wsRow?.w ?? (defaultWorkspaceId(this.sqlite) ?? undefined) },
+      );
       created.push(publication);
+    }
+    if (opts.missionId && created.length > 0) {
+      try {
+        const mission = this.sqlite.prepare("SELECT workspace_id AS workspaceId FROM missions WHERE id = ?")
+          .get(opts.missionId) as { workspaceId: string } | undefined;
+        if (mission) markMissionScheduled(this.sqlite, mission.workspaceId, opts.missionId, this.now());
+      } catch {
+        // Bookkeeping must never fail a publish whose rows are already written. The next publish retries the move.
+      }
     }
     return created;
   }
@@ -554,6 +589,8 @@ export class PublishService {
     if (publication.status === "CANCELLED") {
       throw Object.assign(new Error("Publication cancelled"), { status: 409, retryable: false });
     }
+    const stale = this.sqlite.prepare("SELECT 1 FROM renders WHERE id=? AND json_extract(report, '$.staleInput')=1").get(publication.renderId);
+    if (stale) throw Object.assign(new Error("Đầu vào đã đổi trong lúc dựng. Chọn bản render mới trước khi đăng."), { status: 409, retryable: false });
     const account = this.requireAccount(publication.accountId);
     const publisher = this.registry.require(account.platform);
 
@@ -709,6 +746,11 @@ export class PublishService {
          published_at = ?, last_error = NULL, warnings = ?, updated_at = ? WHERE id = ?`,
       ).run(result.externalId, result.externalUrl, nowIso, warnings, nowIso, publicationId);
     }
+    try {
+      recordPublicationPublished(this.sqlite, publicationId, this.now());
+    } catch {
+      // The platform already has the video. A mission bookkeeping error must not turn that into a failed publish.
+    }
     this.emitPublishNotification(publicationId, "publish_succeeded", result.externalUrl);
   }
 
@@ -820,7 +862,7 @@ export class PublishService {
 
     const rows = this.sqlite.prepare(
       `SELECT id, output_path, aspect_ratio, status, deleted_at, created_at
-       FROM renders WHERE project_id = ? AND status = 'DONE' AND deleted_at IS NULL
+       FROM renders WHERE project_id = ? AND status = 'DONE' AND deleted_at IS NULL AND COALESCE(json_extract(report, '$.staleInput'), 0)=0
        ORDER BY created_at DESC`,
     ).all(project.id) as Array<{
       id: string;
@@ -833,6 +875,10 @@ export class PublishService {
 
     const match = rows.find((row) => (row.aspect_ratio ?? projectAspect) === needed);
     if (match) return match;
+
+    const needsFreshRender = this.sqlite.prepare(`SELECT 1 FROM renders WHERE project_id=? AND json_extract(report, '$.staleInput')=1
+      AND COALESCE(aspect_ratio, ?)=? AND deleted_at IS NULL`).get(project.id, projectAspect, needed);
+    if (needsFreshRender) throw new AppError(409, "STALE_RENDER", "Đầu vào đã đổi trong lúc dựng. Chạy lại bước dựng trước khi đăng.");
 
     // Render the missing aspect variant synchronously (TASK-023 pattern).
     const { render } = await this.renders.render(

@@ -1,4 +1,5 @@
 import Database from "better-sqlite3";
+import { scopeSql } from "../auth/requestContext.js";
 import {
   JobStatusSchema,
   JobUsageSchema,
@@ -116,9 +117,9 @@ function usageForJob(job: UsageJobRow): ProjectUsageRun | undefined {
       fallback: call.fallback,
       ...(call.fallbackReason ? { fallbackReason: call.fallbackReason } : {}),
       ok: call.ok,
-      // The job-level flag only says some call lacked counts: blame calls that reported none.
-      tokensUnknown: (usage.tokensUnknown ?? false) && !call.cached
-        && call.inputTokens === 0 && call.outputTokens === 0,
+      // Explicit call flags retain nonzero estimates; the job-only flag is a legacy fallback.
+      tokensUnknown: call.tokensUnknown ?? ((usage.tokensUnknown ?? false) && !call.cached
+        && call.inputTokens === 0 && call.outputTokens === 0),
       ...(call.costUnknown || (call.provider.startsWith("agent:") && call.costUsd === undefined) ? { costUnknown: true } : {}),
       costUsd: call.provider.startsWith("agent:") ? call.costUsd ?? 0 : ownCosts
         ? (call.costUsd ?? 0)
@@ -220,6 +221,22 @@ export class UsageService {
     private readonly usdVndRate: number,
   ) {}
 
+  /** Completed calls with no surviving job are app overhead, never a synthetic project/job. */
+  getUnassignedRelayUsage(range?: Pick<UsageQuery, "from" | "to">) {
+    const scoped = scopeSql("r.workspace_id", "NULL");
+    const clauses = ["r.status IN ('ok', 'error')", "j.id IS NULL", scoped.sql];
+    const args = [...scoped.args];
+    if (range?.from) { clauses.push("substr(r.created_at, 1, 10) >= ?"); args.push(range.from); }
+    if (range?.to) { clauses.push("substr(r.created_at, 1, 10) <= ?"); args.push(range.to); }
+    return this.sqlite.prepare(`SELECT r.id, r.caller, r.model, r.input_tokens AS inputTokens,
+      r.output_tokens AS outputTokens, r.cost_usd AS costUsd, r.estimated, r.status, r.created_at AS createdAt
+      FROM llm_relay_usage r LEFT JOIN jobs j ON j.id = r.job_id
+      WHERE ${clauses.join(" AND ")} ORDER BY r.created_at, r.id`).all(...args) as Array<{
+        id: string; caller: string; model: string; inputTokens: number; outputTokens: number;
+        costUsd: number | null; estimated: number; status: "ok" | "error"; createdAt: string;
+      }>;
+  }
+
   getAutomationSpend(day: string, timezone: string, profileId?: string): { dailyUsd: number; monthlyUsd: number } {
     const from = `${day.slice(0, 7)}-01`;
     const adjacentDay = (value: string, offset: number) =>
@@ -235,9 +252,17 @@ export class UsageService {
       spend.monthlyUsd += amount;
       if (jobDay === day) spend.dailyUsd += amount;
     }
+    if (!profileId) for (const relay of this.getUnassignedRelayUsage(range)) {
+      const timestamp = new Date(relay.createdAt);
+      if (!Number.isFinite(timestamp.getTime())) continue;
+      const relayDay = localDateString(timestamp, timezone);
+      if (relayDay < from || relayDay > day) continue;
+      spend.monthlyUsd += relay.costUsd ?? 0;
+      if (relayDay === day) spend.dailyUsd += relay.costUsd ?? 0;
+    }
     const manual = this.sqlite.prepare(`SELECT cost_entries.date, cost_entries.amount, cost_entries.currency
       FROM cost_entries LEFT JOIN projects ON projects.id = cost_entries.project_id
-      WHERE cost_entries.date BETWEEN ? AND ? AND cost_entries.source IN ('manual', 'auto')
+      WHERE cost_entries.date BETWEEN ? AND ? AND (cost_entries.source IN ('manual', 'auto') OR cost_entries.source LIKE 'run:%')
         AND cost_entries.kind IN ('llm', 'tts', 'stock_media', 'image')
         AND (? IS NULL OR COALESCE(cost_entries.profile_id, projects.profile_id) = ?)`)
       .all(from, day, profileId ?? null, profileId ?? null) as { date: string; amount: number; currency: string }[];
@@ -311,6 +336,20 @@ export class UsageService {
             : key;
         addTotals(getBucket(groups, key, label), callTotals(call));
       }
+    }
+    for (const relay of this.getUnassignedRelayUsage(query)) {
+      const provider = `relay:${relay.caller}`;
+      const value: UsageTotals = {
+        ...emptyTotals(), llmCalls: 1, inputTokens: relay.inputTokens, outputTokens: relay.outputTokens,
+        failedCalls: relay.status === "error" ? 1 : 0, tokensUnknown: relay.estimated === 1,
+        costUsd: relay.costUsd ?? 0, ...(relay.costUsd === null || relay.estimated === 1 ? { costUnknown: true } : {}),
+      };
+      addTotals(totals, value);
+      const key = query.groupBy === "day" ? relay.createdAt.slice(0, 10)
+        : query.groupBy === "provider" ? provider : query.groupBy === "model" ? `${provider}/${relay.model}` : "relay";
+      const label = query.groupBy === "project" ? "LLM relay (không gắn dự án)"
+        : query.groupBy === "model" ? `${provider} · ${relay.model}` : key;
+      addTotals(getBucket(groups, key, label), value);
     }
     return {
       from: query.from ?? null,

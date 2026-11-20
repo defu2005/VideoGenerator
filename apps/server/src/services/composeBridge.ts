@@ -9,6 +9,7 @@ import {
   estimateRenderSeconds,
   FOOTAGE_MIN_SCORE,
   graphicDurationBounds,
+  processLanguage,
   parseBlackdetect,
   resolveBudget,
   SHOT_KINDS,
@@ -26,6 +27,7 @@ import {
 import type { AppConfig } from "../lib/config.js";
 import { projectDir } from "../storage/paths.js";
 import { beatGridForMusic } from "../compose/beatsFile.js";
+import { clearPlanInputs, composeInputFingerprint, writePlanInputs } from "../compose/planInputs.js";
 import { planProject, renderSceneClip } from "../compose/composeService.js";
 import { baselineDirector, type Director } from "../compose/director.js";
 import { createLlmDirector, createRuleDirector, type LlmCall } from "../compose/director/index.js";
@@ -116,10 +118,13 @@ export async function prepareComposePlan(input: {
   renderDir: string;
   registry?: LlmProviderRegistry;
   signal?: AbortSignal;
+  /** Computed by the caller before planning. Computed here when missing. */
+  inputFingerprint?: string;
 }): Promise<{ plan: ComposePlan | null; warnings: string[]; usage?: JobUsage }> {
   const warnings: string[] = [];
   let usage: JobUsage | undefined;
   try {
+    const fingerprint = input.inputFingerprint ?? composeInputFingerprint(input.sqlite, input.project, input.timeline);
     const features = resolveBudget(input.project.settings.budget ?? { mode: "BALANCED" });
     const mode = directorModeFor(input.project);
     const aspect = input.project.settings.aspectRatio ?? "16:9";
@@ -140,6 +145,9 @@ export async function prepareComposePlan(input: {
       .all(input.project.id) as { sceneId: string; words: unknown; cues: unknown; timingSource: string }[];
     const recipeId = input.project.settings.format || input.project.settings.treatment?.formatId || "explainer";
     const directives = directivesForRecipe(recipeId);
+    const needsDiagram = input.project.settings.budget?.mode !== "ECO" && features.editPlan && features.composeGraphics !== "off"
+      && !directives.disabledKinds.includes("diagram") && scenes.some((scene) => processLanguage(scene.narration));
+    const useLlm = mode === "quality" || needsDiagram;
     const llmVariantChoices: LlmVariantChoice[] = [];
     const plan = await planProject({
       timeline: input.timeline,
@@ -164,17 +172,19 @@ export async function prepareComposePlan(input: {
         const shots = scene.shots.filter((shot) => shot.locked);
         return shots.length ? [{ sceneId: scene.sceneId, shots }] : [];
       }),
-      director: pickDirector(mode, {
+      director: pickDirector(useLlm ? "quality" : "eco", {
         ruleDirector: createRuleDirector({
           language: input.project.settings.language,
           composeGraphics: features.composeGraphics,
         }),
-        llmDirector: mode === "quality" && input.registry
+        llmDirector: useLlm && input.registry
           ? createLlmDirector(composeLlm(input, (next) => { usage = next; }), {
             language: input.project.settings.language,
             composeGraphics: features.composeGraphics,
+            structuredOnly: mode !== "quality",
+            allowTimeline: ["QUALITY", "MAX"].includes(input.project.settings.budget?.mode ?? "BALANCED"),
             // QUALITY only: the LLM may pick among the picker's allowed looks inside this same call.
-            variants: {
+            variants: mode === "quality" ? {
               optionsFor: (shots) => graphicVariantOptions({
                 projectId: input.project.id,
                 profileId: input.project.profileId,
@@ -186,7 +196,7 @@ export async function prepareComposePlan(input: {
                 styles: new StyleService(input.sqlite),
               }, shots),
               onChoices: (choices) => { llmVariantChoices.push(...choices); },
-            },
+            } : undefined,
           })
           : undefined,
       }),
@@ -207,7 +217,10 @@ export async function prepareComposePlan(input: {
     if (kept + dropped > 0) warnings.push(`Footage: giữ ${kept} clip, bỏ ${dropped} clip. Điểm nằm trong kế hoạch.`);
     warnings.push(...await downloadChosenFootage(plan, found, (hit) => ensureFootage(input.config.DATA_DIR, hit, shortSide)));
     mkdirSync(input.renderDir, { recursive: true });
+    clearPlanInputs(input.renderDir);
     writeFileSync(join(input.renderDir, "compose-plan.json"), JSON.stringify(plan));
+    // Plan first, then sidecar: a new sidecar must never sit beside an old plan.
+    writePlanInputs(input.renderDir, fingerprint);
     return { plan, warnings, ...(usage ? { usage } : {}) };
   } catch (error) {
     warnings.push(`Không lập được kế hoạch compose: ${error instanceof Error ? error.message : "lỗi"}. Dùng ảnh tĩnh.`);

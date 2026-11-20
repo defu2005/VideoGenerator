@@ -9,17 +9,24 @@ const GROUPS: readonly Group[] = [
     "get_goal_progress", "compose_plan_preview", "get_originality_report", "search_profile_context",
     "list_overdue_jobs", "get_overdue_checks",
     "visual_get_candidate_image",
+    "preview_frame", "preview_contact_sheet", "preview_clip",
+    "storage_report",
+    "get_continuity_plan", "check_continuity",
+    "visual_cache_lookup", "visual_cache_query",
+    "get_script_draft",
   ]],
   ["project.write", [
     "create_project", "add_topic", "suggest_topics", "approve_topics", "reject_topics", "delete_topic",
     "add_trend_topic", "research_scene_visuals", "crop_scene_images", "dedupe_scene_visuals",
     "undo_timeline_edit", "apply_review_proposal",
+    "switch_script_hook", "rescore_script",
   ]],
   ["stage.run", [
-    "stage_claim_next", "stage_heartbeat", "stage_complete", "stage_release", "visual_submit_candidates", "visual_record_verdict", "visual_select",
+    "stage_claim_next", "stage_heartbeat", "stage_complete", "stage_release", "visual_submit_candidates", "visual_record_verdict", "visual_select", "research_submit_notes", "script_submit_draft", "music_submit_candidates",
     "run_pipeline", "decide_overdue", "repair_script", "repair_scene", "repair_render_stage", "make_shorts", "make_translation", "run_insight",
   ]],
   ["gate.approve", ["approve_gate"]],
+
   ["publish", ["publish_project", "cancel_publication"]],
   ["channel.read", [
     "list_accounts", "list_connections", "list_platform_accounts", "list_comments", "list_publications", "get_style_pack",
@@ -42,7 +49,7 @@ const GROUPS: readonly Group[] = [
     "omniroute_health", "omniroute_list_providers", "omniroute_list_combos", "list_nodes",
     "hermes_duty_heartbeat", "supervision_snapshot", "operator_runs_list", "operator_run_get", "operator_orders_list",
     "escalation_list", "agent_events_poll",
-    "search_lessons", "web_search", "fetch_page", "check_quote", "list_research_runs",
+    "search_lessons", "web_search", "fetch_page", "check_quote", "list_research_runs", "list_stage_feedback", "stage_quality_report",
   ]],
   ["settings.write", [
     "update_stage_timeouts", "update_notification_toggles", "propose_models", "apply_models", "update_llm_settings",
@@ -51,8 +58,9 @@ const GROUPS: readonly Group[] = [
     "update_omniroute_combos", "intel_fetch_page", "intel_submit_assessment", "intel_add_provider_stub",
     "intel_set_offer", "intel_run_job", "intel_write_report", "intel_extract_page", "intel_submit_benchmark",
     "intel_next_research_batch", "intel_mark_researched", "run_model_eval", "set_node_drain",
-    "record_lesson", "retire_lesson", "run_research",
+    "record_lesson", "retire_lesson", "run_research", "propose_stage_note", "decide_stage_note",
   ]],
+  ["mailbox.use", ["agent_send", "agent_inbox", "agent_ack", "agent_thread", "mission_get", "mission_set_plan", "mission_attach_project", "mission_move"]],
   ["secrets.write", ["omniroute_test_provider", "omniroute_set_provider_state", "omniroute_upsert_combo", "omniroute_delete_combo"]],
   ["automation.manage", [
     "set_profile_automation", "pause_automation_all", "resume_automation_all", "claim_skill_run",
@@ -61,7 +69,7 @@ const GROUPS: readonly Group[] = [
     "operator_order_upsert", "operator_order_disable", "operator_override", "escalation_claim", "escalation_resolve",
     "escalation_forward_to_user", "notify_user",
   ]],
-  ["operator.use", ["save_standing_order", "request_user_action", "computer_observe", "computer_act"]],
+  ["operator.use", ["save_standing_order", "request_user_action", "computer_observe", "computer_act", "mission_list", "mission_create", "mission_resume", "mission_cancel"]],
 ];
 
 /** Which workspace action each registry tool needs. A test keeps this in step with ASSISTANT_TOOLS. */

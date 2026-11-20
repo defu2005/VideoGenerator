@@ -8,7 +8,8 @@ import { generateRoutedStructured } from "../providers/llm/structured.js";
 import { autonomyBudgetStatus, hasAutonomySpendLimit } from "./autonomyBudget.js";
 import { UsageService } from "../services/usageService.js";
 
-function digestProject(): Project {
+/** Synthetic project used only to resolve the operatorPlan LLM route (also used by skillBehaviourEval). */
+export function digestProject(): Project {
   const now = new Date().toISOString();
   return {
     id: "00000000-0000-4000-8000-000000000059",

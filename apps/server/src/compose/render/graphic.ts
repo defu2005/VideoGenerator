@@ -149,6 +149,7 @@ async function renderGraphicShot(
       grain: ctx.graphicGrain === false ? false : ctx.graphicGrain === true ? true : undefined,
       stylePack: ctx.stylePack,
       videoStyle: ctx.videoStyle,
+      resolvePath: ctx.resolvePath,
     }),
     width: target.width,
     height: target.height,

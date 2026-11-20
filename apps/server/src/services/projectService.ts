@@ -23,7 +23,8 @@ import type { AppDatabase } from "../db/client.js";
 import { jobs, projects, type ProjectRow } from "../db/schema.js";
 import type { AppConfig } from "../lib/config.js";
 import { AppError } from "../lib/errors.js";
-import { createProjectDir, removeProjectDir } from "../storage/paths.js";
+import { createProjectDir } from "../storage/paths.js";
+import type { FileGc } from "../storage/fileGc.js";
 import type Database from "better-sqlite3";
 import { getGuidelineProfiles, normalizeGuidelineSettings } from "../guidelines/settings.js";
 import type { ProfileService } from "./profileService.js";
@@ -134,7 +135,12 @@ export function createProjectService(
   logger: FastifyBaseLogger,
   sqlite: Database.Database,
   profiles?: ProfileService,
+  fileGc?: FileGc,
 ) {
+  function markProjectFiles(id: string): void {
+    try { fileGc?.run({ projectId: id }); }
+    catch (error) { logger.warn({ err: error, projectId: id }, "Could not mark project files for storage cleanup"); }
+  }
   async function getProject(id: string): Promise<Project | undefined> {
     const row = await db.select().from(projects).where(eq(projects.id, id)).get();
     return row ? toProject(row) : undefined;
@@ -450,6 +456,7 @@ export function createProjectService(
       })
       .where(eq(projects.id, id))
       .run();
+    markProjectFiles(id);
     return getProject(id);
   }
 
@@ -461,14 +468,12 @@ export function createProjectService(
       .where(and(eq(jobs.projectId, id), inArray(jobs.status, ["QUEUED", "RUNNING"])))
       .get();
     if (activeJob || project.status === "GENERATING" || project.status === "RENDERING") return "busy";
+    const activeRun = sqlite.prepare("SELECT 1 FROM project_runs WHERE project_id=? AND status IN ('GRANTED','RUNNING','PAUSED_AT_GATE') LIMIT 1").get(id);
+    if (activeRun) return "busy";
 
     await db.update(projects).set({ parentProjectId: null, updatedAt: new Date().toISOString() }).where(eq(projects.parentProjectId, id)).run();
     await db.delete(projects).where(eq(projects.id, id)).run();
-    try {
-      removeProjectDir(config.DATA_DIR, id);
-    } catch (error) {
-      logger.warn({ err: error, projectId: id }, "Failed to remove project directory after deleting project");
-    }
+    markProjectFiles(id);
     return "deleted";
   }
 

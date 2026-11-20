@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from "node:crypto";
 import { recheckOriginalitySafely } from "../originality/recheckSafely.js";
-import { appendFileSync, copyFileSync, existsSync, mkdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { appendFileSync, copyFileSync, existsSync, mkdirSync, readFileSync, renameSync, statSync, writeFileSync } from "node:fs";
 import { dirname, isAbsolute, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import type Database from "better-sqlite3";
@@ -66,6 +66,7 @@ import { projectDir } from "../storage/paths.js";
 import type { TimelineService } from "./timelineService.js";
 import { footageCreditLines, footageLicences, prepareComposePlan, previewRenderEstimate, probeFreezeBlack, readComposePlan, renderSceneClip } from "./composeBridge.js";
 import { llmChoiceAnswers, prepareGraphicStyle } from "../compose/render/graphicStyle.js";
+import { clearPlanInputs, composeInputFingerprint, writePlanInputs } from "../compose/planInputs.js";
 import { recordFinishedLookSafely } from "../style/recordSafely.js";
 import { executeRender } from "../render/executeRender.js";
 import { readAppVersion } from "../render/appVersion.js";
@@ -482,33 +483,12 @@ export class RenderService {
     const row = this.rowById(projectId, renderId);
     if (!row) throw new AppError(404, "RENDER_NOT_FOUND", "Không tìm thấy bản render này.");
     if (row.deleted_at) return this.toVersion(row)!;
-    try {
-      this.removeVersionFiles(projectId, row);
-    } catch (error) {
-      if (isBusyError(error)) {
-        throw new AppError(409, "RENDER_IN_USE", "Không xoá được vì tệp đang được mở hoặc phát.");
-      }
-      throw error;
+    if (this.sqlite.prepare("SELECT 1 FROM publications WHERE render_id=? LIMIT 1").get(renderId)) {
+      throw new AppError(409, "RENDER_IN_USE", "Bản render đang được một bài đăng sử dụng.");
     }
     const deletedAt = this.now().toISOString();
-    this.sqlite.prepare("UPDATE renders SET deleted_at = ? WHERE id = ?").run(deletedAt, renderId);
+    this.sqlite.prepare("UPDATE renders SET deleted_at = ?, pinned = 0 WHERE id = ?").run(deletedAt, renderId);
     return this.getVersion(projectId, renderId);
-  }
-
-  private removeVersionFiles(projectId: string, row: RenderRow): void {
-    const versionFolder = this.versionDir(projectId, row.id);
-    if (existsSync(versionFolder)) {
-      rmSync(versionFolder, { recursive: true, force: false });
-      return;
-    }
-    // Legacy single-folder rows: only delete files if no other non-deleted row still points at them.
-    const stillUsed = this.sqlite.prepare(
-      "SELECT COUNT(*) AS n FROM renders WHERE project_id = ? AND id != ? AND deleted_at IS NULL AND (output_path = ? OR credits_path = ? OR srt_path = ?)",
-    ).get(projectId, row.id, row.output_path, row.credits_path, row.srt_path) as { n: number };
-    if (stillUsed.n > 0) return;
-    for (const path of [row.output_path, row.credits_path, row.srt_path]) {
-      if (path && existsSync(path)) rmSync(path, { force: false });
-    }
   }
 
   private nextVersionNumber(projectId: string): number {
@@ -600,15 +580,11 @@ export class RenderService {
     ).all(projectId) as RenderRow[];
     if (rows.length <= keep) return;
     const newestId = rows[0]?.id;
-    const removable = rows.slice(keep).filter((row) => !row.pinned && row.id !== newestId && !this.wasRecentlyRead(row.id));
+    const hasPublication = this.sqlite.prepare("SELECT 1 FROM publications WHERE render_id=? LIMIT 1");
+    const removable = rows.slice(keep).filter((row) => !row.pinned && row.id !== newestId && !this.wasRecentlyRead(row.id)
+      && !hasPublication.get(row.id));
     for (const row of removable) {
-      try {
-        this.removeVersionFiles(projectId, row);
-        this.sqlite.prepare("UPDATE renders SET deleted_at = ? WHERE id = ?").run(this.now().toISOString(), row.id);
-      } catch (error) {
-        if (isBusyError(error)) continue;
-        throw error;
-      }
+      this.sqlite.prepare("UPDATE renders SET deleted_at = ? WHERE id = ?").run(this.now().toISOString(), row.id);
     }
   }
 
@@ -752,6 +728,7 @@ export class RenderService {
     let composePlan: ComposePlan | null = null;
     let composeUsage: JobUsage | undefined;
     if (resolveEditEngine(project.settings.edit?.engine) === "compose") {
+      const inputFingerprint = composeInputFingerprint(this.sqlite, project, timeline);
       const prepared = await (this.composeHooks.plan ?? prepareComposePlan)({
         sqlite: this.sqlite,
         config: this.config,
@@ -761,11 +738,16 @@ export class RenderService {
         renderDir,
         registry: this.llmProviders,
         signal,
+        inputFingerprint,
       });
       composePlan = prepared.plan;
       composeUsage = prepared.usage;
       composeWarnings.push(...prepared.warnings);
-      if (composePlan) writeFileSync(join(renderDir, "compose-plan.json"), JSON.stringify(composePlan));
+      if (composePlan) {
+        clearPlanInputs(renderDir);
+        writeFileSync(join(renderDir, "compose-plan.json"), JSON.stringify(composePlan));
+        writePlanInputs(renderDir, inputFingerprint);
+      }
     }
     const budgetFeatures = resolveBudget(project.settings.budget ?? { mode: "BALANCED" });
     const recipeId = project.settings.format || project.settings.treatment?.formatId || "explainer";
@@ -906,6 +888,11 @@ export class RenderService {
     const videoStyle = bundle.videoStyle as ReturnType<typeof prepareGraphicStyle> | null;
     const budgetFeatures = { composeGraphics: bundle.composeGraphics, graphicGrain: bundle.graphicGrain };
     const { renderId, inputHash, outputAspect, projectAspect, isVariant, storedAspect } = state;
+    const existing = this.rowById(project.id, renderId);
+    if (existing?.status === "DONE" && existing.input_hash === inputHash) {
+      const render = this.toRender(existing);
+      if (render) return { render, reused: true };
+    }
     const composeWarnings = [...state.composeWarnings, ...executed.composeWarnings];
     const composeUsage = state.composeUsage ?? undefined;
     const versionFolder = this.versionDir(project.id, renderId);

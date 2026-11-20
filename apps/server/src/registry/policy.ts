@@ -35,7 +35,7 @@ function walkForbidden(value: unknown): string | null {
   }
   if (!value || typeof value !== "object") return null;
   for (const [key, child] of Object.entries(value as Record<string, unknown>)) {
-    if (/^(autonomy|grants|roles?|members?(\.manage)?|memberships?|channelIds|budget.*|repair|killed|ownerChatId|audit.*|agentKind|canSupervise)$/i.test(key)) {
+    if (/^(autonomy|grants|roles?|members?(\.manage)?|memberships?|channelIds|budget.*|repair|killed|ownerChatId|audit.*|agentKind|canSupervise|dailyUsdCap|relay[_-]?grants?)$/i.test(key)) {
       return "Công cụ không được đổi quyền tự vận hành, ngân sách hoặc nhật ký.";
     }
     if (/^(api[_-]?key|token|password|secret|credentials|paymentMethod|cardNumber)$/i.test(key) && child) {

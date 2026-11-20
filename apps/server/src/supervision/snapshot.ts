@@ -5,6 +5,8 @@ import { listLiveLeases } from "./leases.js";
 import { getOperatorPause } from "./pause.js";
 import { fleetOverview } from "../fleet/service.js";
 import { canReadStageFinding } from "../agents/releaseMonitor.js";
+import { storageHealth } from "../storage/health.js";
+import { readDiskPressure } from "../storage/diskPressure.js";
 
 export const SNAPSHOT_MAX_BYTES = 3000;
 const STUCK_JOB_MS = 30 * 60_000;
@@ -72,6 +74,15 @@ export function buildSupervisionSnapshot(sqlite: Database.Database, now = new Da
   }
   if (telegramConflict(sqlite)) {
     anomalies.push({ kind: "telegram_conflict", severity: "warn", ref: "telegram", detail: "Hai tiến trình cùng đọc bot Telegram (HTTP 409)." });
+  }
+  const storage = storageHealth(sqlite, now);
+  if (storage.fallback > 3) {
+    anomalies.push({ kind: "storage_fallback_active", severity: "warn", ref: "storage", detail: `${storage.fallback} lượt chuyển về máy chủ trong 30 phút.` });
+  }
+  const disk = readDiskPressure(sqlite, now);
+  if (disk) {
+    anomalies.push({ kind: "storage_disk_pressure", severity: disk.freePercent < 5 ? "high" : "warn", ref: "storage",
+      detail: `Ổ đĩa trống ${disk.freePercent.toFixed(1)}%. Xem các dự án chiếm nhiều chỗ trong Cài đặt Lưu trữ.` });
   }
 
   // Existing operational failures take precedence when the compact snapshot is full.

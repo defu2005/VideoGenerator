@@ -25,6 +25,7 @@ export async function buildRemoteBundle(
   bundle: RenderBundle,
   resolvePath: (name: string) => string,
   artifacts: ArtifactService,
+  onInput?: (input: { path: string; sha256: string; size: number }) => void,
 ): Promise<{ bundle: RenderBundle; files: ArtifactRef[] }> {
   const files = new Map<string, ArtifactRef>();
   const replaced = new Map<string, string>();
@@ -50,6 +51,7 @@ export async function buildRemoteBundle(
   const logical = new Map<string, string>();
   for (const { text, path } of pending) {
     const { sha256, size } = await artifacts.register(path);
+    onInput?.({ path, sha256, size });
     const name = logicalName(sha256, path);
     logical.set(text, name);
     files.set(sha256, { name, sha256, size });

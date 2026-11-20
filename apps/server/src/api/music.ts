@@ -6,6 +6,7 @@ import { AppError } from "../lib/errors.js";
 import { markStaleFrom } from "../pipeline/invalidation.js";
 import type { JobRepository } from "../jobs/jobRepository.js";
 import { AudioDownloadError } from "../services/audioStore.js";
+import { feedbackSourceFor } from "../learning/stageFeedback.js";
 import type { MusicService } from "../services/musicService.js";
 
 const ProjectParams = z.object({ id: z.string().uuid() }).strict();
@@ -98,7 +99,7 @@ export function registerMusicRoutes(
     const { id } = ProjectParams.parse(request.params);
     const project = await requireProject(id);
     const { candidateId } = MusicSelectRequestSchema.parse(request.body ?? {});
-    const result = await music.select(project, candidateId, "USER");
+    const result = await music.select(project, candidateId, "USER", undefined, feedbackSourceFor(request.actor));
     markStaleFrom(repository, id, "MUSIC_REVIEW");
     return result;
   });

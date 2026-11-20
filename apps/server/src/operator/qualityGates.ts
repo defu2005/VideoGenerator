@@ -4,6 +4,7 @@ import { checkNeighbouringSceneDuplicates, preRenderCheck, untrustedTextHasInstr
 import { localDateString } from "@vg/shared";
 import type Database from "better-sqlite3";
 import { readAutonomyBudget } from "./autonomyBudget.js";
+import { publishFindingOpened } from "./findingEvents.js";
 import { createUserRequest } from "./autopilot.js";
 import { currentDuty } from "../supervision/duty.js";
 import { openEscalation } from "../supervision/escalations.js";
@@ -260,12 +261,13 @@ export function publishGateCheck(
 export function flagUntrustedText(sqlite: Database.Database, dedupeKey: string, text: string): boolean {
   if (!untrustedTextHasInstructions(text)) return false;
   const at = new Date().toISOString();
-  sqlite.prepare(`INSERT INTO supervisor_findings
+  const raised = sqlite.prepare(`INSERT INTO supervisor_findings
     (id, profile_id, kind, severity, dedupe_key, detail, first_seen_at, last_seen_at, status)
     VALUES (?, NULL, 'untrusted_text', 'info', ?, ?, ?, ?, 'open')
     ON CONFLICT(dedupe_key) DO NOTHING`).run(
     randomUUID(), dedupeKey, JSON.stringify({ text: text.slice(0, 200) }), at, at,
   );
+  if (raised.changes) publishFindingOpened(sqlite, { summary: "Văn bản không đáng tin có chỉ dẫn lạ", profileId: null });
   return true;
 }
 
@@ -286,7 +288,7 @@ export function notePublicationClaim(sqlite: Database.Database, input: {
     sqlite.prepare("UPDATE profiles SET automation = ? WHERE id = ?").run(JSON.stringify(automation), row.profile_id);
   }
   const at = new Date().toISOString();
-  sqlite.prepare(`INSERT INTO supervisor_findings
+  const struck = sqlite.prepare(`INSERT INTO supervisor_findings
     (id, profile_id, kind, severity, dedupe_key, detail, first_seen_at, last_seen_at, status)
     VALUES (?, ?, 'strike', 'critical', ?, ?, ?, ?, 'open')
     ON CONFLICT(dedupe_key) DO NOTHING`).run(
@@ -297,6 +299,7 @@ export function notePublicationClaim(sqlite: Database.Database, input: {
     at,
     at,
   );
+  if (struck.changes) publishFindingOpened(sqlite, { summary: "Vi phạm nghiêm trọng: bài bị gỡ khỏi hàng đăng", profileId: row.profile_id });
   createUserRequest(sqlite, {
     profileId: row.profile_id,
     kind: "info",

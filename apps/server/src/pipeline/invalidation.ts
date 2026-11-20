@@ -11,7 +11,10 @@ export function markStaleFrom(repository: JobRepository, projectId: string, stag
         message: null,
         jobId: null,
         error: null,
+        inputVersion: null,
       });
+    } else if (record.state === "RUNNING" || record.state === "QUEUED") {
+      repository.flagInvalidatedJobs(projectId, laterStage);
     }
   }
 }

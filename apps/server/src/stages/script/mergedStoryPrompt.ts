@@ -1,6 +1,7 @@
 import { appendChannelDirection, type BudgetFeatures, type Project } from "@vg/shared";
 import { appendGuidelineGuidance } from "../../guidelines/promptText.js";
-import { formatLine, marketScriptLine } from "./prompt.js";
+import { formatGuidance, formatLine, marketScriptLine } from "./prompt.js";
+import { narrationRulesBlock, WRITER_SYSTEM } from "./narrationRules.js";
 
 export function mergedStoryPrompt(
   project: Project,
@@ -17,7 +18,8 @@ export function mergedStoryPrompt(
     system: [
       "You are generating a merged story: research notes and a documentary script in one response.",
       "Research from model knowledge only; mark uncertainty and never invent URLs.",
-      "Write narration in the requested language. Keep image search terms in English and retain proper nouns.",
+      WRITER_SYSTEM,
+      "Keep image search terms in English and retain proper nouns.",
       "Return compact JSON only with research and script fields exactly as requested.",
     ].join(" "),
     prompt: appendGuidelineGuidance(appendChannelDirection([
@@ -28,6 +30,8 @@ export function mergedStoryPrompt(
       `Style: ${project.settings.style}; tone: ${project.settings.tone}; audience: ${project.settings.audience}; platform: ${project.settings.platform}${pacing}`,
       `Target duration: ${project.settings.targetDurationSec} seconds`,
       formatLine(project),
+      formatGuidance(project),
+      narrationRulesBlock(),
       `Speaking pace: ${pace} words per minute`,
       "Return {research:{summary,keyFacts,timeline,angles,outline,cautions},script:{title,hook,sections,outro,music}}.",
       `Research: ${factTargets[depth]} keyFacts[{fact,confidence,sourceHint|null}], at most 10 timeline[{date,event}] and 6 cautions[string]; outline 3-8 items [{section,purpose,points[string]}].`,

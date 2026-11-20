@@ -23,11 +23,14 @@ import type { PipelineOrchestrator } from "../pipeline/orchestrator.js";
 import type { JobRepository } from "../jobs/jobRepository.js";
 import { readAppVersion } from "../render/appVersion.js";
 import { hashToken, newJoinToken, newNodeToken } from "./tokens.js";
+import { defaultWorkspaceId } from "../auth/workspaces.js";
+import { publishAgentEvent } from "../events/agentBus.js";
 
 export const JOIN_TOKEN_TTL_MS = 60 * 60 * 1000;
 export const NODE_OFFLINE_AFTER_MS = 45_000;
 
 export type NodeRow = {
+  workspace_id?: string | null;
   id: string;
   name: string;
   token_hash: string | null;
@@ -71,6 +74,17 @@ export class NodeService {
   onReleased?: (jobId: string) => void;
   /** A node reported a lease the server no longer honours. Secrets of that lease must go. */
   onCancelled?: (jobId: string, leaseId: string) => void;
+  projectRuns?: {
+    heartbeat(node: Pick<NodeRow, "id">, runId: string, leaseId: string): unknown;
+    expire(): number;
+  };
+
+  private lastHeartbeats = new Map<string, { key: string; writtenAt: number }>();
+
+  /** Clear the in-memory heartbeat coalescing cache (for tests). */
+  clearHeartbeatCache(): void {
+    this.lastHeartbeats.clear();
+  }
 
   constructor(
     private readonly sqlite: Database.Database,
@@ -86,8 +100,8 @@ export class NodeService {
     const createdAt = this.now();
     const expiresAt = new Date(createdAt.getTime() + JOIN_TOKEN_TTL_MS).toISOString();
     this.sqlite.prepare(
-      "INSERT INTO node_join_tokens (id, token_hash, created_by, created_at, expires_at) VALUES (?, ?, ?, ?, ?)",
-    ).run(id, hashToken(token), actor?.userId ?? null, createdAt.toISOString(), expiresAt);
+      "INSERT INTO node_join_tokens (id, token_hash, created_by, created_at, expires_at, workspace_id) VALUES (?, ?, ?, ?, ?, ?)",
+    ).run(id, hashToken(token), actor?.userId ?? null, createdAt.toISOString(), expiresAt, actor?.workspaceId ?? null);
     writeAudit(this.sqlite, {
       workspaceId: actor?.workspaceId ?? null,
       action: "node.join_token_created",
@@ -121,6 +135,8 @@ export class NodeService {
          VALUES (?, ?, ?, 'online', ?, ?, ?, ?, ?, ?, ?, ?)`,
       ).run(nodeId, input.name, hashToken(nodeToken), input.version, JSON.stringify(capabilities), JSON.stringify(input.resources),
         JSON.stringify(desired), at, at, input.probe ? JSON.stringify(input.probe) : null, JSON.stringify(cleanInfo(input.capabilityInfo, capabilities)));
+      this.sqlite.prepare(`UPDATE nodes SET workspace_id=(SELECT workspace_id FROM node_join_tokens WHERE used_by_node_id=?) WHERE id=?`)
+        .run(nodeId, nodeId);
     })();
     writeAudit(this.sqlite, {
       action: "node.joined", targetType: "node", targetId: nodeId, outcome: "ok", source: "system",
@@ -155,7 +171,8 @@ export class NodeService {
     resources: unknown;
     probe?: NodeProbe;
     running: Array<{ jobId: string; leaseId: string; progress: number; message?: string }>;
-  }): { desiredConfig: NodeDesiredConfig; targetVersion: string | null; cancel: string[] } {
+    projectRuns?: Array<{ runId: string; leaseId: string }>;
+  }): { desiredConfig: NodeDesiredConfig; targetVersion: string | null; cancel: string[]; cancelRuns?: string[] } {
     const desired = this.desiredOf(node);
     const at = this.now();
     const until = new Date(at.getTime() + this.config.NODE_LEASE_SEC * 1000).toISOString();
@@ -167,20 +184,44 @@ export class NodeService {
       desired.capabilities = [...desired.capabilities, ...fresh];
       this.sqlite.prepare("UPDATE nodes SET desired_config = ? WHERE id = ?").run(JSON.stringify(desired), node.id);
     }
-    this.sqlite.prepare(
-      "UPDATE nodes SET last_seen_at = ?, version = ?, capabilities = ?, capability_info = ?, resources = ?, status = ?, probe = COALESCE(?, probe) WHERE id = ?",
-    ).run(at.toISOString(), body.version, JSON.stringify(capabilities), JSON.stringify(cleanInfo(body.capabilityInfo, capabilities)), JSON.stringify(body.resources), this.statusFor(desired, body.version),
-      body.probe ? JSON.stringify(body.probe) : null, node.id);
+    const desiredStatus = this.statusFor(desired, body.version);
+    const cleanedCaps = JSON.stringify(capabilities);
+    const cleanedInfoJson = JSON.stringify(cleanInfo(body.capabilityInfo, capabilities));
+    const resourcesJson = JSON.stringify(body.resources);
+    const probeJson = body.probe ? JSON.stringify(body.probe) : null;
+    const stateKey = `${body.version}|${cleanedCaps}|${cleanedInfoJson}|${resourcesJson}|${desiredStatus}|${probeJson}`;
+
+    const last = this.lastHeartbeats.get(node.id);
+    const COALESCE_INTERVAL_MS = 15_000;
+    const isUnchanged = last && last.key === stateKey && (at.getTime() - last.writtenAt < COALESCE_INTERVAL_MS);
+
+    if (!isUnchanged) {
+      this.sqlite.prepare(
+        "UPDATE nodes SET last_seen_at = ?, version = ?, capabilities = ?, capability_info = ?, resources = ?, status = ?, probe = COALESCE(?, probe) WHERE id = ?",
+      ).run(at.toISOString(), body.version, cleanedCaps, cleanedInfoJson, resourcesJson, desiredStatus, probeJson, node.id);
+      this.lastHeartbeats.set(node.id, { key: stateKey, writtenAt: at.getTime() });
+      // TASK-129a §1: a worker coming back from offline is one transition, announced once.
+      if (node.status === "offline" && desiredStatus !== "offline") {
+        publishAgentEvent({ type: "node_online", summary: `Máy worker "${node.name}" đã kết nối lại (trạng thái: ${desiredStatus}).`.slice(0, 200) }, { workspaceId: node.workspace_id ?? (defaultWorkspaceId(this.sqlite) ?? undefined) });
+      }
+    }
     const cancel: string[] = [];
+    const workspace = this.get(node.id)?.workspace_id;
     for (const item of body.running) {
       const job = this.repository.getJob(item.jobId);
       const lease = this.repository.getJobLease(item.jobId);
-      if (!job || job.status !== "RUNNING" || !lease || lease.nodeId !== node.id || lease.leaseId !== item.leaseId) {
+      const project = job && this.sqlite.prepare("SELECT workspace_id FROM projects WHERE id=?").get(job.projectId) as { workspace_id: string | null } | undefined;
+      if (!job || job.status !== "RUNNING" || !lease || lease.nodeId !== node.id || lease.leaseId !== item.leaseId
+        || (workspace && (!project || workspace !== (project.workspace_id ?? defaultWorkspaceId(this.sqlite))))) {
         cancel.push(item.jobId);
         this.onCancelled?.(item.jobId, item.leaseId);
         continue;
       }
-      this.repository.setJobLease(item.jobId, { nodeId: node.id, leaseId: item.leaseId, leaseUntil: until, heartbeatAt: at.toISOString() });
+      const remainingLeaseMs = lease ? new Date(lease.leaseUntil).getTime() - at.getTime() : 0;
+      const leaseFresh = remainingLeaseMs > (this.config.NODE_LEASE_SEC * 1000) / 2;
+      if (!leaseFresh) {
+        this.repository.setJobLease(item.jobId, { nodeId: node.id, leaseId: item.leaseId, leaseUntil: until, heartbeatAt: at.toISOString() });
+      }
       this.orchestrator.reportProgress(
         item.jobId,
         Math.max(1, Math.min(99, Math.round(item.progress))),
@@ -188,7 +229,18 @@ export class NodeService {
       );
     }
     const target = readAppVersion();
-    return { desiredConfig: desired, targetVersion: body.version === target ? null : target, cancel };
+    const cancelRuns: string[] = [];
+    for (const item of body.projectRuns ?? []) {
+      try {
+        if (!this.projectRuns) cancelRuns.push(item.runId);
+        else this.projectRuns.heartbeat(node, item.runId, item.leaseId);
+      } catch (error) {
+        if (!(error instanceof AppError) || ![401, 409].includes(error.statusCode)) throw error;
+        cancelRuns.push(item.runId);
+      }
+    }
+    return { desiredConfig: desired, targetVersion: body.version === target ? null : target, cancel,
+      ...(body.projectRuns ? { cancelRuns } : {}) };
   }
 
   list(): VideoNode[] {
@@ -271,7 +323,8 @@ export class NodeService {
     if (!row) throw new AppError(404, "NODE_NOT_FOUND", "Không thấy máy worker này.");
     if (row.revoked_at) return;
     this.sqlite.prepare("UPDATE nodes SET revoked_at = ?, token_hash = NULL, status = 'revoked' WHERE id = ?").run(this.now().toISOString(), id);
-    const jobs = this.sqlite.prepare("SELECT id FROM jobs WHERE node_id = ? AND status = 'RUNNING'").all(id) as Array<{ id: string }>;
+    this.sqlite.prepare("UPDATE project_runs SET status='CANCELLED',ended_at=?,end_reason='NODE_REVOKED' WHERE node_id=? AND status IN ('GRANTED','RUNNING')").run(this.now().toISOString(), id);
+    const jobs = this.sqlite.prepare("SELECT id FROM jobs WHERE node_id = ? AND status = 'RUNNING' AND finalizing_at IS NULL").all(id) as Array<{ id: string }>;
     for (const { id: jobId } of jobs) {
       this.orchestrator.failJob(jobId, { code: "NODE_LOST", message: `Máy worker "${row.name}" đã bị thu hồi nên bước dựng chạy lại.`, retryable: true });
       this.repository.setJobLease(jobId, null);
@@ -285,13 +338,22 @@ export class NodeService {
 
   /** Every 10 s: quiet nodes turn offline; jobs whose lease ran out go back to the queue (or fail NODE_LOST). */
   sweep(): void {
+    this.projectRuns?.expire();
     const now = this.now();
+    // TASK-129a §1: announce only the nodes this sweep actually flips to offline (one event per transition).
+    const quietBefore = new Date(now.getTime() - NODE_OFFLINE_AFTER_MS).toISOString();
+    const flipping = this.sqlite.prepare(
+      "SELECT name, workspace_id AS w FROM nodes WHERE revoked_at IS NULL AND status != 'offline' AND (last_seen_at IS NULL OR last_seen_at < ?)",
+    ).all(quietBefore) as Array<{ name: string; w: string | null }>;
     this.sqlite.prepare(
       "UPDATE nodes SET status = 'offline' WHERE revoked_at IS NULL AND status != 'offline' AND (last_seen_at IS NULL OR last_seen_at < ?)",
-    ).run(new Date(now.getTime() - NODE_OFFLINE_AFTER_MS).toISOString());
+    ).run(quietBefore);
+    for (const row of flipping) {
+      publishAgentEvent({ type: "node_offline", summary: `Máy worker "${row.name}" mất kết nối (offline).`.slice(0, 200) }, { workspaceId: row.w ?? (defaultWorkspaceId(this.sqlite) ?? undefined) });
+    }
     const expired = this.sqlite.prepare(
       `SELECT j.id AS id, n.name AS name FROM jobs j LEFT JOIN nodes n ON n.id = j.node_id
-       WHERE j.node_id IS NOT NULL AND j.status = 'RUNNING' AND j.lease_until < ?`,
+       WHERE j.node_id IS NOT NULL AND j.status = 'RUNNING' AND j.finalizing_at IS NULL AND j.lease_until < ?`,
     ).all(now.toISOString()) as Array<{ id: string; name: string | null }>;
     for (const row of expired) {
       this.orchestrator.failJob(row.id, {

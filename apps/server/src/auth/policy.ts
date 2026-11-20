@@ -3,7 +3,7 @@ import { WORKSPACE_ROLES, type WorkspaceRole } from "./roles.js";
 
 export const ACTIONS = [
   "project.read", "project.write",
-  "stage.run", "gate.approve",
+  "stage.run", "gate.approve", "mailbox.use",
   "publish",
   "channel.read", "channel.manage",
   "comments.reply",
@@ -29,7 +29,7 @@ export const FORBIDDEN_MESSAGE = "Bạn không có quyền làm việc này.";
 export const NOT_FOUND_MESSAGE = "Không tìm thấy.";
 
 const READ: Action[] = ["project.read", "channel.read", "analytics.read", "finance.read"];
-const EDITOR: Action[] = [...READ, "project.write", "stage.run", "settings.read"];
+const EDITOR: Action[] = [...READ, "project.write", "stage.run", "mailbox.use", "settings.read"];
 const REVIEWER: Action[] = [...EDITOR, "gate.approve"];
 const PUBLISHER: Action[] = [...REVIEWER, "publish", "comments.reply"];
 const ADMIN: Action[] = [

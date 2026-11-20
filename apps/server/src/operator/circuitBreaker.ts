@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import type Database from "better-sqlite3";
 import { PipelineStageSchema, type PipelineStage } from "@vg/shared";
 import { z } from "zod";
+import { findingWillOpen, publishFindingOpened } from "./findingEvents.js";
 
 const HOUR = 3_600_000;
 const PREFIX = "autonomy.breaker.";
@@ -72,6 +73,7 @@ export function recordBreakerOutcome(
   const delayMs = Math.min(24 * HOUR, state.delayMs ? 2 * state.delayMs : HOUR);
   const retryAt = new Date(now.getTime() + delayMs).toISOString();
   write(db, id, { history, retryAt, delayMs, trialJobId: null }, at);
+  const findingWasOpen = findingWillOpen(db, dedupeKey);
   db.prepare(`INSERT INTO supervisor_findings
     (id, profile_id, kind, severity, dedupe_key, detail, first_seen_at, last_seen_at, status)
     VALUES (?, ?, 'breaker_open', 'warn', ?, ?, ?, ?, 'open')
@@ -79,6 +81,7 @@ export function recordBreakerOutcome(
       first_seen_at = CASE WHEN status = 'resolved' THEN excluded.first_seen_at ELSE first_seen_at END,
       status = 'open', resolution = NULL`)
     .run(randomUUID(), profileId, dedupeKey, JSON.stringify({ stage, retryAt, delayMs }), at, at);
+  if (findingWasOpen) publishFindingOpened(db, { summary: `Cầu dao mở cho ${stage}`, profileId });
   return retryAt;
 }
 

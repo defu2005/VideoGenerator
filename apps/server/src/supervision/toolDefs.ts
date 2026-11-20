@@ -1,6 +1,7 @@
 import { z } from "zod";
 import type { AssistantToolContext, AssistantToolDef } from "../assistant/tools.js";
 import { listAgentEvents } from "../events/agentBus.js";
+import { currentWorkspaceId } from "../auth/requestContext.js";
 import { operatorToolHooks, type OperatorSupervisorHooks } from "../operator/hooks.js";
 import { undoAudit } from "../operator/undo.js";
 import { AppError } from "../lib/errors.js";
@@ -10,6 +11,7 @@ import {
 } from "./escalations.js";
 import type { TrustedAgent } from "./identity.js";
 import { clearPauseBy, MAX_HERMES_PAUSE_MIN, pauseByHermes } from "./pause.js";
+import { missionToolDefs } from "../missions/toolDefs.js";
 import { buildSupervisionSnapshot } from "./snapshot.js";
 
 /** The caller's trusted identity, filled in by the registry from the machine key. */
@@ -196,8 +198,9 @@ export const supervisionToolDefs: AssistantToolDef[] = [
   supervised({
     name: "agent_events_poll", description: "Lấy sự kiện mới sau sinceId, theo thứ tự cũ đến mới.", risk: "read", argsSchema: pollArgs,
     summarize: () => "Lấy sự kiện mới",
-  }, (args) => {
-    const all = listAgentEvents({ since: args.sinceId, types: args.kinds, limit: 500 });
+  }, (args, ctx) => {
+    // Scoped to the caller's workspace, failing closed: mailbox events of another workspace never reach this poll.
+    const all = listAgentEvents({ since: args.sinceId, types: args.kinds, workspaceId: currentWorkspaceId(ctx.sqlite) ?? "", limit: 500 });
     const events = all.slice(0, args.limit);
     return { events, lastId: events.at(-1)?.id ?? args.sinceId ?? null, more: all.length > events.length };
   }),
@@ -215,4 +218,6 @@ export const supervisionToolDefs: AssistantToolDef[] = [
     if (sent) notifyTimes.push(now);
     return { ok: sent, ...(sent ? {} : { code: "TELEGRAM_OFF", message: "Telegram chưa bật." }) };
   }),
+  // TASK-129c: mission tools (own on-duty check and owner check; see missions/toolDefs.ts).
+  ...missionToolDefs,
 ];

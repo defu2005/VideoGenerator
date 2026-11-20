@@ -22,6 +22,7 @@ import { projectDir } from "../storage/paths.js";
 import { resolveLibraryFile } from "../providers/music/local.js";
 import { UNKNOWN_LICENSE, type MusicSearchProvider, type MusicSearchResult } from "../providers/music/types.js";
 import { AudioDownloadError, MAX_AUDIO_BYTES, audioMimeType, type AudioStore } from "./audioStore.js";
+import { captureStageFeedback } from "../learning/stageFeedback.js";
 
 const KEEP_CANDIDATES = 12;
 const PER_PROVIDER = 20;
@@ -126,6 +127,20 @@ function toSelection(row: SelectionRow): MusicSelection {
     updatedAt: row.updated_at,
   };
 }
+
+export type AgentMusicStoredItem = {
+  itemId: string;
+  title: string;
+  artist: string | null;
+  sourceUrl: string | null;
+  audioUrl: string | null;
+  durationSec: number | null;
+  genres: string[];
+  tags: string[];
+  license: LicenseMetadata;
+  score: number;
+  localPath: string;
+};
 
 export class MusicService {
   constructor(
@@ -309,7 +324,7 @@ export class MusicService {
   }
 
   /** Download (if needed), probe and approve a candidate. */
-  async select(project: Project, candidateId: string, selectedBy: "AGENT" | "USER", signal?: AbortSignal): Promise<ProjectMusic> {
+  async select(project: Project, candidateId: string, selectedBy: "AGENT" | "USER", signal?: AbortSignal, source?: string | null): Promise<ProjectMusic> {
     const row = this.candidateRow(project.id, candidateId);
     if (!row) throw new AppError(404, "MUSIC_CANDIDATE_NOT_FOUND", "Music candidate not found.");
     this.ensureSelection(project);
@@ -338,10 +353,21 @@ export class MusicService {
     } catch {
       // Keep the provider's duration when ffprobe is unavailable.
     }
+    const previous = this.sqlite.prepare(
+      "SELECT s.candidate_id AS candidateId, c.title AS title, c.provider AS provider, c.provider_item_id AS itemId FROM music_selections s LEFT JOIN music_candidates c ON c.id = s.candidate_id WHERE s.project_id = ?",
+    ).get(project.id) as { candidateId: string | null; title: string | null; provider: string | null; itemId: string | null } | undefined;
     const now = this.now().toISOString();
     this.sqlite.prepare("UPDATE music_candidates SET local_path = ?, duration_sec = ? WHERE id = ?").run(localPath, durationSec, row.id);
     this.sqlite.prepare("UPDATE music_selections SET candidate_id = ?, status = 'APPROVED', selected_by = ?, updated_at = ? WHERE project_id = ?")
       .run(row.id, selectedBy, now, project.id);
+    // Only a user pick of a different track than the previous one is feedback. First picks and agent or auto picks are not.
+    if (source && selectedBy === "USER" && previous?.candidateId && previous.candidateId !== row.id) {
+      captureStageFeedback(this.sqlite, {
+        projectId: project.id, stage: "MUSIC_REVIEW", kind: "swap", target: "music",
+        before: previous?.candidateId ? { provider: previous.provider, id: previous.itemId, title: previous.title } : null,
+        after: { provider: row.provider, id: row.provider_item_id, title: row.title }, source,
+      });
+    }
     return this.getProjectMusic(project);
   }
 
@@ -397,6 +423,40 @@ export class MusicService {
     this.sqlite.prepare("UPDATE music_selections SET candidate_id = ?, status = 'APPROVED', selected_by = 'USER', updated_at = ? WHERE project_id = ?")
       .run(id, now, project.id);
     return this.getProjectMusic(project);
+  }
+
+  /** TASK-147c: store candidates a music scout agent found and that the app already downloaded and screened. The app, not the agent, then makes the review pick. */
+  addAgentCandidates(project: Project, items: AgentMusicStoredItem[], marker: string): ProjectMusic {
+    this.ensureSelection(project);
+    const now = this.now().toISOString();
+    this.sqlite.transaction(() => {
+      // Each lease marks its rows (input_hash is write-only today, so no migration). Unselected agent rows from older leases go.
+      this.sqlite.prepare(`DELETE FROM music_candidates WHERE project_id = ? AND provider = 'agent' AND input_hash != ?
+        AND id NOT IN (SELECT candidate_id FROM music_selections WHERE project_id = ? AND candidate_id IS NOT NULL)`).run(project.id, marker, project.id);
+      items.forEach((item, index) => {
+        const existing = this.sqlite.prepare("SELECT id FROM music_candidates WHERE project_id = ? AND provider = 'agent' AND provider_item_id = ?")
+          .get(project.id, item.itemId) as { id: string } | undefined;
+        const id = existing?.id ?? randomUUID();
+        this.sqlite.prepare(`INSERT INTO music_candidates (id, project_id, provider, provider_item_id, title, artist, source_url, audio_url, duration_sec, genres, tags, license, relevance_score, score_breakdown, rank, local_path, input_hash, created_at)
+          VALUES (?, ?, 'agent', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          ON CONFLICT(id) DO UPDATE SET title = excluded.title, artist = excluded.artist, source_url = excluded.source_url, audio_url = excluded.audio_url,
+            duration_sec = excluded.duration_sec, genres = excluded.genres, tags = excluded.tags, license = excluded.license,
+            relevance_score = excluded.relevance_score, score_breakdown = excluded.score_breakdown, rank = excluded.rank, local_path = excluded.local_path,
+            input_hash = excluded.input_hash`).run(
+          id, project.id, item.itemId, item.title, item.artist, item.sourceUrl, item.audioUrl, item.durationSec,
+          JSON.stringify(item.genres), JSON.stringify(item.tags), JSON.stringify(item.license), item.score, JSON.stringify({ agent: item.score }),
+          index, item.localPath, marker, now,
+        );
+      });
+    })();
+    this.preselectTop(project);
+    return this.getProjectMusic(project);
+  }
+
+  /** Agent rows one lease stored with local files. */
+  agentRowsFor(projectId: string, marker: string): Array<{ provider_item_id: string }> {
+    return this.sqlite.prepare("SELECT provider_item_id FROM music_candidates WHERE project_id = ? AND provider = 'agent' AND input_hash = ? AND local_path IS NOT NULL")
+      .all(projectId, marker) as Array<{ provider_item_id: string }>;
   }
 
   /** Local audio for a candidate: the downloaded copy, or the library file itself. */

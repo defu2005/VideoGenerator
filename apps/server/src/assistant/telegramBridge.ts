@@ -18,6 +18,8 @@ export function installAssistantTelegramHandlers(
       handleTelegram: (input: { chatId: string; text: string }) => Promise<boolean>;
       setOrderEnabled: (id: string, enabled: boolean) => void;
     };
+    /** TASK-129c: `/mission` handler; receives the text after the command and returns an HTML reply. */
+    mission?: (args: string) => string;
   },
 ): void {
   poller.setMessageHandler(async (input) => {
@@ -38,6 +40,7 @@ export function installAssistantTelegramHandlers(
           "/stop — dừng lượt operator",
           "/new — phiên operator mới",
           "/orders — lệnh thường trực",
+          "/mission — tạo, xem, gỡ chờ hoặc huỷ mission",
           "/autonomy — xem mức tự vận hành",
           "/goal — lưu mục tiêu",
           "/feedback — lưu quy tắc",
@@ -46,6 +49,18 @@ export function installAssistantTelegramHandlers(
           "/help — trợ giúp",
         ].join("\n"),
       );
+      return;
+    }
+
+    if (base === "/mission" && options.mission) {
+      const args = input.text.trim().replace(/^\S+\s*/, "");
+      let reply: string;
+      try {
+        reply = options.mission(args);
+      } catch (error) {
+        reply = `Lỗi mission: ${escapeHtml(error instanceof Error ? error.message : String(error))}`;
+      }
+      await client.sendMessage(input.chatId, reply);
       return;
     }
 

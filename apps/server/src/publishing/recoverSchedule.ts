@@ -3,6 +3,7 @@ import type Database from "better-sqlite3";
 import { PROTECTED_PROJECT_ID, ProfileAutomationSchema, enumerateSlots } from "@vg/shared";
 import { effectiveAutonomy } from "../operator/autonomy.js";
 import { getAutomationPaused } from "../services/automationSettings.js";
+import { publishFindingOpened } from "../operator/findingEvents.js";
 
 const GRACE_MS = 2 * 60 * 60_000;
 
@@ -11,7 +12,8 @@ export function recoverMissedPublications(db: Database.Database, lastHeartbeat: 
   const summary = { rescheduled: 0, needsReview: 0 };
   const at = now.toISOString();
   const staleBefore = new Date(now.getTime() - GRACE_MS).toISOString();
-  return db.transaction(() => {
+  const openedMissed: { profileId: string; projectId: string }[] = [];
+  const committed = db.transaction(() => {
     const rows = db.prepare(`SELECT p.id, p.project_id, p.account_id, p.scheduled_for, profile.id AS profile_id, profile.automation
       FROM publications p JOIN projects project ON project.id = p.project_id
       JOIN profiles profile ON profile.id = project.profile_id
@@ -71,14 +73,19 @@ export function recoverMissedPublications(db: Database.Database, lastHeartbeat: 
         db.prepare(`UPDATE jobs SET status = 'CANCELLED', finished_at = ?, message = ?
           WHERE project_id = ? AND stage = 'PUBLISH' AND scope = ? AND status = 'QUEUED'`)
           .run(at, message, row.project_id, row.id);
-        db.prepare(`INSERT OR IGNORE INTO supervisor_findings
+        const missed = db.prepare(`INSERT OR IGNORE INTO supervisor_findings
           (id, profile_id, kind, severity, dedupe_key, detail, first_seen_at, last_seen_at, status, resolution)
           VALUES (?, ?, 'missed_publish', ?, ?, ?, ?, ?, ?, ?)`)
           .run(randomUUID(), row.profile_id, next ? "info" : "warn", `missed_publish:${row.id}:${row.scheduled_for}`,
             JSON.stringify({ publicationId: row.id, scheduledFor: row.scheduled_for, rescheduledTo: next ?? null }),
             at, at, next ? "resolved" : "open", next ? message : null);
+        if (missed.changes && !next) openedMissed.push({ profileId: row.profile_id, projectId: row.project_id });
       }
     }
     return summary;
   }).immediate();
+  for (const item of openedMissed) {
+    publishFindingOpened(db, { summary: "Lịch đăng bị lỡ hơn hai giờ; cần kiểm tra nội dung", profileId: item.profileId, projectId: item.projectId });
+  }
+  return committed;
 }

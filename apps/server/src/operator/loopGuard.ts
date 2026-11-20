@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type Database from "better-sqlite3";
 import { operatorActionKey } from "./checkpoints.js";
+import { findingWillOpen, publishFindingOpened } from "./findingEvents.js";
 
 const WINDOW_MS = 6 * 60 * 60 * 1000;
 const RETENTION_MS = 7 * 24 * 60 * 60 * 1000;
@@ -11,7 +12,8 @@ export function claimOperatorAction(
   const actionKey = operatorActionKey(tool, args);
   const timestamp = now.toISOString();
   const cutoff = new Date(now.getTime() - WINDOW_MS).toISOString();
-  return db.transaction(() => {
+  let opened: string | null = null;
+  const result = db.transaction(() => {
     db.prepare("DELETE FROM operator_action_attempts WHERE attempted_at < ?")
       .run(new Date(now.getTime() - RETENTION_MS).toISOString());
     const { count: thisRun } = db.prepare(
@@ -22,21 +24,27 @@ export function claimOperatorAction(
     ).get(actionKey, cutoff, timestamp) as { count: number };
     if (thisRun >= 2 || failedRuns >= 3) {
       const reason = thisRun >= 2 ? "same_run" : "failed_runs";
+      const findingKey = `loop_guard:${reason}:${actionKey}`;
+      const opens = findingWillOpen(db, findingKey);
       db.prepare(`INSERT INTO supervisor_findings
         (id, kind, severity, dedupe_key, detail, first_seen_at, last_seen_at, status)
         VALUES (?, 'loop_guard', 'warn', ?, ?, ?, ?, 'open')
         ON CONFLICT(dedupe_key) DO UPDATE SET detail = excluded.detail, last_seen_at = excluded.last_seen_at,
           status = 'open', resolution = NULL`).run(
-        randomUUID(), `loop_guard:${reason}:${actionKey}`,
+        randomUUID(), findingKey,
         JSON.stringify({ tool, runId, reason, failedRuns }), timestamp, timestamp,
       );
-      return { message: thisRun >= 2 ? "Đã dừng thao tác lặp lần thứ ba trong lượt này."
-        : "Đã dừng thao tác đã lỗi trong ba lượt trong sáu giờ qua." };
+      const message = thisRun >= 2 ? "Đã dừng thao tác lặp lần thứ ba trong lượt này."
+        : "Đã dừng thao tác đã lỗi trong ba lượt trong sáu giờ qua.";
+      if (opens) opened = message;
+      return { message };
     }
     const attempt = db.prepare("INSERT INTO operator_action_attempts (action_key, run_id, attempted_at) VALUES (?, ?, ?)")
       .run(actionKey, runId, timestamp);
     return { attemptId: attempt.lastInsertRowid };
   }).immediate();
+  if (opened) publishFindingOpened(db, { summary: opened, profileId: null });
+  return result;
 }
 
 export function recordOperatorActionFailure(db: Database.Database, attemptId: number | bigint, now = new Date()): void {

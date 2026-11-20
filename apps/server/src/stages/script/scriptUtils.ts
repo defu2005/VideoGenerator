@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import type { Project, Script } from "@vg/shared";
+import { storyEngineForProject, type Project, type Script } from "@vg/shared";
 
 export function scriptInputHash(project: Project, researchInputHash?: string): string {
   return createHash("sha256").update(JSON.stringify([
@@ -9,6 +9,7 @@ export function scriptInputHash(project: Project, researchInputHash?: string): s
     ...(project.settings.market ? [project.settings.market] : []),
     project.settings.targetDurationSec,
     researchInputHash ?? null,
+    storyEngineForProject(project),
   ])).digest("hex");
 }
 

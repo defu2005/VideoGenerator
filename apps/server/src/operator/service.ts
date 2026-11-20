@@ -2,6 +2,7 @@ import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync, write
 import { stampWorkspace } from "../auth/requestContext.js";
 import { spawn } from "node:child_process";
 import { createHash, randomUUID } from "node:crypto";
+import { findingWillOpen, publishFindingOpened } from "./findingEvents.js";
 import { dirname, join, resolve } from "node:path";
 import type Database from "better-sqlite3";
 import {
@@ -25,7 +26,12 @@ import { readQuotaStatus } from "../providers/llm/quota.js";
 import { resolveCursorRuntime } from "./cursorRuntime.js";
 import { createModelRuntime } from "./modelRuntime.js";
 import { checkpointObservations } from "./checkpoints.js";
-import { activateSkillVersion, listSkillVersions, listSkillVersionViews, saveSkillDraft } from "./skillVersions.js";
+import { activateSkillVersion, clearShadowVersion, isBehaviourExempt, listSkillVersions, listSkillVersionViews, markShadowVersion, saveSkillDraft, shadowVersionFor } from "./skillVersions.js";
+import { baselineFor, readBehaviourEval, registryBehaviourLlm, runBehaviourEval, shadowGateRefusal, type BehaviourLlm } from "./skillBehaviourEval.js";
+import { recordShadowRuns, shadowProgress } from "./shadow.js";
+import { autoShadowReasons, checkAutoActivation } from "./autoActivation.js";
+import { behaviourReason } from "./behaviourGate.js";
+import { fleetSettings } from "../fleet/service.js";
 import { listToolProposals } from "./toolProposals.js";
 import type { EventScope } from "./events.js";
 import { getAutomationPaused } from "../services/automationSettings.js";
@@ -61,6 +67,8 @@ const TICK_PROMPT = "Kiểm tra trạng thái và thực hiện các lệnh thư
 const TICK_KEY = "operator.tickLastFired";
 const ZONE = "Asia/Ho_Chi_Minh";
 const INTERRUPTED_RUN_VI = "Lượt chạy bị dừng vì server khởi động lại.";
+/** Same shape the skill routes accept; a name outside it never becomes a file path (TASK-074b-4 path guard). */
+const SAFE_SKILL_NAME = /^[a-z0-9][a-z0-9-]{1,79}$/;
 
 /** The in-memory queue and active job do not survive a restart. */
 export function failInterruptedOperatorRuns(sqlite: Database.Database, now: Date): number {
@@ -115,6 +123,7 @@ export type OperatorSubmitResult = {
 
 type Logger = {
   info: (obj: unknown, msg?: string) => void;
+  warn: (obj: unknown, msg?: string) => void;
   error: (obj: unknown, msg?: string) => void;
 };
 
@@ -135,15 +144,17 @@ export class OperatorService {
     apiUrl: string;
     assistant: AssistantService;
     llmProviders: LlmProviderRegistry;
+    /** Test seam for the behaviour eval model. Production leaves it out and uses registryBehaviourLlm. */
+    behaviourLlm?: () => BehaviourLlm;
     now?: () => Date;
     logger?: Logger;
   }) {
     this.now = deps.now ?? (() => new Date());
-    this.logger = deps.logger ?? { info: () => undefined, error: () => undefined };
+    this.logger = deps.logger ?? { info: () => undefined, warn: () => undefined, error: () => undefined };
     setOperatorToolHooks({
       supervisor: this.supervisorHooks(),
       saveStandingOrder: (input) => this.saveStandingOrder({ ...input, enabled: true }),
-      findSkills: (query) => this.findSkills(query),
+      findSkills: (query, runId) => this.findSkills(query, runId ?? null),
       findTools: (query) => this.findTools(query),
       notifyToolProposal: (name) => {
         void this.notifySummary(`Đề xuất công cụ mới: ${name}. Xem tại Agent operator.`)
@@ -198,6 +209,7 @@ export class OperatorService {
   }
 
   syncWorkspace(): void {
+    this.syncUserSkillFiles();
     this.syncSeeds();
     const settings = this.getSettings();
     const profiles = this.deps.sqlite.prepare(
@@ -608,10 +620,15 @@ export class OperatorService {
     return { ...result, paused: false };
   }
 
-  findSkills(query: string): unknown {
+  /**
+   * TASK-074b-3b: the run id goes to the shadow rows only. The routing log keeps null, because its outcome
+   * is written by run id and feeds historicalSuccess, which find_skills must not change.
+   */
+  findSkills(query: string, runId: string | null = null): unknown {
     const versions = new Map(listSkillVersions(this.deps.sqlite, true).map((skill) => [skill.name, skill.version]));
     const routed = routeQuery(query, this.skillCandidates());
     this.logRouting(query, routed, null);
+    this.autoActivateAfterShadow(this.recordShadow(query, routed, runId));
     return {
       parts: routed.map((part) => ({
         query: part.query,
@@ -742,31 +759,67 @@ export class OperatorService {
       .map((name) => ({ name, text: readNote(this.deps.dataDir, name) }));
   }
 
-  promoteSkill(relativePath: string): { ok: boolean; errors: string[] } {
+  /**
+   * Saves the user's proposal as a draft, then tries to activate it. TASK-074b-4: saving and activating are separate.
+   * `saved` means the draft exists; `activated` means the behaviour eval and the other gates passed.
+   */
+  promoteSkill(relativePath: string): { ok: boolean; saved: boolean; activated: boolean; errors: string[] } {
+    const refuse = (errors: string[]) => ({ ok: false, saved: false, activated: false, errors });
     const root = this.workspacePath();
     const normalized = relativePath.replaceAll("\\", "/");
     if (!normalized.startsWith("notes/skill-proposals/") || normalized.includes("..")) {
-      return { ok: false, errors: ["Chỉ nạp bản nháp trong notes/skill-proposals."] };
+      return refuse(["Chỉ nạp bản nháp trong notes/skill-proposals."]);
     }
     const source = join(root, normalized);
-    if (!existsSync(source)) return { ok: false, errors: ["Không thấy bản nháp."] };
+    if (!existsSync(source)) return refuse(["Không thấy bản nháp."]);
     const markdown = readFileSync(source, "utf8");
     const errors = validateSkillMarkdown(markdown, new Set(Object.keys(ASSISTANT_TOOLS)));
-    if (errors.length) return { ok: false, errors };
+    if (errors.length) return refuse(errors);
     const parsed = parseSkillMarkdown(markdown);
-    if (!parsed) return { ok: false, errors: ["Frontmatter không hợp lệ."] };
+    if (!parsed) return refuse(["Frontmatter không hợp lệ."]);
+    let draft: ReturnType<typeof saveSkillDraft>;
     try {
-      const draft = saveSkillDraft(this.deps.sqlite, markdown, { source: "user_review", runIds: [] }, this.skillRegistry());
-      if (!draft) return { ok: false, errors: ["Chưa lưu được bản nháp."] };
-      this.activateSkill(draft.name, draft.version);
-      return { ok: true, errors: [] };
+      draft = saveSkillDraft(this.deps.sqlite, markdown, { source: "user_review", runIds: [] }, this.skillRegistry());
     } catch (error) {
-      return { ok: false, errors: [error instanceof Error ? error.message : String(error)] };
+      return refuse([error instanceof Error ? error.message : String(error)]);
+    }
+    if (!draft) return refuse(["Chưa lưu được bản nháp."]);
+    try {
+      this.activateSkill(draft.name, draft.version);
+      return { ok: true, saved: true, activated: true, errors: [] };
+    } catch (error) {
+      return { ok: false, saved: true, activated: false, errors: [error instanceof Error ? error.message : String(error)] };
     }
   }
 
+  /**
+   * The skill list. TASK-074b-3b adds the stored behaviour eval for each version, and for a shadow version its
+   * progress plus the declared tools of the shadow and of its baseline. TASK-074b-4 adds `activation`: whether
+   * the user may activate a draft now, and why not.
+   */
   skillVersions() {
-    return listSkillVersionViews(this.deps.sqlite);
+    const db = this.deps.sqlite;
+    const now = this.now();
+    return listSkillVersionViews(db).map((item) => {
+      // TASK-152: a shadow or needs_merge version can never be activated (activateSkillVersionInTx refuses both), so the UI must show it disabled.
+      const blockedReason = item.status === "shadow" ? "Bản shadow chỉ ghi nhận lượt định tuyến, không thể kích hoạt."
+        : item.status === "needs_merge" ? "Bản nháp dựa trên phiên bản cũ. Gộp thay đổi thành bản nháp mới trước khi kích hoạt."
+        : null;
+      const reason = blockedReason ?? (item.status === "draft" && !isBehaviourExempt(item.evidence) ? behaviourReason(db, item.name, item.version) : null);
+      const activation = { allowed: reason === null, reasons: reason ? [reason] : [] };
+      if (item.status !== "shadow") return { ...item, behaviour: readBehaviourEval(db, item.name, item.version), shadow: null, activation };
+      const baseline = baselineFor(db, item.name);
+      return {
+        ...item,
+        behaviour: readBehaviourEval(db, item.name, item.version),
+        shadow: {
+          ...shadowProgress(db, item.name, item.version, now),
+          shadowTools: parseSkillMarkdown(item.markdown)?.tools ?? [],
+          baselineTools: baseline ? parseSkillMarkdown(baseline.markdown)?.tools ?? [] : null,
+        },
+        activation,
+      };
+    });
   }
 
   /** A user's edit becomes a new draft. It is scored and still needs approval before use. */
@@ -803,7 +856,7 @@ export class OperatorService {
     return {
       lessons: { operator: lessons, profiles: profileLessons.map((row) => ({ ...row, notes: row.notes.slice(0, 400) })) },
       skills: { active: pick("active"), drafts: pick("draft") },
-      toolProposals: listToolProposals(this.deps.sqlite).map(({ id, name, kind, operation, createdAt }) => ({ id, name, kind, operation, createdAt })),
+      toolProposals: listToolProposals(this.deps.sqlite, this.logger).map(({ id, name, kind, operation, createdAt }) => ({ id, name, kind, operation, createdAt })),
     };
   }
 
@@ -812,10 +865,169 @@ export class OperatorService {
       throw new AppError(409, "BUILT_IN_SKILL", "Skill tích hợp được quản lý cùng ứng dụng.");
     }
     const markdown = activateSkillVersion(this.deps.sqlite, name, version, this.skillRegistry());
+    this.writeUserSkill(name, markdown);
+  }
+
+  /**
+   * TASK-074b-3b: runs the behaviour eval for one version and stores the result. TASK-074b-4: a passed eval may
+   * make the draft the shadow version (auto setting on only). Nothing is activated here; the result says what happened to shadowing.
+   * 404 for a missing version; 503 when no model is configured, checked before any budget is used.
+   */
+  async runSkillBehaviourEval(name: string, version: number) {
+    const exists = this.deps.sqlite.prepare("SELECT 1 FROM operator_skill_versions WHERE name = ? AND version = ?").get(name, version);
+    if (!exists) throw new AppError(404, "SKILL_VERSION_NOT_FOUND", "Không tìm thấy phiên bản skill.");
+    let llm: BehaviourLlm;
+    try {
+      llm = this.deps.behaviourLlm ? this.deps.behaviourLlm() : registryBehaviourLlm(this.deps.llmProviders, this.deps.sqlite);
+    } catch {
+      throw new AppError(503, "BEHAVIOUR_LLM_UNAVAILABLE", "Chưa cấu hình model cho eval hành vi.");
+    }
+    const result = await runBehaviourEval(this.deps.sqlite, name, version, { llm, now: this.now() });
+    const autoShadow = this.autoShadowAfterEval(name, version);
+    return { ...result, autoShadow };
+  }
+
+  /**
+   * TASK-074b-3b: sets a draft as the skill's one shadow version. The gate reads the stored eval result
+   * and the current baseline. Check, then mark, with no await between them.
+   */
+  setShadowSkill(name: string, version: number): void {
+    const db = this.deps.sqlite;
+    const exists = db.prepare("SELECT 1 FROM operator_skill_versions WHERE name = ? AND version = ?").get(name, version);
+    if (!exists) throw new AppError(404, "SKILL_VERSION_NOT_FOUND", "Không tìm thấy phiên bản skill.");
+    const refusal = shadowGateRefusal({ baseline: baselineFor(db, name), result: readBehaviourEval(db, name, version) });
+    if (refusal) throw new AppError(409, refusal.code, refusal.message);
+    markShadowVersion(db, name, version);
+  }
+
+  /** TASK-074b-3b: turns the shadow version back into a draft. Returns the number of rows changed. */
+  clearShadowSkill(name: string): number {
+    return clearShadowVersion(this.deps.sqlite, name);
+  }
+
+  /** Activates each named skill's shadow version when eligible. Never throws into routing. */
+  private autoActivateAfterShadow(names: string[]): void {
+    for (const name of names) {
+      if (OPERATOR_SKILLS.some((skill) => skill.name === name && !skill.research)) continue;
+      try {
+        const result = checkAutoActivation(this.deps.sqlite, name, {
+          now: this.now(), registry: this.skillRegistry(), autoEnabled: fleetSettings(this.deps.sqlite).autoActivateReadOnlySkills,
+        });
+        if (result.activated && result.markdown !== null) {
+          this.writeUserSkill(name, result.markdown);
+          this.logger.info({ name, version: result.version }, "operator skill auto-activated");
+        } else if (result.reasons.length) {
+          this.logger.info({ name, reasons: result.reasons }, "operator skill auto-activation refused");
+        }
+      } catch (error) {
+        this.logger.error({ err: error }, "operator auto activation failed");
+      }
+    }
+  }
+
+  /**
+   * After a passed eval, a read-only draft may become the shadow version. Needs shadow logging and the auto setting on.
+   * Returns why it did not, so the eval route can show it. Never throws. A manual shadow is never displaced.
+   */
+  private autoShadowAfterEval(name: string, version: number): { shadowed: boolean; reasons: string[] } {
+    const db = this.deps.sqlite;
+    try {
+      if (!getOperatorSettings(db).shadowEnabled || !fleetSettings(db).autoActivateReadOnlySkills) {
+        return { shadowed: false, reasons: [] };
+      }
+      if (shadowVersionFor(db, name)) return { shadowed: false, reasons: ["đã có bản shadow, giữ nguyên bản đó"] };
+      const reasons = autoShadowReasons(db, name, version, this.skillRegistry());
+      const refusal = shadowGateRefusal({ baseline: baselineFor(db, name), result: readBehaviourEval(db, name, version) });
+      if (refusal) reasons.push(refusal.message);
+      if (reasons.length) {
+        this.logger.info({ name, version, reasons }, "operator skill not set as shadow automatically");
+        return { shadowed: false, reasons };
+      }
+      markShadowVersion(db, name, version);
+      this.logger.info({ name, version }, "operator skill set as shadow automatically");
+      return { shadowed: true, reasons: [] };
+    } catch (error) {
+      this.logger.error({ err: error }, "operator auto shadow failed");
+      return { shadowed: false, reasons: ["lỗi khi đặt shadow tự động"] };
+    }
+  }
+
+  /**
+   * Writes an active skill's file for the operator to read, then syncs. Never throws: the activation is already
+   * committed in the DB, so a failed write is flagged (a finding) and the next sync rewrites the file (TASK-074b-4 item 5).
+   */
+  private writeUserSkill(name: string, markdown: string): void {
+    if (!SAFE_SKILL_NAME.test(name)) {
+      this.logger.error({ name }, "operator user skill name rejected for file write");
+      return;
+    }
     const dir = join(this.workspacePath(), "skills", "user");
-    mkdirSync(dir, { recursive: true });
-    writeFileSync(join(dir, `${name}.md`), markdown, "utf8");
-    this.syncWorkspace();
+    try {
+      mkdirSync(dir, { recursive: true });
+      writeFileSync(join(dir, `${name}.md`), markdown, "utf8");
+    } catch (error) {
+      this.logger.error({ err: error, name }, "operator user skill file write failed");
+      this.openSkillFileFinding(name, error);
+      return;
+    }
+    this.resolveSkillFileFinding(name);
+    try {
+      this.syncWorkspace();
+    } catch (error) {
+      this.logger.error({ err: error }, "operator workspace sync failed after skill file write");
+    }
+  }
+
+  /**
+   * TASK-074b-4 item 5: rewrites each active user skill file that is missing or stale, from the DB. A failed write opens
+   * a finding; a file that matches the DB resolves it. Never throws, so the workspace sync still runs.
+   */
+  private syncUserSkillFiles(): void {
+    const dir = join(this.workspacePath(), "skills", "user");
+    for (const item of listSkillVersions(this.deps.sqlite, true)) {
+      if (!SAFE_SKILL_NAME.test(item.name)) continue;
+      const path = join(dir, `${item.name}.md`);
+      try {
+        if (!existsSync(path) || readFileSync(path, "utf8") !== item.markdown) {
+          mkdirSync(dir, { recursive: true });
+          writeFileSync(path, item.markdown, "utf8");
+        }
+        this.resolveSkillFileFinding(item.name);
+      } catch (error) {
+        this.logger.error({ err: error, name: item.name }, "operator user skill file sync failed");
+        this.openSkillFileFinding(item.name, error);
+      }
+    }
+  }
+
+  /** Opens (or reopens) the one finding for a skill whose file write failed. Never throws into the caller. */
+  private openSkillFileFinding(name: string, error: unknown): void {
+    try {
+      const db = this.deps.sqlite;
+      const dedupeKey = `skill-file-write:${name}`;
+      const at = this.now().toISOString();
+      const code = (error as NodeJS.ErrnoException | undefined)?.code ?? "UNKNOWN";
+      const willOpen = findingWillOpen(db, dedupeKey);
+      db.prepare(`INSERT INTO supervisor_findings
+        (id, profile_id, kind, severity, dedupe_key, detail, first_seen_at, last_seen_at, status)
+        VALUES (?, NULL, 'skill_file_write', 'warn', ?, ?, ?, ?, 'open')
+        ON CONFLICT(dedupe_key) DO UPDATE SET detail = excluded.detail, last_seen_at = excluded.last_seen_at,
+          first_seen_at = CASE WHEN status = 'resolved' THEN excluded.first_seen_at ELSE first_seen_at END,
+          status = 'open', resolution = NULL`)
+        .run(randomUUID(), dedupeKey, JSON.stringify({ name, code }), at, at);
+      if (willOpen) publishFindingOpened(db, { summary: `Không ghi được file skill ${name}`, profileId: null });
+    } catch (err) {
+      this.logger.error({ err, name }, "operator skill file finding could not be recorded");
+    }
+  }
+
+  private resolveSkillFileFinding(name: string): void {
+    try {
+      this.deps.sqlite.prepare("UPDATE supervisor_findings SET status = 'resolved', resolution = ? WHERE dedupe_key = ? AND status <> 'resolved'")
+        .run("Đã ghi lại file skill.", `skill-file-write:${name}`);
+    } catch (err) {
+      this.logger.error({ err, name }, "operator skill file finding could not be resolved");
+    }
   }
 
   private skillRegistry() {
@@ -1038,6 +1250,11 @@ ${scope}` : ""}`;
       upsertOrder: (input) => this.saveStandingOrder(input as StandingOrderInput & { id?: string }),
       disableOrder: (id) => this.setOrderEnabled(id, false),
       sendTelegram: (text) => this.notifySummary(text),
+      telegramReady: () => {
+        if (!this.telegramFactory?.()) return false;
+        const settings = getNotificationSettings(this.deps.sqlite);
+        return Boolean(settings.telegram.enabled && settings.telegram.chatId);
+      },
     };
   }
 
@@ -1193,6 +1410,7 @@ ${scope}` : ""}`;
   private suggestion(prompt: string, runId: string): string {
     const routed = routeQuery(prompt, this.skillCandidates(), 3);
     this.logRouting(prompt, routed, runId);
+    this.autoActivateAfterShadow(this.recordShadow(prompt, routed, runId));
     const names = routed.flatMap((part) => part.hits.slice(0, 2).map((hit) => hit.name));
     if (!names.length) return "";
     return `Gọi find_skills rồi đọc các kỹ năng: ${[...new Set(names)].join(", ")}.`;
@@ -1322,6 +1540,20 @@ ${scope}` : ""}`;
       for (const id of ids) events.push({ id, at: row.created_at, outcome: row.outcome });
     }
     return events;
+  }
+
+  /**
+   * TASK-074b-3a: records shadow plans only. Never throws into routing, and never changes the routed result.
+   * A failure here must not change what the caller receives.
+   */
+  private recordShadow(query: string, routed: ReturnType<typeof routeQuery>, runId: string | null): string[] {
+    try {
+      return recordShadowRuns({ sqlite: this.deps.sqlite, query, routed, runId, now: this.now() });
+    } catch (error) {
+      // Shadow recording is observation only: the caller still gets its routing result.
+      this.logger.error({ err: error }, "operator shadow routing record failed");
+      return [];
+    }
   }
 
   private logRouting(query: string, routed: ReturnType<typeof routeQuery>, runId: string | null): void {

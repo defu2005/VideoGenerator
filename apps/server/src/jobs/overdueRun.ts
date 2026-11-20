@@ -23,6 +23,8 @@ import type { AppConfig } from "../lib/config.js";
 import { LlmCache } from "../providers/llm/cache.js";
 import { estimateLlmCost } from "../providers/llm/pricing.js";
 import type { LlmProviderRegistry } from "../providers/llm/registry.js";
+import { publishAgentEvent } from "../events/agentBus.js";
+import { defaultWorkspaceId } from "../auth/workspaces.js";
 import { getAppLlmSettings } from "../providers/llm/settings.js";
 import { generateRoutedStructured } from "../providers/llm/structured.js";
 import {
@@ -248,6 +250,12 @@ export class OverdueRun {
         at: deps.now().toISOString(), facts, action: choice.action, extendMs: choice.extendMs ?? null,
         source: outcome.source, actor: null, reason: choice.reason, costUsd: outcome.costUsd,
       });
+      // TASK-129a §1: only the automatic check path emits; the decide path (overdueRun ~319) does not.
+      const wsRow = deps.sqlite.prepare("SELECT workspace_id AS w FROM projects WHERE id = ?").get(job.projectId) as { w: string | null } | undefined;
+      publishAgentEvent(
+        { type: "stage_overdue", projectId: job.projectId, stage: job.stage, summary: `Bước ${job.stage} quá giờ (lần kiểm tra ${checkNo}).` },
+        { workspaceId: wsRow?.w ?? (defaultWorkspaceId(deps.sqlite) ?? undefined) },
+      );
       const spacing = overdueCheckSpacingMs(checkNo);
       if (choice.action === "wait") {
         this.enterChecking();

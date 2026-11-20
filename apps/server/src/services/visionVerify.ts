@@ -28,6 +28,7 @@ import {
   buildVisionResearchPrompt,
 } from "../stages/visuals/visionPrompts.js";
 import type Database from "better-sqlite3";
+import { imageVerdictContext, reusableImageCheck, visualFingerprint, visualWorkspace, writeImageVerdict } from "../agents/visualCache.js";
 
 export type VisionCandidateInput = {
   id: string;
@@ -41,6 +42,7 @@ export type VisionSceneInput = {
   sceneId: string;
   narration: string;
   visualDescription: string;
+  subjectKey?: string;
   queries: string[];
   candidates: VisionCandidateInput[];
 };
@@ -116,6 +118,16 @@ export async function verifySceneVision(input: {
   const visionCacheDir = join(projectDir(input.config.DATA_DIR, input.project.id), "vision-cache");
   const appRouting = getAppLlmSettings(input.sqlite);
   const cache = new LlmCache(input.sqlite, input.config.LLM_CACHE_ENABLED);
+  const workspace = visualWorkspace(input.sqlite, input.project.id);
+  const subject = input.scene.subjectKey || input.scene.visualDescription || input.scene.queries[0] || "";
+  const verdictContext = imageVerdictContext({ narration: input.scene.narration, visualDescription: input.scene.visualDescription,
+    aspectRatio: input.aspectRatio, visionThreshold: input.budget.visionThreshold });
+  const fingerprints = new Map<string, { phash: string; sha256: string }>();
+
+  const remember = (candidate: VisionCandidateInput, check: VisionCheck) => {
+    checks.set(candidate.id, check);
+    scores.set(candidate.id, combineVisionScore({ visionFit: check.fit, textRerank: candidate.textRerank, codeScore: candidate.relevanceScore }));
+  };
 
   const visionNormalize = (raw: unknown) => {
     const result = normalizeVisionCheckBatch(raw);
@@ -145,12 +157,9 @@ export async function verifySceneVision(input: {
         model,
         checkedAt,
       };
-      checks.set(candidate.id, check);
-      scores.set(candidate.id, combineVisionScore({
-        visionFit: fit,
-        textRerank: candidate.textRerank,
-        codeScore: candidate.relevanceScore,
-      }));
+      remember(candidate, check);
+      const fingerprint = fingerprints.get(candidate.id);
+      if (fingerprint) writeImageVerdict(input.sqlite, workspace, fingerprint.phash, subject, { ...check, sha256: fingerprint.sha256 }, new Date(), verdictContext);
     }
   };
 
@@ -171,6 +180,7 @@ export async function verifySceneVision(input: {
       schema: VisionCheckBatchSchema,
       schemaName: "VisionCheck",
       schemaVersion: "2",
+      cacheKeyExtra: verdictContext,
       maxOutputTokens: 2_000,
       repairAttempts: 1,
       signal: input.signal,
@@ -183,7 +193,17 @@ export async function verifySceneVision(input: {
   };
 
   const runCheck = async (batch: VisionCandidateInput[]) => {
-    const withLocal = batch.filter((candidate) => candidate.localPath);
+    const withLocal = (await Promise.all(batch.map(async (candidate) => {
+      if (!candidate.localPath) return null;
+      if (!workspace || !subject) return candidate;
+      const fingerprint = await visualFingerprint(candidate.localPath);
+      if (!fingerprint) return candidate;
+      fingerprints.set(candidate.id, fingerprint);
+      const cached = reusableImageCheck(input.sqlite, workspace, fingerprint, subject, verdictContext);
+      if (!cached) return candidate;
+      remember(candidate, cached);
+      return null;
+    }))).filter((candidate): candidate is VisionCandidateInput => candidate !== null);
     if (!withLocal.length) return;
     const checkedAt = new Date().toISOString();
     const isRecoverableVisionParseError = (error: unknown) =>

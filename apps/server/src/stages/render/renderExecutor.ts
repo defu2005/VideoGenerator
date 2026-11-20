@@ -36,7 +36,7 @@ export class RenderExecutor implements StageExecutor {
     aspectRatio: AspectRatio | undefined,
     render: Render,
     reused: boolean,
-  ): Promise<{ outputHash: string; message: string }> {
+  ): Promise<{ outputHash: string; message: string; renderId: string }> {
     let thumbNote = "";
     if (this.thumbnails) {
       try {
@@ -60,6 +60,7 @@ export class RenderExecutor implements StageExecutor {
     const variant = render.aspectRatio ? ` · ${render.aspectRatio}` : "";
     return {
       outputHash: render.inputHash,
+      renderId: render.id,
       message: `${reused ? "Dùng lại video" : "Video"} ${minutes}:${seconds} · ${render.width}×${render.height}${variant} · ${mb} MB${issues}${thumbNote}`,
     };
   }

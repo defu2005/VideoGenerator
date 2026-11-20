@@ -1,5 +1,9 @@
 import { enqueueIndex } from "../../retrieval/service.js";
-import { FORMAT_RECIPE_IDS, ResearchNotesSchema, fallbackFormat, missingRequiredSections, resolveBudget, resolveFormat, ScriptSchema, guidelineRulesFor, storyModeForProject, dedupeSeams, type GuidelineFindingDraft, type LlmCallUsage, type Script } from "@vg/shared";
+import { FORMAT_RECIPE_IDS, ResearchNotesSchema, StoredResearchNotesSchema, fallbackFormat, missingRequiredSections, resolveBudget, resolveFormat, ScriptSchema, guidelineRulesFor, storyModeForProject, storyEngineForProject, dedupeSeams, lintNarration, prioritizeNarrationLint, type GuidelineFindingDraft, type LlmCallUsage, type Script } from "@vg/shared";
+import { runStoryEngine, type StoryEngineResult } from "./storyEngine.js";
+
+/** At most this many `[lint]` notes are stored in review_notes (cap of 8 stays). */
+const MAX_LINT_NOTES = 3;
 import type Database from "better-sqlite3";
 import { z } from "zod";
 import type { AppConfig } from "../../lib/config.js";
@@ -16,7 +20,8 @@ import {
   blockingNote, readScriptRepairHint, SCRIPT_REVISION_HEADER, scriptCacheExtra, scriptRepairHintDigest, scriptRepairHintPrompt,
   scriptRevisionFeedback,
 } from "../../operator/qualityGates.js";
-import { scriptPrompt } from "./prompt.js";
+import { projectRecipe, scriptPrompt } from "./prompt.js";
+import { activePromptVariant } from "../../learning/promptVariants.js";
 import { checkScriptDuration, computeSectionDurations, maxOutputTokensForDuration, researchInputHash, scriptContentHash, scriptInputHash } from "./scriptUtils.js";
 import { scriptReviewPrompt } from "./reviewPrompt.js";
 import { FactCheckResponseSchema, factCheckPrompt } from "./factCheckPrompt.js";
@@ -99,7 +104,7 @@ export class ScriptExecutor implements StageExecutor {
         const guidedEarly = await this.applyScriptGuidelines({
           context,
           project,
-          research: researchRow ? ResearchNotesSchema.parse(JSON.parse(researchRow.data) as unknown) : undefined,
+          research: researchRow ? StoredResearchNotesSchema.parse(JSON.parse(researchRow.data) as unknown) : undefined,
           script: data,
           budget,
           reviewNotes: existing?.review_notes ? JSON.parse(existing.review_notes) as string[] : null,
@@ -178,14 +183,24 @@ export class ScriptExecutor implements StageExecutor {
     const appRouting = getAppLlmSettings(this.sqlite);
     try {
       const research = applicableResearch
-        ? ResearchNotesSchema.parse(JSON.parse(applicableResearch.data) as unknown)
+        ? StoredResearchNotesSchema.parse(JSON.parse(applicableResearch.data) as unknown)
         : undefined;
-      let script: Script;
+      let script!: Script;
       let mergedCall = false;
-      let provider: string;
-      let model: string;
+      let provider = "";
+      let model = "";
+      const engineMode = storyEngineForProject(project);
+      let draftData: Extract<StoryEngineResult, { fallback: false }>["draft"] | null = null;
+      let engineFallbackNote: string | null = null;
+      let engineQualityScore: number | null = null;
+      let engineBlockingFacts = 0;
+      let engineReviewNotes: string[] | null = null;
       const scriptGuidance = new GuidelineService(this.sqlite).guidanceFor(project, ["script", "subtitles"]);
-      const promptContext = getProfilePromptContext(this.sqlite, project.profileId);
+      const promptContext = getProfilePromptContext(this.sqlite, project.profileId, "SCRIPT");
+      // TASK-148e: only a variant the user promoted is injected; trials never reach the writer.
+      const promptVariant = activePromptVariant(this.sqlite, "SCRIPT");
+      const withVariant = (rules: string): string => [rules, promptVariant ? `Phong cách viết đã được người dùng duyệt:\n${promptVariant.text}` : ""]
+        .filter((part) => part.trim().length > 0).join("\n\n");
       if (mergedSource) {
         script = ScriptSchema.parse(JSON.parse(existing!.data) as unknown);
         const durationCheck = checkScriptDuration(script, project.settings.targetDurationSec, this.config.SPEECH_WORDS_PER_MINUTE);
@@ -196,93 +211,143 @@ export class ScriptExecutor implements StageExecutor {
         provider = existing!.provider ?? researchRow?.provider ?? "unknown";
         model = existing!.model ?? researchRow?.model ?? "unknown";
       } else {
-        selected = this.registry.resolveTask("script", project, appRouting);
         const inputHash = scriptInputHash(project, applicableResearch?.input_hash);
-        const ownerRules = project.profileId ? preferenceBlock(this.sqlite, project.profileId, "script") : "";
-        const initialPrompt = scriptPrompt(project, research, this.config.SPEECH_WORDS_PER_MINUTE, scriptGuidance, promptContext.direction, promptContext.learnedNotes, ownerRules);
-        const check = preflight({
-          provider: selected.provider,
-          mode: "off",
-          project,
-          wordsPerMinute: this.config.SPEECH_WORDS_PER_MINUTE,
-          maxOutputTokens: Math.ceil(maxOutputTokensForDuration(
-            project.settings.targetDurationSec,
-            this.config.SPEECH_WORDS_PER_MINUTE,
-          ) * budget.outputHeadroom),
-          input: initialPrompt,
-          ...(research ? {
-            research,
-            rebuildInput: (trimmedResearch) => scriptPrompt(project, trimmedResearch, this.config.SPEECH_WORDS_PER_MINUTE, scriptGuidance, promptContext.direction, promptContext.learnedNotes, ownerRules),
-          } : {}),
-        });
-        if (check.decision === "reject") throw check.error;
-        const system = check.input.system;
-        let prompt = check.input.prompt;
-        let cacheKeyExtra = inputHash;
-        if (revising) {
-          let scenes = existing?.data ?? "";
-          try {
-            const parsed = JSON.parse(existing?.data ?? "") as { sections?: unknown };
-            scenes = JSON.stringify(parsed.sections ?? []);
-          } catch {
-            scenes = existing?.data ?? "";
+
+        if (engineMode !== "off") {
+          const engineResult = await runStoryEngine({
+            project,
+            applicableResearch: research,
+            engineMode,
+            scriptGuidance,
+            channelDirection: promptContext.direction,
+            learnedNotes: promptContext.learnedNotes,
+            ownerRules: withVariant(project.profileId ? preferenceBlock(this.sqlite, project.profileId, "script") : ""),
+            context,
+            sqlite: this.sqlite,
+            registry: this.registry,
+            cache: this.cache,
+            config: this.config,
+            appRouting,
+            inputHash,
+            cacheKeyExtra: inputHash,
+          });
+
+          spentUsage.llmCalls += engineResult.spentCalls;
+          spentUsage.inputTokens += engineResult.spentInputTokens;
+          spentUsage.outputTokens += engineResult.spentOutputTokens;
+          spentUsage.calls.push(...engineResult.callUsages);
+          spentCost += engineResult.spentCost;
+          for (const [k, v] of Object.entries(engineResult.featureCounts)) {
+            features[k] = (features[k] ?? 0) + v;
           }
-          prompt = `${prompt}\n\n${SCRIPT_REVISION_HEADER}\n${feedback.reasons.map((reason) => `- ${reason}`).join("\n")}\n${scenes.slice(0, 4000)}`;
-          cacheKeyExtra = scriptCacheExtra(inputHash, feedback.round, feedback.reasons);
+
+          if (!engineResult.fallback) {
+            script = engineResult.script;
+            provider = engineResult.provider;
+            model = engineResult.model;
+            draftData = engineResult.draft;
+            engineQualityScore = engineResult.qualityScore;
+            engineBlockingFacts = engineResult.blockingFacts;
+            engineReviewNotes = engineResult.reviewNotes;
+          } else {
+            engineFallbackNote = engineResult.fallbackNote;
+          }
         }
-        const repairHint = readScriptRepairHint(this.sqlite, project.id);
-        if (repairHint) {
-          const extra = scriptRepairHintPrompt(repairHint);
-          if (extra) prompt = `${prompt}\n\n${extra}`;
-          cacheKeyExtra = `${cacheKeyExtra}:${scriptRepairHintDigest(repairHint)}`;
-          if (repairHint.stronger) {
+
+        if (!draftData) {
+          selected = this.registry.resolveTask("script", project, appRouting);
+          const ownerRules = withVariant(project.profileId ? preferenceBlock(this.sqlite, project.profileId, "script") : "");
+          const initialPrompt = scriptPrompt(project, research, this.config.SPEECH_WORDS_PER_MINUTE, scriptGuidance, promptContext.direction, promptContext.learnedNotes, ownerRules);
+          const check = preflight({
+            provider: selected.provider,
+            mode: "off",
+            project,
+            wordsPerMinute: this.config.SPEECH_WORDS_PER_MINUTE,
+            maxOutputTokens: Math.ceil(maxOutputTokensForDuration(
+              project.settings.targetDurationSec,
+              this.config.SPEECH_WORDS_PER_MINUTE,
+            ) * budget.outputHeadroom),
+            input: initialPrompt,
+            ...(research ? {
+              research,
+              rebuildInput: (trimmedResearch) => scriptPrompt(project, trimmedResearch, this.config.SPEECH_WORDS_PER_MINUTE, scriptGuidance, promptContext.direction, promptContext.learnedNotes, ownerRules),
+            } : {}),
+          });
+          if (check.decision === "reject") throw check.error;
+          const system = check.input.system;
+          let prompt = check.input.prompt;
+          let cacheKeyExtra = inputHash;
+          if (revising) {
+            let scenes = existing?.data ?? "";
             try {
-              selected = this.registry.resolveTask("scriptReview", project, appRouting);
+              const parsed = JSON.parse(existing?.data ?? "") as { sections?: unknown };
+              scenes = JSON.stringify(parsed.sections ?? []);
             } catch {
-              // Keep the normal script route when no stronger one resolves.
+              scenes = existing?.data ?? "";
+            }
+            prompt = `${prompt}\n\n${SCRIPT_REVISION_HEADER}\n${feedback.reasons.map((reason) => `- ${reason}`).join("\n")}\n${scenes.slice(0, 4000)}`;
+            cacheKeyExtra = scriptCacheExtra(inputHash, feedback.round, feedback.reasons);
+          }
+          const repairHint = readScriptRepairHint(this.sqlite, project.id);
+          if (repairHint) {
+            const extra = scriptRepairHintPrompt(repairHint);
+            if (extra) prompt = `${prompt}\n\n${extra}`;
+            cacheKeyExtra = `${cacheKeyExtra}:${scriptRepairHintDigest(repairHint)}`;
+            if (repairHint.stronger) {
+              try {
+                selected = this.registry.resolveTask("scriptReview", project, appRouting);
+              } catch {
+                // Keep the normal script route when no stronger one resolves.
+              }
             }
           }
+          const validatedSchema = ScriptSchema.superRefine((value, ctx) => {
+            const { reject } = checkScriptDuration(value, project.settings.targetDurationSec, this.config.SPEECH_WORDS_PER_MINUTE);
+            if (reject) ctx.addIssue({ code: z.ZodIssueCode.custom, message: reject });
+          });
+          context.reportProgress(20, "Calling script provider");
+          const generated = await generateRoutedStructured({
+            registry: this.registry,
+            route: selected,
+            task: "script",
+            knowledgeProject: project,
+            knowledgeQuery: [project.topic,research?.summary].filter(Boolean).join(" "),
+            system,
+            prompt,
+            schema: validatedSchema,
+            schemaName: "Script",
+            schemaVersion: "3",
+            maxOutputTokens: check.maxOutputTokens,
+            repairAttempts: budget.repairAttempts,
+            signal: context.signal,
+            cache: this.cache,
+            cacheKeyExtra,
+            logger: context.logger,
+          });
+          addUsage(spentUsage, features, "script", generated.usage);
+          spentCost += estimateLlmCost(this.config, generated.provider, generated.model, generated.usage);
+          script = generated.value;
+          provider = generated.provider;
+          model = generated.model;
         }
-        const validatedSchema = ScriptSchema.superRefine((value, ctx) => {
-          const { reject } = checkScriptDuration(value, project.settings.targetDurationSec, this.config.SPEECH_WORDS_PER_MINUTE);
-          if (reject) ctx.addIssue({ code: z.ZodIssueCode.custom, message: reject });
-        });
-        context.reportProgress(20, "Calling script provider");
-        const generated = await generateRoutedStructured({
-          registry: this.registry,
-          route: selected,
-          task: "script",
-          knowledgeProject: project,
-          knowledgeQuery: [project.topic,research?.summary].filter(Boolean).join(" "),
-          system,
-          prompt,
-          schema: validatedSchema,
-          schemaName: "Script",
-          schemaVersion: "3",
-          maxOutputTokens: check.maxOutputTokens,
-          repairAttempts: budget.repairAttempts,
-          signal: context.signal,
-          cache: this.cache,
-          cacheKeyExtra,
-          logger: context.logger,
-        });
-        addUsage(spentUsage, features, "script", generated.usage);
-        spentCost += estimateLlmCost(this.config, generated.provider, generated.model, generated.usage);
-        script = generated.value;
-        provider = generated.provider;
-        model = generated.model;
+
+        (this as unknown as { _lastDraft?: typeof draftData })._lastDraft = draftData;
+        (this as unknown as { _lastFallbackNote?: string | null })._lastFallbackNote = engineFallbackNote;
       }
 
       const baseData = computeSectionDurations(script, this.config.SPEECH_WORDS_PER_MINUTE);
       let finalData = baseData;
-      let reviewNotes: string[] | null = null;
-      let qualityScore: number | null = null;
-      let blockingFacts = 0;
-      let reviewed = false;
+      let reviewNotes: string[] | null = engineReviewNotes;
+      let qualityScore: number | null = engineQualityScore;
+      let blockingFacts = engineBlockingFacts;
+      let reviewed = draftData !== null;
       let reviewSkippedCode: string | null = null;
+      if (engineFallbackNote) {
+        reviewNotes = [engineFallbackNote, ...(reviewNotes ?? [])].slice(0, 8);
+      }
       const baseVersion = (existing?.version ?? 0) + (existing?.data === JSON.stringify(baseData) ? 0 : 1);
       let version = baseVersion;
-      if (budget.scriptReviewPasses > 0) {
+      if (!draftData && budget.scriptReviewPasses > 0) {
         const reviewRoute = this.registry.resolveTask("scriptReview", project, appRouting);
         const reviewSchema = z.object({
           revisedScript: ScriptSchema,
@@ -307,6 +372,7 @@ export class ScriptExecutor implements StageExecutor {
             pass,
             priorNotes,
             scriptGuidance,
+            lintNarration(finalData, projectRecipe(project), project.settings.language).filter((finding) => finding.severity === "fix"),
           );
           const reviewHash = `${scriptInputHash(project, applicableResearch?.input_hash)}:${scriptContentHash(finalData)}:${JSON.stringify(research ?? null)}:${pass}:${JSON.stringify(priorNotes)}`;
           context.reportProgress(70, `Reviewing and revising script (${pass}/${budget.scriptReviewPasses})`);
@@ -480,6 +546,14 @@ export class ScriptExecutor implements StageExecutor {
           finalData = computeSectionDurations(dedupedFinal, this.config.SPEECH_WORDS_PER_MINUTE);
         }
       }
+      // Code-only style lint on the final script: leftovers become `[lint]` notes (no LLM call).
+      const lintNotes = prioritizeNarrationLint(lintNarration(finalData, projectRecipe(project), project.settings.language))
+        .slice(0, MAX_LINT_NOTES)
+        .map((finding) => `[lint] ${finding.code} (${finding.sectionId}): ${finding.message}`);
+      if (lintNotes.length > 0) {
+        const existingNotes = (reviewNotes ?? []).filter((n) => !n.startsWith("[lint]"));
+        reviewNotes = [...existingNotes.slice(0, 8 - lintNotes.length), ...lintNotes].slice(0, 8);
+      }
       context.reportProgress(85, "Saving script");
       const serializedData = JSON.stringify(finalData);
       if (existing?.data === serializedData) version = existing.version;
@@ -501,6 +575,35 @@ export class ScriptExecutor implements StageExecutor {
         qualityScore,
         blockingFacts,
       );
+      if (draftData) {
+        this.sqlite.prepare(
+          `INSERT INTO script_drafts (project_id, outline, hook_candidates, critique, critique_history, engine_mode, input_hash, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+           ON CONFLICT(project_id) DO UPDATE SET
+             outline = excluded.outline,
+             hook_candidates = excluded.hook_candidates,
+             critique = excluded.critique,
+             critique_history = excluded.critique_history,
+             engine_mode = excluded.engine_mode,
+             input_hash = excluded.input_hash,
+             updated_at = excluded.updated_at`,
+        ).run(
+          project.id,
+          JSON.stringify(draftData.outline),
+          JSON.stringify({
+            candidates: draftData.hookCandidates,
+            chosenHookId: draftData.chosenHookId,
+            hookAssessments: draftData.hookAssessments,
+          }),
+          draftData.critique ? JSON.stringify(draftData.critique) : null,
+          draftData.critiqueHistory ? JSON.stringify(draftData.critiqueHistory) : null,
+          engineMode,
+          inputHash,
+          new Date().toISOString(),
+        );
+      } else {
+        this.sqlite.prepare("DELETE FROM script_drafts WHERE project_id = ?").run(project.id);
+      }
       rememberTreatment(this.sqlite, project, finalData);
       this.persistGuidelineResults(project, guided);
       context.recordUsage({
