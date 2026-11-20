@@ -25,8 +25,8 @@ Mỗi test kiểm từng giai đoạn: baseline `marked: 0`, sau cleanup (file v
 
 ## Phát hiện
 
-1. **H2 chỉ là synthetic.** Đã đọc các đường ghi: `uploadJob` (`leaseService.ts:457–461`) cho `uploadOffset`, `appendOutput`, `outputTarget` và `haveOutputs`, và `receiveOutput` (`:529`, `:532`). Mọi đường ghi đi qua `holding()` (`:392`), bắt `leaseId` phải bằng lease của job. Lease của job là `randomUUID()` (`:245`, `:367`), nên hàng ghi qua server luôn có lease UUID. Tên: `outputNameOk` (`:96–100`) chọn một trong ba regex trong `packages/shared/src/schemas/renderBundle.ts:78–81`, và cả ba đều nằm trong `ANY_OUTPUT` (`leaseService.ts:94`). Regex không có cờ `g`, nên `.test` không có trạng thái. Kết luận: nhánh (d) với tên ngoài `ANY_OUTPUT` hoặc lease không UUID không tới được qua đường ghi. Nhánh (d) chỉ tới được qua hàng `linked`, mà đường dẫn của hàng này là đường dẫn artifact (`uploadStore.ts:54`). Chưa kiểm: đường dẫn artifact có thể nằm dưới `pending/` hay không.
-2. **H3 mở rộng TASK-157 phát hiện 1.** Sau purge, hàng còn lại trỏ tới file đã bị xóa. Test ghim hành vi hiện tại và có comment ghi rõ đó không phải bản sửa.
+1. **H2 chỉ là synthetic.** Đã đọc các đường ghi: `uploadJob` (`leaseService.ts:457–461`) cho `uploadOffset`, `appendOutput`, `outputTarget` và `haveOutputs`, và `receiveOutput` (`:529`, `:532`). Mọi đường ghi đi qua `holding()` (`:392`), bắt `leaseId` phải bằng lease của job. Lease của job là `randomUUID()` (`:245`, `:367`), nên hàng ghi qua server luôn có lease UUID. Tên: `outputNameOk` (`:96–100`) chọn một trong ba regex trong `packages/shared/src/schemas/renderBundle.ts:78–81`, và cả ba đều nằm trong `ANY_OUTPUT` (`leaseService.ts:94`). Regex không có cờ `g`, nên `.test` không có trạng thái. Kết luận: nhánh (d) với tên ngoài `ANY_OUTPUT` hoặc lease không UUID không tới được qua đường ghi. Nhánh (d) chỉ tới được qua hàng `linked`, mà đường dẫn của hàng này là đường dẫn artifact (`uploadStore.ts:54`). Đã kiểm ở TASK-161 (đọc mã): đường dẫn artifact CÓ THỂ nằm dưới `pending/`, vì `references.ts:172` và `fileGc.ts:451/465` đăng ký file pending trong bảng `artifacts`, và `linkKnown` không loại trừ `pending/`. Đây là đường đọc mã, chưa đo.
+2. **H3 mở rộng TASK-157 phát hiện 1, và là synthetic.** Sau purge, hàng còn lại trỏ tới file đã bị xóa. Test ghim hành vi hiện tại và có comment ghi rõ đó không phải bản sửa. Không write site nào trong `apps/server/src` tạo hàng không-linked có đường dẫn khác `outputPath()` (TASK-161 §1): `uploadStore.ts:45` là INSERT duy nhất, các UPDATE không đổi `path`, và không có writer chung nào (snapshot, checkpoint, input version đều lọc bảng `control`). Riêng `DATA_DIR` có thể đổi khi khởi động lại với cấu hình khác, đây là ngoại lệ chỉ do cấu hình, chưa đo (TASK-161 §2).
 3. **Thư mục rỗng (đọc mã, chưa đo).** Cleanup chỉ xóa file, không xóa `<job>.uploads/<lease>/`. Sau H1 thư mục này có thể còn. Không assert.
 
 ## Mutant (sửa bản sao, chạy, khôi phục, so sánh byte)
@@ -57,8 +57,8 @@ Không mutant nào chỉ đỏ ở `existsSync` cuối. Cả ba file nguồn kh�
 - Không đo `rmSync` lỗi (nhánh c).
 - Không đo giới hạn `LIMIT 1000` và thứ tự không có `ORDER BY` (TASK-157 phát hiện 1).
 - Không đo wiring `app.ts:761`.
-- Chưa kiểm: `linked` có thể trỏ tới đường dẫn dưới `pending/` không.
-- Chưa đọc `blobs.outputTarget` (`leaseService.ts:467–473`). Nếu nó ghi hàng có đường dẫn không phải đường dẫn tính toán, nhánh lệch đường dẫn (H3) có thể tới được qua production. Chưa kiểm.
+- `linked` có thể trỏ tới đường dẫn dưới `pending/`: đã đọc mã ở TASK-161 (xem phát hiện 1). Chưa đo, và chưa đo chuỗi xóa file của job khác.
+- `blobs.outputTarget` (`leaseService.ts:467–473`) đã đọc ở TASK-161: chỉ trả URL đăng ký, không ghi hàng `node_uploads`, nên không tạo đường dẫn lệch. Nhánh H3 không tới được qua đường này.
 
 ## Sửa đi kèm (gom vào commit này, theo quyết định advisor)
 

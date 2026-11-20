@@ -90,7 +90,8 @@ describe("TASK-160: cleanup to GC hand-off for render/pending uploads", () => {
 
   it("H2 (synthetic): a row dropped by the non-UUID branch leaves its file, which GC marks and purges once the one-day ephemeral grace passes", () => {
     // Server-minted leases are randomUUID() (leaseService.ts:245, :367), so this lease id never reaches production.
-    // The branch is still reachable through a linked row, but a linked row's path is the artifact's, not pending/.
+    // This test exercises the UUID clause only. A linked row also keeps its file, through the status clause (not this test).
+    // A linked row's path is the artifact's, and that path can sit under pending/ (TASK-161).
     const s = setup();
     try {
       expect(s.gc.run()).toMatchObject({ marked: 0 });
@@ -116,6 +117,7 @@ describe("TASK-160: cleanup to GC hand-off for render/pending uploads", () => {
 
   it("H3: a row whose path differs from the computed one keeps row and file in cleanup; GC purges the file and the row survives", () => {
     // Pinned as current behaviour. A row that survives its file is TASK-157 finding 1 extended; it is not a fix.
+    // Synthetic: no write site in apps/server/src produces a non-linked row whose path differs from outputPath() (TASK-161 §1).
     const s = setup();
     try {
       expect(s.gc.run()).toMatchObject({ marked: 0 });
