@@ -69,12 +69,12 @@ describe("file GC: render/pending uploads", () => {
     } finally { harness.close(); }
   });
 
-  it("C: a DONE job's node_uploads row does not keep a pending upload alive", () => {
+  it("C: a SUCCEEDED job's node_uploads row does not keep a pending upload alive", () => {
     const { harness, gc, create, insertJob, insertUpload } = setup();
     try {
       const jobId = "cccccccc-cccc-4ccc-8ccc-cccccccccc02";
       const stale = create(jobId, "stale.bin");
-      insertJob(jobId, "DONE");
+      insertJob(jobId, "SUCCEEDED");
       insertUpload(jobId, stale);
       expect(gc.run()).toMatchObject({ marked: 1 });
       harness.advance(2 * day);
@@ -83,14 +83,14 @@ describe("file GC: render/pending uploads", () => {
     } finally { harness.close(); }
   });
 
-  it("D: a DONE job's node_uploads row added after the mark does not block the purge", () => {
+  it("D: a SUCCEEDED job's node_uploads row added after the mark does not block the purge", () => {
     // The row arrives after the mark. The purge-time index (DbReferenceIndex.build, references.ts:508) must still allow the purge.
     const { harness, gc, create, insertJob, insertUpload } = setup();
     try {
       const jobId = "dddddddd-dddd-4ddd-8ddd-dddddddddd03";
       const late = create(jobId, "late.bin");
       expect(gc.run()).toMatchObject({ marked: 1 });
-      insertJob(jobId, "DONE");
+      insertJob(jobId, "SUCCEEDED");
       insertUpload(jobId, late);
       harness.advance(2 * day);
       expect(gc.run({ purge: true })).toMatchObject({ purged: 1 });

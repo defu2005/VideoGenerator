@@ -6,7 +6,7 @@ Trạng thái: chỉ thêm test, không đổi `src/`. Commit cục bộ trên `
 
 TASK-157 (`cleanupFinishedUploads`) xóa hàng `node_uploads` và file của upload chưa liên kết khi job đã kết thúc hơn 24 giờ (`apps/server/src/node/leaseService.ts:424–437`). Với hàng đã liên kết, cleanup chỉ xóa hàng và giữ file, vì file đó thuộc artifact. Phát hiện 3 của TASK-157 ghi rằng file upload còn nằm trong `render/pending/<jobId>.uploads/` sẽ bị GC thu, nhưng chưa có test. TASK-159 kiểm chứng điều đó.
 
-Chưa kiểm: con đường production đưa tới trạng thái "file còn, không có hàng bảo vệ". Một giả thuyết: hàng bị cleanup bỏ qua (`expected !== row.path` ở `leaseService.ts:432`, hoặc `rmSync` lỗi ở `:433`) vẫn giữ file và hàng. Khi job đã kết thúc, `references.ts:125` không bảo vệ file, và GC vẫn thu file (case C). Đây là giả thuyết, chưa đo. TASK-159 không chạy cleanup, nên không khẳng định con đường này.
+Chưa kiểm: con đường production đưa tới trạng thái "file còn, không có hàng bảo vệ". Một giả thuyết: hàng bị cleanup bỏ qua (`expected !== row.path` ở `leaseService.ts:432`, hoặc `rmSync` lỗi ở `:433`) vẫn giữ file và hàng. Khi job đã kết thúc, `references.ts:125` không bảo vệ file, và GC vẫn thu file (case C). Đây là giả thuyết, chưa đo. TASK-159 không chạy cleanup, nên không khẳng định con đường này. TASK-160 đo phần sau cleanup của nhánh lệch đường dẫn (H3, `leaseCleanupGcHandoff.test.ts`): cleanup giữ cả hàng và file, GC sau đó purge file. Còn mở: production có ghi hàng có đường dẫn lệch không (xem TASK-160).
 
 ## Bố cục thật (đã đọc mã)
 
@@ -26,10 +26,12 @@ Chưa kiểm: con đường production đưa tới trạng thái "file còn, kh�
 |---|---|---|---|
 | A | file không có hàng nào trỏ tới | đánh dấu 1; sau 12 giờ chưa xóa; sau 2,5 ngày bị xóa | mốc 1 ngày; mục `"pending"` ở `fileGc.ts:101` |
 | B (đối chứng) | `node_uploads` của job RUNNING | không đánh dấu, không xóa | không tách được `:125`: dự án bận, `:96` bảo vệ cả thư mục |
-| C | `node_uploads` của job DONE có sẵn trước lần chạy đầu | đánh dấu 1; sau 2 ngày bị xóa | `:125` (mốc) và `:508` (kiểm lại lúc purge) |
-| D | job DONE chèn sau khi đã đánh dấu | đánh dấu 1; purge vẫn xóa | `:125` (graph dựng lại trong `run()`, `fileGc.ts:406`) và `:508` (kiểm lại lúc purge) |
+| C | `node_uploads` của job SUCCEEDED có sẵn trước lần chạy đầu | đánh dấu 1; sau 2 ngày bị xóa | `:125` (mốc) và `:508` (kiểm lại lúc purge) |
+| D | job SUCCEEDED chèn sau khi đã đánh dấu | đánh dấu 1; purge vẫn xóa | `:125` (graph dựng lại trong `run()`, `fileGc.ts:406`) và `:508` (kiểm lại lúc purge) |
 
 A mô phỏng trạng thái sau cleanup: hàng đã mất, file còn. Test không chạy `cleanupFinishedUploads`; nó dựng trạng thái đó trực tiếp.
+
+Trạng thái job trong test là `SUCCEEDED`, `RUNNING` hoặc `QUEUED`, đúng với các giá trị job mà code dùng (`orchestrator.ts:533`). `jobs.status` là text tự do (`db/schema.ts:487`), nên không có ràng buộc enum. Bản đầu dùng `DONE`, đó là trạng thái của stage, không phải của job. Đã đổi sang `SUCCEEDED`; kết quả mutant không đổi.
 
 ## Mutant (áp lên `src/`, chạy, khôi phục, so sánh byte)
 
@@ -44,24 +46,24 @@ A mô phỏng trạng thái sau cleanup: hàng đã mất, file còn. Test khôn
 | no-fence + force-skip | cả hai thay đổi trên | đỏ: B |
 | drop-347 | bỏ dòng skip ở `references.ts:347` (`isTargetReferencedInDb`) | không đỏ (không có test nào phủ oracle này cho `render/pending`) |
 
-B xanh trong ba mutant đơn lẻ, đúng với vai trò đối chứng. Mỗi mutant được khôi phục và so sánh byte với bản gốc; `git diff -- apps/server/src` rỗng sau khi chạy.
+B xanh trong bảy trên tám mutant (chỉ mutant kết hợp làm B đỏ), đúng với vai trò đối chứng. Mỗi mutant được khôi phục và so sánh byte với bản gốc; `git diff -- apps/server/src` rỗng sau khi chạy.
 
 Đọc bảng mutant:
 - Fence `:96` và force-skip `:125/:508` dự phòng cho nhau trong B. Bỏ fence thì `:125` vẫn bảo vệ B. Bỏ `:125/:508` thì fence vẫn bảo vệ B. Chỉ khi bỏ cả hai, B đỏ. B là đối chứng cho cặp này, không tách được từng cơ chế.
 - Quy tắc skip `:125/:508` được ghim bởi C và D (drop-125, drop-508). Fence `:96` không có test riêng làm đỏ khi `:125/:508` còn. Đây là khoảng trống đã biết, mức thấp.
-- drop-508 cũng làm đỏ C, vì lúc purge chỉ bộ chỉ mục mới thấy hàng DONE và từ chối xóa. D là biến thể mà hàng xuất hiện sau khi đã đánh dấu.
+- drop-508 cũng làm đỏ C, vì lúc purge chỉ bộ chỉ mục mới thấy hàng SUCCEEDED và từ chối xóa. D là biến thể mà hàng xuất hiện sau khi đã đánh dấu.
 
 Lần chạy đầu của drop-508 áp nhầm vào `references.ts:347` (cùng chuỗi, lần xuất hiện thứ hai). Script cuối chọn dòng theo số dòng và kiểm nội dung dòng trước khi thay, rồi in từng dòng đã thay. Các số trong bảng là của lần chạy cuối.
 
 ## Kết quả
 
 - `fileGcPendingUploads.test.ts`: 4/4 xanh (trên mã chưa mutate).
-- Hồi quy `fileGc.test.ts`, `fileGcPurgeIndex.test.ts`, `fileGcRecovery.test.ts` và file mới: 35/35 xanh (chạy lại sau khi sửa báo cáo và comment case D).
+- Hồi quy `fileGc.test.ts`, `fileGcPurgeIndex.test.ts`, `fileGcRecovery.test.ts` và file mới: 35/35 xanh (chạy sau khi đổi `DONE` thành `SUCCEEDED` trong test).
 - `npx tsc --noEmit` (apps/server): exit 0.
 
 ## Lệch so với đề xuất advisor
 
-- Advisor đề xuất case C tắt fence `:96` và buộc `:125` riêng. Cách làm ở đây khác: C dùng job DONE trong dự án không bận, nên `:96` không áp dụng và không cần tắt fence. B là đối chứng job RUNNING, bị `:96` chặn, nên không tách được `:125`.
+- Advisor đề xuất case C tắt fence `:96` và buộc `:125` riêng. Cách làm ở đây khác: C dùng job SUCCEEDED trong dự án không bận, nên `:96` không áp dụng và không cần tắt fence. B là đối chứng job RUNNING, bị `:96` chặn, nên không tách được `:125`.
 - Quyết định (advisor, 2026-11-21): giữ cách làm này. Kết quả mutant không-fence, force-skip và cả hai khớp kỳ vọng đã đặt trước khi chạy: B chỉ đỏ khi bỏ cả hai cơ chế.
 
 ## Không kiểm / ghi nhận
@@ -70,7 +72,7 @@ Lần chạy đầu của drop-508 áp nhầm vào `references.ts:347` (cùng ch
 - `references.ts:347` (`isTargetReferencedInDb`, oracle) không bị mutant. Phần parity do `fileGcPurgeIndex.test.ts` phủ, và chỉ cho `uploads/`, không cho `render/pending`.
 - Đường `ephemeralOnly` (`app.ts:801`) không được kiểm.
 - Fence `:96` không có test riêng làm đỏ (xem phần đọc bảng mutant).
-- Trạng thái "file còn, không có hàng bảo vệ" trong production chưa được xác định (xem phần "Vì sao").
+- Trạng thái "file còn, không có hàng bảo vệ" trong production chưa được xác định (xem phần "Vì sao"). Phần sau cleanup của nhánh lệch đường dẫn được đo ở TASK-160 (H3); chưa đo production có ghi hàng lệch đường dẫn không.
 
 ## Sửa đi kèm
 
