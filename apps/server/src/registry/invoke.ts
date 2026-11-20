@@ -185,6 +185,7 @@ export async function invokeRegistryTool(input: {
     autoConfirm: input.autoConfirm === true,
     alwaysConfirm: ALWAYS_CONFIRM_TOOLS.has(input.name),
     autonomy,
+    paused: getAutomationPaused(input.ctx.sqlite),
   });
   const pendingSummary = locked ? "Bạn vừa sửa mục này, agent chờ 24 giờ." : summary;
   async function execute(): Promise<Exclude<RegistryInvokeResult, { kind: "refused" }>> {

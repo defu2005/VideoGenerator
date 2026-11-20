@@ -177,17 +177,17 @@ Tool dùng chung cho assistant, MCP, operator và agent. Mã nằm ở `apps/ser
 - `AuditSource = "api" | "assistant" | "mcp" | "operator" | "system"` (`auth/auditLog.ts:12`). Nguồn `agent` được ghi thành `operator` (`registry/audit.ts:79`).
 - `TOOL_GRANTS` (`packages/shared/src/schemas/autonomy.ts:98`) ánh xạ tên tool tới khóa quyền (`approveGates`, `publish`, `retries`, `providers`, …) hoặc `null`.
 - `autonomyDecision` (`registry/policy.ts`, dòng 59–81): chặn cứng trước, rồi mức tự chủ `off` hoặc `assist` (cho chờ), rồi tool không có grant (chờ), rồi kiểm grant.
-- `shouldCreatePending` (`registry/policy.ts`, dòng 104–129) quyết định việc tạo thao tác chờ theo thứ tự: `forcesUserPending`; `computer_act`; nếu có `autonomy` thì áp `autonomyDecision`; tool `confirm` không có khóa nào trong `TOOL_GRANTS` (`Object.hasOwn`, khóa `null` vẫn tính là có) thì chờ; nguồn `agent` thì chạy; `confirm` từ `mcp` hoặc `operator` thì chờ; `alwaysConfirm`; cuối cùng `autoConfirm`.
+- `shouldCreatePending` (`registry/policy.ts`, dòng 104–132) quyết định việc tạo thao tác chờ theo thứ tự: `forcesUserPending`; `computer_act`; nếu có `autonomy` thì áp `autonomyDecision`; tool `confirm` không có khóa nào trong `TOOL_GRANTS` (`Object.hasOwn`, khóa `null` vẫn tính là có) thì chờ; khi automation đang pause (tham số `paused`, TASK-153) thì tool `confirm` từ nguồn `agent` chờ; nguồn `agent` còn lại thì chạy; `confirm` từ `mcp` hoặc `operator` thì chờ; `alwaysConfirm`; cuối cùng `autoConfirm`.
 - `registry/invoke.ts:178`: với nguồn `agent` không truyền `autonomy`, nên nhánh tự chủ không chạy. Mọi lượt gọi `agent` đều được truyền `gated = true` vào `execute`.
 
 **Đối chiếu với v0.2 (đã sửa).** v0.2 viết nguồn `agent` “chạy luôn” mọi thao tác `confirm`, kể cả xóa, đăng và bật lịch. Theo code ngày 2026-11-21, đó là quá rộng:
 - `hardBlockMessage` (`registry/invoke.ts:44`) chạy trước mọi nhánh và áp cho **mọi nguồn**, kể cả `agent`. Các lượt bị chặn ghi `refused`.
 - `forcesUserPending` (`registry/policy.ts:100`) đưa `delete_project`, `run_research` và việc bật tự động hóa vào chờ người dùng, với mọi nguồn.
-- Nguồn `agent`: không có `autonomy` (`invoke.ts:178`), nên nhánh tự chủ không chạy. Tool `confirm` không có khóa trong `TOOL_GRANTS` thì chờ. Tool có khóa, như `publish_project` (grant `publish`), thì **chạy trực tiếp** với `gated = true`, không qua mức tự chủ của người dùng.
+- Nguồn `agent`: không có `autonomy` (`invoke.ts:178`), nên nhánh tự chủ không chạy. Tool `confirm` không có khóa trong `TOOL_GRANTS` thì chờ. Tool có khóa, như `publish_project` (grant `publish`), thì **chạy trực tiếp** với `gated = true`, không qua mức tự chủ của người dùng; riêng khi automation đang pause thì các tool `confirm` này chờ người dùng (TASK-153, test `apps/server/test/registry.test.ts`).
 
 Tool có khóa `null` trong `TOOL_GRANTS` (chú thích trong code: “Null requires human review even with every grant”) có hai nhánh:
 - Nguồn không phải `agent`: `autonomyDecision` không có grant nên trả `pending`. Đúng với chú thích.
-- Nguồn `agent` không có `autonomy`, và khóa `null` vẫn qua `hasOwn`, nên tool `confirm` có khóa `null` **chạy trực tiếp** với `gated = true`, trừ khi `hardBlockMessage` chặn. Nhóm `null` này gồm 18 tool (đã đọc `risk` trong các file định nghĩa): `add_revenue_entry`, `make_shorts`, `make_translation`, `apply_review_proposal`, `undo_timeline_edit`, `update_stage_timeouts`, `crop_scene_images`, `dedupe_scene_visuals`, `switch_script_hook`, `rescore_script`, `set_node_drain`, `decide_stage_note`, `propose_knowledge_change`, `import_knowledge`, `resolve_change_event`, `report_change`, `set_style_pack`, `mark_change_reviewed` (`providerIntel/toolDefs.ts:161`).
+- Nguồn `agent` không có `autonomy`, và khóa `null` vẫn qua `hasOwn`, nên tool `confirm` có khóa `null` **chạy trực tiếp** với `gated = true`, trừ khi `hardBlockMessage` chặn hoặc automation đang pause (khi đó chờ người dùng, TASK-153). Nhóm `null` này gồm 18 tool (đã đọc `risk` trong các file định nghĩa): `add_revenue_entry`, `make_shorts`, `make_translation`, `apply_review_proposal`, `undo_timeline_edit`, `update_stage_timeouts`, `crop_scene_images`, `dedupe_scene_visuals`, `switch_script_hook`, `rescore_script`, `set_node_drain`, `decide_stage_note`, `propose_knowledge_change`, `import_knowledge`, `resolve_change_event`, `report_change`, `set_style_pack`, `mark_change_reviewed` (`providerIntel/toolDefs.ts:161`).
 
 Phạm vi đầy đủ rộng hơn nhóm `null`: mọi tool `confirm` có khóa bất kỳ trong `TOOL_GRANTS` (kể cả `publish_project` với grant `publish`) đều đi cùng nhánh này, trừ các ngoại lệ `forcesUserPending` (`delete_project`, `run_research`, bật tự động hóa) và `computer_act`. Phần có khóa không `null` chưa được đếm đầy đủ.
 
@@ -195,7 +195,7 @@ Chưa đối chiếu hết: hành vi trong một số hàm `execute` đổi theo
 
 Khóa `locked` (`invoke.ts:177`, `agentMayChange` ở `operator/autopilot.ts:274`) làm thao tác chờ với mọi nguồn, kể cả `agent`, khi người dùng vừa chạm khóa cài đặt đó trong 24 giờ (`needsPending = locked || shouldCreatePending(...)`).
 
-Vì vậy, khi agent gọi (nguồn lấy từ header `x-vg-tool-source` do client gửi, `api/registry.ts:25–26`), các tool `confirm` nói trên chạy được khi không bị `hardBlockMessage`, `forcesUserPending` hay khóa `locked` chặn. Đường tiếp cận này (ai có thể đặt header đó) cần đối chiếu với lớp xác thực, chưa làm trong tài liệu này. Đây có phải thiết kế mong muốn hay không là quyết định sản phẩm, tài liệu này không tự kết luận.
+Vì vậy, khi agent gọi (nguồn lấy từ header `x-vg-tool-source` do client gửi, `api/registry.ts:25–26`), các tool `confirm` nói trên chạy được khi không bị `hardBlockMessage`, `forcesUserPending`, khóa `locked` chặn, và automation không đang pause (khi pause, chúng chờ người dùng: TASK-153). Đường tiếp cận này (ai có thể đặt header đó) cần đối chiếu với lớp xác thực, chưa làm trong tài liệu này. Đây có phải thiết kế mong muốn hay không là quyết định sản phẩm, tài liệu này không tự kết luận.
 
 ## 6. Điều khiển từ ngoài UI
 
@@ -431,7 +431,7 @@ Khi task mới thật sự thiếu cắt scene trên video có sẵn, hoặc că
 | `pipeline/stale.ts` | `pipeline/invalidation.ts` (`markStaleFrom`) | `pipeline/invalidation.ts:4` |
 | `apps/server/src/renderService.ts`, `orchestrator.ts` | `services/renderService.ts`, `pipeline/orchestrator.ts` | Hai đường cũ không tồn tại |
 | `jobs/queue.ts` | Hàng đợi nằm trong `jobs/worker.ts` và `jobs/jobRepository.ts` | `jobs/queue.ts` không tồn tại |
-| Nguồn `agent` chạy mọi việc `confirm` | Tool `confirm` có khóa trong `TOOL_GRANTS` (kể cả khóa `null`, 18 tool; khóa khác như `publish_project` cũng vậy) chạy trực tiếp; tool ngoài bảng, `delete_project`, `run_research` và bật tự động hóa thì chờ; `locked` cũng làm chờ. Mọi nguồn đều bị `hardBlockMessage` chặn trước (§5) | `registry/policy.ts:100–129`, `registry/invoke.ts:44,178` |
+| Nguồn `agent` chạy mọi việc `confirm` | Tool `confirm` có khóa trong `TOOL_GRANTS` (kể cả khóa `null`, 18 tool; khóa khác như `publish_project` cũng vậy) chạy trực tiếp, trừ khi automation đang pause (khi đó chờ người dùng, TASK-153); tool ngoài bảng, `delete_project`, `run_research` và bật tự động hóa thì chờ; `locked` cũng làm chờ. Mọi nguồn đều bị `hardBlockMessage` chặn trước (§5) | `registry/policy.ts:100–132`, `registry/invoke.ts:44,178` |
 | “Thư mục `.cursor/`” là workspace operator | Workspace operator là `.video-agent-operator` ngoài git root | `operator/workspace.ts:33` |
 
 ## 16. Liên kết tới tài liệu sâu

@@ -109,6 +109,8 @@ export function shouldCreatePending(input: {
   autoConfirm: boolean;
   alwaysConfirm: boolean;
   autonomy?: AutonomySettings;
+  /** TASK-153: automation pause also holds agent-sourced confirm tools (default false). */
+  paused?: boolean;
 }): boolean {
   if (forcesUserPending(input.name, input.args)) return true;
   if (input.name === "computer_act" && !(input.autonomy && autonomyDecision(input.name, input.args, input.autonomy) === "run")) {
@@ -121,6 +123,7 @@ export function shouldCreatePending(input: {
   }
   const risk = effectiveRisk(input.risk);
   if (risk === "confirm" && !Object.hasOwn(TOOL_GRANTS, input.name)) return true;
+  if (input.paused && risk === "confirm" && input.source === "agent") return true;
   if (input.source === "agent") return false;
   if (risk !== "confirm") return false;
   if (input.source === "mcp" || input.source === "operator") return true;

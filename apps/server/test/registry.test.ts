@@ -603,4 +603,49 @@ describe("tool registry", () => {
     });
     expect(approve.statusCode).toBe(403);
   });
+
+  it("TASK-153: a paused automation sends agent-sourced publish_project to pending", async () => {
+    const sqlite = (app.vgPublish.service as unknown as { sqlite: import("better-sqlite3").Database }).sqlite;
+    const created = await app.inject({
+      method: "POST", url: "/api/projects", payload: { topic: "TASK-153 pause agent publish", mode: "ASSISTED" },
+    });
+    const projectId = created.json<{ id: string }>().id;
+    setAutomationPaused(sqlite, true);
+    try {
+      const paused = await app.inject({
+        method: "POST",
+        url: "/api/registry/invoke",
+        headers: { "x-vg-tool-source": "agent" },
+        payload: { name: "publish_project", args: { projectId, body: { accountIds: ["00000000-0000-4000-8000-00000000d153"], visibility: "private" } } },
+      });
+      expect(paused.statusCode).toBe(200);
+      expect(paused.json()).toMatchObject({ pendingActionId: expect.any(String) });
+    } finally {
+      setAutomationPaused(sqlite, false);
+    }
+  });
+
+  it("TASK-153: an unpaused automation does not make agent-sourced publish_project pending", async () => {
+    const sqlite = (app.vgPublish.service as unknown as { sqlite: import("better-sqlite3").Database }).sqlite;
+    setAutomationPaused(sqlite, false);
+    const created = await app.inject({
+      method: "POST", url: "/api/projects", payload: { topic: "TASK-153 unpaused agent publish", mode: "ASSISTED" },
+    });
+    const projectId = created.json<{ id: string }>().id;
+    const pendingRows = () => (sqlite.prepare(
+      "SELECT COUNT(*) AS n FROM operator_tool_audit WHERE tool = 'publish_project' AND source = 'agent' AND decision = 'pending'",
+    ).get() as { n: number }).n;
+    const before = pendingRows();
+    // The call reaches execute() and stops at the publish gate (no account exists), so it is not pending.
+    const running = await app.inject({
+      method: "POST",
+      url: "/api/registry/invoke",
+      headers: { "x-vg-tool-source": "agent" },
+      payload: { name: "publish_project", args: { projectId, body: { accountIds: ["00000000-0000-4000-8000-00000000d153"], visibility: "private" } } },
+    });
+    expect(running.statusCode).toBe(409);
+    expect(running.json()).toMatchObject({ error: { code: "PUBLISH_GATE" } });
+    expect(running.json()).not.toHaveProperty("pendingActionId");
+    expect(pendingRows()).toBe(before);
+  });
 });
