@@ -81,6 +81,47 @@ function reply(value: unknown, isError = false): ToolReply {
   };
 }
 
+const registryContentSchema = z.array(z.discriminatedUnion("type", [
+  z.object({ type: z.literal("text"), text: z.string() }).strict(),
+  z.object({ type: z.literal("image"), mimeType: z.enum(["image/png", "image/jpeg"]), data: z.string().min(1) }).strict(),
+]));
+
+function validImage(block: { mimeType: string; data: string }): boolean {
+  // Buffer decoding alone is permissive (it ignores invalid characters/padding).
+  if (block.data.length % 4 !== 0 || !/^[A-Za-z0-9+/]*={0,2}$/.test(block.data)) return false;
+  const bytes = Buffer.from(block.data, "base64");
+  if (bytes.toString("base64") !== block.data) return false;
+  return block.mimeType === "image/png"
+    ? bytes.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]))
+    : bytes.length >= 3 && bytes[0] === 255 && bytes[1] === 216 && bytes[2] === 255;
+}
+
+/** Lift image blocks out of registry JSON while retaining facts, URLs and text. */
+function registryImageReply(response: Awaited<ReturnType<VideoAgentApiClient["invokeRegistry"]>>, candidate: boolean): ToolReply {
+  if (!response.result) return reply(response);
+  const result = response.result;
+  if (typeof result !== "object" || Array.isArray(result)) throw new Error("Máy chủ trả dữ liệu ảnh MCP không hợp lệ.");
+  if (!("content" in result) && !candidate) return reply(response); // URL-only preview fallback.
+  const { content: rawContent, ...metadata } = result as Record<string, unknown>;
+  const parsed = registryContentSchema.safeParse(rawContent);
+  if (!parsed.success || parsed.data.some((block) => block.type === "image" && !validImage(block))) {
+    throw new Error("Máy chủ trả dữ liệu ảnh MCP không hợp lệ.");
+  }
+  const content: ToolReply["content"] = [...parsed.data];
+  if (candidate) {
+    if (!z.string().regex(/^[a-f0-9]{64}$/).safeParse(metadata.sha256).success || !content.some((block) => block.type === "image")) {
+      throw new Error("Máy chủ trả dữ liệu ảnh MCP không hợp lệ.");
+    }
+    content.push({ type: "text", text: `SHA256 ảnh gốc: ${metadata.sha256}` });
+    delete metadata.sha256;
+  }
+  const { result: _result, ...envelope } = response;
+  if (Object.keys(metadata).length || Object.keys(envelope).length) {
+    content.push({ type: "text", text: JSON.stringify({ ...envelope, result: metadata }) });
+  }
+  return { content };
+}
+
 async function invoke<T>(action: () => Promise<T>, format: (value: T) => unknown = (value) => value): Promise<ToolReply> {
   try {
     return reply(format(await action()));
@@ -134,12 +175,10 @@ export function registerVideoAgentTools(
       }
       const handler = async (args: unknown): Promise<ToolReply> => {
         if (tool.name !== "research_scene_visuals" && tool.name !== "dedupe_scene_visuals" && tool.name !== "crop_scene_images" && containsProtectedProject(args)) return Promise.resolve(reply("Dự án này bị từ chối.", true));
-        if (tool.name === "visual_get_candidate_image") {
+        if (tool.name === "visual_get_candidate_image" || tool.name === "preview_frame" || tool.name === "preview_contact_sheet") {
           try {
             const response = await api.invokeRegistry(tool.name, args);
-            if (!response.result) return reply(response);
-            const result = z.object({ content: z.array(z.object({ type: z.literal("image"), mimeType: z.literal("image/png"), data: z.string().min(1) }).strict()), sha256: z.string().regex(/^[a-f0-9]{64}$/) }).strict().parse(response.result);
-            return { content: [...result.content, { type: "text", text: `SHA256 ảnh gốc: ${result.sha256}` }] };
+            return registryImageReply(response, tool.name === "visual_get_candidate_image");
           } catch (error) {
             return reply(error instanceof VideoAgentApiError ? error.rawBody ?? error.message : error instanceof Error ? error.message : String(error), true);
           }
@@ -302,6 +341,10 @@ export function registerVideoAgentTools(
       };
     }));
 
+  define("get_stage_lessons", "Xem bài học theo bước đã duyệt hoặc đang chờ của một kênh (kèm bài học toàn cục). Chỉ đọc.", {    profileId: z.string().min(1).max(80),  }, ({ profileId }) => invoke(() => api.getStageLessons(profileId)));
+
+  define("stage_quality_report", "Xu hướng chất lượng 14 ngày so với 14 ngày trước của một bước. Chỉ đọc.", {    stage: z.string().min(1).max(40),    metric: z.string().min(1).max(40).optional(),    days: z.number().int().min(1).max(90).optional(),    profileId: z.string().min(1).max(80).optional(),  }, ({ stage, metric, days, profileId }) => invoke(() => api.getStageQualityTrend(stage, days ?? 14, profileId)));
+
   define("set_stage_timeout", "Tính lại thời gian tối đa từng bước, hoặc đặt một bước theo giây. timeoutSec null trả bước đó về mức ước lượng.", {
     ...projectIdShape,
     recompute: z.boolean().optional(),
@@ -370,6 +413,17 @@ export function registerVideoAgentTools(
 
   define("get_script", "Read the current script and its origin/version metadata.", projectIdShape, ({ projectId }) =>
     invoke(async () => (await api.getScript(projectId)).script));
+
+  define("get_script_draft", "Read the story outline, candidate hooks, critique score, and loop status for a project's script.", projectIdShape, ({ projectId }) =>
+    invoke(() => api.getScriptDraft(projectId)));
+
+  define("switch_script_hook", "Switch the active hook candidate for a script and adjust the opening section narration.", {
+    ...projectIdShape,
+    hookId: z.string().min(1),
+  }, ({ projectId, hookId }) => invoke(() => api.switchScriptHook(projectId, hookId)));
+
+  define("rescore_script", "Re-score the current script with the 6-dimension critic rubric.", projectIdShape, ({ projectId }) =>
+    invoke(() => api.rescoreScript(projectId)));
 
   define("get_scenes", "Read the compact storyboard and timing for a project's planned scenes.", projectIdShape, ({ projectId }) =>
     invoke(async () => {

@@ -13,7 +13,7 @@ function home() { const root = mkdtempSync(join(tmpdir(), "vg-sync123-")); roots
 function bundle(version = 1): FleetBundle {
   const data: Omit<FleetBundle, "hash" | "bundleVersion"> = {
     files: [{ path: "vg-test/SKILL.md", content: "---\nname: vg-test\ndescription: test\n---\nRead state." }],
-    configPatch: { model: { provider: "custom:fleet", default: "fixture", base_url: "http://model.test/v1" }, providers: { fleet: { api: "http://model.test/v1", api_mode: "chat_completions", api_key: "${VG_HERMES_MODEL_KEY}" } }, mcp_servers: { "video-agent": { url: "${VG_MCP_URL}", headers: { Authorization: "Bearer ${VG_API_KEY}" } } }, skills: { external_dirs: ["/opt/data/vg-skills"] }, memory: { memory_enabled: true } },
+    configPatch: { model: { provider: "custom:fleet", default: "fixture", base_url: "${VG_API_URL}/api/llm/relay/v1" }, providers: { fleet: { api: "${VG_API_URL}/api/llm/relay/v1", api_mode: "chat_completions", api_key: "${VG_API_KEY}" } }, mcp_servers: { "video-agent": { url: "${VG_MCP_URL}", headers: { Authorization: "Bearer ${VG_API_KEY}" } } }, skills: { external_dirs: ["/opt/data/vg-skills"] }, memory: { memory_enabled: true } },
     hermesVersion: "0.23.1", toolHash: "a".repeat(64), skillVersions: { "vg-test": version },
     cron: [{ name: "vg-supervise", schedule: "every 15m", prompt: "Run the vg-supervise skill", skill: "vg-supervise", command: 'hermes cron create "every 15m" "Run the vg-supervise skill" --skill vg-supervise --name vg-supervise' }],
   };
@@ -40,13 +40,26 @@ it("merges managed YAML leaves, keeps local settings/comments/external dirs, and
   expect(readFileSync(join(root, "config.yaml.vg-bak"), "utf8")).toBe(original);
   const text = readFileSync(join(root, "config.yaml"), "utf8"), parsed = parse(text);
   expect(text).toContain("# user comment");
-  expect(parsed).toMatchObject({ model: { temperature: 0.5, provider: "custom:fleet" }, telegram: { enabled: false }, providers: { fleet: { request_timeout_seconds: 120, api_key: "${VG_HERMES_MODEL_KEY}" } } });
+  expect(parsed).toMatchObject({ model: { temperature: 0.5, provider: "custom:fleet" }, telegram: { enabled: false }, providers: { fleet: { request_timeout_seconds: 120, api_key: "${VG_API_KEY}" } } });
   expect(parsed.skills.external_dirs).toEqual(["/local/skills", join(root, "vg-skills")]);
   expect(parsed.mcp_servers["video-agent"]).toEqual({ url: "${VG_MCP_URL}", headers: { Authorization: "Bearer ${VG_API_KEY}" } });
   expect(parsed.mcp_servers.unrelated.command).toBe("keep-local-server");
   expect(existsSync(join(root, "vg-sync/reload-needed"))).toBe(true);
   expect(mergeFleetConfig(root, bundle().configPatch, first.managed).changed).toBe(false);
   expect(() => mergeFleetConfig(root, { ...bundle().configPatch, terminal: { command: "unsafe" } } as never)).toThrow();
+});
+
+it("clears a stale local model when relay policy has no eligible default while retaining the relay provider", () => {
+  const root = home();
+  writeFileSync(join(root, "config.yaml"), "model:\n  default: stale-direct-model\n  provider: direct-provider\n");
+  const patch = bundle().configPatch;
+  patch.model.default = "";
+  mergeFleetConfig(root, patch);
+  const config = parse(readFileSync(join(root, "config.yaml"), "utf8"));
+  expect(config.model.default).toBe("");
+  expect(config.model.provider).toBe("custom:fleet");
+  expect(config.model.base_url).toBe("${VG_API_URL}/api/llm/relay/v1");
+  expect(config.providers.fleet.api_key).toBe("${VG_API_KEY}");
 });
 it("syncs without tokens, pushes only changes, uses the pre-pull parent, and never transmits local secrets/memory", async () => {
   const root = home();

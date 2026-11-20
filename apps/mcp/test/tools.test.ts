@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
@@ -57,11 +57,101 @@ function jsonResponse(value: unknown, status = 200): Response {
 
 describe("Video Agent MCP tools", () => {
   it("returns stored candidate previews as native MCP image content", async () => {
-    const image = { type: "image", mimeType: "image/png", data: Buffer.from("stored-preview").toString("base64") };
+    const image = { type: "image", mimeType: "image/png", data: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=" };
     const fetchImpl = vi.fn(async () => jsonResponse({ result: { content: [image], sha256: "a".repeat(64) } }));
     const client = await connect(fetchImpl, [{ name: "visual_get_candidate_image", description: "Stored image", properties: { candidateId: "uuid", "maxSide?": "number" } }]);
     const result = await client.callTool({ name: "visual_get_candidate_image", arguments: { candidateId: projectId, maxSide: 768 } });
     expect(result.content).toEqual([image, { type: "text", text: `SHA256 ảnh gốc: ${"a".repeat(64)}` }]);
+  });
+  it.each(["preview_frame", "preview_contact_sheet"])("returns %s as a native image while preserving text, facts and metadata without duplicated base64", async (name) => {
+    const data = readFileSync(new URL("../../server/test/fixtures/images/tiny.jpg", import.meta.url)).toString("base64");
+    const image = { type: "image", mimeType: "image/jpeg", data };
+    const text = { type: "text", text: "Ảnh xem trước; kiểm tra vùng chữ an toàn." };
+    const metadata = { kind: name === "preview_frame" ? "frame" : "contact_sheet", basis: "selection", cached: false,
+      file: { id: "fixture-file", name: "fixture.jpg", url: `/api/projects/${projectId}/preview/fixture.jpg`, mime: "image/jpeg" },
+      width: 480, height: 270, elapsedMs: 12, notes: ["Timeline chưa hoàn tất"], warnings: ["safe-area"],
+      facts: [{ kind: "title", text: "Nội dung", averageLuma: 50, safeAreaOverflow: true, pHash: "fixture-hash" }],
+      tiles: [{ sceneIndex: 0, atSec: 1.2 }], atSec: 1.2 };
+    const fetchImpl = vi.fn(async () => jsonResponse({ result: { ...metadata, content: [text, image] }, summaryVi: "Xem trước nhanh" }));
+    const client = await connect(fetchImpl, [{ name, description: "Preview", inputSchema: {
+      type: "object", properties: { projectId: { type: "string", format: "uuid" } }, required: ["projectId"],
+    } }]);
+    const result = await client.callTool({ name, arguments: { projectId } });
+    expect(result.isError).not.toBe(true);
+    expect(result.content).toEqual([text, image, { type: "text", text: JSON.stringify({ summaryVi: "Xem trước nhanh", result: metadata }) }]);
+    expect(resultText(result)).not.toContain(data);
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+    expect(JSON.parse(String(fetchImpl.mock.calls[0]?.[1]?.body))).toMatchObject({ name, args: { projectId } });
+  });
+
+  it.each(["preview_frame", "preview_contact_sheet", "preview_clip"])("keeps the URL-only %s result and facts intact", async (name) => {
+    const response = { result: { kind: name === "preview_clip" ? "clip" : "frame", basis: "timeline", cached: true,
+      file: { id: "fixture", url: `/api/projects/${projectId}/preview/fixture`, mime: name === "preview_clip" ? "video/mp4" : "image/jpeg" },
+      facts: [{ kind: "still", averageLuma: 100 }], durationSec: name === "preview_clip" ? 3 : undefined } };
+    const client = await connect(vi.fn(async () => jsonResponse(response)), [{ name, description: "URL preview", properties: { projectId: "uuid" } }]);
+    const result = await client.callTool({ name, arguments: { projectId } });
+    expect(result.content).toEqual([{ type: "text", text: JSON.stringify(response) }]);
+    expect(JSON.parse(resultText(result))).toEqual(JSON.parse(JSON.stringify(response)));
+  });
+
+  it("preserves an image tool's pending-action envelope", async () => {
+    const response = { pendingActionId: "pending-fixture", summaryVi: "Chưa có ảnh" };
+    const client = await connect(vi.fn(async () => jsonResponse(response)), [{ name: "preview_frame", description: "Preview" }]);
+    const result = await client.callTool({ name: "preview_frame", arguments: {} });
+    expect(JSON.parse(resultText(result))).toEqual(response);
+  });
+
+  it("returns preview images through the operator-only catalog path as well", async () => {
+    vi.stubEnv("VG_TOOL_SOURCE", "operator");
+    const image = { type: "image", mimeType: "image/jpeg",
+      data: readFileSync(new URL("../../server/test/fixtures/images/tiny.jpg", import.meta.url)).toString("base64") };
+    const client = await connect(vi.fn(async () => jsonResponse({ result: { content: [image], basis: "timeline" } })),
+      [{ name: "preview_frame", description: "Operator preview", properties: { projectId: "uuid" } }]);
+    const result = await client.callTool({ name: "preview_frame", arguments: { projectId } });
+    expect(result.content).toEqual([image, { type: "text", text: JSON.stringify({ result: { basis: "timeline" } }) }]);
+  });
+
+  it("keeps the candidate SHA256 contract when validating native image results", async () => {
+    const image = { type: "image", mimeType: "image/png", data: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=" };
+    const client = await connect(vi.fn(async () => jsonResponse({ result: { content: [image], sha256: "invalid-hash" } })),
+      [{ name: "visual_get_candidate_image", description: "Candidate" }]);
+    const result = await client.callTool({ name: "visual_get_candidate_image", arguments: {} });
+    expect(result.isError).toBe(true);
+    expect(result.content).toEqual([{ type: "text", text: "Máy chủ trả dữ liệu ảnh MCP không hợp lệ." }]);
+  });
+
+  it.each([
+    { mimeType: "image/jpeg", data: "not base64!" },
+    { mimeType: "image/jpeg", data: "ab==" }, // Noncanonical unused bits.
+    { mimeType: "image/jpeg", data: "" },
+    { mimeType: "image/svg+xml", data: Buffer.from("<svg/>").toString("base64") },
+    { mimeType: "image/jpeg", data: Buffer.from("not an image").toString("base64") },
+    { mimeType: "image/jpeg", data: "iVBORw0KGgo=" }, // PNG signature declared as JPEG.
+    { mimeType: "image/png", data: "data:image/png;base64,iVBORw0KGgo=" },
+  ])("rejects invalid preview MIME/base64/image signature without echoing image payload ($mimeType, $data)", async (image) => {
+    const client = await connect(vi.fn(async () => jsonResponse({ result: { content: [{ type: "image", ...image }] } })),
+      [{ name: "preview_contact_sheet", description: "Preview" }]);
+    const result = await client.callTool({ name: "preview_contact_sheet", arguments: {} });
+    expect(result.isError).toBe(true);
+    expect(result.content).toEqual([{ type: "text", text: "Máy chủ trả dữ liệu ảnh MCP không hợp lệ." }]);
+  });
+
+  it("preserves candidate image hashes and additional metadata/text through the shared image path", async () => {
+    const image = { type: "image", mimeType: "image/png", data: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=" };
+    const client = await connect(vi.fn(async () => jsonResponse({ result: { content: [image, { type: "text", text: "Candidate note" }], sha256: "b".repeat(64), width: 1 }, summaryVi: "Ảnh gốc" })),
+      [{ name: "visual_get_candidate_image", description: "Candidate" }]);
+    const result = await client.callTool({ name: "visual_get_candidate_image", arguments: {} });
+    expect(result.content).toEqual([image, { type: "text", text: "Candidate note" },
+      { type: "text", text: `SHA256 ảnh gốc: ${"b".repeat(64)}` },
+      { type: "text", text: JSON.stringify({ summaryVi: "Ảnh gốc", result: { width: 1 } }) }]);
+  });
+
+  it("keeps registry API failures as MCP errors on the image path", async () => {
+    const client = await connect(vi.fn(async () => jsonResponse({ error: { code: "PREVIEW_BUSY", message: "Thử lại sau" } }, 503)),
+      [{ name: "preview_frame", description: "Preview" }]);
+    const result = await client.callTool({ name: "preview_frame", arguments: {} });
+    expect(result.isError).toBe(true);
+    expect(resultText(result)).toContain("PREVIEW_BUSY");
   });
   it("registers all specified tools and three writing prompts", async () => {
     const client = await connect();
@@ -91,6 +181,8 @@ describe("Video Agent MCP tools", () => {
       "get_scene_visuals",
       "get_scenes",
       "get_script",
+      "get_script_draft",
+      "get_stage_lessons",
       "get_video_metadata",
       "get_writing_brief",
       "list_profiles",
@@ -101,6 +193,7 @@ describe("Video Agent MCP tools", () => {
       "list_vision_models",
       "publish_project",
       "recommend_brief",
+      "rescore_script",
       "retry_stage",
       "run_pipeline",
       "save_research",
@@ -110,8 +203,9 @@ describe("Video Agent MCP tools", () => {
       "select_scene_visual",
       "set_llm_models",
       "set_stage_timeout",
+      "stage_quality_report",
       "suggest_topics",
-    ]);
+      "switch_script_hook",]);
     expect(prompts.prompts.map((prompt) => prompt.name).sort()).toEqual([
       "write_research",
       "write_script",
@@ -589,6 +683,40 @@ describe("Video Agent MCP tools", () => {
     });
     expect(memory.isError).toBe(true);
     expect(fetchImpl).toHaveBeenCalledTimes(1);
+  });
+
+  it("app_api reads the in-progress and done proposal lists and refuses every write to tool proposals", async () => {
+    const requests: { method: string; url: string }[] = [];
+    const fetchImpl = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      requests.push({ method: init?.method ?? "GET", url: String(input) });
+      return jsonResponse({ items: [{ id: "33333333-3333-4333-8333-333333333333", name: "done_a", taskRef: "TASK-A" }] });
+    }) as typeof fetch;
+    const client = await connect(fetchImpl);
+    for (const path of ["/api/operator/tool-proposals/in-progress", "/api/operator/tool-proposals/done"]) {
+      const read = await client.callTool({ name: "app_api", arguments: { method: "GET", path } });
+      expect(read.isError, path).not.toBe(true);
+      expect(resultText(read), path).toContain("TASK-A");
+    }
+    expect(requests.map((r) => `${r.method} ${new URL(r.url).pathname}`)).toEqual([
+      "GET /api/operator/tool-proposals/in-progress",
+      "GET /api/operator/tool-proposals/done",
+    ]);
+
+    const id = "22222222-2222-4222-8222-222222222222";
+    const writes = [
+      `/api/operator/tool-proposals/${id}/start`,
+      `/api/operator/tool-proposals/${id}/check-done`,
+      `/api/operator/tool-proposals/${id}/accept`,
+      `/api/operator/tool-proposals/${id}/draft`,
+      `/api/operator/tool-proposals/${id}/dismiss`,
+      `/api/operator/tool%2Dproposals/${id}/check-done`,
+    ];
+    for (const path of writes) {
+      const blocked = await client.callTool({ name: "app_api", arguments: { method: "POST", path, body: { task: "TASK-X" } } });
+      expect(blocked.isError, path).toBe(true);
+      expect(resultText(blocked), path).toContain("Chỉ người dùng xử lý đề xuất công cụ trong giao diện.");
+    }
+    expect(requests).toHaveLength(2);
   });
 
   it("lists vision models and retries a failed stage", async () => {

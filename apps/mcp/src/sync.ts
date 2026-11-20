@@ -6,6 +6,7 @@ import { fileURLToPath } from "node:url";
 import { hostname, homedir } from "node:os";
 import { parseDocument } from "yaml";
 import { FleetBundleSchema, FleetConfigPatchSchema, FleetFileSchema, fleetBundlePayload, redactExportText, type FleetBundle } from "@vg/shared";
+import { pollAgentEventsOnce, pollInboxOnce, type InboxPeek, type PolledEvent } from "./eventPoller.js";
 
 type SyncState = { bundleVersion: number; hash: string; skillsHash: string; toolHash: string; pushed: Record<string, string>; managed: string[][]; activeVersions: Record<string, number> };
 const emptyState = (): SyncState => ({ bundleVersion: 0, hash: "", skillsHash: "", toolHash: "", pushed: {}, managed: [], activeVersions: {} });
@@ -188,18 +189,107 @@ export type SyncOptions = {
   fetchImpl?: typeof fetch; log?: (text: string) => void;
   secretValues?: readonly string[];
 };
-export async function syncFleetOnce(options: SyncOptions) {
-  const log = options.log ?? (() => undefined);
-  const base = new URL(options.apiUrl);
-  if (!options.apiKey || !["http:", "https:"].includes(base.protocol) || base.username || base.password || base.search || base.hash) throw new Error("SYNC_CONNECTION_INVALID");
-  const fetchImpl = options.fetchImpl ?? fetch;
-  async function api(path: string, body?: unknown): Promise<unknown> {
+/** Shared by the sync loop and the event poller: same auth, secret check and error codes. */
+function makeApi(options: SyncOptions, fetchImpl: typeof fetch) {
+  return async function api(path: string, body?: unknown): Promise<unknown> {
     const serialized = body === undefined ? undefined : JSON.stringify(body);
     if (serialized && [options.apiKey, ...(options.secretValues ?? [])].some((value) => value && serialized.includes(value))) throw new Error("SYNC_SECRET_REJECTED");
     const response = await fetchImpl(`${options.apiUrl.replace(/\/+$/, "")}${path}`, { method: body === undefined ? "GET" : "POST", redirect: "error", signal: AbortSignal.timeout(20_000), headers: { Authorization: `Bearer ${options.apiKey}`, "x-api-key": options.apiKey, ...(body === undefined ? {} : { "Content-Type": "application/json" }) }, ...(serialized === undefined ? {} : { body: serialized }) });
     if (!response.ok) throw new Error(`SYNC_HTTP_${response.status}`);
     return response.json();
+  };
+}
+
+export const EVENT_CURSOR_PATH = "vg-sync/events-cursor.json";
+export function readEventCursor(home: string): string | undefined {
+  try {
+    const cursor = (JSON.parse(readFileSync(syncPath(home, EVENT_CURSOR_PATH), "utf8")) as { cursor?: unknown }).cursor;
+    return typeof cursor === "string" ? cursor : undefined;
+  } catch { return undefined; }
+}
+
+/** Signal file the Hermes skill reads on its next cron run. Lives beside the cursor, never in vg-skills (a sync swaps that folder). */
+export const WAKE_SIGNAL_PATH = "vg-sync/wake-signal.json";
+export const WAKE_SIGNAL_CAP = 20;
+/** Appends woken events, deduped by id, bounded to the newest WAKE_SIGNAL_CAP. Stores only id, type, time and a short summary. */
+export function appendWakeSignal(home: string, events: PolledEvent[], now: () => string = () => new Date().toISOString()) {
+  if (!events.length) return;
+  let existing: { id: string; type: string; at: string; summary: string }[] = [];
+  try {
+    const parsed = JSON.parse(readFileSync(syncPath(home, WAKE_SIGNAL_PATH), "utf8")) as { events?: unknown };
+    if (Array.isArray(parsed.events)) existing = parsed.events as typeof existing;
+  } catch { existing = []; }
+  const known = new Set(existing.map((row) => row.id));
+  const at = now();
+  const fresh = events.filter((event) => !known.has(event.id)).map((event) => ({ id: event.id, type: event.type, at, summary: event.summary.slice(0, 200) }));
+  if (!fresh.length) return;
+  atomicText(home, WAKE_SIGNAL_PATH, `${JSON.stringify({ events: [...existing, ...fresh].slice(-WAKE_SIGNAL_CAP) })}
+`);
+}
+
+/** One event poll (TASK-129a step 4). Wakes only on subscribed kinds; logs counts and error codes only. */
+export async function pollEventsOnce(options: SyncOptions, kinds: readonly string[], wake: (event: PolledEvent) => void) {
+  const log = options.log ?? (() => undefined);
+  const api = makeApi(options, options.fetchImpl ?? fetch);
+  const cursor = readEventCursor(options.home);
+  const woken: PolledEvent[] = [];
+  try {
+    const result = await pollAgentEventsOnce({
+      kinds, wake: (event) => { woken.push(event); wake(event); },
+      fetchEvents: async (since) => {
+        const query = new URLSearchParams({ types: kinds.join(","), limit: "100" });
+        if (since) query.set("since", since);
+        return api(`/api/events?${query.toString()}`) as Promise<{ events: PolledEvent[] }>;
+      },
+    }, cursor);
+    // Signal first: if it fails, the cursor stays put and the next poll wakes the same events again (deduped by id).
+    appendWakeSignal(options.home, woken);
+    atomicText(options.home, EVENT_CURSOR_PATH, `${JSON.stringify({ cursor: result.cursor ?? "" })}\n`);
+    log(`vg-events-poll ok woke=${result.woke}`);
+    return { ok: true as const, woke: result.woke };
+  } catch (error) {
+    // Cursor is kept unchanged on failure, so the next poll retries the same window.
+    const code = error instanceof Error && /^SYNC_[A-Z0-9_]+$/.test(error.message) ? error.message : "SYNC_FAILED";
+    log(`vg-events-poll ${code}; giữ con trỏ`);
+    return { ok: false as const, code };
   }
+}
+
+export const INBOX_SEEN_PATH = "vg-sync/inbox-seen.json";
+export function readInboxSeen(home: string): string[] | undefined {
+  try {
+    const ids = (JSON.parse(readFileSync(syncPath(home, INBOX_SEEN_PATH), "utf8")) as { ids?: unknown }).ids;
+    return Array.isArray(ids) && ids.every((id) => typeof id === "string") ? ids : undefined;
+  } catch { return undefined; }
+}
+
+/** One mailbox peek (TASK-129a step 4). Wakes once per unacked mail id; logs counts and error codes only. */
+export async function pollInboxEventsOnce(options: SyncOptions, wake: (message: InboxPeek) => void) {
+  const log = options.log ?? (() => undefined);
+  const api = makeApi(options, options.fetchImpl ?? fetch);
+  const seen = readInboxSeen(options.home);
+  try {
+    const result = await pollInboxOnce({
+      wake,
+      fetchPeek: () => api("/api/agents/mailbox/peek") as Promise<{ messages: InboxPeek[] }>,
+    }, seen);
+    atomicText(options.home, INBOX_SEEN_PATH, `${JSON.stringify({ ids: result.seen })}
+`);
+    log(`vg-inbox-poll ok woke=${result.woke}${result.primed ? " primed" : ""}`);
+    return { ok: true as const, woke: result.woke };
+  } catch (error) {
+    const code = error instanceof Error && /^SYNC_[A-Z0-9_]+$/.test(error.message) ? error.message : "SYNC_FAILED";
+    log(`vg-inbox-poll ${code}; giữ danh sách đã báo`);
+    return { ok: false as const, code };
+  }
+}
+
+export async function syncFleetOnce(options: SyncOptions) {
+  const log = options.log ?? (() => undefined);
+  const base = new URL(options.apiUrl);
+  if (!options.apiKey || !["http:", "https:"].includes(base.protocol) || base.username || base.password || base.search || base.hash) throw new Error("SYNC_CONNECTION_INVALID");
+  const fetchImpl = options.fetchImpl ?? fetch;
+  const api = makeApi(options, fetchImpl);
   try {
     const state = readState(options.home);
     const heartbeat = (pendingCron: string[] = []) => api("/api/agents/instances/heartbeat", { ...(options.instance ? { instance: options.instance } : {}), environment: options.environment ?? "docker", host: hostname(), hermesVersion: options.hermesVersion, bundleVersion: state.bundleVersion, skillsHash: state.skillsHash, toolHash: state.toolHash, pendingCron });
@@ -236,13 +326,33 @@ export async function syncFleetOnce(options: SyncOptions) {
     return { ok: false as const, code };
   }
 }
+/** TASK-129a step 4: poll every 15 s until stopped. The poll functions catch their own errors; this is a backstop that logs one fixed line (no error text) and keeps polling. */
+export async function runEventPollLoop(opts: { isStopped: () => boolean; pollOnce: () => Promise<void>; intervalMs?: number; log?: (line: string) => void }): Promise<void> {
+  const intervalMs = opts.intervalMs ?? 15_000;
+  while (!opts.isStopped()) {
+    try { await opts.pollOnce(); } catch { opts.log?.("vg-event-poll-loop lỗi không xử lý; tiếp tục vòng sau"); }
+    if (opts.isStopped()) break;
+    await new Promise<void>((done) => setTimeout(done, intervalMs));
+  }
+}
 async function main() {
   const interval = Number(process.env.VG_SYNC_INTERVAL_SEC ?? "300");
   if (!Number.isFinite(interval) || interval < 10 || interval > 86400) throw new Error("VG_SYNC_INTERVAL_SEC không hợp lệ");
-  const options: SyncOptions = { home: process.env.VG_HERMES_HOME ?? process.env.HERMES_HOME ?? join(homedir(), ".hermes"), apiUrl: process.env.VG_API_URL ?? "http://127.0.0.1:3001", apiKey: process.env.VG_API_KEY ?? "", secretValues: [process.env.VG_HERMES_MODEL_KEY ?? ""], instance: process.env.VG_AGENT_NAME, environment: process.env.VG_ENVIRONMENT ?? "wsl", hermesVersion: process.env.HERMES_VERSION ?? "unknown", log: (line) => process.stdout.write(`${line}\n`) };
+  const options: SyncOptions = { home: process.env.VG_HERMES_HOME ?? process.env.HERMES_HOME ?? join(homedir(), ".hermes"), apiUrl: process.env.VG_API_URL ?? "http://127.0.0.1:3001", apiKey: process.env.VG_API_KEY ?? "", secretValues: [process.env.VG_API_KEY ?? ""], instance: process.env.VG_AGENT_NAME, environment: process.env.VG_ENVIRONMENT ?? "wsl", hermesVersion: process.env.HERMES_VERSION ?? "unknown", log: (line) => process.stdout.write(`${line}\n`) };
   // Version comes from the pinned image/launcher environment; never spawn a real Hermes CLI.
   let stopped = false;
   process.once("SIGTERM", () => { stopped = true; }); process.once("SIGINT", () => { stopped = true; });
+  // Event poller (TASK-129a step 4): own 15 s loop, only when kinds are configured. The default wake only counts.
+  const kinds = (process.env.VG_EVENT_POLL_KINDS ?? "").split(",").map((item) => item.trim()).filter(Boolean);
+  const inboxOn = process.env.VG_INBOX_POLL === "1";
+  const polling = kinds.length || inboxOn ? runEventPollLoop({
+    isStopped: () => stopped,
+    log: options.log,
+    pollOnce: async () => {
+      if (kinds.length) await pollEventsOnce(options, kinds, () => undefined);
+      if (inboxOn) await pollInboxEventsOnce(options, () => undefined);
+    },
+  }) : Promise.resolve();
   do {
     await syncFleetOnce(options);
     if (process.argv.includes("--once") || stopped) break;
@@ -252,5 +362,6 @@ async function main() {
       process.once("SIGTERM", finish); process.once("SIGINT", finish);
     });
   } while (!stopped);
+  await polling;
 }
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) main().catch(() => { process.stderr.write("vg-hermes-sync cấu hình không hợp lệ\n"); process.exitCode = 1; });

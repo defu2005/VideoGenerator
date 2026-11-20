@@ -16,6 +16,8 @@ import type {
   LlmTaskId,
   ProjectUsage,
   GuidelinePack,
+  ScriptData,
+  ScriptDraftPayload,
 } from "@vg/shared";
 
 const SERVER_DOWN_GUIDANCE = "Start it with `npm run dev`.";
@@ -108,6 +110,18 @@ export class VideoAgentApiClient {
     return this.request(`/api/projects/${encodeURIComponent(projectId)}/compose-plan`);
   }
 
+  /** TASK-148b: approved and proposed lessons for a channel, plus global ones. */
+  getStageLessons(profileId: string): Promise<unknown[]> {
+    return this.request(`/api/profiles/${encodeURIComponent(profileId)}/stage-notes`);
+  }
+
+  /** TASK-148c: rolling quality trend for one stage (read only). */
+  getStageQualityTrend(stage: string, days: number, profileId?: string): Promise<unknown> {
+    const params = new URLSearchParams({ stage, days: String(days) });
+    if (profileId) params.set("profileId", profileId);
+    return this.request(`/api/stage-quality/trend?${params.toString()}`);
+  }
+
   getProjectUsage(projectId: string): Promise<ProjectUsage> {
     return this.request(`/api/projects/${encodeURIComponent(projectId)}/usage`);
   }
@@ -126,14 +140,26 @@ export class VideoAgentApiClient {
     });
   }
 
-  getScript(projectId: string): Promise<{
-    script: { data: Script; origin: "AGENT" | "USER"; edited: boolean; version: number } | null;
-    research: { data: ResearchNotes; provider: string; model: string; cached: boolean } | null;
-    origin: "AGENT" | "USER" | null;
-    version: number;
-    stale: boolean;
-  }> {
+  getScript(projectId: string): Promise<ScriptData> {
     return this.request(`/api/projects/${encodeURIComponent(projectId)}/script`);
+  }
+
+  async getScriptDraft(projectId: string): Promise<ScriptDraftPayload | null> {
+    const data = await this.getScript(projectId);
+    return data.draft ?? null;
+  }
+
+  switchScriptHook(projectId: string, hookId: string): Promise<ScriptData> {
+    return this.request(`/api/projects/${encodeURIComponent(projectId)}/script/hook`, {
+      method: "POST",
+      body: JSON.stringify({ hookId }),
+    });
+  }
+
+  rescoreScript(projectId: string): Promise<ScriptData> {
+    return this.request(`/api/projects/${encodeURIComponent(projectId)}/script/critique`, {
+      method: "POST",
+    });
   }
 
   getScenes(projectId: string): Promise<ScenePlanSummary> {
