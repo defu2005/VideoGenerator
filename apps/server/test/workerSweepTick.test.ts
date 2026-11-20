@@ -30,6 +30,36 @@ describe("worker timer runs the sweeps every 10 s", () => {
     vi.advanceTimersByTime(10_000);
     expect(sweep).toHaveBeenCalledTimes(1);
   });
+
+  // A throwing node sweep is caught and logged; the timer keeps running. The same tick's later sweeps may be skipped, which is not pinned here.
+  it("keeps the 10 s timer running after a node sweep throws once", async () => {
+    const sweep = vi.fn().mockImplementationOnce(() => { throw new Error("boom"); });
+    h.worker.setSweep(sweep);
+    await h.worker.start();
+    vi.advanceTimersByTime(10_000);
+    vi.advanceTimersByTime(10_000);
+    expect(sweep).toHaveBeenCalledTimes(2);
+  });
+});
+
+// The tick is the worker's direct entry point: it runs the agent-stage sweep, and does nothing once the worker is stopped.
+describe("worker tick runs the agent-stage sweep and stops cleanly", () => {
+  let h: ReturnType<typeof createPipelineHarness>;
+  beforeEach(() => { vi.useRealTimers(); h = createPipelineHarness(); });
+  afterEach(async () => {
+    await h.worker.stop?.();
+    h.close();
+  });
+
+  it("calls the agent-stage sweep on tick, and not after stop()", async () => {
+    const sweep = vi.fn();
+    h.worker.setAgentStages({ sweep } as never);
+    await h.worker.tick();
+    expect(sweep).toHaveBeenCalledTimes(1);
+    await h.worker.stop();
+    await h.worker.tick();
+    expect(sweep).toHaveBeenCalledTimes(1);
+  });
 });
 
 // TASK-129a: the worker tick must escalate an unanswered question to the duty holder after 15 min.
