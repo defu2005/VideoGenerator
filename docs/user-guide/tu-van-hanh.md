@@ -71,6 +71,18 @@ Mở **Nhật ký tự vận hành** để lọc theo công cụ hoặc nguồn.
 
 Khi tự vận hành đang bật, thanh trên có nút đỏ **Dừng tự vận hành**. Một lần bấm đưa mọi mức về Trợ giúp và tạm dừng tự động hoá. Trước khi cập nhật app, gọi chế độ xả: server ngừng nhận job mới và chờ bước đang chạy xong.
 
+## Giao việc một lệnh (Mission) {#mission}
+
+Mission là một việc lớn gồm nhiều bước do agent giữ. Mở **Mission** trên thanh điều hướng để tạo mission mới từ một câu lệnh, xem danh sách, và mở chi tiết để đọc kế hoạch và các mốc (checkpoint).
+
+- **Gỡ chờ**: chỉ dùng khi mission đang chờ bạn. Gỡ chờ **không** duyệt cổng; cổng duyệt vẫn ở trang dự án.
+- **Huỷ**: dừng mission còn mở, có bước xác nhận.
+- **Thao tác chờ xác nhận**: khi một thao tác cần bạn xác nhận gắn với một dự án, mission đang chạy của dự án đó chuyển sang chờ bạn. Xác nhận hoặc từ chối trả mission về đang chạy (trừ khi dự án còn cổng chờ bạn). Nếu thao tác hết hạn, mission vẫn ở chờ bạn: gỡ chờ bằng tay. Giới hạn đã biết: nếu sau đó bạn từ chối một thao tác khác của cùng dự án, mission chờ cũ có thể tự chạy lại mà không cần bạn quyết định riêng cho nó.
+- **Nhắc lại khi lỗi gửi**: nếu gửi nhắc Telegram thất bại, app thử lại sau 5 phút, không thử ngay ở nhịp kế tiếp.
+- **Mất nhịp trực**: nếu agent trực không gửi nhịp sống 5 phút, app báo bạn một lần. Agent dự phòng có quyền giám sát sẽ nhận trực ở nhịp đầu tiên của nó; mission đang chạy vẫn tiếp tục trong lúc đó. Mission đang mở được chuyển quyền sở hữu cho người trực mới.
+- **Bản tin**: bản tin cuối ngày lúc 21:00 có dòng Mission: số đang chạy, số chờ bạn, số video đã đăng hôm nay, số kết thúc (kèm số lỗi). Bản tin sáng lúc 07:00 có cùng dòng Mission nhưng báo ngày hôm qua.
+- Trên Telegram, `/mission` thực hiện ngay: tạo, gỡ chờ hoặc huỷ mission, không có bước xác nhận riêng. Trợ lý chat thì mọi thao tác ghi (tạo, gỡ chờ, huỷ) đều chờ bạn xác nhận trước khi chạy.
+
 ## Chạy 24/7 trên Windows {#windows-24-7}
 
 Tạo tác vụ trong Task Scheduler, chạy lúc đăng nhập, bật “restart on failure”. Khi cắm điện, tắt chế độ ngủ trong Power Options. App không dùng pm2. Sau khi máy ngủ hoặc khởi động lại, server chạy bù lịch gần và không đăng trùng bài.

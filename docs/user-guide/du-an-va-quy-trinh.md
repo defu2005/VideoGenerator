@@ -50,6 +50,12 @@ Mỗi bước có mức thời gian **dự kiến**, lấy theo thứ tự: số
 
 Quá mức dự kiến, bước **không bị dừng**. Trong khi bước đang chạy dưới mức thời gian dự kiến, thẻ và dòng tiến trình hiển thị ước lượng \"dự kiến còn ~X phút\"; khi vượt quá thì chuyển sang \"quá dự kiến X phút\". Thẻ bước hiện **Quá dự kiến**, lần kiểm tra gần nhất và lịch sử kiểm tra (cách nhau 2, 5, 10, 20, 30 phút). Bạn chọn **Chờ thêm**, **Dừng và thử lại** hoặc **Dừng hẳn**. Cài đặt **Khi quá thời gian** có ba giá trị: `Kiểm tra` (mặc định), `Dừng ngay`, `Chỉ báo`.
 
+### Đầu vào đổi khi bước đang chạy {#dau-vao-da-doi}
+
+Nếu bạn sửa kịch bản, cảnh hoặc tệp mà một bước đang dùng, quy trình giữ kết quả đang làm để có thể dùng lại. Khi hoàn tất, bước hiện **Đầu vào đã đổi trong lúc chạy** và cần chạy lại với dữ liệu mới trước khi quy trình đi tiếp. Với **Chạy toàn bộ**, app tự xếp lại bước một lần khi các bước trước đã sẵn sàng. Nếu đầu vào tiếp tục đổi trong lần chạy lại, app dừng để bạn kiểm tra.
+
+Trong lúc chạy toàn bộ, dòng **Bước này sẽ chạy lại với dữ liệu mới** báo trước thay đổi. Nếu chạy từng bước, bạn có thể bấm chạy lại khi đã sửa xong. Bản dựng đã lỗi thời vẫn xem được trong lịch sử. Để đăng, hãy dùng bản dựng còn phù hợp với dữ liệu hiện tại.
+
 ## Chế độ chạy {#che-do-chay}
 
 Dùng để chọn ai bấm tiếp. Đặt trong brief lúc tạo hoặc **Edit** dự án.
@@ -72,6 +78,30 @@ Mục **Mẫu video** trên brief chọn kiểu kể: giải thích, danh sách,
 2. **Copy** chép prompt nếu bạn viết bằng công cụ khác rồi dán lại.
 
 Form sửa tay dùng nhãn tiếng Việt: tiêu đề, mở đầu, các phần, lời thoại và câu tìm hình. Không có kịch bản thì không có cảnh. Sửa lời thoại làm các bước sau thành cũ. Chế độ **QUALITY** có thể thêm vòng AI đọc lại kịch bản. Bạn vẫn sửa tay được.
+
+### Bộ kiểm tra kịch bản {#kiem-tra-kich-ban}
+
+Sau khi viết (và sau vòng AI đọc lại nếu có), app chạy một bộ kiểm tra bằng mã, không tốn lượt gọi AI. Nó tìm các lỗi kể chuyện hay gặp: câu mở đầu bị lặp lại ở phần 1, một phần chỉ liệt kê năm tháng, lời sáo ("bi tráng", "a testament to"), lời kết chỉ cảm ơn hoặc xin đăng ký, các câu đều tăm tắp, câu hỏi mở đầu không được trả lời và câu quá dài.
+
+Kết quả hiện trong ghi chú của kịch bản với tiền tố `[lint]`, ví dụ `[lint] DATE_LIST (s1): …`. Trong ngoặc là mã phần (`hook`, `outro` hoặc id phần). Tối đa 3 ghi chú `[lint]`, các ghi chú còn lại là của AI. Lỗi nặng (lặp mở đầu, liệt kê năm, lời kết rập khuôn, câu dài gấp rưỡi giới hạn) được đưa cho vòng AI đọc lại sửa; ghi chú `[lint]` là những gì còn sót sau vòng cuối. Đây là gợi ý, bạn có thể bỏ qua hoặc sửa tay. Kịch bản đã lưu không đổi cho tới khi bạn chạy lại bước SCRIPT; chạy lại sẽ dùng quy tắc kể chuyện mới.
+
+### Kịch bản: dàn ý, hook và chấm điểm {#dan-y-hook-cham-diem}
+
+Khi chạy chế độ ngân sách **BALANCED** hoặc **QUALITY** / **MAX**, bước SCRIPT sử dụng **Story Engine** đa bước để sản xuất kịch bản bài bản thay vì viết tự do:
+
+1. **Đọc bảng Dàn ý & Đánh giá (Draft Panel):**
+   - Nằm ngay đầu tab **Script**. Bảng hiển thị khung tự sự (ba hồi, vòng tròn cốt truyện, kim tự tháp Freytag...), câu hỏi trung tâm và lời hứa với khán giả.
+   - Danh sách các nhịp kể (beats) chỉ rõ mục đích từng đoạn, cảm xúc dẫn dắt, khoảnh khắc cụ thể, thông tin mới cung cấp và các vòng tò mò (loops) được mở hoặc khép lại. Bấm vào bất kỳ beat nào để cuộn trang nhanh tới phần kịch bản tương ứng trong trình soạn thảo.
+2. **Chọn và đổi câu mở đầu (Hook candidates):**
+   - Engine luôn đề xuất 3 phương án hook với các chiến thuật mở đầu khác nhau (câu hỏi gợi mở, mở đầu trực diện vào cao trào, khơi gợi khoảng cách thông tin...).
+   - Mỗi hook được chấm điểm độc lập: độ tò mò, tính rõ ràng, mức độ bám sát sự thật, độ phù hợp khán giả và khả năng đền đáp lời hứa.
+   - Thuật toán tự động chọn hook tốt nhất và tránh lặp lại chiến thuật hook đã dùng gần đây trên kênh. Nếu thích một mở đầu khác, bạn có thể bấm **Chọn hook này**: app sẽ tự động cập nhật câu mở đầu và viết lại phần 1 cho khớp mượt mà với hook mới mà không cần chạy lại toàn bộ kịch bản.
+3. **Điểm giám khảo (Critique rubric):**
+   - Giám khảo độc lập chấm điểm kịch bản trên thang 100 theo 6 tiêu chí: cấu trúc mạch lạc, sức hút mở đầu, độ chính xác thông tin, độ trôi chảy khi đọc bằng giọng đọc AI (TTS), tính trực quan dễ tìm hình ảnh, và tính độc đáo tránh sáo rỗng.
+   - Bảng cảnh báo rõ nếu lời hứa mở đầu chưa được giải quyết ở kết bài (`hookPaidOff = false`) hoặc có vòng tò mò bị bỏ lửng.
+   - Nếu bạn tự sửa tay lời thoại trong trình soạn thảo, bấm nút **Chấm lại điểm** (Rescore) để cập nhật bảng điểm mới nhất.
+4. **Giữ chắc khung kịch bản:**
+   - Kịch bản giữ nguyên thứ tự các phần để bước phân cảnh và ghép giọng tiếp theo không bị lệch. Khi sửa tay, nên đảm bảo trả lời được câu hỏi mở đầu và đóng hết các ý còn dang dở trước phần outro.
 
 ## Cảnh {#canh}
 

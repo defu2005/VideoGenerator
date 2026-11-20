@@ -161,6 +161,7 @@ The `research_runs` table: id, skill, version, trigger (`stale | change_event | 
   - the body may not tell the operator to approve, to raise budgets, to turn on `paid_fallback`, to skip a check, or to touch the protected project;
   - it may not paste in text from web pages longer than 25 words;
   - test: a list of forbidden phrasings in Vietnamese and English.
+  - **Ruling (advisor, 2026-11-19):** the five rules above are the list. The implementer writes the phrasings in `TASK-074b-1.md` step 2.
 
 ### 4.2 Tests a draft must pass
 

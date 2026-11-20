@@ -98,3 +98,21 @@ Trang này ghi những gì đọc được từ trang chính thức của nhà c
 8. Tab **Năng lực và benchmark** hiện bộ đánh giá và ước tính số lượt. Gõ tên model miễn phí rồi bấm **Chạy đánh giá**. Model trả phí sẽ hỏi bạn trước.
 
 Ứng dụng không tự thêm thẻ, không bật nạp tiền tự động, và không chấp nhận điều khoản hộ bạn.
+
+## LLM qua máy chủ {#relay-llm}
+
+Chỉ máy điều khiển giữ khoá OmniRoute. Máy Hermes, scout, operator và máy worker gọi mô hình qua máy điều khiển bằng khoá riêng của máy đó, nên **không máy nào cần khoá LLM** (không còn `VG_HERMES_MODEL_KEY`).
+
+Mở **Cài đặt → AI → LLM qua máy chủ** để xem và chỉnh:
+
+- Trạng thái relay: đã có khoá chưa, OmniRoute có phản hồi không, bao nhiêu model.
+- Bảng từng máy: số lời gọi hôm nay, token, chi phí và lần bị từ chối gần nhất.
+- **Sửa giới hạn:** danh sách model được dùng (trống = kế thừa danh sách mặc định; dùng `tên*` cho cả nhóm), lời gọi mỗi phút, token mỗi phút, ngân sách mỗi ngày (0 = không giới hạn) và công tắc cho phép. Hàng "Mặc định cho mọi máy" áp dụng trong workspace đang mở; để trống danh sách của hàng này nghĩa là cho phép mọi model của gateway. **Dùng mức mặc định** xoá giới hạn riêng.
+
+Giới hạn và số liệu tách theo workspace, kể cả khi hai workspace có agent cùng tên. Chỉ người dùng được xem và sửa cấu hình giới hạn này.
+
+Các lượt gọi đồng thời giữ trước ngân sách tối đa. Nếu nhà cung cấp không báo usage, phản hồi bị ngắt hoặc máy chính khởi động lại, ngân sách vẫn giữ phần ước tính; số liệu được ghi là **ước tính** hoặc **Chưa rõ**. Chi phí chưa rõ không được coi là miễn phí. Máy đang có trần USD sẽ từ chối model chưa xác định được giá hoặc khi còn chi phí chưa rõ trong ngày. Lượt gửi ảnh cần model có thông tin giới hạn ngữ cảnh để tính trần token.
+
+Khi một máy bị từ chối, nó nhận lỗi kiểu OpenAI và mã: `RELAY_MODEL_NOT_ALLOWED`, `RELAY_RATE_LIMITED` (kèm thời gian chờ), `RELAY_BUDGET_EXCEEDED` hoặc `RELAY_DISABLED`. Trang **Fleet** và **Máy worker** cũng hiện một dòng dùng hôm nay cho từng máy.
+
+Nếu thấy "Relay chưa dùng được": kiểm tra `OMNIROUTE_API_KEY` và địa chỉ OmniRoute trên máy điều khiển. Cài mới có khoá và model sẽ tự đặt Gateway ở chế độ **Chỉ OmniRoute**; bản cài cũ giữ nguyên lựa chọn của bạn.

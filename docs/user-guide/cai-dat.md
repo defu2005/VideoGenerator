@@ -74,3 +74,12 @@ Dùng để đăng video và đọc thống kê. Menu: **Hồ sơ** → tab **T�
 Mặc định chưa có tài khoản nào. YouTube ở chế độ Testing hết hạn refresh khoảng 7 ngày: bấm **Kết nối lại**. Meta báo **Cần kết nối lại** trước khoảng 7 ngày khi token dài hạn sắp hết (khoảng 60 ngày).
 
 Ứng dụng không tạo giúp bạn ứng dụng Google hay Meta. Không đăng video chỉ vì đã kết nối. Xem [Tài khoản](dang-bai.md#tai-khoan).
+
+## Cơ sở dữ liệu và Hiệu năng máy chủ {#co-so-du-lieu}
+
+Dùng để theo dõi trạng thái tệp SQLite, khóa bận, kích thước WAL và hàng đợi ghi gộp. Menu: **Cài đặt** → **Render** → thẻ **Cơ sở dữ liệu**.
+
+1. Thẻ hiển thị dung lượng tệp DB, dung lượng file nhật ký WAL, số lần gặp khóa bận (`SQLITE_BUSY`) và kết quả thử lại tự động.
+2. Nút **Thu gọn WAL** cho phép chủ động dọn dẹp và thu nhỏ tệp WAL (`PRAGMA wal_checkpoint(TRUNCATE)`). Hệ thống cũng tự động thu gọn định kỳ mỗi 30 giây khi file WAL vượt quá 16 MB hoặc khi tắt máy chủ sạch.
+3. Độ trễ câu lệnh (p50, p95, tối đa) và danh sách top 10 câu lệnh chậm nhất giúp quản trị viên phát hiện sớm hiện tượng nghẽn I/O khi cụm có nhiều worker node cùng hoạt động.
+4. Trường hợp máy chủ bị sập đột ngột (mất điện hoặc `kill -9`), các bản ghi nhật ký hoạt động (audit) và mức dùng token trong bộ đệm 1–2 giây gần nhất có thể bị mất. Khi khởi động lại, máy chủ tự kiểm tra `PRAGMA quick_check` và phục hồi an toàn. Các job đang dở trên worker sẽ được tự động xếp lại sau khi hết hạn thuê việc.

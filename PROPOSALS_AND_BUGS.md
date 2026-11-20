@@ -842,3 +842,84 @@ flowchart TD
 
 
 
+
+---
+
+## 19. [RUN-VANLY-001] Chạy tự động trên product: RESEARCH bị chặn quota, VISUAL_SEARCH trả 0 ứng viên (17/11/2026)
+
+Dự án thử: `b1ca31b8-e149-447e-b787-b4ff9860328c` (Vạn Lý Trường Thành), product API 3100, mode AUTO, budget BALANCED.
+
+### Triệu chứng và bằng chứng
+1. **RESEARCH kẹt `LLM_QUOTA_WAIT`**, `retryAt` cố định 2026-11-18T03:17Z, dù trong `/api/llm/quota` gần như mọi provider free đều còn quota (Gemini 0/10 phút). Route mặc định `omniroute / grok-cli/grok-4.7` bị chặn.
+   - Đã xử lý: đổi route dự án sang `claude-cli / claude-sonnet-5-5`, cancel rồi chạy lại. RESEARCH, SCRIPT, SCENE_PLAN chạy xong.
+   - Lỗi phụ: `retry` stage trả 409 khi job còn chạy; phải cancel trước. Route `claude-cli/*` (wildcard) không hợp lệ, phải ghi tên model cụ thể.
+2. **VISUAL_SEARCH: 32/32 cảnh `no_candidate`**, mọi cảnh `NEEDS_ATTENTION`, `withImage: 0`. Cổng TASK-077 hoạt động đúng (không chọn ảnh lạc đề).
+   - Provider đã bật: wikimedia, openverse, pixabay, nasa, loc, met, smithsonian (khóa cấu hình sẵn một phần). `met` và `loc` có `lastBlockedAt` 2026-11-16 19:55.
+   - Chưa xác định vì sao không có ứng viên ngay cả với nguồn công cộng. Nghi ngờ: query không khớp (chủ đề lịch sử tiếng Việt, script tiếng Việt), hoặc breaker giữ các provider đã bị chặn.
+3. **Lỗi hiển thị tiếng Việt trong API/terminal**: chuỗi UTF-8 bị hiển thị thành `?`/ký tự lạ khi đi qua PowerShell (cửa sổ console, không phải API). Không phải lỗi dữ liệu, nhưng gây nhầm khi đọc log.
+4. **Nhánh/worktree product bị hỏng**: `git worktree list` ghi `videoGenerator-product ... prunable`; `git -C` trong worktree báo lỗi đường dẫn. Start script vẫn chạy được vì dùng build có sẵn.
+
+### Đề xuất (cho Dev, không sửa tại đây)
+- Khi RESEARCH bị `LLM_QUOTA_WAIT` và có provider khác còn quota, tự chuyển route thay vì chờ `retryAt` (luật "tự chuyển route" trong memory). Hiện chưa làm.
+- Có endpoint hoặc log cho biết provider nào trả 0 ứng viên và vì sao (query, breaker, lọc). Hiện chỉ có `no_candidate`.
+- `retry` nên trả 202 hoặc tự cancel khi job đang chạy, thay vì 409 không kèm hướng dẫn.
+- Xác minh đường dẫn `videoGenerator-product` và sửa worktree prunable (liên quan TASK-080 và BRANCHES.md).
+
+### Cập nhật 17/11/2026 (tìm ảnh thủ công qua Wikimedia Commons)
+- Dự án `b1ca31b8-…`: 31/32 cảnh `READY_FOR_RENDER`, 1 cảnh (order 23) `NEEDS_ATTENTION`.
+- Nguồn: Wikimedia Commons (CC BY / CC BY-SA / CC0 / Public domain), gắn qua `POST …/visuals/custom-url` với `license` và `author`. Mỗi ảnh đã kiểm bằng vision: đúng Vạn Lý Trường Thành, không watermark/logo/chữ.
+- Cảnh 23 (`Earth from space night chart`) là biểu đồ số liệu, không phải ảnh; không tìm được ảnh vệ tinh đúng nội dung. Giữ `NEEDS_ATTENTION` theo luật độ liên quan.
+- Phát hiện: Pixabay trả ứng viên đúng chủ đề nhưng app không tải/không chọn được (`localPath`, `downloadedAt` null) → `no_candidate`. Nghi ngờ bước tải ảnh hoặc lọc nguồn lỗi. Cần Dev điều tra.
+- Phát hiện: Wikimedia giới hạn tốc độ (429) khi gọi vision liên tiếp; URL thumb tự đoán bị 404. Nên lấy đúng `thumburl` từ API và giãn cách request.
+- Phát hiện: Pixabay chặn truy cập trang (403) khi đọc og:image; không lách chặn.
+
+### Kết quả render 17/11/2026 — dự án `b1ca31b8-…` (Vạn Lý Trường Thành)
+- Đã duyệt FINAL_APPROVAL (theo yêu cầu trực tiếp của người dùng trong chat) và render.
+- Video: `data/projects/b1ca31b8-…/render/versions/f804fff7-…/output.mp4`, 1920×1080, 204.4 s, 88.9 MB, có âm thanh và phụ đề. Lấy khung ở 60 s: đúng chủ đề, phụ đề tiếng Việt đọc được, không watermark.
+- Cảnh báo của report render (không chặn):
+  - `DUPLICATE_NARRATION`: hai cảnh liền kề (f202287b, 6580bcec) có cùng câu "Dã lợ có một hệ thống, được đắp suốt hơn hai nghìn năm." → lỗi kịch bản/SCENE_PLAN.
+  - `BLACK_FRAMES` 151.8–152.9 s (cảnh 24, a25975bd): đây là cảnh chưa có ảnh (ảnh cảnh 23 đã gắn, cảnh 24 là biểu đồ/không ảnh). Cần kiểm tra lại.
+  - `GRAPHIC_SKIPPED`: footage giữ 33 clip, bỏ 543 clip (đúng kế hoạch).
+- Lỗi vận hành:
+  - VISUAL_SEARCH báo FAILED sau 30 phút vì không có agent nhận, dù ảnh đã đủ. Retry thành công.
+  - Render ban đầu trả 409 vì FINAL_APPROVAL chưa duyệt (đúng hành vi).
+  - Gửi `POST …/visuals/custom-url` với `sceneId` sai (số thay vì UUID) → 400.
+
+### Đánh giá tính hấp dẫn — dự án b1ca31b8 (17/11/2026)
+- Kịch bản 6 phần, không câu hỏi giữa video, không nhân vật/xung đột, không nhắc móc câu, kết chỉ mời đăng ký. Đây là lý do video "thuần đọc thông tin".
+- Đề xuất cấu trúc mới (câu hỏi mở → nhân vật Tần Thủy Hoàng → kẻ phản bội Ngô Tam Quế → người xây tường → nhắc móc câu → trả lời + mời xem tiếp): `/home/defu/.hermes/cache/scratch/de_xuat_kich_ban.md`.
+- Chưa áp dụng vì sẽ làm STALE các bước sau; chờ người dùng duyệt.
+- Phát hiện bổ sung: `repair_script` không có endpoint REST trong `apps/server/src/api`; chỉ có `PUT /api/projects/:id/script` (ghi thẳng kịch bản, không có bước đề xuất). Skill `video-giu-chan-nguoi-xem` mô tả việc đề xuất qua `apply_review_proposal` — cần Dev kiểm xem đường đề xuất có tồn tại trong app không.
+
+### Video Pompeii (dự án 5e81276c-…, 17/11/2026, chất lượng QUALITY, Claude Sonnet)
+- Kết quả: `render/versions/30181ed5-…/output.mp4`, 1920×1080, 293.4 s (4:53), 157 MB, có tiếng và phụ đề.
+- 44/44 cảnh có ảnh Wikimedia (CC/Public domain), 44/44 có giọng.
+- Khung 90 s: đúng chủ đề, phụ đề đọc được. Khung 240 s: **footage phố hiện đại có xe đạp, lạc đề** → lỗi lọc footage (Pixabay/Pexels). Đây là lọt ảnh lạc đề, vi phạm luật độ liên quan. Cần Dev kiểm tra vì sao footage không qua cổng relevance như ảnh.
+- Cảnh báo report: `GRAPHIC_SKIPPED` (giữ 49 clip, bỏ 743). Dự kiến.
+- Lỗi vận hành:
+  - VOICE FAILED `TTS_NO_AUDIO` ở cảnh 43 sau 6 lần thử; nguyên nhân: `edge-tts.exe` bị Windows Application Control chặn (đã ghi trong CHANGELOG_AGENT). `python -m edge_tts` hoạt động. Retry stage thành công.
+  - Hủy pipeline để gán ảnh thủ công khiến VOICE chạy lại từ đầu (tốn thời gian ~30 phút). Nên gán ảnh trước khi chạy.
+  - Gán ảnh trong lúc pipeline chạy trả 409; gán ảnh cần pipeline không chạy.
+  - Kiểm soát SCENE_PLAN: 44 cảnh, chỉ 2 cảnh có ảnh tự động liên quan; 42 cần gán thủ công (cần Dev xem ngưỡng relevance quá chặt với chủ đề lịch sử/khảo cổ).
+
+### Kiểm tra trước khi đăng — Pompeii (5e81276c-…, 17/11/2026): CHƯA ĐẠT
+- Chặn: cảnh ~240 s là footage phố hiện đại có xe đạp, lạc đề (luật độ liên quan). Cần thay ảnh/footage rồi render lại.
+- Cần sửa: mô tả không ghi công ảnh Wikimedia (CC BY / CC BY-SA yêu cầu ghi nguồn). Metadata nháp chưa có phần "Nguồn ảnh". Đề xuất app tự sinh khối ghi công từ `license.author` và `sourceUrl` của từng cảnh.
+- Cần người dùng chọn: kênh đích. Chỉ có YouTube CONNECTED là "Bình Vũ Trụ" (profile "Kênh Kpop"). Dự án không gắn profile (`profileId` trống). Các kênh "Vũ Trụ (test)" chưa kết nối.
+- Đạt: không trùng video cũ (video đầu tiên của chủ đề này), không dùng clip người khác, không có ảnh AI, độ dài 4:53 phù hợp YouTube, tiêu đề và mô tả khớp nội dung.
+- Chưa có lịch đăng hay publication nào được tạo.
+
+- [2026-11-18] `apps/server/src/db/stats.ts` (`notifyBeforeQuery`, và flusher audit_log ở khoảng dòng 238): lỗi của flusher bị nuốt im lặng. Dòng audit vẫn được giữ lại và thử lại, nhưng lỗi lặp lại sẽ không có dấu vết trong log. Đề xuất: ghi log cảnh báo có giới hạn tần suất.
+
+- (2026-11-19) Duty tự nhận báo cáo của mình: `inbox()` không loại người gửi, nên instance đang trực nhận lại báo cáo nó gửi tới `duty` (test `apps/server/test/dutySelfReport.test.ts`). Hành vi hiện tại, chưa đổi mã; cần quyết định có nên loại người gửi khỏi hộp thư không.
+
+- 2026-11-19 (SSE): `/api/events` với `text/event-stream` không gọi flushHeaders, nên client không có backlog chỉ nhận header sau heartbeat 15 s. Đã sửa (`apps/server/src/api/agentEvents.ts`, `flushHeaders()`), đo 34 ms. Đã khóa bằng test: `agentEventsSse.test.ts` assert header về trong dưới 3 s (gỡ dòng thì test FAIL 15076 ms).
+- 2026-11-19 (loop listener không cách ly): `publishAgentEvent` gọi mọi listener trong vòng lặp không try/catch (`apps/server/src/events/agentBus.ts:25`). Listener SSE (`apps/server/src/api/agentEvents.ts:55`) không tự bắt lỗi; listener webhook (`apps/server/src/app.ts:927`) có. Một listener ném lỗi có thể làm hỏng publisher gọi sau nó. Chưa sửa; TASK-149 bọc try/catch tại từng publish mới.
+- [ĐÃ IMPLEMENT và TEST, chưa review, chưa commit: TASK-149, báo cáo `docs/tasks/TASK-149.report.md`] 2026-11-19 (publisher): `budget_wait` và `needs_user` khai báo trong `packages/shared/src/events/agentEvents.ts` nhưng không có publisher ở server/mcp/web. Spec: `docs/cursor/TASK-060.md:139` và §5.1 yêu cầu cả hai loại trong danh sách sự kiện, nên đây là khoảng trống của implementer (TASK-060), không phải loại thừa. Guide cho implementer: `docs/cursor/TASK-149.md` (user ủy quyền quyết định cho advisor; advisor chọn viết guide, giữ enum).
+- 2026-11-19 (sidecar): `editSavedComposeShot` (`apps/server/src/services/composeBridge.ts:489`) ghi `compose-plan.json` mà không xóa sidecar; writer chính (~dòng 220) đã xóa trước khi ghi. Chờ user quyết định.
+
+## 20. [BUG-TASK145-HOLD-FLOOR-009] Ngưỡng `minQualityScore` trong spec có sàn 0, nên spec đặt thấp có thể duyệt điểm dưới 60 (không chặn)
+- Nguồn: `apps/server/src/operator/qualityGates.ts` (đọc spec, dòng 28–37, mặc định 7); `packages/shared/src/schemas/autonomy.ts:125` (mặc định 7, sàn 0).
+- Hiện tượng: với `minQualityScore` ≤ 5.5 và không có blocking fact, `scriptGateDecision` có thể trả `approve` cho kịch bản tổng dưới 60. Guide TASK-145 dòng 116 yêu cầu hold khi total < 60.
+- Không chặn TASK-145: quyết định của advisor (thay người dùng) là giữ hành vi hiện tại; blocking fact không bao giờ được approve ở mọi vòng revise (`task145HoldGate.test.ts`).
+- Đề xuất sau: sàn cứng cho điểm hold (total < 60 luôn không approve), hoặc giới hạn `minQualityScore` ≥ 6 trong spec.

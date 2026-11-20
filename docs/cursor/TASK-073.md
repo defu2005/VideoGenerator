@@ -359,6 +359,8 @@ The user can change the policy per category. They can never lower a `critical` a
 
 ## 10. 073d: exploration and fading signals (outline; Claude details it after RESEARCH-072/073)
 
+> Guide đã viết: `docs/cursor/TASK-073d.md` (2026-11-19). Phần này giữ làm đề cương; khi mâu thuẫn, guide thắng.
+
 - New kind `format_signal`: a score per (market, platform, format or niche or topic, length band, posting slot), with a half-life.
 - **Inputs:** research priors (low weight), trend velocity, and the channel's own results. Weights halve every half-life unless confirmed, and the channel's own data wins with enough videos.
 - **Exploration budget** (setting, default 15 % of autopilot videos): Thompson sampling over allowed alternatives (format, length, posting slot, hook style). This catches changes that nobody announces.

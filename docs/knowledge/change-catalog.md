@@ -21,7 +21,7 @@ Các detector D1–D7 là điểm tích hợp theo guide. Trong 073a dùng kiể
 | C4 | Ad market and money | market, monetization_program | D3, D1, D6, manual | R0 / R1 / R2 |
 | C5 | Local law | market, law | D1, D6, D7, manual | R0 / R1 / R2 |
 | D1 | LLM providers | provider_terms | D2, provider_intel, manual | R0 / R1 / R2 |
-| D2 | TTS, footage, image and music sources | provider_terms | D1, D2, D6, manual | R0 / R1 / R2 |
+| D2 | TTS, footage, image and music sources | provider_terms, source_note | D1, D2, D6, manual | R0 / R1 / R2 |
 | D3 | Tools and dependencies | dependency | D2, D6, D7, manual | R0 / R1 / R2 |
 | E1 | Account health | account_policy | D3, D2, manual | R0 / R1 / R2 |
 | E2 | Video health | — | D3, manual | R0 / R1 / R2 |

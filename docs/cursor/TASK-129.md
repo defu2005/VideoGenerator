@@ -226,9 +226,9 @@ If a maintained, permissive-licence project fits better, report it under README 
 
 ## Done
 
-- [ ] 129a: subscriptions, push (webhook/SSE/poller), event coverage, mailbox + tools, fleet page threads, migration, tests
-- [ ] 129b: governor, worker integration, settings, dashboard tile, anomaly, tests
-- [ ] 129c: missions table + states, `/mission` on Telegram/web/chat, checkpoints and reports, autonomy preview, duty watchdog, digest section, migration, tests
+- [x] 129a (done 2026-11-19): subscriptions, push (webhook/SSE/poller), event coverage, mailbox + tools, fleet page threads, migration, tests
+- [x] 129b (done 2026-11-19): governor, worker integration, settings, dashboard tile, anomaly, tests
+- [x] 129c (done 2026-11-19, có giới hạn: mức đọc từ app/hồ sơ chứ không từ mission, không điều khiển VISUAL_REVIEW/MUSIC_REVIEW/FINAL_APPROVAL, dòng Mission trong bản tin chưa có test; xem report): missions table + states, `/mission` on Telegram/web/chat, checkpoints and reports, autonomy preview, duty watchdog, digest section, migration, tests
 - [ ] full suites; typecheck; build
 - [ ] user guide: "Giao việc một lệnh (Mission)", "Tài nguyên máy", "Agent nói chuyện với nhau"; `featureMap`; changelog
 - [ ] report per part: `docs/tasks/TASK-129a.report.md` → `.done`, and the same for 129b and 129c

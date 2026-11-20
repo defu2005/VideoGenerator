@@ -49,6 +49,30 @@ Dùng để AI chấm ảnh có đúng cảnh không, và nhìn vài frame sau r
 
 **ECO**, **BALANCED**, **QUALITY** không bật nhìn ảnh. AI nhìn tốn thêm lượt gọi. Nó không thay nút **Approve** khi bạn đang ở **ASSISTED**.
 
+## Định hướng hình ảnh và nhịp {#dinh-huong-hinh-anh}
+
+Định hướng tính liên tục của video (Director continuity pass) tạo ra một kế hoạch hình ảnh và nhịp dựng thống nhất cho toàn bộ video, khắc phục tình trạng rời rạc hoặc đổi phong cách giữa các cảnh:
+
+1. **Kế hoạch liên tục (Continuity plan)**: Tự động khởi tạo sau bước phân cảnh (**SCENE_PLAN**) khi bật `continuityPlan` (chế độ **QUALITY** hoặc **MAX**, hoặc tùy chỉnh trong chế độ ngân sách). Kế hoạch gồm:
+   - **Bảng màu (Palette)**: Nhiệt độ màu (`warm`, `neutral`, `cool`), độ bão hoà (`low`, `mid`, `high`), và mã màu chủ đạo (lấy từ phong cách kênh nếu có).
+   - **Nhân vật xuyên suốt (Characters)**: Danh sách nhân vật xuất hiện ở nhiều cảnh kèm câu truy vấn mẫu (`referenceQuery`) để bảo đảm diện mạo nhất quán.
+   - **Nhịp cắt mục tiêu (Pacing)**: Thời lượng trung bình mỗi cảnh theo từng phần (mở đầu hook, nội dung body, kết thúc outro).
+   - **Mô-típ lặp lại (Motifs)**: Tối đa 3 ý tưởng hình ảnh lặp lại xuyên suốt các cảnh được chỉ định.
+   - **Yếu tố cần tránh (Avoid)**: Các yếu tố phá vỡ phong cách (ví dụ: tránh hoạt họa trong phim tài liệu).
+
+2. **Xem và chỉnh sửa**: Thẻ **Định hướng hình ảnh** trên trang **Scenes** cho phép xem và điều chỉnh các tiêu chí. Khi bạn sửa định hướng, phiên bản đầu vào (`inputVersion`) của bước tìm ảnh sẽ tự động thay đổi để báo làm mới khi cần.
+
+3. **Tìm và chọn ảnh**:
+   - Bước tìm ảnh tự động bổ sung câu truy vấn tham chiếu nhân vật và mô-típ cho đúng các cảnh liên quan, đồng thời luôn giữ câu tìm gốc ở vị trí ưu tiên đầu tiên.
+   - Thuật toán chọn ảnh tự động tính điểm liên tục (khoảng cách màu CIE Lab so với bảng màu và cảnh liền trước, cùng độ lệch thời lượng so với nhịp chuẩn). Điểm liên tục cộng dồn với hệ số nhỏ, tuyệt đối không bao giờ vượt qua cổng liên quan hay giấy phép ảnh. Ảnh do bạn tự chọn thủ công không bao giờ bị đổi.
+
+4. **Kiểm tra tính liên tục (Continuity check)**: Trước cổng duyệt ảnh (**Visual Review**), hệ thống tự động kiểm tra:
+   - Bước nhảy màu quá lớn giữa hai cảnh kế tiếp (khoảng cách Lab > 35).
+   - Thời lượng cảnh lệch quá 40% so với nhịp mục tiêu.
+   - Cảnh thuộc mô-típ nhưng thiếu tag tương ứng.
+   - Kiểm tra nhất quán nhân vật bằng AI nhìn (vision) nếu đã cấu hình model vision; nếu chưa có model vision thì hệ thống ghi chú bỏ qua chứ không tự đoán.
+   Các phát hiện được hiển thị trên bảng Visual Review kèm nút **Tìm lại cảnh này** theo gợi ý sửa.
+
 ## Giọng đọc {#giong-doc}
 
 Dùng để chọn giọng cho mọi dự án. Menu: **Giọng đọc (TTS)**.

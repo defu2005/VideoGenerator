@@ -1,37 +1,68 @@
 # Agent nhận stage {#agent-nhan-stage}
 
-Agent ngoài có thể nhận toàn bộ **bước tìm ảnh** bằng model, công cụ tìm kiếm và vision của chính nó. App vẫn giữ ảnh, nguồn, kết quả duyệt và tiến độ; các cổng chất lượng tiếp tục được kiểm tra trong app.
+Agent ngoài có thể nhận các bước pipeline được ủy quyền (như **tìm ảnh**, **nghiên cứu**, **kịch bản**, **tìm nhạc**) bằng model, công cụ và tri thức riêng của chính nó. App vẫn giữ kết quả, nguồn, dữ liệu duyệt và tiến độ; các cổng chất lượng tiếp tục được kiểm tra trong app.
 
 ## Chọn cách xử lý {#che-do}
 
-Trong **Hồ sơ → Brief mặc định**, hoặc phần tùy chỉnh khi tạo/sửa dự án, tìm **Ai xử lý bước tìm ảnh**:
+Trong **Hồ sơ → Brief mặc định**, hoặc phần tùy chỉnh khi tạo/sửa dự án, có thể cấu hình người xử lý cho từng bước được hỗ trợ (**Ai xử lý bước tìm ảnh / nghiên cứu / kịch bản / tìm nhạc**):
 
 | Lựa chọn | Cách chạy |
 | --- | --- |
-| App xử lý | App dùng các provider đã cấu hình như trước. |
+| App xử lý | App dùng các provider đã cấu hình như trước. Đây là mặc định cho nghiên cứu, kịch bản, tìm nhạc. |
 | Giao cho agent ngoài | Bước vào hàng đợi agent ngay khi được xếp chạy. |
-| App trước, agent khi chưa xong | App làm trước, rồi giao các cảnh còn mở khi hết provider/quota vision, nguồn ảnh giới hạn tốc độ sau các lần thử lại, không kiểm tra được ảnh hoặc vòng sửa ảnh chưa giải quyết xong. Đây là mặc định. |
+| App trước, agent khi chưa xong | App làm trước, rồi giao khi gặp lỗi bàn giao được cấu hình (ví dụ hết provider/quota vision, nguồn giới hạn tốc độ sau thử lại). Đây là mặc định cho bước tìm ảnh. |
 | Theo hồ sơ / mặc định | Dự án dùng cấu hình hiện tại của hồ sơ. Hồ sơ chưa đặt thì dùng mặc định ở trên. |
 
 **Thời gian chờ agent (phút)** mặc định là 30. Để trống để kế thừa hồ sơ. Nếu hết thời gian mà chưa ai nhận, bước báo lỗi “không có agent nào nhận”, không chờ vô hạn. Nếu agent mất heartbeat và hết lease, việc được trả về hàng đợi để nhận lại; thời gian chờ được tính lại từ đó.
 
-Override của dự án ưu tiên hơn hồ sơ. Chọn lại **Theo hồ sơ / mặc định** và xóa thời gian chờ riêng để bỏ override. Hiện chỉ bước tìm ảnh hỗ trợ agent ngoài; các bước khác vẫn do app xử lý.
+Override của dự án ưu tiên hơn hồ sơ. Chọn lại **Theo hồ sơ / mặc định** và xóa thời gian chờ riêng để bỏ override. Bốn bước có thể giao cho agent: tìm ảnh, nghiên cứu, kịch bản và tìm nhạc. Danh sách chi tiết và cổng kiểm tra nằm trong mục bên dưới.
+
+## Bước nào giao được, và app kiểm tra gì {#buoc-giao-duoc}
+
+| Bước | Vai trò agent | Mặc định | Agent nộp gì | App kiểm tra trước khi nhận |
+| --- | --- | --- | --- | --- |
+| Tìm ảnh | `visual_scout` | App trước, agent khi chưa xong | Ứng viên ảnh, verdict, lựa chọn | Tải ảnh (giới hạn dung lượng, kích thước, địa chỉ nội bộ, trùng), kiểm chủ thể, watermark, nguồn rủi ro, chất lượng |
+| Nghiên cứu | `research_scout` | App | Ghi chú nghiên cứu có nguồn | Ít nhất 6 ý chính; ít nhất 60% ý có nguồn; trích dẫn tối đa 30 từ; nguồn phải là http(s), không trỏ máy nội bộ, không thuộc miền bị chặn |
+| Kịch bản | `script_writer` | App | Bản kịch bản đầy đủ | Kiểm văn phong (ghi chú `[lint]`), chấm critic bằng route LLM của app, kiểm sự thật với ghi chú nghiên cứu. Giữ khi tổng điểm dưới 60, độ chính xác dưới 3, hoặc có ý cần xác minh |
+| Tìm nhạc | `music_scout` | App | Tối đa 8 bản nhạc cho mỗi việc | Giấy phép thuộc danh sách dùng thương mại của chế độ bản quyền; URL hợp lệ; app tự tải và đo thời lượng. Agent không chọn bản nhạc cuối |
+
+Cổng của app luôn chạy, kể cả khi việc do agent làm. Không có công tắc nào để bỏ qua. Lý do: agent có thể mạnh về nghiên cứu hay viết, nhưng nếu cổng đặt ở phía agent thì một agent yếu có thể đưa kịch bản sai sự thật hoặc nhạc sai giấy phép vào video.
+
+**Kịch bản do agent viết** được lưu với `author` là `agent:<tên instance>`, nên bạn thấy ai đã viết. Khi kịch bản bị giữ, agent nhận phản hồi chấm điểm và có thể nộp lại tối đa 2 lần trong lượt nhận việc. Nếu vẫn không đạt, việc trả về app hoặc chờ bạn, tùy cấu hình.
+
+**Nghiên cứu do agent viết** có nguồn cho từng ý. Phần kịch bản kiểm sự thật dựa trên các nguồn này.
+
+**Kịch bản đã do bạn sửa tay** không bị agent ghi đè. Khi đó agent nhận lỗi `SCRIPT_EDITED`.
+
+**Nhạc:** agent chỉ đề xuất. App tải bản nhạc, đo thời lượng và đưa vào danh sách ứng viên. Bản cuối vẫn do gate MUSIC_REVIEW quyết định: tự động chọn bản xếp hạng cao nhất, hoặc chờ bạn duyệt, tùy cấu hình.
 
 Chế độ **Giao cho agent ngoài** xếp việc cho agent kể cả khi worker nội bộ đang tắt. Agent nhận việc không cần chờ một lượt chạy của worker nội bộ.
 
 ## Kết nối và thêm scout {#them-scout}
 
 1. Trong [Tài khoản của tôi](dang-nhap.md), người dùng tạo khóa máy với loại agent và **tên instance cố định**. Tên không được chỉ lấy từ header do agent tự khai.
-2. Kết nối agent với [MCP của app](ket-noi-agent.md). Có thể dùng nhiều instance khác tên. Mỗi instance hiện nhận tối đa một stage đang có lease trong cùng workspace.
-3. Agent gọi `stage_claim_next`, có thể lọc theo hồ sơ, dự án hoặc `VISUAL_SEARCH`. Không có việc phù hợp thì nhận `null`.
+2. Kết nối agent với [MCP của app](ket-noi-agent.md). Mở **Cài đặt → Đội Hermes → Phân công agent** để chọn vai trò, phạm vi và số việc đang giữ tối đa cho mỗi instance.
+3. Agent gọi `stage_claim_next`, có thể lọc theo hồ sơ, dự án hoặc bước pipeline. Giao thức khớp vai trò của stage adapter với vai trò phân công của agent (loại trừ vai trò quản lý kênh `channel_manager`). Không có phân công đang bật khớp vai trò và phạm vi, hoặc đã đủ số việc, thì nhận `null`.
 
-Phân công cố định theo vai trò chưa có trong phiên bản này. Bộ lọc nhận việc thu hẹp phạm vi được phép; nó không mở thêm quyền. Agent không tự sửa quyền, khóa, routing, tiền hoặc chế độ bản quyền.
+| Nhu cầu | Phân công |
+| --- | --- |
+| Hermes-1 quản lý kênh A | Chọn `hermes/Hermes-1`, vai trò `channel_manager` và hồ sơ A (không nhận stage trực tiếp). |
+| Hermes-2 và Hermes-3 tìm ảnh cho mọi video | Tạo hai phân công `visual_scout` với tối đa 2 việc mỗi instance, hoặc dùng `*` để áp dụng cho nhóm khóa máy trong workspace. |
+| Hermes-4 chỉ tìm ảnh video X | Chọn `hermes/Hermes-4`, vai trò `visual_scout`, video X và bước Tìm ảnh. |
+
+Phân công cụ thể hơn có ưu tiên. Phạm vi video và bước đứng trước phạm vi hồ sơ và bước, rồi đến bước chung và nhóm. Giới hạn thấp của việc đã nhận vẫn áp dụng khi agent nhận thêm việc. Vai trò quản lý kênh dùng lease hồ sơ/dự án cho thao tác điều phối. Scout dùng lease của job để làm cảnh trong cùng kênh. Quyền của khóa máy vẫn áp dụng cho cả hai.
+
+Chỉ người dùng có quyền quản lý cài đặt sửa phân công. Agent có thể gửi đề nghị qua luồng chuyển việc cho người dùng. Skill theo vai trò được ưu tiên trong gói đồng bộ. Mọi instance vẫn đọc được toàn bộ skill, kể cả skill đã cập nhật qua quy trình duyệt bản nháp.
+
+Thẻ **Việc đang giao cho agent** hiển thị hàng đợi theo vai trò, số job đang giữ theo instance và trung vị giây mỗi cảnh từ các job có mẫu. Khi việc tìm ảnh chờ quá nửa số phút đã cấu hình, Fleet gợi ý thêm `visual_scout`. Mỗi scout cần khóa máy, tên và thư mục dữ liệu riêng.
 
 ## Tìm và duyệt ảnh {#tim-va-duyet}
 
 Khi nhận việc, agent được xem các **cảnh còn mở**, lời đọc/chủ thể, truy vấn đã ghi nhận (kể cả lần tìm không có kết quả), ảnh đã loại và lý do, ghi chú phong cách, tỉ lệ video, giới hạn ảnh, ngân sách và chế độ bản quyền. Cảnh đã có ảnh hợp lệ hoặc do người dùng giữ được giữ nguyên.
 
 - `stage_heartbeat`: báo tiến độ khoảng mỗi phút; lease có hiệu lực 10 phút kể từ lần gia hạn.
+- `visual_cache_query`: tra kết quả tìm gần đây theo truy vấn và nguồn. Cache trong workspace giữ kết quả 7 ngày và bỏ URL chứa thông tin xác thực hoặc chữ ký.
+- `visual_cache_lookup`: tra verdict theo `subjectKey` từ context và phash, candidate ID hoặc URL ảnh. Verdict giữ 90 ngày và giúp scout tham khảo. App chỉ dùng lại đánh giá phù hợp cảnh khi nội dung tệp, lời dẫn, mô tả hình, tỉ lệ khung và quy tắc kiểm tra đều khớp. Đổi ngữ cảnh sẽ kiểm ảnh lại; ảnh do bạn giữ vẫn được giữ. Scout vẫn xem tệp đã lưu và ghi quyết định trước khi chọn.
 - `visual_submit_candidates`: gửi URL ảnh và trang nguồn, tiêu đề, lý do phù hợp, ghi chú giấy phép nếu có. App tải ảnh với giới hạn 25 MB, cạnh ngắn ít nhất 320 px, chặn địa chỉ nội bộ và ảnh trùng.
 - `visual_get_candidate_image`: xem tệp app đã lưu, mặc định thu nhỏ tối đa 768 px. Agent duyệt ảnh này thay vì ảnh xem trước ở trang khác.
 - `visual_record_verdict`: ghi pass/reject, chủ thể có khớp hay không, lý do và model đã dùng. Kết quả được gắn với hash của tệp và danh tính agent.
@@ -39,6 +70,8 @@ Khi nhận việc, agent được xem các **cảnh còn mở**, lời đọc/ch
 - `stage_complete`: gửi tóm tắt khi mọi cảnh còn mở đã xong. App kiểm tra lại trước khi cho pipeline tiếp tục.
 
 Ảnh trong màn hình duyệt hiển thị ai tìm, ai duyệt và model nào đã dùng. Đổi ảnh, cắt ảnh và các bước kiểm tra trước render vẫn dùng dữ liệu bình thường của dự án.
+
+`sourceNotes` trong context lấy từ kho tri thức của workspace. Agent có thể đọc `list_knowledge` với `kind: source_note` hoặc gửi `propose_knowledge_change` kèm bằng chứng công khai. Ghi chú về website giúp chọn nơi tìm ảnh. Giấy phép của từng ảnh vẫn được kiểm riêng.
 
 ## Bản quyền và chi phí {#ban-quyen-va-chi-phi}
 

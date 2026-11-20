@@ -2,6 +2,8 @@
 
 Đang gắn trong app:
 
+- TASK-137 tự triển khai chữ ký URL từ đặc tả [AWS S3 Signature Version 4](https://docs.aws.amazon.com/AmazonS3/latest/developerguide/sigv4-query-string-auth.html). Dùng `node:crypto`, kèm vector kiểm thử AWS. Không nhúng mã aws4 hay MinIO.
+
 - `hyperframes@0.9.14` — Apache-2.0. Render HTML thành video. https://github.com/heygen-com/hyperframes
 - `gsap@3.15.1` — GSAP standard, không tính phí cho sử dụng thương mại thông thường. File `gsap.min.js` được copy vào thư mục render, không tải từ CDN.
 - `@fontsource/be-vietnam-pro@5.3.0` — OFL-1.1. Font tiếng Việt nhúng cục bộ.

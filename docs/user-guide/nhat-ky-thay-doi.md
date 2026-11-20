@@ -1,5 +1,126 @@
 # Nhật ký thay đổi {#nhat-ky}
 
+## TASK-148d
+
+- **Gợi ý truy vấn ảnh theo kênh:** agent tìm ảnh nhận các truy vấn đã đạt cho cùng chủ đề và cùng kênh (profile) của dự án. Kênh khác không thấy gợi ý của nhau. Công cụ `visual_cache_query` chỉ gợi ý cho dự án không gắn kênh.
+- **Migration 0096:** bảng gợi ý ảnh có thêm cột kênh; dữ liệu cũ được gán kênh trống.
+
+## TASK-129a
+
+- **Kênh hai chiều cho agent:** agent đăng ký nhận sự kiện theo loại và dự án, qua webhook ký số, hoặc kéo qua SSE và bộ hỏi 15 giây.
+- **Hộp thư agent:** agent gửi, đọc, xác nhận và xem chuỗi tin; câu hỏi chưa trả lời được chuyển cho agent trực sau 15 phút và cho bạn sau 60 phút. Giới hạn 60 tin mỗi phút cho mỗi agent.
+- **Trang Đội agent:** bạn xem các chuỗi tin và gửi tin vào chuỗi; tin của bạn được coi là chỉ đạo cấp cao nhất.
+
+## TASK-129c
+
+- **Mission (giao việc một lệnh):** tạo mission từ một lệnh, xem kế hoạch và checkpoint, gỡ chờ người hoặc huỷ mission. Có trên trang Mission, lệnh `/mission` trên Telegram và công cụ trò chuyện (ghi hành động cần bạn xác nhận). Xem [Giao việc một lệnh (Mission)](tu-van-hanh.md#mission).
+- **Mất nhịp trực:** nếu không có agent trực quá 5 phút, bạn nhận một thông báo cho mỗi lần mất nhịp; agent dự phòng nhận trực ở nhịp đầu tiên, mission đang mở vẫn chạy.
+- **Bản tin:** bản tin 21:00 có thêm dòng Mission (đang chạy, chờ bạn, video đã đăng hôm nay, kết thúc và lỗi). Bản tin sáng lúc 07:00 báo ngày hôm qua, cùng dòng Mission.
+- **Xác nhận rủi ro giữ mission:** khi một thao tác cần xác nhận có gắn dự án được tạo, mission đang chạy của dự án đó chuyển sang chờ bạn. Xác nhận hoặc từ chối sẽ trả mission về đang chạy, trừ khi dự án còn cổng chờ bạn. Thao tác hết hạn không tự trả mission; bạn gỡ chờ tay.
+- **Chưa có:** nâng mức tự vận hành từng mission trên trang web.
+
+## TASK-148
+
+- **Mẫu truy vấn ảnh:** ghi nhận truy vấn đạt hoặc không đạt theo chủ đề, và gợi ý cho công cụ tra cache ảnh. Xem [Mẫu truy vấn ảnh](phan-tich-va-tai-chinh.md#mau-truy-van-anh).
+- **Phong cách viết đã duyệt:** đăng ký và duyệt phong cách viết cho bước Kịch bản (chỉ người dùng duyệt). Xem [Phong cách viết đã duyệt](phan-tich-va-tai-chinh.md#phong-cach-viet).
+- **Công cụ đọc:** `get_stage_lessons` và `stage_quality_report` cho MCP.
+
+- **Bài học theo bước:** ghi chú cho từng bước pipeline được đề xuất hằng tuần từ phản hồi (sửa kịch bản, sửa lời dẫn, duyệt có chỉnh sửa) và chỉ dùng sau khi bạn duyệt. Nghiên cứu và kịch bản đọc bài học đã duyệt. Xem [Bài học theo bước](phan-tich-va-tai-chinh.md#bai-hoc-theo-buoc).
+- **Chất lượng theo bước:** sổ ghi chất lượng mỗi lần chạy bước, xu hướng 14 ngày trên trang Phân tích, và cảnh báo khi điểm giảm trên 20%. Xem [Chất lượng theo bước](phan-tich-va-tai-chinh.md#chat-luong-theo-buoc).
+- **Công cụ trợ lý và vận hành:** `list_stage_feedback`, `stage_quality_report` (chỉ đọc), `propose_stage_note` (đề xuất), `decide_stage_note` (cần xác nhận của bạn).
+
+## TASK-139
+
+- **Xem trước theo đúng kế hoạch hiện tại:** kế hoạch dựng đã lưu chỉ được tái dùng khi mọi đầu vào vẫn khớp (ảnh, chuyển động, FPS, chữ graphic, thứ tự và số cảnh, nội dung và giọng đọc, cài đặt dựng). Nếu timeline hoặc cài đặt đã đổi, xem trước dựng lại kế hoạch tạm và ghi chú lý do. Thiết lập chạy như mốc kiến thức không làm dựng lại. Chưa tối ưu tốc độ dựng lại tạm (chưa đạt mục tiêu 3 giây).
+
+## TASK-141
+
+- **Định hướng hình ảnh và nhịp (Director continuity pass):** sau bước phân cảnh, sinh kế hoạch định hướng thống nhất cho toàn bộ video gồm bảng màu (Lab/hex kế thừa phong cách kênh), nhân vật xuyên suốt (kèm query tham chiếu), nhịp cắt mục tiêu theo từng phần và mô-típ lặp lại.
+- **Tích hợp tìm kiếm và chọn ảnh:** bổ sung query tham chiếu cho cảnh có nhân vật/mô-típ nhưng giữ nguyên câu tìm gốc ở đầu; tính điểm thưởng liên tục (bảng màu và nhịp) mà không vượt qua cổng liên quan hay lựa chọn thủ công của người dùng.
+- **Thẻ Định hướng và Bảng kiểm tra liên tục:** hiển thị thẻ "Định hướng hình ảnh" trên tab Cảnh và bảng phát hiện lệch màu/lệch nhịp/mô-típ/nhất quán nhân vật trên tab Ảnh kèm nút tìm lại từng cảnh. Xem [Định hướng hình ảnh và nhịp](hinh-anh-va-giong-doc.md#dinh-huong-hinh-anh).
+- **Công cụ trợ lý:** bổ sung hai công cụ chỉ đọc `get_continuity_plan` và `check_continuity`.
+- **Sửa theo liền mạch (TASK-141 P2):** lệch màu giữa hai cảnh đổi ứng viên ở cảnh sau; thiếu mô-típ tìm lại cảnh rồi mới chọn. Mỗi bậc chỉ thử một lần trong một cửa sổ; cặp lệch màu thứ hai trong cùng cửa sổ không được thử lại. Cảnh đã tự chọn (owned) không bị đụng. Nhịp và nhân vật không tự sửa.
+
+## TASK-145
+
+- **Story Engine sản xuất kịch bản đa bước:** phân rã bước SCRIPT thành chuỗi khép kín: dàn ý & khung tự sự, 3 ứng viên câu mở đầu (hook), viết lời dẫn bám nhịp, giám khảo chấm điểm theo 6 tiêu chí (thang 100 điểm), tự sửa nhắm mục tiêu cho các đoạn chưa đạt, và tự động co giãn vừa vặn thời lượng.
+- **Bảng Dàn ý & Đánh giá trên Web:** hiển thị khung cốt truyện, các nhịp kể (nhấn để cuộn nhanh), so sánh điểm 3 câu mở đầu, nút đổi hook kèm tự viết lại phần 1, và nút chấm lại điểm khi sửa tay. [Kịch bản: dàn ý, hook và chấm điểm](du-an-va-quy-trinh.md#dan-y-hook-cham-diem)
+- **Công cụ MCP & Trợ lý:** bổ sung `get_script_draft`, `switch_script_hook`, `rescore_script` cho các agent vận hành và trợ lý trò chuyện.
+
+## TASK-143
+
+- **Độ bền bỉ máy chủ điều khiển (Control Plane Resilience):** bọc CSDL SQLite đo độ trễ câu lệnh p50/p95/tối đa, bắt khóa bận `SQLITE_BUSY` tự động thử lại kèm backoff, hiển thị thẻ "Cơ sở dữ liệu" trong Cài đặt → Render (`GET /api/admin/db-stats`).
+- **Gộp ghi đĩa (Hot-write Coalescing):** lọc các tín hiệu sống (heartbeat) trùng lặp từ máy worker trong vòng 15 giây, gộp ghi nhật ký audit log và mức dùng LLM relay theo chu kỳ 1 giây, tự động xả sạch khi tắt server.
+- **Thu gọn WAL & Diễn tập khôi phục:** tự động `wal_checkpoint(TRUNCATE)` khi WAL vượt quá 16 MB; bổ sung script `deploy/docker/restore-drill.sh` kiểm chứng khôi phục CSDL và sổ tay vận hành `docs/RUNBOOK-two-machines.md`.
+
+## TASK-147a
+
+- **Khung adapter nhận stage cho agent ngoài:** chuẩn hóa kiến trúc `StageAgentAdapter` cho các bước pipeline (`VISUAL_SEARCH`, `RESEARCH`, `SCRIPT`, `MUSIC_SEARCH`).
+- **Phân công và nhận việc theo vai trò:** `stage_claim_next` đối chiếu vai trò phân công của agent với yêu cầu của adapter (loại trừ vai trò quản lý kênh `channel_manager`).
+- **Cấu hình người xử lý:** hỗ trợ chọn app, agent ngoài hoặc app làm trước cho các bước được mở rộng; mặc định các bước mới vẫn do app xử lý, riêng tìm ảnh giữ `app_then_agent`. Xem [Agent nhận stage](agent-nhan-stage.md).
+
+## TASK-147b
+
+- **Agent nghiên cứu có nguồn:** `research_submit_notes` nhận notes có nguồn (url, tiêu đề, trích dẫn tối đa 30 từ) cho stage RESEARCH; app kiểm đủ 6 fact, tối thiểu 60% có nguồn, miền bị chặn và URL nội bộ; panel nghiên cứu hiện nguồn và trích dẫn cho từng fact.
+
+## TASK-147d
+
+- **Agent viết kịch bản:** `script_submit_draft` nhận kịch bản theo cấu trúc app yêu cầu cho stage SCRIPT. App chạy lint nhịp văn, critic và kiểm sự thật trước khi ghi; bản dưới ngưỡng bị giữ kèm critique, agent được nộp lại tối đa 2 lần trong lease, lần thứ ba trả việc về app. Bản đạt được ghi với `author` là `agent:<instance>`.
+- **Chưa có:** `script_submit_outline` (TASK-146) chưa được triển khai, nên agent chưa nộp dàn ý.
+
+## TASK-147c
+
+- **Agent tìm nhạc có giấy phép:** `music_submit_candidates` nhận tối đa 8 ứng viên; app kiểm giấy phép thương mại, URL công khai, trùng lặp, tải tệp và lưu; ứng viên đi vào MUSIC_REVIEW. Agent không chọn bản cuối cùng. Nhạc ngắn hơn video được lặp theo timeline.
+
+## 2026-11-17 — Bản vận hành và bản phát triển
+
+- **Hai bản app:** bản vận hành (product) chạy dữ liệu thật ở `http://localhost:5100`, bản phát triển (dev) chạy dữ liệu thử `data-dev`. Tính năng mới lên bản vận hành sau review, có sao lưu trước khi nâng cấp. [Bản vận hành và bản phát triển](cai-dat.md#ban-van-hanh)
+- **Cần làm khi chuyển:** dừng mọi `npm run dev` cũ đang chạy trên dữ liệu thật trước khi chạy bản vận hành. Khi nối thêm tài khoản nền tảng ở bản vận hành, thêm callback cổng 3100 vào ứng dụng của nền tảng.
+
+## TASK-144
+
+- **Kịch bản kể chuyện hơn.** Người viết, bản gộp và bước đọc lại đều nhận đủ hướng dẫn của mẫu video (mục đích từng phần, kiểu mở đầu, mức đọc) và bộ quy tắc kể chuyện chung. Bộ kiểm tra bằng mã báo lỗi liệt kê năm, lời sáo, lời kết rập khuôn; kết quả hiện ở ghi chú `[lint]`. [Bộ kiểm tra kịch bản](du-an-va-quy-trinh.md#kiem-tra-kich-ban)
+
+## TASK-138
+
+- **Dọn tệp theo thời gian giữ.** Trang Lưu trữ có thống kê, bản chạy thử, xác nhận dọn và cài đặt thời gian giữ. Xóa project và giữ số bản render đi qua quy trình đánh dấu. Dashboard cảnh báo khi ổ đĩa gần đầy. [Vòng đời tệp](render-va-thumbnail.md#luu-tru)
+
+## TASK-137
+
+- **Lưu trữ S3 cho worker.** Worker có thể tải đầu vào và gửi kết quả qua kho tương thích S3. Cài đặt có nút thử kết nối, thống kê và trạng thái chuyển đường truyền về máy chủ. [Lưu trữ](render-va-thumbnail.md#luu-tru)
+
+## TASK-136
+
+- **Sửa sau review:** giới hạn và usage tách theo workspace; giữ ngân sách cho các lượt gọi đồng thời, ghi chi phí cả khi phản hồi lỗi và đưa lời gọi không gắn job vào báo cáo sử dụng/tài chính. Số ước tính và giá chưa rõ được ghi rõ trên giao diện.
+- **LLM qua máy chủ:** máy Hermes, scout, operator và máy worker gọi mô hình qua máy điều khiển; chỉ máy điều khiển giữ khoá OmniRoute. Có giới hạn model, tốc độ và ngân sách ngày cho từng máy, và thống kê dùng hôm nay. [LLM qua máy chủ](mo-hinh-ai.md#relay-llm)
+- **Cần làm khi nâng cấp:** xoá `VG_HERMES_MODEL_KEY` khỏi `hermes.env` trên các máy Hermes (không còn dùng) rồi đồng bộ lại để nhận gói mới. Khoá `llm:*` không còn được cho node mượn; cài đặt cũ còn liệt kê chúng sẽ bị bỏ qua và ghi một dòng nhật ký.
+
+## TASK-139
+
+- **Xem trước nhanh:** tab Timeline có nút xem 3 khung của từng cảnh, phát đoạn 3 giây và contact sheet cả video mà không cần render. Kèm ghi chú tính bằng mã (chữ sát mép, quá tối/sáng, cảnh trùng). Không tự chạy, không đổi trạng thái bước. [Xem trước nhanh](render-va-thumbnail.md#xem-truoc-nhanh)
+
+## TASK-099
+
+- **Sơ đồ và dòng thời gian:** Compose có thêm sơ đồ tối đa 7 nút cho thể loại Giải thích/Hướng dẫn và dòng thời gian tối đa 8 mốc cho Lịch sử/Tổng hợp tin. Nội dung lấy từ lời dẫn, thời điểm hiện theo giọng đọc, bố cục tự đổi ngang/dọc và dùng phong cách kênh.
+- BALANCED chỉ trích sơ đồ khi cần; QUALITY/MAX có thể tinh chỉnh cả hai bằng lời gọi dựng đã được định tuyến và tính chi phí. ECO không gọi AI cho sơ đồ. Dữ liệu không hợp lệ lùi về danh sách hoặc hình minh họa.
+- Tab Render hiện tên hai kiểu cảnh mới và vẫn cho khoá/bỏ khoá. Xem [Sơ đồ và dòng thời gian](so-do-va-dong-thoi-gian.md).
+
+## TASK-135a
+
+- Mã tham gia mới giới hạn máy worker vào workspace đã tạo mã, áp dụng cả khi giao từng bước. Máy cũ giữ phạm vi toàn instance đến khi được thu hồi và tham gia lại. [Phạm vi workspace](may-worker.md#workspace)
+- Bổ sung nền tảng truyền dữ liệu và checkpoint cho node chạy cả dây chuyền. Lựa chọn nơi chạy và màn hình theo dõi sẽ có ở các phần tiếp theo của TASK-135.
+
+## TASK-134
+
+- Quy trình phát hiện đầu vào đổi khi một bước đang chạy, báo cần chạy lại và chặn đăng bản dựng đã lỗi thời. [Đầu vào đổi khi bước đang chạy](du-an-va-quy-trinh.md#dau-vao-da-doi)
+- Worker tiếp tục gửi từ byte đã lưu, bỏ qua tệp đúng mã băm đã có và cho máy chính hoàn tất từ tệp đã nhận sau khi khởi động lại. [Tải tiếp kết quả](may-worker.md#tai-tiep-ket-qua)
+
+## TASK-128b
+
+- **Sửa sau review:** đổi lời dẫn, tỉ lệ khung hoặc quy tắc kiểm ảnh sẽ kiểm tra lại độ phù hợp; cache theo chủ thể chỉ để tham khảo nếu ngữ cảnh khác. Ảnh do người dùng giữ tiếp tục được giữ nguyên.
+- **Phân công agent** trong Cài đặt → Đội Hermes. Chọn phạm vi video, hồ sơ hoặc bước và giới hạn số job cho từng instance. Fleet theo dõi hàng đợi và gợi ý bổ sung scout khi chờ lâu.
+- **Skill theo vai trò và cache ảnh**. Scout ưu tiên quy trình tìm ảnh trong gói đồng bộ. App và scout chia sẻ kết quả tìm, verdict cùng chủ thể và ghi chú nguồn trong workspace. Xem [Agent nhận stage](agent-nhan-stage.md#them-scout).
+
 ## TASK-128a
 
 - **Agent nhận bước tìm ảnh:** chọn app, agent ngoài, hoặc app trước rồi chuyển các cảnh còn mở cho agent. Cấu hình dự án ưu tiên hơn hồ sơ; có thể bỏ override để tiếp tục kế thừa. Thời gian chờ mặc định 30 phút.

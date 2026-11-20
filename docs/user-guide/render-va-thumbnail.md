@@ -77,3 +77,32 @@ Dùng làm ảnh bìa. Khối **Thumbnail** trên tab **Render**.
 3. **Tải ảnh lên** nếu bạn có sẵn ảnh (PNG hoặc JPEG).
 
 **MAX** có thể để AI chọn khung (**Chọn thumbnail bằng AI nhìn**). Bạn vẫn đổi tay được. Ảnh bìa không tự lên YouTube cho đến khi bạn **Đăng** và nền tảng nhận thumbnail.
+
+## Xem trước nhanh {#xem-truoc-nhanh}
+
+Ở tab **Timeline** bạn xem thử một cảnh hoặc cả video mà không cần render. Không có gì tự chạy; chỉ khi bạn bấm.
+
+- **Xem trước nhanh** (mỗi cảnh): dựng 3 khung (đầu, giữa, cuối cảnh) ở độ phân giải thấp. Dưới ảnh có ghi chú, ví dụ chữ gần mép khung, khung quá tối hoặc quá sáng, hai cảnh giống nhau.
+- **Phát 3 giây**: dựng đoạn tối đa 3 giây của cảnh, có giọng đọc và phụ đề nếu đã có.
+- **Contact sheet**: một ảnh gồm 3 khung của mọi cảnh, để thấy nhịp và độ đa dạng của cả video.
+
+Lưu ý:
+
+- Nếu bước Timeline chưa xong, bản xem trước dựa trên ảnh đã chọn, độ dài cảnh là ước lượng, chưa có giọng và phụ đề. Trang sẽ ghi rõ điều này.
+- Với bộ dựng Chromium sẵn có, fixture 10 cảnh đo được khoảng 1,6 giây cho một khung, 5 giây cho contact sheet và 5 giây cho clip. Máy và nội dung khác có thể mất lâu hơn. Khi phải dùng bộ dựng dự phòng, một khung đồ họa lạnh mất khoảng 11,6 giây.
+- Chỉ chạy tối đa 2 bản xem trước cùng lúc; nếu máy bận bạn sẽ thấy "đang bận", thử lại sau vài giây.
+- Các phép đo vùng an toàn dùng vị trí chữ thật trong mẫu đồ họa tại khung lấy mẫu. Chữ nằm sẵn trong ảnh/video dùng ước tính, kết quả có ghi cách đo. So sánh cảnh gần giống dùng cả hash và màu.
+- Bản xem trước thuộc tệp tạm. Sau khi được đánh dấu không còn sử dụng, tệp chờ ít nhất một ngày trước lượt dọn tiếp theo. Trợ lý có ba công cụ tương ứng `preview_frame`, `preview_contact_sheet`, `preview_clip`.
+## Lưu trữ {#luu-tru}
+
+Mở **Cài đặt → Lưu trữ** bằng tài khoản quản trị của không gian làm việc mặc định. **Đĩa máy chủ** là lựa chọn mặc định. Nếu có kho tương thích S3, chọn kho đó rồi nhập endpoint, bucket, vùng và hai khóa truy cập. Lưu cấu hình và bấm **Kiểm tra kết nối**. App kiểm tra ghi, đọc và xóa một tệp thử 1 KiB.
+
+Worker tải trực tiếp những tệp đã sao lưu và gửi kết quả qua kho nếu có URL ký. Khi tải trực tiếp lỗi hai lần, worker quay về máy chủ. Máy chủ giữ bản cục bộ và kiểm SHA-256 của kết quả trước khi dùng. Màn hình cho biết dung lượng đã sao lưu từ đầu ngày UTC, số lượt truyền theo đường trong 30 phút và thời gian chuyển về máy chủ khi kho lỗi.
+
+Với Cloudflare R2, dùng endpoint S3 của tài khoản, vùng `auto` và tắt tùy chọn checksum SHA-256. Máy chủ sẽ xác minh bằng cách băm nội dung nhận được. [Tài liệu tương thích S3 của Cloudflare](https://developers.cloudflare.com/r2/api/s3/api/).
+
+Khối **Vòng đời tệp** thống kê dung lượng và những tệp đang chờ dọn. Bấm **Chạy thử (không xoá)** để xem số tệp đã hết thời gian giữ. **Dọn ngay** mở hộp xác nhận có số tệp và dung lượng, rồi kiểm lại tham chiếu trước khi xóa.
+
+Tệp không còn sử dụng mặc định chờ 14 ngày, có thể chỉnh từ 7 đến 60 ngày. Tệp xem trước và tệp tạm chờ một ngày. Sau khi đăng thành công đủ bảy ngày hoặc khi lưu trữ project, app có thể đánh dấu ảnh chưa chọn, bản render cũ và bản xem trước. Tệp vẫn được timeline, snapshot hoàn tác hoặc bài đăng sử dụng được giữ lại. Xóa project hoặc bản render đưa tệp vào quy trình này.
+
+Khi ổ đĩa trống dưới 15%, app dọn tệp tạm đã hết thời gian giữ và cảnh báo dung lượng. Dưới 5%, app tạm ngừng nhận việc dựng và tải clip mới. Dashboard hiển thị lý do và liên kết tới trang Lưu trữ. Agent đọc thống kê bằng công cụ `storage_report`.

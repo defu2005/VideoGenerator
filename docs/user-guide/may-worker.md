@@ -14,7 +14,13 @@ Trang tự làm mới mỗi 15 giây và tạm dừng khi bạn chuyển sang ta
 
 Nếu trang đang mở bằng địa chỉ `localhost`, hộp thoại cảnh báo: máy khác không nối được tới `localhost` của bạn. Hãy mở trang bằng địa chỉ mạng riêng (hoặc Tailscale) của máy chính rồi tạo lại mã.
 
-Máy worker không có cơ sở dữ liệu, không giữ khoá AI và không đăng nhập như người dùng. Nó chỉ nhận dữ liệu của đúng việc dựng đang giao cho nó.
+Máy worker không có cơ sở dữ liệu, không giữ khoá AI (LLM đi qua máy chủ, xem [LLM qua máy chủ](mo-hinh-ai.md#relay-llm)) và không đăng nhập như người dùng. Nó chỉ nhận dữ liệu của đúng việc dựng đang giao cho nó.
+
+### Phạm vi workspace {#workspace}
+
+Máy tham gia bằng mã được tạo trong một workspace chỉ nhận việc của workspace đó. Mã hết hạn hoặc đã dùng không thể dùng lại để đổi phạm vi. Các máy đã tham gia từ trước khi có giới hạn workspace vẫn giữ phạm vi toàn instance; muốn giới hạn một máy cũ, hãy thu hồi rồi cho máy tham gia bằng mã mới trong workspace mong muốn.
+
+Nền tảng truyền dữ liệu cho chế độ chạy cả dây chuyền đang được bổ sung theo TASK-135. Phần 135a chưa thêm lựa chọn nơi chạy trong giao diện; các chế độ giao từng bước bên dưới vẫn được dùng như hiện tại.
 
 ## Chế độ dựng {#che-do}
 
@@ -75,6 +81,12 @@ Trợ lý cũng có thể xem danh sách máy (`list_nodes`) và rút hay bật 
 ## Khi máy bị mất kết nối {#mat-ket-noi}
 
 Máy báo còn sống mỗi 15 giây. Không nghe tin trong khoảng 45 giây thì máy hiện **Mất kết nối**; hết hạn thuê việc (60 giây) thì việc báo lỗi `NODE_LOST` và được tự xếp lại. Kết quả gửi muộn từ máy cũ bị bỏ, không ghi đè.
+
+### Tải tiếp kết quả {#tai-tiep-ket-qua}
+
+Khi mạng gián đoạn mà máy vẫn giữ quyền làm việc, lần gửi lại tiếp tục từ số byte máy chính đã lưu. Tệp đúng mã SHA-256 đã có trong dự án có thể được dùng lại. Máy chính kiểm tra đủ tệp và mã băm trước khi hoàn tất.
+
+Sau khi máy chính đã nhận quyền hoàn tất, nó tiếp tục khâu này từ các tệp đã nhận nếu phải khởi động lại. Máy khác có thể nhận việc mới, còn việc đang hoàn tất vẫn do máy chính xử lý. Tệp tải lên tạm được dọn sau ít nhất 24 giờ kể từ khi việc kết thúc.
 
 Cách xử lý:
 
