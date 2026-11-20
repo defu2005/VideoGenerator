@@ -1,20 +1,22 @@
-# AI Video Agent — Architecture
+# AI Video Agent — Kiến trúc
 
-> Status: **v0.2** (2026-11-06, Asia/Bangkok). Source of truth cho kiến trúc hệ thống.
-> Hành vi người dùng: `docs/user-guide/` và `packages/shared/src/features/featureMap.ts`.
-> Thứ tự task và quy tắc agent: `docs/cursor/README.md`. Khi guide của một task mâu thuẫn với đoạn cũ trong file này, guide thắng cho phạm vi task đó.
+> Trạng thái: **v1.0** (2026-11-21, Asia/Bangkok). Thay thế v0.2 (2026-11-06). Viết lại từ mã nguồn hiện tại (HEAD `f367f14` cộng thay đổi chưa commit). Đường dẫn, định danh và dòng code được kiểm ngày 2026-11-21. Các phần giữ từ v0.2 là §3.3, §3.5, §4.4, §6 (ngưỡng cổng), §7.2, §8.4, §9, §10, §12, §13 và §14: chỉ tên định danh được kiểm; hành vi, ngưỡng và số đo chưa chạy lại; mục chưa kiểm được ghi “chưa đối chiếu lại”.
+> Kiến trúc đã làm: file này. Kiến trúc đang lên kế hoạch (chưa có trong mã): [`ARCHITECTURE-TARGET.md`](ARCHITECTURE-TARGET.md). Không coi tên trong file đó là hiện trạng.
+> Hành vi người dùng: [`user-guide/`](user-guide/) và `packages/shared/src/features/featureMap.ts`.
+> Thứ tự task và quy tắc agent: [`cursor/README.md`](cursor/README.md). Mỗi task có guide ở `docs/cursor/TASK-*.md` và báo cáo ở `docs/tasks/`. Khi guide của một task mâu thuẫn với file này, guide thắng cho phạm vi task đó.
 > Mọi thay đổi kiến trúc phải cập nhật file này.
+> Bố cục gần với arc42 và C4 (bối cảnh, container, khối, runtime, triển khai, khái niệm, quyết định, chất lượng, rủi ro). Số mục không khớp từng mục arc42.
 
-## 1. Runtime
+## 1. Quyết định nền
 
 | Hạng mục | Quyết định |
 |---|---|
-| Ngôn ngữ | TypeScript, monorepo npm workspaces |
-| Node | 24.x (OmniRoute bên ngoài yêu cầu Node 22.22+ hoặc 24+, không dùng Node 23) |
-| DB | SQLite (`better-sqlite3`) + Drizzle. Migration chỉ sinh bằng `npx drizzle-kit generate` trong `apps/server` |
-| File | `data/` (gitignored): `app.db`, `projects/<id>/`, secrets vault |
+| Ngôn ngữ | TypeScript, monorepo npm workspaces (`packages/*`, `apps/*`) |
+| Runtime | Node 22 trong Docker (`deploy/docker/Dockerfile:12,106`: `node:22-bookworm-slim`). Bản v0.2 ghi “Node 24.x”; không tìm thấy nguồn trong repo nên đã bỏ. Yêu cầu Node của OmniRoute bên ngoài chưa được kiểm trong repo |
+| DB | SQLite (`better-sqlite3`) + Drizzle. Schema một file: `apps/server/src/db/schema.ts`. Migration chỉ sinh bằng `npx drizzle-kit generate` trong `apps/server` |
+| File | `data/` (gitignored): `app.db`, `projects/<id>/`, vault bí mật |
 | Job | Worker trong process, hàng đợi trong SQLite. Không Redis, không broker |
-| Progress | SSE + GET polling |
+| Tiến độ | SSE + GET polling |
 | UI | React + Vite + React Router + TanStack Query. Chữ UI tiếng Việt |
 | Media | FFmpeg/ffprobe qua `ffmpeg-static` / `ffprobe-static` (hoặc `FFMPEG_PATH`) |
 | Test | Vitest + `fastify.inject`. Không mạng, không LLM/TTS thật |
@@ -22,100 +24,51 @@
 
 Không dùng: microservices, Kubernetes, ORM thứ hai. Zustand chỉ thêm khi thật cần.
 
-## 2. Repository layout
+## 2. Ứng dụng và gói
 
 ```
 videoGenerator/
-├── package.json                  # workspaces: packages/*, apps/*
-├── docs/
-│   ├── ARCHITECTURE.md           # file này
-│   ├── cursor/                   # guide từng task (thứ tự trong README)
-│   ├── tasks/                    # spec + report
-│   └── user-guide/               # hướng dẫn tiếng Việt
-├── packages/shared/src/          # zod + logic thuần, export từ index.ts (suffix .js)
-│   ├── schemas/  budget/  pipeline/  features/
-│   ├── edit/  formats/  motion/  render/  review/
-│   ├── providerIntel/  llmQuota/  publishing/  operator/
-│   └── scenes/ timeline/ subtitles/ thumbnails/ …
+├── package.json                    # workspaces: packages/*, apps/*
+├── docs/                           # ARCHITECTURE.md (file này), cursor/, tasks/, user-guide/
+├── packages/shared/src/            # zod + logic thuần, export qua index.ts (import dùng đuôi .js)
+│   ├── schemas/  budget/  pipeline/  features/  script/  operator/  llm/  llmQuota/  markets/  metadata/  modelEval/  motion/
+│   ├── agents/  automation/  brief/  clips/  comments/  compose/  connections/  edit/  events/  fleet/  formats/  guidelines/
+│   ├── knowledge/  music/  originality/  providerIntel/  publishing/  render/  repair/  retrieval/  review/  scenes/  selfImprovement/
+│   ├── style/  subtitles/  thumbnails/  timeline/  translations/  trends/  tts/  visuals/
+│   ├── enums.ts  pipeline.ts  …    # JOB_STATUSES, STAGE_ORDER, GATES
 ├── apps/server/src/
-│   ├── api/                      # route Fastify, đăng ký trong app.ts
-│   ├── db/                       # schema + migrate
-│   ├── jobs/                     # queue, worker, SSE
-│   ├── pipeline/                 # orchestrator, stale, stage timeout plan
-│   ├── stages/                   # research, script, scenes, visuals, voice,
-│   │                             # subtitle, music, timeline, render, clip
-│   ├── services/                 # project, script, scene, visual, render, …
-│   ├── providers/                # llm/, images/, tts/, music/
-│   ├── review/  guidelines/  publishing/  operator/  assistant/
-│   ├── providerIntel/  learning/  finance/  analytics/
-│   ├── notifications/  comments/  trends/  translations/
-│   ├── edit/  formats/  media/  timeline/  registry/  storage/
-│   └── lib/                      # config, errors
-├── apps/web/src/features/        # dashboard, projects, pipeline, script, scenes,
-│                                 # visuals, voice, subtitles, music, timeline,
-│                                 # render, review, profiles, publish, settings,
-│                                 # operator, providers, finance, usage, help
-├── apps/mcp/                     # MCP video-agent (stdio → REST)
-├── provider-intelligence/        # hồ sơ nghiên cứu nhà cung cấp (file, không phải DB app)
-└── data/                         # gitignored
+│   ├── api/                        # route Fastify, mỗi nhóm một file, đăng ký trong app.ts (app.ts, index.ts ở gốc src)
+│   ├── db/                         # schema.ts, client.ts (pragma), checkpoint.ts (WAL)
+│   ├── pipeline/                   # orchestrator, invalidation, dataContract, inputVersion, stageTimeoutPlan
+│   ├── jobs/                       # worker.ts, jobRepository.ts, SSE
+│   ├── stages/                     # clip, music, publish, render, research, scenes, script, subtitle, timeline, visuals, voice
+│   ├── services/                   # project, script, scene, visual, render (renderService.ts), …
+│   ├── agents/                     # stageService.ts, stageAdapters/, toolkit theo stage
+│   ├── node/                       # agent.ts (heartbeat), nodeService.ts, leaseService.ts, projectPlacement.ts
+│   ├── fleet/                      # quản lý agent (service.ts), gồm loại hermes
+│   ├── supervision/                # lease giám sát (leases.ts)
+│   ├── registry/                   # policy.ts, invoke.ts, audit.ts: tool dùng chung
+│   ├── operator/                   # workspace.ts, qualityRepair.ts, handbook
+│   ├── assistant/                  # service.ts, tools.ts, telegramBridge.ts
+│   ├── providers/                  # llm/ (có relay.ts), footage/, images/, music/, tts/, web/
+│   ├── compose/                    # director/, render/, sceneClip.ts, planInputs
+│   ├── style/  originality/        # xem §11
+│   ├── review/  guidelines/  publishing/  providerIntel/  learning/  continuity/  knowledge/  research/  retrieval/
+│   ├── finance/  analytics/  notifications/  comments/  trends/  translations/  reports/  missions/  settings/
+│   ├── edit/  formats/  media/  timeline/  storage/  events/  auth/  lib/  cli/  help/  preview/  computerUse/
+├── apps/web/src/features/          # 35 thư mục, mỗi màn hình một thư mục
+├── apps/mcp/                       # MCP video-agent (stdio → REST)
+├── provider-intelligence/          # hồ sơ nghiên cứu nhà cung cấp (file, không phải DB của app)
+└── data/                           # gitignored
 ```
 
-Operator Cursor (TASK-047) dùng thư mục **ngoài** git root (`<data>/operator` hoặc `../.video-agent-operator`), không dùng `.cursor/` của repo này làm workspace operator.
+Workspace của operator Cursor nằm **ngoài** git root: `apps/server/src/operator/workspace.ts:33` dùng `.video-agent-operator`, không dùng `.cursor/` của repo.
 
-## 3. Hybrid: agent và người dùng
+## 3. Pipeline và hệ thống job
 
-Mỗi project có `mode`. Từng stage có thể override `executor` (`AGENT` | `USER`).
+### 3.1 Thứ tự stage
 
-| Mode | Hành vi |
-|---|---|
-| `AUTO` | Chạy tiếp các gate khi còn được phép. `VISUAL_REVIEW` và `MUSIC_REVIEW` tự duyệt nếu không có lý do chặn (`autoBlock`: thiếu ảnh, `NEEDS_ATTENTION`, v.v.). `FINAL_APPROVAL` vẫn dừng trừ khi `autoRender`. Dừng bất ngờ thì báo attention, không coi là “chờ bạn duyệt” bình thường. |
-| `ASSISTED` (mặc định) | Agent sinh, dừng ở `VISUAL_REVIEW`, `MUSIC_REVIEW`, `FINAL_APPROVAL`. |
-| `MANUAL` | Chỉ chạy stage khi người dùng bấm. |
-
-`stageExecutors.visuals = USER`: agent chỉ gợi ý query, người dùng dán URL hoặc upload. 0 token tìm ảnh.
-
-### Cost tiers
-
-| Tier | Ví dụ | Chi phí |
-|---|---|---|
-| 0 — Code | Tách scene, rank/dedupe ảnh, timeline, FFmpeg, timeout baseline, validate | Free |
-| 1 — API rẻ | Image search, music search, TTS | Thấp |
-| 2 — LLM text | Research, script, query, rerank text, metadata, review chat, advisor, assistant | Theo budget mode + cache |
-| 3 — LLM vision | Kiểm tra ảnh, đồng nhất scene, frame sau render, chọn thumbnail | Tắt mặc định. Bật ở MAX hoặc CUSTOM |
-
-Mỗi call ghi `usage` (task, provider, model, token, cost ước tính).
-
-### Budget mode (theo project)
-
-| Mode | Ý tưởng |
-|---|---|
-| `ECO` | Research + script gộp một call. Không review, không trợ ảnh/nhạc |
-| `BALANCED` | Research và script tách. Review 1 lượt. Trợ query, rerank, mood, metadata. Repair 1 |
-| `QUALITY` | Research sâu, review/polish 2 lượt, mọi trợ text, repair 2. Vision vẫn opt-in |
-| `MAX` | Mọi trợ ở mức cao + fact-check, tìm ảnh rộng, vision top ảnh, đồng nhất scene, kiểm tra frame sau render. Scene dưới ngưỡng → `NEEDS_ATTENTION` |
-| `CUSTOM` | Nền BALANCED + từng feature bật/tắt. Ước tính theo cấu hình |
-
-Preset và cờ nằm ở `packages/shared/src/budget/modes.ts`. Danh sách tác vụ LLM (`LLM_TASKS`) ở `packages/shared/src/schemas/llm.ts`.
-
-**Định tuyến:** mỗi task có `{provider, model, maxOutputTokens?, fallback?}`. Ưu tiên: project theo task → project mặc định → app theo task → app mặc định → ENV.
-
-**Gateway OmniRoute** (chạy riêng, mặc định `http://127.0.0.1:20128/v1`): `off` | `prefer` (fallback khi mất kết nối/5xx) | `only`. Key endpoint trong `OMNIROUTE_API_KEY`. Token quản trị chỉ đọc (vault) dùng cho quota live và audit nhà cung cấp, không thay key gọi model.
-
-**Quota:** bộ đếm local + cool-down 429; số OmniRoute (nếu có token) ghi đè ước tính. Chính sách hết hạn mức miễn phí: chờ reset, hoặc model trả phí trong trần USD/ngày.
-
-### Quy tắc LLM
-
-1. Việc code làm tốt thì viết code: tách câu, thời lượng, lọc trùng, timeline, render, validate.
-2. LLM được gọi khi làm video tốt hơn (viết, biên tập, ngữ nghĩa, guideline, góp ý). ECO vẫn là lựa chọn tiết kiệm. Chat do người bấm được phép mọi mode và hiện chi phí từng tin.
-3. UI ước tính call/token trước khi chạy. Không vượt mode một cách âm thầm.
-4. Vision luôn opt-in trừ MAX/CUSTOM đã bật; vẫn có đường người duyệt ở gate.
-5. Cache theo hash input + provider/model. Pre-flight theo giới hạn provider.
-6. Timeout stage: một call LLM nhỏ (`stageTimeouts`) hoặc baseline code. Worker dùng plan đó, không một trần 10 phút chung.
-7. Đường 0 token: người tự viết, hoặc MCP `video-agent` qua API.
-
-## 4. Pipeline
-
-Thứ tự chính (`STAGE_ORDER`):
+`packages/shared/src/pipeline.ts:17–30` (`STAGE_ORDER`):
 
 ```
 RESEARCH → SCRIPT → SCENE_PLAN → VISUAL_SEARCH → [VISUAL_REVIEW]
@@ -123,17 +76,28 @@ RESEARCH → SCRIPT → SCENE_PLAN → VISUAL_SEARCH → [VISUAL_REVIEW]
         → [FINAL_APPROVAL] → RENDER
 ```
 
-`[...]` là gate. `project.status`: `DRAFT | GENERATING | REVIEW | RENDERING | COMPLETED | FAILED`. Archive là `archivedAt`.
+`[...]` là gate (`GATES`, `isGate` trong cùng file). Trạng thái project và stage: xem `packages/shared/src/enums.ts` (chưa đối chiếu lại trong lần viết này).
 
-Job: `QUEUED → RUNNING → SUCCEEDED | FAILED | CANCELLED`, progress, retry backoff. Job `RUNNING` lúc restart được đưa lại `QUEUED`. Output lưu sau mỗi bước.
+| Mode | Hành vi |
+|---|---|
+| `AUTO` | Chạy tiếp các gate khi còn được phép. `VISUAL_REVIEW` và `MUSIC_REVIEW` tự duyệt nếu không có lý do chặn (`autoBlock`). `FINAL_APPROVAL` dừng trừ khi `autoRender`. Dừng bất ngờ thì báo attention |
+| `ASSISTED` (mặc định) | Agent sinh, dừng ở cả ba gate |
+| `MANUAL` | Chỉ chạy stage khi người dùng bấm |
 
-**Side job** (không nằm trong `STAGE_ORDER`, không đẩy stage pipeline): `PUBLISH`, `CLIP`.
+Mỗi stage có thể đặt `executor` là `AGENT` hoặc `USER`. Ví dụ: `stageExecutors.visuals = USER` nghĩa là agent chỉ gợi ý truy vấn, người dùng dán URL hoặc tải ảnh lên, 0 token tìm ảnh.
 
-Stage state: `PENDING | QUEUED | RUNNING | DONE | FAILED | STALE | WAITING_USER | SKIPPED`.
+### 3.2 Job
 
-### Invalidation
+- Trạng thái job: `JOB_STATUSES = ["QUEUED", "RUNNING", "SUCCEEDED", "FAILED", "CANCELLED"]` (`packages/shared/src/enums.ts:111`).
+- Side job nằm ngoài `STAGE_ORDER` và không đẩy stage pipeline: `PUBLISH`, `CLIP`.
+- Worker quét định kỳ mỗi 10 giây (`apps/server/src/jobs/worker.ts:225`, `sweepTimer`): chạy hàm đăng ký qua `setSweep` (`apps/server/src/app.ts:759`), `agentStages.sweep()`, `sweepRemote()`, rồi `wake()` nếu worker cục bộ bật. Timer chỉ được tạo khi đã gọi `setSweep` (`worker.ts:214`) và không phụ thuộc `WORKER_ENABLED`.
+- Chưa đối chiếu lại: retry backoff; job `RUNNING` lúc restart được đưa về `QUEUED`; output lưu sau mỗi bước.
 
-Output lưu `inputHash`. Lệch hash → `STALE` từ stage đó trở đi (`markStaleFrom`).
+### 3.3 Invalidation
+
+Output lưu `inputHash`. Lệch hash thì stage đó và các stage sau thành `STALE` qua `markStaleFrom` (`apps/server/src/pipeline/invalidation.ts:4`, gọi từ `pipeline/orchestrator.ts`).
+
+Sơ đồ phụ thuộc (từ v0.2, chưa đối chiếu lại từng cạnh):
 
 ```
 topic ─► script ─► scenes ─┬─► visualQueries ─► candidates ─► selection ─┐
@@ -141,137 +105,341 @@ topic ─► script ─► scenes ─┬─► visualQueries ─► candidates �
                            └─► musicMood ─► music ──────────────────────┴─► timeline ─► render
 ```
 
-Sửa narration một scene làm stale voice scene đó, subtitle, timeline, render. Đổi ảnh một scene chỉ stale selection đó, timeline, render (cache clip theo scene).
-
 Chat review áp proposal có cấu trúc thì stage liên quan thành `STALE`. Có revision token và undo (web, Telegram, MCP).
 
-## 5. Data model (lõi)
+### 3.4 Lease và thời gian (đã đối chiếu)
 
-Schema Zod ở `packages/shared`. Cột lồng nhau là JSON trong SQLite. Chi tiết bảng: `apps/server/src/db/schema.ts`.
+| Thông số | Giá trị | Nơi định nghĩa |
+|---|---|---|
+| Lease node | `NODE_LEASE_SEC` = 60 s mặc định (khoảng 10–600) | `lib/config.ts:65`; cấp lease ở `node/leaseService.ts` |
+| Ngưỡng node offline | `NODE_OFFLINE_AFTER_MS` = 45 s | `node/nodeService.ts:30`; dùng để xét node mất kết nối (`nodeService.ts:344`) |
+| Heartbeat node | 15 s | `node/agent.ts:177` |
+| Lease agent stage | 10 phút | `agents/stageService.ts:18` |
+| Lease giám sát | 10 phút | `supervision/leases.ts:4` |
+| Quét node | 10 s | `jobs/worker.ts:225` |
 
-| Nhóm | Thực thể chính |
+Lưu ý: 45 s là ngưỡng offline, không phải thời hạn lease. Bản v0.2 đã nhầm hai khái niệm này.
+
+Timeout stage: một lời gọi LLM nhỏ hoặc baseline bằng code, lấy từ `pipeline/stageTimeoutPlan.ts`. Không dùng một trần 10 phút chung.
+
+### 3.5 Project run và upload (TASK-135a)
+
+Điều khiển theo run: bảng `project_runs` (fence theo node, workspace, lease, hạn), `run_checkpoints` (khử trùng kết quả có thứ tự), `run_uploads` (tái dùng lõi upload có thể tiếp tục, khóa ngoại tới run). Upload output của node lưu offset và checksum theo job và lease trong `node_uploads`. Trước side effect của stage có một claim `finalizing_at` (kiểm bằng `db/schema.ts`). Control khởi động lại thì tiếp tục finalize từ bundle đang chờ và các upload đã kiểm. Node hết hạn không làm hỏng finalize mà control đang giữ. File tạm của job đã kết thúc hết hạn sau 24 giờ.
+
+Snapshot dùng bảng không thuộc control, đọc tiến độ, tên file theo SHA đầy đủ, và tag journal Drizzle mới nhất. Import yêu cầu DB project rỗng đã migrate và file cache đã kiểm. Khi apply checkpoint, hệ thống so input version trước khi thay các hàng do stage sở hữu, trong một transaction `IMMEDIATE`. Sự kiện stage được phát sau commit.
+
+## 4. Dữ liệu
+
+### 4.1 SQLite
+
+- Pragma (`apps/server/src/db/client.ts`): `journal_mode = WAL`, `busy_timeout = 5000`, `synchronous = NORMAL`, `foreign_keys = ON`.
+- `PRAGMA quick_check` lúc khởi động; hành vi khi kết quả xấu chưa đối chiếu lại.
+- `WalCheckpointManager` (`db/checkpoint.ts`): kiểm dung lượng WAL định kỳ và chạy `wal_checkpoint(TRUNCATE)` khi vượt ngưỡng (chưa đối chiếu lại hằng số).
+- Batching: `audit_log` và `llm_relay_usage` gộp ghi trong RAM và xả định kỳ (chi tiết §13).
+
+### 4.2 Migration
+
+- Thư mục `apps/server/drizzle`. Dải `0080`–`0103` là các migration chưa commit tại thời điểm viết (theo `git status`; xem `docs/tasks/TASK-080.commit-plan.md`). Migration trước đó đã nằm trong git. Ví dụ `0102_improvement_done_at.sql`, `0103_acceptance_result.sql`. Journal: `meta/_journal.json`.
+- Chỉ sinh migration trong `apps/server` bằng `npx drizzle-kit generate`. Không sinh tại chỗ cho file thử nghiệm: dùng thư mục nháp.
+- Migration đi cùng schema trong cùng commit.
+
+### 4.3 Bảng chính
+
+| Nhóm | Bảng hoặc thực thể (nguồn: `db/schema.ts`) |
 |---|---|
-| Dự án | VideoProject (brief, mode, budget, stageExecutors, autoRender, status, stage), Script, Scene |
-| Hình | VisualQuery, VisualCandidate, VisualSelection, LicenseMetadata |
-| Âm thanh | VoiceTrack, SubtitleTrack (cues + word timing khi provider có), MusicTrack |
+| Dự án | VideoProject (brief, mode, budget, stageExecutors, autoRender, status, stage), `script_drafts`, Scene |
+| Chạy và bước | `project_runs`, `run_checkpoints`, `run_uploads`, `node_uploads`, Job + `usage.calls`, `stage_feedback`, `stage_notes`, `stage_quality` |
+| Hình | VisualQuery, VisualCandidate, VisualSelection, LicenseMetadata, `visual_query_patterns` |
+| Âm thanh | VoiceTrack, SubtitleTrack (cue + word timing khi provider có), MusicTrack |
 | Dựng | Timeline, edit plan, motion clips, Render output + version |
-| Việc | Job + usage.calls |
+| LLM | `llm_relay_usage`, `llm_relay_grants`, `stage_prompt_variants` |
+| File | `blobs`, `file_gc_marks`, `file_gc_runs`, `retrieval_chunks`, `retrieval_uses`, `retrieval_exclusions` |
+| Node và fleet | `nodes`, `agent_instances` (loại `hermes` là một giá trị của `kind`) |
 | Ngoài pipeline | Profile, platform account, publication, schedule, comment, analytics snapshot, finance entry, notification, operator conversation, provider-intel rows, quota snapshot |
 
-**Candidate và selection:** search tạo nhiều candidate. Selection trỏ một candidate. Đổi ảnh = đổi `candidateId`.
+Trạng thái visual: `VisualStatus` là `DISCOVERED → REVIEW_REQUIRED → APPROVED | REJECTED`, thêm `REPLACED`, `CUSTOM`, `AI_GENERATED`. Scene visual là `NO_VISUAL → SEARCHING → REVIEW_REQUIRED → APPROVED → READY_FOR_RENDER`, cộng `NEEDS_ATTENTION`, `SKIPPED`.
 
-**VisualStatus:** `DISCOVERED → REVIEW_REQUIRED → APPROVED | REJECTED`; thêm `REPLACED`, `CUSTOM`, `AI_GENERATED`.
+Search tạo nhiều candidate; selection trỏ tới một candidate. Đổi ảnh là đổi `candidateId`. LLM không bịa URL ảnh. License chỉ là metadata (`evidence`: `api | page_meta | user | none`), không khóa cứng. Render xuất `credits.txt` khi `attributionRequired`.
 
-**Scene visual:** `NO_VISUAL → SEARCHING → REVIEW_REQUIRED → APPROVED → READY_FOR_RENDER`, cộng `NEEDS_ATTENTION`, `SKIPPED`.
+### 4.4 Vòng đời tệp
 
-LLM không bịa URL ảnh. License chỉ là metadata (`evidence`: `api | page_meta | user | none`). Không hard-block. Render xuất `credits.txt` khi `attributionRequired`.
+- Bảng tham chiếu được dựng từ cột tệp và JSON trong DB (`storage/references.ts`, `DbReferenceIndex`). Một lượt dọn dựng một chỉ mục, không quét lại cho từng tệp. Chỉ mục làm mới khi `PRAGMA data_version` hoặc `total_changes()` đổi, và được kiểm lại trong transaction ghi ngay trước khi gỡ tệp.
+- Tệp cục bộ chỉ bị gỡ sau kiểm tra tham chiếu trong transaction SQLite và kiểm lại dấu tệp trên đĩa. `file_gc_marks` giữ dấu đường dẫn cục bộ kể cả khi project đã bị xóa. `blobs.orphaned_at/purge_after` giữ thời gian chờ của bản S3; `file_gc_runs` ghi từng lượt.
+- Khi tham chiếu xuất hiện trong lúc chờ mạng, tệp cục bộ được giữ lại và bản S3 cần xác minh lại.
+- Worker mặc định nhận tệp qua máy điều khiển. Khi bật S3, máy điều khiển sao lưu đầu vào bundle theo SHA-256 dưới `blobs/`. Worker kiểm hash sau khi tải và quay về route của máy điều khiển nếu hai lần tải trực tiếp thất bại.
+- Worker gửi đầu ra qua URL PUT giới hạn theo lease, tên, kích thước và hash. Tệp chưa kiểm nằm trong `incoming/`, tách khỏi bản sao theo nội dung. Khóa nằm trong vault; chỉ URL ngắn hạn tới worker.
 
-## 6. Providers
+## 5. Registry, công cụ và chính sách
 
-| Loại | Hiện có |
+Tool dùng chung cho assistant, MCP, operator và agent. Mã nằm ở `apps/server/src/registry/`.
+
+- `ToolSource = "assistant" | "mcp" | "operator" | "agent"` (`registry/policy.ts:11`).
+- `AuditSource = "api" | "assistant" | "mcp" | "operator" | "system"` (`auth/auditLog.ts:12`). Nguồn `agent` được ghi thành `operator` (`registry/audit.ts:79`).
+- `TOOL_GRANTS` (`packages/shared/src/schemas/autonomy.ts:98`) ánh xạ tên tool tới khóa quyền (`approveGates`, `publish`, `retries`, `providers`, …) hoặc `null`.
+- `autonomyDecision` (`registry/policy.ts`, dòng 59–81): chặn cứng trước, rồi mức tự chủ `off` hoặc `assist` (cho chờ), rồi tool không có grant (chờ), rồi kiểm grant.
+- `shouldCreatePending` (`registry/policy.ts`, dòng 104–129) quyết định việc tạo thao tác chờ theo thứ tự: `forcesUserPending`; `computer_act`; nếu có `autonomy` thì áp `autonomyDecision`; tool `confirm` không có khóa nào trong `TOOL_GRANTS` (`Object.hasOwn`, khóa `null` vẫn tính là có) thì chờ; nguồn `agent` thì chạy; `confirm` từ `mcp` hoặc `operator` thì chờ; `alwaysConfirm`; cuối cùng `autoConfirm`.
+- `registry/invoke.ts:178`: với nguồn `agent` không truyền `autonomy`, nên nhánh tự chủ không chạy. Mọi lượt gọi `agent` đều được truyền `gated = true` vào `execute`.
+
+**Đối chiếu với v0.2 (đã sửa).** v0.2 viết nguồn `agent` “chạy luôn” mọi thao tác `confirm`, kể cả xóa, đăng và bật lịch. Theo code ngày 2026-11-21, đó là quá rộng:
+- `hardBlockMessage` (`registry/invoke.ts:44`) chạy trước mọi nhánh và áp cho **mọi nguồn**, kể cả `agent`. Các lượt bị chặn ghi `refused`.
+- `forcesUserPending` (`registry/policy.ts:100`) đưa `delete_project`, `run_research` và việc bật tự động hóa vào chờ người dùng, với mọi nguồn.
+- Nguồn `agent`: không có `autonomy` (`invoke.ts:178`), nên nhánh tự chủ không chạy. Tool `confirm` không có khóa trong `TOOL_GRANTS` thì chờ. Tool có khóa, như `publish_project` (grant `publish`), thì **chạy trực tiếp** với `gated = true`, không qua mức tự chủ của người dùng.
+
+Tool có khóa `null` trong `TOOL_GRANTS` (chú thích trong code: “Null requires human review even with every grant”) có hai nhánh:
+- Nguồn không phải `agent`: `autonomyDecision` không có grant nên trả `pending`. Đúng với chú thích.
+- Nguồn `agent` không có `autonomy`, và khóa `null` vẫn qua `hasOwn`, nên tool `confirm` có khóa `null` **chạy trực tiếp** với `gated = true`, trừ khi `hardBlockMessage` chặn. Nhóm `null` này gồm 18 tool (đã đọc `risk` trong các file định nghĩa): `add_revenue_entry`, `make_shorts`, `make_translation`, `apply_review_proposal`, `undo_timeline_edit`, `update_stage_timeouts`, `crop_scene_images`, `dedupe_scene_visuals`, `switch_script_hook`, `rescore_script`, `set_node_drain`, `decide_stage_note`, `propose_knowledge_change`, `import_knowledge`, `resolve_change_event`, `report_change`, `set_style_pack`, `mark_change_reviewed` (`providerIntel/toolDefs.ts:161`).
+
+Phạm vi đầy đủ rộng hơn nhóm `null`: mọi tool `confirm` có khóa bất kỳ trong `TOOL_GRANTS` (kể cả `publish_project` với grant `publish`) đều đi cùng nhánh này, trừ các ngoại lệ `forcesUserPending` (`delete_project`, `run_research`, bật tự động hóa) và `computer_act`. Phần có khóa không `null` chưa được đếm đầy đủ.
+
+Chưa đối chiếu hết: hành vi trong một số hàm `execute` đổi theo `gated` (`assistant/tools.ts:985, 998, 1038, 1138`; hai dòng 998 và 1038 chỉ áp cho bước `SCRIPT` và `RENDER`). `research/toolDefs.ts:26` chỉ đổi cờ `manual` (`!ctx.gated && !ctx.autonomyRun`); `run_research` vẫn bị `forcesUserPending` chờ. Vì vậy “chạy trực tiếp” không đồng nhất cho mọi tool. `decide_stage_note` có tên trong `auth/toolActions.ts:61` và `supervision/leases.ts:53`; cách hai chỗ này áp lên lượt `agent` chưa đối chiếu. `propose_stage_note` có `risk: "safe"`, không ảnh hưởng.
+
+Khóa `locked` (`invoke.ts:177`, `agentMayChange` ở `operator/autopilot.ts:274`) làm thao tác chờ với mọi nguồn, kể cả `agent`, khi người dùng vừa chạm khóa cài đặt đó trong 24 giờ (`needsPending = locked || shouldCreatePending(...)`).
+
+Vì vậy, khi agent gọi (nguồn lấy từ header `x-vg-tool-source` do client gửi, `api/registry.ts:25–26`), các tool `confirm` nói trên chạy được khi không bị `hardBlockMessage`, `forcesUserPending` hay khóa `locked` chặn. Đường tiếp cận này (ai có thể đặt header đó) cần đối chiếu với lớp xác thực, chưa làm trong tài liệu này. Đây có phải thiết kế mong muốn hay không là quyết định sản phẩm, tài liệu này không tự kết luận.
+
+## 6. Điều khiển từ ngoài UI
+
+- **Assistant (web và Telegram):** `apps/server/src/assistant/` (`service.ts`, `tools.ts`, `telegramBridge.ts`). Trợ lý gọi tool và hỏi trước khi sửa, đăng hoặc render.
+- **MCP `video-agent`:** `apps/mcp` (stdio → REST, không mở SQLite). Biến `VG_TOOL_SOURCE` trong `apps/mcp/src/tools.ts` và `apiClient.ts` chọn nguồn. Với `VG_TOOL_SOURCE=agent`, các tool `confirm` đi theo §5. Đồng bộ phía MCP qua `apps/mcp/src/sync.ts` (lệnh `vg-hermes-sync`).
+- **Operator:** `apps/server/src/operator/`. Phiên Cursor CLI dài, không có shell, chỉ MCP `video-agent` và ghi `notes/`. Workspace nằm ngoài git root (`workspace.ts:33`). Handbook sinh lúc khởi động (chưa đối chiếu lại).
+- **Hermes:** một loại agent trong fleet, không phải module. Mã nằm ở `apps/server/src/fleet/service.ts`; route cài đặt là `/api/settings/hermes-fleet` (`api/fleet.ts`). Đồng bộ qua `vg-hermes-sync` (cũng xuất hiện trong `fleet/service.ts`). Bảng `agent_instances` lưu instance theo `kind`.
+- **Adapter giao stage cho agent ngoài (TASK-147):** `apps/server/src/agents/stageAdapters/`. Chỉ `VISUAL_SEARCH` giữ `app_then_agent`; các stage khác mặc định là `app`. Người dùng bật từng stage theo kênh hoặc dự án. Cổng chất lượng của app luôn chạy cho agent, không tắt được. Nếu agent lỗi, app giữ việc để chạy lại cục bộ hoặc chuyển cho agent khác.
+
+| Stage | Vai trò agent | Cổng của app (tóm tắt) |
+|---|---|---|
+| `VISUAL_SEARCH` | `visual_scout` | Kiểm ảnh theo luồng visual hiện có |
+| `RESEARCH` | `research_scout` | ≥ 6 `keyFacts`; ≥ 60% fact có nguồn; nguồn http(s) không trỏ máy nội bộ; notes khớp `input_hash` |
+| `MUSIC_SEARCH` | `music_scout` | Giấy phép thương mại; tối đa 8 bản nhạc mỗi job; app tự tải và đo thời lượng |
+| `SCRIPT` | `script_writer` | Lint (chỉ ghi chú); critic; kiểm sự thật. Giữ khi tổng điểm dưới 60, độ chính xác dưới 3, hoặc có fact chặn. Tối đa 2 lần nộp lại |
+
+Vì sao app giữ cổng: cổng không đọc lời tự khai của agent. Nó kiểm lại nội dung đã lưu, lease và đầu vào hiện tại.
+
+### Hybrid: agent và người dùng
+
+Chưa đối chiếu lại (từ v0.2 mục 3). Mỗi project có `mode`; từng stage có thể override `executor` (`AGENT` | `USER`).
+
+| Mode | Hành vi |
+|---|---|
+| `AUTO` | Chạy tiếp các gate khi còn được phép. `VISUAL_REVIEW` và `MUSIC_REVIEW` tự duyệt nếu không có lý do chặn (`autoBlock`: thiếu ảnh, `NEEDS_ATTENTION`, v.v.). `FINAL_APPROVAL` vẫn dừng trừ khi `autoRender`. |
+| `ASSISTED` (mặc định) | Agent sinh, dừng ở `VISUAL_REVIEW`, `MUSIC_REVIEW`, `FINAL_APPROVAL`. |
+| `MANUAL` | Chỉ chạy stage khi người dùng bấm. |
+
+Ví dụ: `stageExecutors.visuals = USER` nghĩa là agent chỉ gợi ý query, người dùng dán URL hoặc tải ảnh lên, và không tốn token tìm ảnh.
+
+### API (nhóm route)
+
+Route nằm trong `apps/server/src/api/`, chia theo file. Danh sách dưới đây là 66 file `.ts` trực tiếp trong `api/` (kiểm ngày 2026-11-21), xếp theo miền để đọc. Lỗi trả dạng `{ "error": { "code", "message", "details" } }` (từ v0.2, chưa kiểm lại). Chưa đối chiếu trong bản này: đường dẫn URL của từng route và việc từng file có được đăng ký trong `app.ts`. v0.2 nêu nhóm `jobs` và `events (SSE)`, nhưng không có file `jobs.ts` hay `events.ts` trong danh sách, nên chưa biết route nằm ở file nào. Chi tiết đọc từ mã nguồn.
+
+- **Dự án và pipeline:** `projects`, `pipeline`, `budget`, `stageTimeouts`, `overdue`, `missions`, `dashboard`, `timeline`.
+- **Dữ liệu từng stage và nội dung:** `script`, `scenes`, `visuals`, `voice`, `subtitles`, `music`, `motion`, `render`, `preview`, `clips`, `thumbnails`, `originality`, `style`, `retrieval`, `knowledge`, `resources`, `recommendations`.
+- **Review và metadata:** `review`, `guidelines`, `metadata`, `comments`, `promptVariants`, `stageLessons`, `skillReports`, `autoReport`, `capabilityProbe`.
+- **LLM, cài đặt và hệ thống:** `llm`, `llmRelay`, `usage`, `connections`, `ttsSettings`, `webImageSettings`, `imageSourcesSettings`, `storageSettings`, `adminDbStats`, `health`, `help`.
+- **Hồ sơ, tự động hóa và kênh ra:** `profiles`, `automation`, `autonomy`, `trends`, `translations`, `publications`, `oauth`, `webhooks`, `notifications`.
+- **Agent, fleet và vận hành:** `agentStages`, `agentEvents`, `fleet`, `nodes`, `assistant`, `operator`, `registry`, `providerIntel`, `research`.
+- **Phân tích, tài chính và học tập:** `analytics`, `finance`, `learning`.
+
+## 7. Node, worker và cổng LLM
+
+### 7.1 Node
+
+Worker chạy trên máy khác (`node/agent.ts`). Heartbeat mỗi 15 giây; payload không đổi được gộp trong RAM, chỉ ghi `UPDATE nodes` khi có thay đổi trạng thái hoặc phiên bản. Node mất kết nối sau 45 giây (§3.4). Thẻ placement của project nằm ở `node/projectPlacement.ts`.
+
+### 7.2 Cổng LLM (relay, TASK-136)
+
+Chỉ máy điều khiển giữ `OMNIROUTE_API_KEY`. Các máy khác (agent Hermes, scout, operator, node) gọi LLM qua relay tương thích OpenAI:
+
+- Route: `/api/llm/relay/v1/{chat/completions,embeddings,models}` (`apps/server/src/api/llmRelay.ts`). Route quản trị là `/api/llm/relay-admin/*`.
+- Khóa của người gọi: khóa agent có hồ sơ (`agent:<loại>/<tên>`) hoặc token node `vgn_…` (`node:<id>`).
+- Relay chỉ gửi header an toàn (content-type, accept, khóa máy chủ), bỏ auth, cookie và `x-*` của người gọi, và che khóa máy chủ trong mọi phản hồi kể cả luồng SSE qua ranh giới chunk.
+- Mỗi lời gọi qua `preflight` theo thứ tự: bật/tắt, model được phép, rpm/tpm trượt 60 giây, trần USD/ngày, rồi trạng thái quota dùng chung.
+- Từ chối là lỗi kiểu OpenAI: `RELAY_DISABLED`, `RELAY_MODEL_NOT_ALLOWED`, `RELAY_RATE_LIMITED`, `RELAY_BUDGET_EXCEEDED`, kèm `retry-after`. Các lần này được ghi vào `llm_relay_usage`.
+- Giới hạn nằm ở `llm_relay_grants` (hàng `*` là mặc định).
+- Header `x-vg-job-id` chỉ được tính khi job đang `RUNNING` và được giao đúng cho người gọi. Khi đó chi phí đi qua `orchestrator.recordUsage` nên trang Chi phí chỉ đếm một lần.
+- Khóa LLM (`llm:*`) không còn được node mượn. Cài mới mặc định gateway ở chế độ `only`.
+
+## 8. LLM, ngân sách và chi phí
+
+### 8.1 Tầng chi phí
+
+| Tầng | Ví dụ | Chi phí |
+|---|---|---|
+| 0 — Code | Tách scene, rank/dedupe ảnh, timeline, FFmpeg, timeout, validate | Miễn phí |
+| 1 — API rẻ | Tìm ảnh, tìm nhạc, TTS | Thấp |
+| 2 — LLM text | Research, script, query, rerank, metadata, review chat, advisor, assistant | Theo budget mode và cache |
+| 3 — LLM vision | Kiểm ảnh, đồng nhất scene, frame sau render, chọn thumbnail | Tắt mặc định, bật ở MAX hoặc CUSTOM |
+
+Mỗi lời gọi ghi `usage` (task, provider, model, token, chi phí ước tính).
+
+### 8.2 Budget mode (theo project)
+
+Preset và cờ ở `packages/shared/src/budget/modes.ts`. Danh sách tác vụ LLM (`LLM_TASKS`) ở `packages/shared/src/schemas/llm.ts`.
+
+| Mode | Ý tưởng (tóm tắt, chi tiết trong `modes.ts`) |
+|---|---|
+| `ECO` | Research và script gộp một lời gọi. Không review, không trợ ảnh/nhạc |
+| `BALANCED` | Research và script tách. Review một lượt. Có trợ query, rerank, metadata, repair một lượt |
+| `QUALITY` | Research sâu, review hai lượt, mọi trợ text, repair hai lượt. Vision vẫn opt-in |
+| `MAX` | Mọi trợ ở mức cao, fact-check, tìm ảnh rộng, vision top ảnh, kiểm frame sau render. Scene dưới ngưỡng thành `NEEDS_ATTENTION` |
+| `CUSTOM` | Nền BALANCED, từng cờ bật/tắt |
+
+**Định tuyến:** mỗi task có `{provider, model, maxOutputTokens?, fallback?}`. Ưu tiên: project theo task → project mặc định → app theo task → app mặc định → ENV.
+
+**Gateway OmniRoute:** chạy riêng, mặc định `http://127.0.0.1:20128/v1`. Chế độ `off` | `prefer` | `only`. Khóa endpoint trong `OMNIROUTE_API_KEY`. Token quản trị chỉ đọc dùng cho quota live và audit nhà cung cấp; không thay khóa gọi model.
+
+**Quota:** bộ đếm cục bộ và cool-down khi 429. Số của OmniRoute (nếu có token) ghi đè ước tính.
+
+### 8.3 Quy tắc LLM
+
+1. Việc code làm tốt thì viết code: tách câu, thời lượng, lọc trùng, timeline, render, validate.
+2. LLM được gọi khi làm video tốt hơn (viết, biên tập, ngữ nghĩa, guideline, góp ý). ECO vẫn là lựa chọn tiết kiệm. Chat do người bấm được phép mọi mode và hiện chi phí từng tin.
+3. UI ước tính call và token trước khi chạy. Không vượt mode một cách âm thầm.
+4. Vision luôn opt-in trừ MAX/CUSTOM đã bật; vẫn có đường người duyệt ở gate.
+5. Cache theo hash input + provider/model. Pre-flight theo giới hạn provider.
+6. Timeout stage theo `stageTimeouts` hoặc baseline code.
+7. Đường 0 token: người tự viết, hoặc MCP `video-agent` qua API.
+
+Cố vấn model, catalog OmniRoute và scorecard provider intel chỉ chọn route. Chúng không tự ghi route hay combo cho đến khi người bấm.
+
+### 8.4 Provider
+
+| Loại | Hiện có (theo v0.2, chưa đối chiếu lại đầy đủ) |
 |---|---|
 | LLM | anthropic, gemini, openai, ollama, remote-ollama, openrouter, deepseek, groq, omniroute, opencode, custom, claude-cli, copilot-cli, antigravity-cli, mock (test) |
-| Ảnh | wikimedia, openverse, pexels, pixabay, unsplash, nasa, met, loc, smithsonian, europeana, flickr. Thêm Brave + Gemini grounding + crawl khi bật web image search. Ảnh chưa rõ license không tự duyệt |
+| Ảnh | wikimedia, openverse, pexels, pixabay, unsplash, nasa, met, loc, smithsonian, europeana, flickr; Brave và crawl khi bật web image search. Ảnh chưa rõ license không tự duyệt |
 | TTS | edge-tts (mặc định), google_cloud, gemini, elevenlabs, openai, fpt_ai, viettel_ai, piper, vieneu, mock |
 | Nhạc | openverse, thư viện local |
 
-Cố vấn model, catalog OmniRoute, và scorecard provider intel chọn route. Chúng không tự ghi route hay combo OmniRoute cho đến khi người bấm.
+## 9. Chất lượng, học và sửa
 
-## 7. Render và sau render
+### 9.1 Kịch bản
 
-1. Edit plan (code + LLM khi bật): transition (`xfade`), emphasis, style phụ đề.
-2. Mỗi scene → clip (Ken Burns / motion đã chọn, đúng duration voice). Cache theo hash.
-3. Motion graphics: template HTML/GSAP (HyperFrames) → clip alpha, overlay.
-4. Ghép clip, voice, nhạc (volume, fade, ducking), burn phụ đề, xuất `.srt`.
-5. Biến thể khung (16:9 / 9:16 / 1:1) từ một project khi được yêu cầu.
-6. Output `data/projects/<id>/renders/` + `credits.txt`. Kiểm tra ffprobe. MAX: vision frame giữa scene.
-7. Thumbnail (frame + chữ), clip dọc (`CLIP`) đưa vào lịch, metadata (title, description, tags).
-8. Publish: vault mã hoá, OAuth, job lịch, YouTube (dài + Shorts), TikTok, Facebook Reels, Instagram Reels, publisher mock cho test.
+- **Kể chuyện và lint (TASK-144):** `stages/script/narrationRules.ts` giữ bộ quy tắc và `WRITER_SYSTEM`. `packages/shared/src/script/lint.ts` chạy `lintNarration(script, recipe, language)` thuần mã, ngưỡng ở `NARRATION_LINT_THRESHOLDS`. Finding còn sót cuối cùng ghi vào `review_notes` với tiền tố `[lint]`, kể cả khi tắt review (không thêm lời gọi LLM).
+- **Story Engine (TASK-145):** `stages/script/storyEngine.ts`, bật theo feature budget `storyEngine` (`off` | `lite` | `full`; ECO mặc định `off`, BALANCED `lite`, QUALITY và MAX `full`). Luồng: dàn ý và hook → chọn hook (tránh lặp chiến thuật của kênh) → viết → critic chấm sáu tiêu chí → sửa đúng phần lỗi → vừa độ dài. Bản nháp lưu ở `script_drafts`; API và MCP có `get_script_draft`, `switch_script_hook`, `rescore_script`.
 
-## 8. API (nhóm)
+### 9.2 Liền mạch hình ảnh (TASK-141)
 
-Lỗi: `{ "error": { "code", "message", "details" } }`.
+- `buildContinuityPlan` chạy sau `SCENE_PLAN`: bảng màu, nhân vật lặp lại, nhịp cắt, mô-típ (tối đa 3). Kế hoạch lưu trong `visual_queries` của cảnh `order === 0` (không cần migration), nên sửa kế hoạch làm stale bước tìm ảnh.
+- Lựa chọn ảnh cộng điểm liên tục theo khoảng cách Lab và nhịp. Điểm này nhân với `weight` và không bao giờ vượt cổng hay lựa chọn thủ công.
+- `checkContinuity` chạy trước `VISUAL_REVIEW`: bước nhảy màu, lệch nhịp, thiếu tag mô-típ, và (nếu cấu hình) kiểm nhất quán nhân vật qua vision.
+- Sửa liền mạch: `operator/qualityRepair.ts` (`repairStep`, `diagnose`). `color_jump` đi tới `pick_next_candidate`; `motif_missing` đi tới `research_scene` rồi `pick_next_candidate`. `pacing` và `character_mismatch` không có hành động tự động. Giới hạn đã chấp nhận: thang theo loại, nên cặp lệch màu thứ hai trong cùng cửa sổ không được thử.
 
-| Nhóm | Việc |
-|---|---|
-| health, help | Sống, tìm hướng dẫn |
-| projects, recommendations, budget, stage-timeouts | CRUD dự án, brief, ước tính, trần thời gian |
-| pipeline, jobs, events | Chạy stage, duyệt gate, SSE |
-| script, scenes, visuals, voice, subtitles, music, timeline, motion, render | Dữ liệu từng stage |
-| review, guidelines, metadata, thumbnails, clips, auto-report | Góp ý, chính sách, xuất bản phụ |
-| llm, usage | Route, gateway, quota, usage |
-| profiles, automation, trends, translations | Hồ sơ, hàng đợi chủ đề, xu hướng, lồng tiếng |
-| oauth, publications | Kết nối kênh, đăng, lịch |
-| analytics, comments, finance, learning | Số liệu, hộp thư, doanh thu, bài học |
-| notifications, assistant, operator, registry | Telegram, trợ lý, operator, tool chung |
-| provider-intel | Hồ sơ nhà cung cấp, audit OmniRoute, combo (chỉ khi bấm) |
+### 9.3 Học theo bước (TASK-148)
 
-## 9. Điều khiển ngoài UI
+- **Phản hồi:** `stage_feedback` ghi mỗi lần người dùng sửa kịch bản, sửa lời dẫn hoặc duyệt có chỉnh sửa (`learning/stageFeedback.ts`). Ghi best-effort, không làm hỏng thao tác của người dùng.
+- **Bài học:** `stage_notes` có trạng thái `proposed`, `approved`, `rejected`, `retired`. `distillStageFeedback` và `recordStageNotes` chỉ đề xuất. Chỉ `decideStageNote` từ API người dùng mới duyệt. Ghi chú đã duyệt đi vào prompt của RESEARCH và SCRIPT qua `getProfilePromptContext`.
+- **Quyền:** `POST /api/profiles/:id/stage-notes/:noteId/decision` cần `project.write`; khóa API của agent bị từ chối (`AGENT_CANNOT_DECIDE`).
+- **Sổ chất lượng:** `stage_quality` có một dòng cho mỗi lần chạy stage không phải side job. `orchestrator.completeJob` gọi `recordStageQuality` (`learning/stageQuality.ts`), rồi `checkStageQualityAlerts`. Metric hiện chỉ có `quality_score` của SCRIPT.
+- **Cảnh báo:** escalation `stage_quality_drop` mở khi điểm giảm trên 20% với ít nhất 5 lần chạy, so 14 ngày với 14 ngày trước. Mỗi tuần một cảnh báo cho mỗi bước. Cảnh báo chuyển cho người dùng, không đổi prompt, model hay cài đặt.
+- **Mẫu truy vấn ảnh (148d):** `visual_query_patterns`, `learning/queryPatterns.ts`. `queryHints` tối đa 5 truy vấn; chỉ gợi ý, không đổi kết quả đã chọn. Gợi ý chỉ theo kênh của dự án.
+- **Biến thể prompt (148e):** `stage_prompt_variants`, `learning/promptVariants.ts`. Đăng ký và duyệt đều chặn khóa agent. Chỉ biến thể `active` được nối vào quy tắc của hồ sơ trong `scriptExecutor.ts`. `variantTrialRunner.ts` chạy thử mù qua giám khảo được tiêm vào; khuyến nghị chỉ khi có ít nhất 10 lần thử và tỷ lệ thắng từ 0,6. Chưa có giao diện và chưa nối judge thật.
+- **Giới hạn đã biết:** critic của TASK-145 chưa được chấp nhận làm nguồn điểm; quality chỉ lấy `script_drafts.critique`. Xem trước prompt có thể tăng `uses` của ghi chú (tác dụng phụ đã biết).
 
-Một registry tool (`assistant` | `mcp` | `operator` | `agent`). Nguồn `mcp` và `operator` biến việc `confirm` thành thao tác chờ. Nguồn `agent` (MCP Cursor với `VG_TOOL_SOURCE=agent`) chạy luôn các việc đó, kể cả xóa, đăng và bật lịch. Vẫn từ chối dự án được bảo vệ, đổi secret/thanh toán, bật fallback trả phí, và mọi công cụ tự duyệt thao tác chờ. MCP đăng ký tool sẵn, catalog registry, và `app_api` cho các route HTTP còn lại. `app_api` từ chối đường dẫn token, khóa TTS, khóa YouTube, app credentials và OAuth callback.
+### 9.4 Mẫu TASK-121: agent tự sửa lỗi chất lượng
 
-- **Web chat và Telegram:** trợ lý gọi tool, hỏi trước khi sửa/đăng/render.
-- **Operator:** phiên Cursor CLI dài, không shell, chỉ MCP `video-agent` + ghi `notes/`. Handbook sinh lúc startup.
-- **MCP IDE:** `.cursor/mcp.json` trong repo (nếu có) là tiện ích Cursor. Workspace operator là file riêng, chỉ một server `video-agent`.
+Mẫu này áp dụng cho lỗi chất lượng ở gate. Lỗi không còn bị đẩy về người dùng nếu agent có quyền sửa.
 
-### Hướng mở rộng cho agent vận hành
+Nguyên tắc: code giữ sự thật (đo, kiểm, giới hạn), agent chọn hành động trong giới hạn của grant.
 
-TASK-051 tách vòng đời operator khỏi Cursor CLI. Adapter Cursor hỗ trợ MCP, nối phiên, streaming và dừng. MCP của agent chạy nền chỉ công bố catalog từ registry. Runtime model dùng lịch sử cấp app và đưa lệnh native function calling hoặc lệnh từ cầu JSON qua cùng registry với quyền operator. Lượt runtime model ghi mức dùng theo mã lượt. Chọn runtime riêng cho web, Telegram và lịch chạy. API registry trả `inputSchema` đầy đủ cùng bản mô tả ngắn cho các client hiện tại.
+- `approve_gate` kết thúc gate đã thất bại bằng vòng sửa trong code, khi profile có grant `retries`.
+- Các chế độ `off` và `assist` giữ đường cũ `recordHeld`.
+- Gate, ngưỡng và giới hạn cứng không đổi. Dự án được bảo vệ bị từ chối.
+- Chi tiết: [`cursor/TASK-121.md`](cursor/TASK-121.md) và [`tasks/TASK-121.report.md`](tasks/TASK-121.report.md).
 
-Người dùng có hai lựa chọn độc lập. **Agent vận hành** nhận yêu cầu, lập kế hoạch, gọi công cụ và báo kết quả. **Model theo tác vụ** xử lý nội dung như nghiên cứu, viết kịch bản hoặc kiểm tra ảnh theo cấu hình và ngân sách của dự án. Ví dụ, Claude Desktop có thể vận hành qua MCP trong khi pipeline dùng model vision đã chọn cho dự án.
+### 9.5 Tri thức pipeline (TASK-057)
 
-| Môi trường | Đường vận hành hiện có |
-|---|---|
-| Web và Telegram | Trợ lý tích hợp hoặc Cursor operator. Cursor operator chạy trên máy chủ app và có lệnh thường trực. |
-| IDE hoặc desktop | Cursor, Claude Desktop và Copilot Chat có thể gọi MCP `video-agent` khi kết nối được với API. |
-| Tác vụ nội dung | Router chọn provider/model theo task. Claude Code CLI ở chế độ provider nhận prompt để sinh nội dung. |
+Chưa đối chiếu lại (từ v0.2 mục 11). Đã kiểm trong code: embedding gửi tối đa 32 văn bản mỗi lần gọi (`apps/server/src/retrieval/embeddings.ts:49`, `indexer.ts:159`); đoạn tri thức đưa vào prompt nằm trong khối `<kien_thuc_kenh untrusted="true">` với `contentType: "untrusted_context_data"` (`retrieval/context.ts:29`). Các bảng `retrieval_chunks`, `retrieval_uses`, `retrieval_exclusions`, job `retrieval_index`, dự phòng từ khóa khi lỗi hay hết quota, và quy tắc không lập chỉ mục dự án được bảo vệ chưa đối chiếu lại.
 
-Khi thêm agent chạy nền, khai báo adapter theo khả năng của môi trường, gồm phát hiện runtime, mở hoặc nối phiên, nhận tiến độ và dừng. Chỉ hiện lựa chọn khả dụng và giữ lựa chọn của người dùng cho mỗi kênh. Mọi adapter chạy nền dùng cùng registry và nguồn `operator`; quyền cao hơn của MCP chủ máy phải được cấu hình riêng. Workflow và lịch chạy tiếp tục thuộc worker/SQLite. Agent đọc trạng thái job đã lưu trước khi quyết định thử lại một thao tác. Việc đăng công khai, bật lịch và thao tác có rủi ro đi theo bước duyệt của app.
+## 10. Render và sau render
 
-Để giảm token, tra cứu skill và dữ liệu dự án liên quan trước khi đưa ngữ cảnh vào prompt. Dùng truy vấn có cấu trúc cho trạng thái, quota và lịch sử. Khi cần RAG cho tài liệu dài, chỉ lấy đoạn liên quan kèm nguồn và phạm vi hồ sơ. Ghi nhớ quyết định có thể dùng lại trong ghi chú theo phạm vi, còn checkpoint và trạng thái công việc nằm trong dữ liệu của app. Các bước cơ học chạy bằng code. Với bước cần LLM, chọn theo khả năng, chất lượng quan sát được, quota và ngân sách; dùng cache và chỉ nâng model khi bước đó cần thêm năng lực. Đo token, tỷ lệ thành công, lỗi định dạng và điểm đánh giá đầu ra trên cùng bộ mẫu trước khi đổi route mặc định.
+- Xem trước nhanh dùng cùng timeline, compose plan, template và biến GSAP ở độ phân giải thấp. Chromium lấy khung đúng thời điểm của shot; FFmpeg xử lý footage, ảnh tĩnh, ghép sheet và encode đoạn tối đa ba giây. Cache lưu facts cùng sidecar đo chữ.
+- Kế hoạch dựng đã lưu (`render/compose-plan.json`) chỉ được preview tái dùng khi sidecar `render/compose-plan.inputs.json` khớp fingerprint của đầu vào. Fingerprint do `compose/planInputs.ts` tính. Thiếu sidecar, sai version hoặc JSON hỏng thì preview dựng lại tạm. Sửa shot chỉnh tay không ghi sidecar.
+- Render chạy trong `services/renderService.ts` (không phải `apps/server/src/renderService.ts`).
+- Chuỗi render (theo v0.2, chưa đối chiếu lại từng bước): edit plan → clip cho từng scene (cache theo hash) → motion graphics (HyperFrames) → ghép clip, voice, nhạc, phụ đề, `.srt` → biến thể khung hình khi được yêu cầu → output `data/projects/<id>/renders/` cùng `credits.txt`, kiểm ffprobe → thumbnail, clip dọc (`CLIP`), metadata → publish.
 
-Dùng scheduler và hook sự kiện hiện có cho tác vụ định kỳ và phản ứng theo sự kiện. Nhật ký lượt chạy, tool audit và usage cần cho phép đối chiếu agent, job, model và kết quả. Chỉ mở Computer Use cho tác vụ thực sự cần thao tác giao diện, với phạm vi và xác nhận theo loại thao tác. Phần mở rộng adapter, RAG theo hồ sơ và Computer Use là thiết kế tiếp theo.
+## 11. Phong cách và độc đáo nội dung
 
-## 10. Việc đã có sau MVP
+- **Phong cách (`apps/server/src/style/`):** `service.ts`, `designer.ts`, `frames.ts`, `preview.ts`, `toolDefs.ts`; API ở `api/style.ts`. Tool `set_style_pack` có khóa `null` trong `TOOL_GRANTS`, vì diện mạo kênh là quyết định của người dùng. Với nguồn `agent`, tool này thuộc nhóm `confirm` có khóa `null` nên chạy trực tiếp khi không bị chặn (§5); đó là điểm cần quyết định.
+- **Độc đáo (`apps/server/src/originality/`):** `service.ts`, `manifest.ts`, `recheckSafely.ts`; API ở `api/originality.ts`. Kiểu `SourceManifest` và `OriginalityReport` nằm trong `@vg/shared`. Manifest ghi nguồn của từng tài sản (nhà cung cấp, URL nguồn, license, `phash`).
+- Chi tiết thuật toán và ngưỡng: xem guide của task tương ứng qua [`cursor/README.md`](cursor/README.md). Tài liệu này không lặp lại.
 
-Roadmap chi tiết và thứ tự: `docs/cursor/README.md`. File này không lặp từng TASK.
+## 12. Phân tích, đăng bài, tài chính và thông báo
 
-Đã có trong code, ngoài pipeline MVP (research → render):
+- **Phân tích (`analytics/`):** `overview.ts`, `registry.ts`, `syncService.ts`, và bộ lấy số liệu theo nền tảng (`facebookFetcher.ts`, `instagramFetcher.ts`, `tiktokFetcher.ts`, …). Số liệu lưu thành snapshot.
+- **Đăng bài (`publishing/`):** `guardrail.ts`, `appCredentialValidation.ts`, `envAppCredentials.ts`, và publisher cho Facebook Reels và Instagram Reels. Thứ tự nền tảng: YouTube (dài và Shorts), TikTok, Facebook Reels, Instagram Reels. Token OAuth nằm trong vault mã hóa. Publisher mock dùng cho test.
+- **Tài chính (`finance/`):** `financeService.ts`, `csvImport.ts`, `profit.ts`, `youtubeRevenue.ts`, `currencySettings.ts`.
+- **Thông báo, bình luận, xu hướng, dịch:** `notifications/`, `comments/`, `trends/`, `translations/`. Thông báo Telegram đi qua cùng assistant bridge.
 
-- Guideline pack, review chat, metadata, version render, chế độ MAX, web image search, AUTO report
-- Hồ sơ kênh, biến thể khung hình, publish đa nền tảng, lịch tự động
-- OmniRoute gateway, cố vấn model, quota local + live
-- Thông báo Telegram, trợ lý, analytics, tài chính, learning, thumbnail, clip ngắn
-- Hộp bình luận, xu hướng, dịch kịch bản, nhiều TTS
-- Edit plan, motion graphics, format/treatment, revision + undo
-- Operator, provider intelligence, timeout theo stage
-- Hướng dẫn trong app (`featureMap` + `docs/user-guide/`)
+## 13. Khả năng phục hồi và giới hạn đo được
 
-Việc còn vận hành thật (token OmniRoute, bấm áp route, phiên nghiên cứu trang nhà cung cấp) ghi ở `docs/tasks/CON-THIEU.md`, không phải lỗ hổng schema.
+Nguồn: `apps/server/test/load/controlPlaneLoad.ts`, chạy qua `controlPlaneLoad.gated.test.ts` với `RUN_LOAD_TEST=1` (không mạng, không provider thật). Số đo lấy từ v0.2 §12 (lần đo 2026-11-18); lần viết v1.0 không chạy lại.
 
-## 11. Công cụ ngoài (một người, máy của họ)
+**Cấu hình SQLite và bảo vệ:**
+- Pragma như §4.1. Lỗi `SQLITE_BUSY` được thử lại tối đa 5 lần với backoff ngẫu nhiên; đếm thành công và thất bại; ghi độ trễ p50, p95, max.
+- `audit_log` gộp ghi trong RAM, xả mỗi 1 giây hoặc khi tắt sạch (`SIGTERM`, `SIGINT`). `llm_relay_usage` gộp cập nhật mỗi 1 giây và xả trước khi đọc bảng.
+- `WalCheckpointManager` kiểm dung lượng WAL mỗi 30 giây; chạy `wal_checkpoint(TRUNCATE)` khi WAL vượt 16 MB và khi tắt sạch.
 
-Một người chạy app trên máy của họ. Không có người dùng thứ hai, không bán app, không cho người khác đăng nhập. Điều kiện miễn phí của Remotion (cá nhân) và n8n Community Edition (tự host) **đã đúng với cách dùng này**. Binary FFmpeg GPL trong `ffmpeg-static` cũng vậy.
+**Kịch bản:** một tiến trình, một luồng, SQLite tệp thật trong thư mục tạm. Mỗi node gửi 8 heartbeat qua đường thật (có gộp). 40 lần INSERT usage trực tiếp và 10 job tạo kèm lease. Profiler được xóa sau khi đăng ký node.
 
-Vẫn chỉ gắn công cụ khi pipeline chưa làm được việc đó. Không thêm runtime thứ hai cho cùng một việc. License ghi theo nguồn ngày 2026-11-06.
+| Node | Câu lệnh/s | p95 (ms) | max (ms) | SQLITE_BUSY |
+|---|---|---|---|---|
+| 5 | 4571 | 0.34 | 0.44 | 0 |
+| 20 | 3940 | 0.24 | 20.15 | 0 |
+| 50 | 5349 | 0.27 | 0.51 | 0 |
+| 250 | 6458 | 0.24 | 16.54 | 0 |
+| 300 | 6350 | 0.28 | 8.29 | 0 |
+
+Đọc đúng số đo:
+- Đến 300 node, p95 dưới 0.35 ms và không có `SQLITE_BUSY`. Kịch bản **chưa đạt điểm bão hòa**, nên không có ngưỡng node nào được suy ra.
+- 3.900–6.500 câu lệnh/s là thông lượng trong một đợt ngắn, một luồng. Không phải số ghi bền mỗi giây dưới tải nhiều tiến trình.
+- Chưa đo: tải kéo dài, nhiều tiến trình ghi đồng thời, độ trễ replica Litestream, và lặp lại để lấy phương sai.
+
+**Điểm chuyển khỏi SQLite (tiêu chí, không phải số đo):**
+1. p95 ghi vượt 50 ms liên tục trong vận hành bình thường;
+2. `SQLITE_BUSY` vượt 5% tổng số lệnh ghi;
+3. cần nhiều cụm điều khiển active-active.
+
+**Cửa sổ mất dữ liệu khi sập đột ngột** (`SIGKILL` hoặc mất điện): tối đa 1–2 giây bản ghi audit và usage còn trong RAM. Trạng thái dự án và kịch bản được commit ngay. Lease node hết hạn sau 60 giây (`NODE_LEASE_SEC`, §3.4) và job được thử lại.
+
+## 14. Công cụ ngoài (một người, máy của họ)
+
+Một người chạy app trên máy của họ. Không có người dùng thứ hai, không bán app. Các điều kiện giấy phép được ghi theo nguồn ngày 2026-11-06 (chưa kiểm lại).
+
+Chỉ gắn công cụ khi pipeline chưa làm được việc đó. Không thêm runtime thứ hai cho cùng một việc.
 
 | Công cụ | Trong app | Lý do |
 |---|---|---|
-| **HyperFrames** | Đã gắn (`hyperframes@0.9.14`, Apache-2.0) | Đồ họa động HTML/GSAP → clip alpha. Giữ. |
-| **FFmpeg** | Đã gắn (`ffmpeg-static` GPL-3.0-or-later, gọi process) | Ken Burns, xfade, phụ đề, ducking, thumbnail. Một người chạy trên máy mình: đúng cách dùng. Không đổi bản binary hay bật codec khác. `ffprobe-static` đi cùng. |
-| **Motion Canvas** | Không gắn | Cùng vai trò với HyperFrames. Hai engine đồ họa cho một app cá nhân. |
-| **Remotion** | Không gắn | Điều kiện miễn phí cho một người đã đúng. Render React vẫn trùng HyperFrames + FFmpeg, nên không thêm. |
-| **PySceneDetect** | Không gắn | Cắt scene đã có: timeline theo voice + `CLIP` (LLM chọn đoạn, FFmpeg cắt). Thêm Python CLI không đổi chất lượng video đang render từ ảnh. |
-| **WhisperX** | Không gắn | Mốc từng từ lấy từ provider TTS khi provider có word timing. WhisperX cần GPU và model riêng. Không gọi trong test. |
-| **OpenMontage** | Không gắn | Chạy riêng trên máy mình thì AGPL không bắt app này phải đổi giấy phép. Repo chính `calesthio/OpenMontage` vẫn là **AGPL-3.0** (không phải MIT). Không gộp mã vào repo này, vì app đã có pipeline riêng và repo có thể được đẩy lên Git. |
-| **Postbase** | Không gắn | Self-host miễn phí nhưng cần Postgres/Supabase và API key từng mạng. App đã đăng YouTube, TikTok, Facebook Reels, Instagram Reels. Không thêm X/LinkedIn bằng một sản phẩm thứ hai. |
-| **n8n** | Không gắn | Một người tự host Community Edition thì Sustainable Use License cho phép. Lịch và job đã nằm trong SQLite, nên không nhúng n8n. |
-| **Mastra** | Không gắn | Trợ lý, registry tool, operator và MCP `video-agent` đã có. Core Mastra miễn phí, hạ tầng cloud của họ có thể tính phí. Không đổi framework agent. |
+| HyperFrames | Đã gắn (`hyperframes@0.9.14`, Apache-2.0) | Đồ họa động HTML/GSAP → clip alpha |
+| FFmpeg | Đã gắn (`ffmpeg-static`, GPL-3.0-or-later, gọi process) | Ken Burns, xfade, phụ đề, ducking, thumbnail |
+| Motion Canvas | Không gắn | Cùng vai trò với HyperFrames |
+| Remotion | Không gắn | Render React trùng HyperFrames và FFmpeg |
+| PySceneDetect | Không gắn | Cắt scene đã có: timeline theo voice và `CLIP` |
+| WhisperX | Không gắn | Mốc từng từ lấy từ provider TTS khi có word timing; cần GPU |
+| OpenMontage | Không gắn | Repo chính là AGPL-3.0; không gộp mã vào repo này |
+| Postbase | Không gắn | Cần Postgres/Supabase; app đã có các nền tảng cần thiết |
+| n8n | Không gắn | Lịch và job đã nằm trong SQLite |
+| Mastra | Không gắn | Trợ lý, registry tool, operator và MCP đã có |
 
-MCP trong repo (Cursor): `video-agent`, filesystem, fetch, git, playwright, duckduckgo-search. Xem `.cursor/mcp.json`. Không thêm MCP cho các công cụ ở bảng trên vì chúng không phải server MCP của app, và app không gọi chúng.
+Khi task mới thật sự thiếu cắt scene trên video có sẵn, hoặc căn lời khi TTS không có word timing, thêm adapter tùy chọn (binary trên PATH, test giả lập, không mạng). Không thêm dependency npm cho việc đó.
 
-Khi một task mới thật sự thiếu cắt scene trên video có sẵn hoặc căn lời khi TTS không có word timing, thêm adapter tùy chọn (binary trên PATH, test giả lập, không mạng). Không thêm dependency npm cho việc đó.
+## 15. Đính chính so với v0.2
 
-### Tri thức pipeline (TASK-057)
+| Mục v0.2 | Sửa trong v1.0 | Căn cứ |
+|---|---|---|
+| Lease 45 giây | Lease node là `NODE_LEASE_SEC` = 60 s; 45 s là ngưỡng offline | `lib/config.ts:65`; `node/nodeService.ts:30` |
+| Node 24.x | Node 22 trong Docker; nguồn cho 24.x không có trong repo | `deploy/docker/Dockerfile:12,106` |
+| `apps/server/src/hermes` | Hermes là loại agent trong fleet | `fleet/service.ts`; không có thư mục `hermes/` |
+| `pipeline/stale.ts` | `pipeline/invalidation.ts` (`markStaleFrom`) | `pipeline/invalidation.ts:4` |
+| `apps/server/src/renderService.ts`, `orchestrator.ts` | `services/renderService.ts`, `pipeline/orchestrator.ts` | Hai đường cũ không tồn tại |
+| `jobs/queue.ts` | Hàng đợi nằm trong `jobs/worker.ts` và `jobs/jobRepository.ts` | `jobs/queue.ts` không tồn tại |
+| Nguồn `agent` chạy mọi việc `confirm` | Tool `confirm` có khóa trong `TOOL_GRANTS` (kể cả khóa `null`, 18 tool; khóa khác như `publish_project` cũng vậy) chạy trực tiếp; tool ngoài bảng, `delete_project`, `run_research` và bật tự động hóa thì chờ; `locked` cũng làm chờ. Mọi nguồn đều bị `hardBlockMessage` chặn trước (§5) | `registry/policy.ts:100–129`, `registry/invoke.ts:44,178` |
+| “Thư mục `.cursor/`” là workspace operator | Workspace operator là `.video-agent-operator` ngoài git root | `operator/workspace.ts:33` |
 
-retrieval_chunks là dữ liệu dẫn xuất theo hồ sơ (hoặc dự án không hồ sơ); retrieval_uses ghi đoạn thực dùng và retrieval_exclusions loại riêng cho một dự án. FTS5 external-content được tạo lúc chạy, đồng bộ bằng code, không trigger. Job retrieval_index độc lập pipeline, embedding tối đa 32 văn bản/call qua provider có khả năng; lỗi/quota dùng từ khoá. Ngữ cảnh được lọc lệnh, che secret và đặt trong khối untrusted_context_data trước khi hash cache. Không lập chỉ mục dự án được bảo vệ.
+## 16. Liên kết tới tài liệu sâu
+
+- Kế hoạch (chưa có trong mã): [`ARCHITECTURE-TARGET.md`](ARCHITECTURE-TARGET.md). Gồm: registry tham số, playbook kênh, lab, thư viện mẫu; tách `assistant/tools.ts` thành `registry/tools/<nhóm>.ts`; tách schema thành `db/schema/<domain>.ts`; tách `visuals/`. Tên trong file đó là đề xuất.
+- Roadmap và thứ tự: [`ROADMAP.md`](ROADMAP.md), [`BLUEPRINT.md`](BLUEPRINT.md), [`cursor/README.md`](cursor/README.md).
+- Vận hành hai máy: [`RUNBOOK-two-machines.md`](RUNBOOK-two-machines.md).
+- Hướng dẫn người dùng: [`user-guide/`](user-guide/) và `packages/shared/src/features/featureMap.ts`.
+- Báo cáo và trạng thái task: `docs/tasks/`. Việc còn vận hành thật (token OmniRoute, bấm áp route) ở `docs/tasks/CON-THIEU.md`.
+- Hướng mở rộng cho agent vận hành (v0.2 mục 9) là kế hoạch, không phải hiện trạng: xem [`ARCHITECTURE-TARGET.md`](ARCHITECTURE-TARGET.md) §4 (bề mặt tool) và §6 (điểm mở rộng).
+- Việc đã có sau MVP (v0.2 mục 10): xem [`ROADMAP.md`](ROADMAP.md) và `docs/tasks/`. Không chép lại danh sách v0.2.
