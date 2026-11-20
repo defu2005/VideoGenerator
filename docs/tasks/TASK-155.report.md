@@ -50,8 +50,8 @@ Lý do đỏ đúng: sweep ném lỗi làm bước sau bị bỏ qua, nên lần
 
 ## Giới hạn
 
-1. `wake()` có guard riêng nhưng không có test ghim: fixture đặt `WORKER_ENABLED: "false"`, nên `wake()` trong timer không chạy. Lỗi của `wake()` không được kiểm tra bằng test.
-2. Mutant rethrow-agent chỉ bị bắt bởi test C. Không có test nào ghim "timer tiếp tục chạy sau khi agent-stage sweep ném lỗi" (test "keeps the timer running" chỉ dùng node sweep).
+1. ~~`wake()` có guard riêng nhưng không có test ghim: fixture đặt `WORKER_ENABLED: "false"`, nên `wake()` trong timer không chạy. Lỗi của `wake()` không được kiểm tra bằng test.~~ Đã đóng bởi TASK-156 (`8d84baa`, `251d178`): test wake trên timer, có spy. Guard bên trong thân `wake()` vẫn chưa có test.
+2. ~~Mutant rethrow-agent chỉ bị bắt bởi test C. Không có test nào ghim "timer tiếp tục chạy sau khi agent-stage sweep ném lỗi" (test "keeps the timer running" chỉ dùng node sweep).~~ Đã đóng bởi TASK-156 (`8d84baa`): test "wakes the worker on the same tick when the agent-stage sweep throws, and keeps ticking".
 3. Lỗi được mô phỏng bằng `throw` trong stub: không có sweep thật bị lỗi (ví dụ lỗi DB).
 4. Timer dùng fake timers; không kiểm độ trễ thật.
 
