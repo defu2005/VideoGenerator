@@ -18,7 +18,7 @@ Phạm vi: §1–§4 của guide TASK-128; tự review theo chỉ dẫn người
 
 ## Kiểm chứng
 
-Đang chốt kết quả kiểm tra cuối cùng trước khi tạo `.done`.
+- `npm run typecheck`, `npm run build` và `npm test --workspaces -- --maxWorkers=2` đều đạt. Shared 755, MCP 31, server 1.369 đạt và 6 skip, web 223. Build báo cảnh báo kích thước chunk Vite. Log nằm trong `tmp/task128a-verified-{typecheck,build,tests}.log`.
 
 - Test tập trung cuối về enqueue khi worker tắt, recovery/take-back, protocol/API, quality repair và hai test CLI giả lập/FFmpeg: **94 đạt**, 5 file. Không dùng mạng hoặc LLM/TTS/agent CLI thật.
 - Trình duyệt dùng React/Vite thật với API giả lập, chặn mạng ngoài: desktop 1440 px và mobile 375 px; thẻ stage và lấy lại việc; lưu/reset override dự án; xóa mặc định hồ sơ; provenance cả ảnh đang chọn và danh sách. Không tràn ngang. Ảnh kiểm tra: `tmp/task128a-desktop.png`, `tmp/task128a-mobile.png`; log `tmp/task128a-browser.log`.

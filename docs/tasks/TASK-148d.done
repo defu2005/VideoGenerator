@@ -1,0 +1,1 @@
+TASK-148d done 2026-11-19. Full apps/server suite: 243 files, 1956 tests pass. Migration 0096 verified via migrateDatabase on a data-dev copy. Known limit: visual_cache_query reads channel '' only.

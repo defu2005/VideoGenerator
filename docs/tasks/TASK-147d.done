@@ -1,0 +1,13 @@
+TASK-147d done 2026-11-19 (có giới hạn). Bằng chứng trong apps/server/test/agentScriptToolkit.test.ts (21 test trong file):
+- Gate: bản dưới 60 điểm, accuracy dưới 3, hoặc có fact chặn bị giữ kèm critique và không ghi hàng; hai lần nộp lại, lần thứ ba trả việc về app; bản đạt ghi author=agent:<instance> và hoàn tất job; critic lỗi không tính là giữ; bản sai cấu trúc bị 422 trước mọi lời gọi LLM; bản người dùng đã sửa bị từ chối; research đổi giữa cổng và ghi thì không ghi; dự án bảo vệ bị chặn ở context và submit; lease khác bị từ chối khi complete; hàng cũ đổi hash bị từ chối.
+- Lint: lint chạy trên bản agent và ghi ghi chú `[lint] TEMPLATE_OUTRO` vào review_notes mà không giữ bản nháp (test "runs lint on the agent draft..."). Lint không bao giờ là lý do giữ, đúng với scriptToolkit.ts.
+- Bypass stage_complete: hai test. Một test sau held (không có hàng, nhánh không có hàng). Một test hàng do app ghi sau khi lease đã pass. Đây là hai test bổ sung cho nhau, không phải hai bằng chứng độc lập; mutation nới kiểm tra lease làm test app-written đỏ, đã khôi phục.
+- Đấu nối production: app.ts tạo createScriptAdapter, AgentScriptToolkit và đưa adapter vào AgentStageService cùng research và music. AGENT_CAPABLE_STAGES có SCRIPT.
+- Kỹ năng .agents/skills/script-writer/SKILL.md có quy tắc không gọi stage_complete trước passed. Nội dung kỹ năng chưa có test.
+- Chạy: npm run typecheck, npm run test (shared 98/98, mcp 7/7, server 262 pass + 4 skip, web 90/90), npm run build đều pass. Sau test lint thêm: 6 file agent pass 85/85.
+
+Giới hạn và việc còn lại (chưa làm, không chặn việc đóng 147d):
+- script_submit_outline và scriptOutlineApproval (TASK-146) chưa có trong code. Tool outline là tùy chọn trong spec 147d nên hoãn cùng TASK-146.
+- Chưa có mục cấu hình SCRIPT trong UI chế độ stage (spec 147a mục 2). Chưa kiểm trên trình duyệt.
+- Tài liệu theo quy tắc 12 còn thiếu: ARCHITECTURE.md (bảng adapter/gate), trang người dùng agent-nhan-stage, dòng vận hành trong video-stage-kich-ban về author, tài liệu công cụ MCP. featureMap đã có mục agent-stage-handoff. README chưa có dòng 147. Các mục này gộp vào bước tài liệu 147b/c/d.
+- Không có mutation check ngoài mutation lease và không có test trực tiếp cho nội dung kỹ năng script-writer.

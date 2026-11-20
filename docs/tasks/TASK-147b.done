@@ -1,0 +1,6 @@
+TASK-147b done 2026-11-19. Tiêu chí có test: notes hợp lệ hoàn tất stage (agentResearchScout.test.ts:67); dưới 6 fact, thiếu nguồn dưới 60%, quote quá 30 từ, miền bị chặn, URL private/loopback và non-http bị từ chối với RESEARCH_AGENT_INVALID kèm danh sách lỗi (75–104, 174); lease cũ trả LEASE_LOST (112, 124, 183). Kỹ năng .agents/skills/research-scout/SKILL.md có tồn tại; nội dung kỹ năng chưa có test. Chưa kiểm trên trình duyệt: panel nguồn nghiên cứu. Chạy lại 3 file agent (agentResearchScout, agentMusicScout, agentMusicRegistry): 33/33 pass.
+
+Cập nhật 2026-11-19: panel nghiên cứu nay hiện nguồn (tiêu đề có liên kết, quote) cho fact có `source`; test `apps/web/src/features/script/ResearchPanel.test.tsx` 4/4 pass; web tsc không lỗi. Chưa kiểm trên trình duyệt.
+Cập nhật 2026-11-19: dự án được bảo vệ bị chặn trên đường lease/job; test chỉ phủ claim (agentStage.test.ts:161), chưa có test submit (`apps/server/src/agents/stageService.ts:136`, PROTECTED_PROJECT_ID). Changelog `docs/user-guide/nhat-ky-thay-doi.md` mục TASK-147b đã thêm.
+
+Ghi bổ sung 2026-11-19: các mục spec dòng 201 chưa kiểm: hướng dẫn người dùng (mục agent tìm nhạc và agent nghiên cứu chưa viết), featureMap, tài liệu công cụ, dòng kỹ năng vận hành. Đã có: changelog, kỹ năng research-scout và music-scout.

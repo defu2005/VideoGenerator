@@ -1,0 +1,14 @@
+TASK-143 control-plane resilience completed and verified on 2026-11-17.
+- SQLite query profiling & retry mechanism in apps/server/src/db/stats.ts
+- WAL checkpoint manager with 16MB threshold in apps/server/src/db/checkpoint.ts
+- SQLite pragmas (WAL, busy_timeout=5000, synchronous=NORMAL) and quick_check in apps/server/src/db/client.ts
+- Admin DB stats endpoint GET /api/admin/db-stats & POST /api/admin/db-stats/checkpoint
+- DatabaseStatsCard.tsx in Settings -> Render
+- Hot-write coalescing for worker heartbeats (15s cache) in nodeService.ts
+- Usage batching (1-2s) in orchestrator.ts & audit write batching (1s) in auditLog.ts
+- Load benchmark script apps/server/test/load/controlPlaneLoad.ts verified for N=5, 20, 50 nodes
+- Disaster recovery restore drill script deploy/docker/restore-drill.sh verified
+- Runbook for two machines in docs/RUNBOOK-two-machines.md
+- Architecture limits documented in docs/ARCHITECTURE.md
+- User guide, featureMap, and changelog updated
+- All unit and integration tests passing with --maxWorkers=2

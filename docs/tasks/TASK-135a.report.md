@@ -1,0 +1,12 @@
+# TASK-135a — Snapshot và checkpoint trên máy chính
+
+- Migration Drizzle `0082_lonely_darkstar.sql` thêm nơi chạy dự án, lease theo đoạn, checkpoint có mã nội dung và bảng upload theo run. Mã tham gia mới gắn máy với workspace đã cấp mã. Máy tham gia trước đó giữ phạm vi hiện có.
+- `node/projectSnapshot.ts` và `node/projectContext.ts` xuất các bảng nội dung đã đăng ký, trạng thái bước, hồ sơ và cấu hình được phép, cùng manifest SHA-256. Node nhập vào cơ sở dữ liệu riêng đã migrate và kiểm nội dung từng tệp. Token xuất bản, vault và lịch sử đề xuất tri thức không nằm trong snapshot.
+- `node/runService.ts`, `node/runTransport.ts`, `node/runCheckpoint.ts` và `api/nodes.ts` kiểm node, workspace, lease và hạn trên máy chính. Checkpoint ghi đầu ra, trạng thái và chi phí trong cùng transaction. Gửi lại cùng checkpoint không ghi hai lần. Checkpoint đầu vào cũ nhận `RUN_REBASE` với các bảng và phần metadata đã đổi khi có hash của snapshot nền. Dữ liệu đã gửi được xác minh lại trước khi gắn vào dự án. Heartbeat gia hạn run và trả về các run cần dừng.
+- Phần context RPC cho truy xuất theo hồ sơ giới hạn 60 yêu cầu mỗi phút cho mỗi node và run, đối chiếu workspace từ run, và dùng tìm kiếm văn bản trên máy chính. Delta thay cả bảng đã đổi. Node có thể tái sử dụng tệp theo SHA-256 khi nạp lại dữ liệu.
+- `dataContract.ts` và `inputVersion.ts` nhận diện thêm tham chiếu tệp trong JSON của checkpoint tìm ảnh. Khi ghi checkpoint, hàng cha giữ nguyên khóa được cập nhật tại chỗ để bảo toàn dữ liệu liên quan. Máy chính từ chối xóa render đã gắn với bản xuất bản.
+- Hướng dẫn Máy worker và changelog giải thích phạm vi workspace. Chọn nơi chạy, hiển thị tiến độ run và kiểm tra container thật thuộc 135b/135c. Các bài kiểm tra ở đây dùng fixture SQLite và Fastify inject.
+
+Kiểm tra tập trung đã bao gồm vòng xuất → nhập → xuất, đổi schema, thay đầu vào và nạp delta trên DB node, kiểm workspace RAG, upload tiếp sau restart, kiểm tệp bị sửa, chi phí đúng một lần và bảo toàn hàng con khi ghi lại cảnh. Drizzle generate lần kiểm tra báo không có thay đổi schema.
+
+Typecheck và build toàn repo đã qua. Số test đã qua theo workspace là shared 765, MCP 31, server 1.414 và web 223. Server bỏ qua 7 test tùy chọn. Sau thay đổi delta, 17 test snapshot, checkpoint và transport cùng typecheck và build server đã qua. Web chạy lại đầy đủ sau khi sửa đường dẫn hướng dẫn 099. Kiểm tra UTF-8, NUL và `git diff --check` đã qua.

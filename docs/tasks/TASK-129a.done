@@ -1,0 +1,1 @@
+TASK-129a done 2026-11-19. Server suite 244 files / 1957 tests pass; mcp 7 files / 65 tests pass; web 89 files / 242 tests pass (changelog coverage fixed with TASK-148d and TASK-129a sections). Not verified: live Hermes wake (no Hermes CLI on PATH), browser check of fleet threads (no isolated data dir and owner account). Recorded as limits in TASK-129a.report.md.
