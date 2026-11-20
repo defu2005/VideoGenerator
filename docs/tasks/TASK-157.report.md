@@ -38,7 +38,7 @@ Cả bảy mutant đều được khôi phục và `cmp`-identical với bản s
 ## Kết quả
 
 - `leaseCleanupUploads.test.ts`: 6/6 xanh (trên mã chưa mutate).
-- Hồi quy: `workerNodes`, `workerNodeE2E`, `remoteStages`, `runTransport`, `fileGcPurgeIndex`: 79 pass, 1 skipped. Test skipped là `workerNodeE2E` (chỉ chạy khi `VG_E2E_NODE=1`, theo thiết kế). Chạy với `VG_E2E_NODE=1`: 1/1 xanh.
+- Hồi quy: `workerNodes`, `workerNodeE2E`, `remoteStages`, `runTransport`, `fileGcPurgeIndex` (năm file cũ): 73 pass, 1 skipped. Cộng 6 test mới trong cùng lần chạy: 79 pass, 1 skipped. Test skipped là `workerNodeE2E` (chỉ chạy khi `VG_E2E_NODE=1`, theo thiết kế). Chạy với `VG_E2E_NODE=1`: 1/1 xanh.
 - `npx tsc --noEmit`: exit 0.
 - Mã hóa dòng: `leaseService.ts` là LF thuần (810 LF, 0 CRLF). File test mới là LF.
 
@@ -46,11 +46,13 @@ Cả bảy mutant đều được khôi phục và `cmp`-identical với bản s
 
 1. Hàng bị bỏ qua vì `path` lệch hoặc `rmSync` lỗi (`continue`) không bao giờ bị xóa. Vì vậy chúng được chọn lại ở mỗi lần sweep. Truy vấn có `LIMIT 1000` nhưng không có `ORDER BY`, nên về lý thuyết các hàng này có thể chiếm slot và làm đói các hàng khác. Mức thấp.
 2. Wiring `setSweep` → `cleanupFinishedUploads` trong `app.ts:761` chưa được ghim bằng test.
-3. File mồ côi: sau khi hàng bị xóa, file vẫn nằm trong `pending/<job>.uploads`. Theo đọc mã, `fileGc` duyệt thư mục `pending` (`fileGc.ts:101`) và bỏ qua hàng `node_uploads` của job không còn hoạt động (`references.ts:125`), nên file sẽ do GC dọn sau. Đây là thiết kế theo đọc mã, chưa có test end-to-end.
+3. File mồ côi của upload thường: sau khi hàng bị xóa, file vẫn nằm trong `pending/<job>.uploads`. Theo đọc mã, `fileGc` duyệt cây dự án, gồm thư mục `pending` (`fileGc.ts:90–105`), và bỏ qua hàng `node_uploads` của job không còn hoạt động (`references.ts:125`), nên file được đưa vào diện GC. Phần đọc mã dừng ở bước duyệt; quyết định xóa thực tế của GC chưa được đọc đến và chưa có test end-to-end. Coi đây là chưa kiểm chứng.
+4. Hàng `linked` không phải file mồ côi. `uploadStore.ts:54` ghi hàng `linked` với `known.path`, tức đường dẫn của artifact đã có cùng sha256 (thuộc chủ sở hữu khác). File đó được giữ có chủ đích, và cleanup không xóa nó (test 4 khẳng định điều này).
 
 ## Giới hạn còn lại
 
 - Hàng được chèn tay, không đi qua lease và upload thật.
+- Test 4 gán cho hàng `linked` đường dẫn tính toán (`pending/<job>.uploads/...`). Production không làm vậy: hàng `linked` trỏ tới đường dẫn artifact (`uploadStore.ts:54`). Test này chỉ ghim nhánh `status !== "linked"`, không mô phỏng đường dẫn thật của hàng `linked`.
 - Chỉ dùng tên `final.mp4` và lease id UUID cố định. Không có test cho lease id không phải UUID, cho tên ngoài `ANY_OUTPUT`, cho nhánh `rmSync` lỗi, hay cho giới hạn 1000 hàng.
 
 ## Sửa đi kèm
