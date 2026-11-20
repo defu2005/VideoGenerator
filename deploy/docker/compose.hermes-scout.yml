@@ -1,0 +1,38 @@
+# Start one Compose project per scout. Its project name namespaces the data volume.
+services:
+  hermes-scout:
+    image: nousresearch/hermes-agent:${HERMES_VERSION:-0.23.1}
+    command: ["gateway", "run"]
+    environment:
+      HERMES_HOME: /opt/data
+      HERMES_UID: ${HERMES_UID:-10000}
+      HERMES_GID: ${HERMES_GID:-10000}
+      VG_MCP_URL: ${VG_MCP_URL:?Set the hub MCP URL}
+      VG_API_KEY: ${VG_API_KEY:?Set the key for this scout}
+    volumes: ["scout-data:/opt/data"]
+    restart: unless-stopped
+
+  vg-hermes-sync:
+    image: ${VG_IMAGE:-vg:dev}
+    user: "${HERMES_UID:-10000}:${HERMES_GID:-10000}"
+    command: ["node", "apps/mcp/dist/sync.js"]
+    environment:
+      VG_API_URL: ${VG_API_URL:?Set the hub API origin}
+      VG_MCP_URL: ${VG_MCP_URL:?Set the hub MCP URL}
+      VG_API_KEY: ${VG_API_KEY:?Set the key for this scout}
+      VG_AGENT_NAME: ${VG_AGENT_NAME:?Set the bound scout instance name}
+      VG_HERMES_HOME: /opt/data
+      VG_ENVIRONMENT: docker
+      HERMES_VERSION: ${HERMES_VERSION:-0.23.1}
+      VG_SYNC_INTERVAL_SEC: ${VG_SYNC_INTERVAL_SEC:-300}
+    volumes: ["scout-data:/opt/data"]
+    init: true
+    restart: unless-stopped
+    healthcheck:
+      disable: true
+    depends_on:
+      hermes-scout:
+        condition: service_started
+
+volumes:
+  scout-data:

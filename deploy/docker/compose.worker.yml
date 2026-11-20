@@ -19,6 +19,9 @@ services:
       - ${VG_CACHE_DIR:-vg-cache}:/data
     shm_size: "1gb"
     init: true
+    # Worker không mở cổng 3001, nên HEALTHCHECK của image (/api/health:3001) luôn fail. Tắt ở đây; kiểm tra sống qua nodes.last_seen_at.
+    healthcheck:
+      disable: true
     # on-failure: restart only on a non-zero exit. A revoked node exits 0 and stays stopped; exit 75 (update) restarts.
     restart: on-failure
     stop_grace_period: 130s

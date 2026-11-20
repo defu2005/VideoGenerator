@@ -58,10 +58,19 @@ COPY apps/web/package.json apps/web/package.json
 COPY apps/mcp/package.json apps/mcp/package.json
 
 # The lockfile is written on Windows, so Rollup's Linux optional binary is named
-# on the rollup package but has no resolved tarball entry. Install that one
-# package inside the image. This does not change package.json or the lockfile.
+# on the rollup package but has no resolved tarball entry. Fetch that one tarball
+# with npm pack and extract it into node_modules. Do not run npm install here:
+# with --no-package-lock it re-resolves the whole tree (for example
+# @better-auth/core 1.7.21 -> 1.7.25), which breaks the lockfile versions.
 RUN npm ci --no-audit --no-fund \
- && npm install --no-save --no-package-lock --no-audit --no-fund @rollup/rollup-linux-x64-gnu@4.67.4
+ && mkdir -p /tmp/rollup-linux \
+ && cd /tmp/rollup-linux \
+ && npm pack --silent @rollup/rollup-linux-x64-gnu@4.67.4 \
+ && mkdir -p /app/node_modules/@rollup/rollup-linux-x64-gnu \
+ && tar -xzf rollup-rollup-linux-x64-gnu-4.67.4.tgz -C /app/node_modules/@rollup/rollup-linux-x64-gnu --strip-components=1 \
+ && rm -rf /tmp/rollup-linux /root/.npm \
+ && node -e "require('/app/node_modules/@rollup/rollup-linux-x64-gnu/package.json')" \
+ && test "$(node -p "require('/app/node_modules/@better-auth/core/package.json').version")" = "1.7.21"
 
 COPY packages ./packages
 COPY apps ./apps
@@ -175,8 +184,11 @@ RUN fc-cache -f \
 VOLUME /data
 EXPOSE 3001
 
-HEALTHCHECK --interval=15s --timeout=5s --start-period=40s --retries=5 \
-  CMD node -e "fetch('http://127.0.0.1:'+(process.env.PORT||3001)+'/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+# TASK-150 C: a worker (VG_ROLE=worker) serves no HTTP, so it is healthy while DATA_DIR/worker-alive is under 60 s old
+# (4x the 15 s heartbeat). A control-plane outage makes heartbeats fail and the file go stale: unhealthy by design.
+# start-period 90s: run() runs the render probe (up to 60 s, PROBE_TIMEOUT_MS) before join and the first heartbeat.
+HEALTHCHECK --interval=15s --timeout=5s --start-period=90s --retries=5 \
+  CMD node -e "const f=require('fs'),p=require('path');if(process.env.VG_ROLE==='worker'){let ok=false;try{ok=Date.now()-f.statSync(p.join(process.env.DATA_DIR||'/data','worker-alive')).mtimeMs<60000}catch(e){}process.exit(ok?0:1)}fetch('http://127.0.0.1:'+(process.env.PORT||3001)+'/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
 
 ENTRYPOINT ["vg-entrypoint"]
 CMD ["node", "apps/server/dist/index.js"]
