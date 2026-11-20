@@ -13,6 +13,7 @@ import { failInterruptedOperatorRuns } from "../src/operator/service.js";
 import { clearAssistantChatScript, setAssistantChatScript } from "../src/providers/llm/mock.js";
 import { registerSeededStandingOrder } from "../src/operator/extensions.js";
 import { getNotificationSettings, saveNotificationSettings } from "../src/settings/notifications.js";
+import { storePassingBehaviourEval } from "./helpers/behaviour.js";
 
 const root = mkdtempSync(join(tmpdir(), "vg-operator-test-"));
 let config: AppConfig;
@@ -114,6 +115,7 @@ describe("operator runtime", () => {
     const activate = (version: number) => app.inject({
       method: "POST", url: `/api/operator/skills/${draft.name}/versions/${version}/activate`,
     });
+    storePassingBehaviourEval(sqlite(), draft.name, 1, { baseline: "none", activeVersion: null });
     expect((await activate(1)).statusCode).toBe(200);
     expect((await find("mcp")).json()).toEqual((await find("operator")).json());
     expect((await find("operator")).body).toContain(`"name":"${draft.name}","version":1`);
@@ -122,6 +124,7 @@ describe("operator runtime", () => {
     const path = join(app.vgOperator.service.workspacePath(), relativePath);
     writeFileSync(path, draft.markdown.replace("tools:\n  - find_tools", "tools:\n  - delete_project"), "utf8");
     expect(app.vgOperator.service.promoteSkill(relativePath)).toMatchObject({ ok: false });
+    storePassingBehaviourEval(sqlite(), draft.name, 2, { baseline: "active", activeVersion: 1 });
     writeFileSync(path, `${draft.markdown}\n- Đã kiểm tra lại hướng dẫn.\n`, "utf8");
     expect(app.vgOperator.service.promoteSkill(relativePath)).toMatchObject({ ok: true });
     expect((await find("operator")).body).toContain(`"name":"${draft.name}","version":2`);
@@ -192,6 +195,50 @@ describe("operator runtime", () => {
       .toEqual({ total: 1 });
     expect(sqlite().prepare("SELECT run_id FROM operator_tool_audit WHERE tool = 'create_project' AND run_id = ?")
       .get(run.runId)).toEqual({ run_id: run.runId });
+  });
+
+  it("gates propose_missing_tool over HTTP until find_tools and find_skills both ran in the same managed run", async () => {
+    let token: string | undefined;
+    app.vgOperator.service.setSpawn((command, args, options) => {
+      token = options.env?.VG_OPERATOR_INVOCATION;
+      return scriptedProcess({ hang: true })(command, args, options);
+    });
+    const call = (name: string, args: unknown) => app.inject({
+      method: "POST", url: "/api/registry/invoke",
+      headers: { "x-vg-tool-source": "operator", "x-vg-operator-managed": "1", "x-vg-operator-invocation": token ?? "" },
+      payload: { name, args },
+    });
+    const proposal = {
+      kind: "internal", name: "fixture_http_gate_tool",
+      operation: "Đọc bản chép lời đã tạo", reproduction: "Mở dự án thử có file chép lời",
+      impact: "Agent lấy được văn bản", inputSchema: { type: "object" }, outputSchema: { type: "object" },
+      permissions: ["Đọc dự án được chọn"], dataSent: "Không gửi ra ngoài", requiresConfirmation: false,
+      acceptance: ["Trả bản chép lời đúng dự án"],
+    };
+    const proposalCount = () => (sqlite().prepare("SELECT COUNT(*) AS n FROM improvement_requests").get() as { n: number }).n;
+    const before = proposalCount();
+    app.vgOperator.service.submit({ prompt: "Đề xuất công cụ fixture gate" });
+    expect(token).toBeTruthy();
+
+    const none = await call("propose_missing_tool", proposal);
+    expect(none.statusCode).toBe(403);
+    expect(none.json().error.message).toMatch(/find_tools và find_skills/);
+    expect(proposalCount()).toBe(before);
+
+    expect((await call("find_tools", { query: "đọc bản chép lời" })).statusCode).toBe(200);
+    const onlyTools = await call("propose_missing_tool", proposal);
+    expect(onlyTools.statusCode).toBe(403);
+    expect(onlyTools.json().error.message).toBe("Cần gọi find_skills trong lượt này trước khi đề xuất công cụ.");
+    expect(proposalCount()).toBe(before);
+
+    expect((await call("find_skills", { query: "đọc bản chép lời" })).statusCode).toBe(200);
+    const accepted = await call("propose_missing_tool", proposal);
+    expect(accepted.statusCode).toBe(200);
+    expect(accepted.json().result).toMatchObject({ status: "proposed" });
+    expect(proposalCount()).toBe(before + 1);
+
+    app.vgOperator.service.stopActive();
+    await app.vgOperator.service.waitForIdle();
   });
 
   it.each([true, false])("reconciles a workflow after interruption (recorded receipt: %s)", async (recorded) => {

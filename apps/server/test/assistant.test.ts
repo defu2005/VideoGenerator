@@ -29,6 +29,7 @@ import {
 import * as structuredLlm from "../src/providers/llm/structured.js";
 import { getAutomationPaused, setAutomationPaused } from "../src/services/automationSettings.js";
 import { getNotificationSettings, saveNotificationSettings } from "../src/settings/notifications.js";
+import { type OperatorToolHooks, setOperatorToolHooks } from "../src/operator/hooks.js";
 
 const root = mkdtempSync(join(tmpdir(), "vg-assistant-test-"));
 let config: AppConfig;
@@ -189,6 +190,39 @@ describe("assistant API — mock LLM loop", () => {
     expect(body.totals.inputTokens).toBeGreaterThan(0);
     expect(body.byGroup.some((group) => group.key === "assistant" && group.label === "Trợ lý")).toBe(true);
     expect(body.topProjects).toHaveLength(0);
+  });
+
+  it("TASK-152 1: find_skills gets one chat-turn id for the whole turn, and a new one for the next turn", async () => {
+    const seen: Array<string | null | undefined> = [];
+    setOperatorToolHooks({
+      findSkills: (_query: string, runId?: string | null) => {
+        seen.push(runId);
+        return { candidates: [] };
+      },
+      findTools: () => ({ candidates: [] }),
+      saveStandingOrder: () => ({}),
+    } as unknown as OperatorToolHooks);
+    try {
+      const conversationId = await createConversation();
+      setAssistantChatScript([
+        { reply: "", done: false, calls: [{ tool: "find_skills", args: { query: "lỗi một" } }, { tool: "find_skills", args: { query: "lỗi hai" } }] },
+        { reply: "Xong lượt một.", done: true },
+      ]);
+      await sendAssistantMessage(conversationId, "Lượt một");
+      expect(seen).toHaveLength(2);
+      expect(seen[0]).toBeTruthy();
+      expect(seen[1]).toBe(seen[0]);
+      setAssistantChatScript([
+        { reply: "", done: false, calls: [{ tool: "find_skills", args: { query: "lỗi ba" } }] },
+        { reply: "Xong lượt hai.", done: true },
+      ]);
+      await sendAssistantMessage(conversationId, "Lượt hai");
+      expect(seen).toHaveLength(3);
+      expect(seen[2]).toBeTruthy();
+      expect(seen[2]).not.toBe(seen[0]);
+    } finally {
+      setOperatorToolHooks(null);
+    }
   });
 
   it("read tool result feeds the next step and final reply arrives", async () => {
@@ -486,7 +520,11 @@ describe("assistant API — mock LLM loop", () => {
     const text = JSON.stringify(catalog);
     expect(text).not.toContain("$schema");
     // TASK-128 adds eight compact stage/visual tools; keep guarding against raw-schema bloat.
-    expect(text.length).toBeLessThan(37_000);
+    // Cap raised 37 000 → 40 000 on 2026-11-18 (decision in GOAL-2026-11-18.decisions.md): 190 tools now, the guard still catches raw schemas.
+    // Cap raised 40 000 → 41 000 for TASK-129a's four mailbox tools (~640 chars of compact signatures); see the 129a Vòng entry.
+    // Cap raised 41 000 → 42 000 for TASK-129c's four mission tools (2026-11-18).
+    // Cap raised 42 000 → 42 500 for TASK-147d script_submit_draft: its description names the three results and the stage_complete step.
+    expect(text.length).toBeLessThan(42_500);
     const deleteProject = catalog.find((entry) => entry.name === "delete_project");
     expect(deleteProject?.args).toHaveProperty("projectId", "string");
   });

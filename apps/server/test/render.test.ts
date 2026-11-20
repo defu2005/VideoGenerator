@@ -12,6 +12,7 @@ import { saveRenderSettings } from "../src/settings/render.js";
 import { RenderExecutor } from "../src/stages/render/renderExecutor.js";
 import { projectDir } from "../src/storage/paths.js";
 import { createPipelineHarness } from "./pipelineFixtures.js";
+import { FileGc } from "../src/storage/fileGc.js";
 
 type Harness = ReturnType<typeof createPipelineHarness>;
 const harnesses: Harness[] = [];
@@ -102,6 +103,40 @@ function fakeTools(overrides: { failOn?: (args: string[]) => boolean; hang?: boo
 }
 
 describe("RenderService with a fake ffmpeg", () => {
+  it("keeps a published version and render inputs while collecting archived intermediates", async () => {
+    const { harness, dir, state, timelines, project } = setup();
+    const { tools } = fakeTools();
+    const service = new RenderService(harness.sqlite, harness.config, timelines, tools);
+    const first = await service.render(project(), new AbortController().signal);
+    const now = harness.clock().toISOString();
+    harness.sqlite.prepare("INSERT INTO profiles(id,name,default_brief,guidelines,created_at,updated_at) VALUES ('gc-profile','GC fixture','{}','{}',?,?)").run(now, now);
+    harness.sqlite.prepare(`INSERT INTO platform_accounts(id,profile_id,platform,display_name,format,publish_settings,created_at,updated_at)
+      VALUES ('gc-account','gc-profile','youtube','GC fixture','long','{}',?,?)`).run(now, now);
+    harness.sqlite.prepare(`INSERT INTO publications(id,project_id,render_id,account_id,status,visibility_requested,visibility_used,published_at,created_at,updated_at)
+      VALUES ('gc-publication',?,?,'gc-account','PUBLISHED','private','private',?,?,?)`).run(harness.projectId, first.render.id, now, now, now);
+    state.inputHash = "second";
+    const second = await service.render(project(), new AbortController().signal);
+    state.inputHash = "third";
+    const third = await service.render(project(), new AbortController().signal);
+    harness.sqlite.prepare(`INSERT INTO timelines(project_id,data,input_hash,total_duration_sec,created_at,updated_at)
+      VALUES (?,?,?,3,?,?)`).run(harness.projectId, JSON.stringify(state.timeline), state.inputHash, now, now);
+    harness.sqlite.prepare("UPDATE projects SET archived_at=? WHERE id=?").run(now, harness.projectId);
+    const gc = new FileGc(harness.sqlite, harness.config.DATA_DIR, undefined, harness.clock);
+    gc.run();
+    harness.advance(15 * 86_400_000);
+    gc.run({ purge: true });
+    expect(existsSync(join(service.versionDir(harness.projectId, first.render.id), "output.mp4"))).toBe(true);
+    expect(existsSync(join(service.versionDir(harness.projectId, second.render.id), "output.mp4"))).toBe(false);
+    expect(existsSync(join(service.versionDir(harness.projectId, third.render.id), "output.mp4"))).toBe(true);
+    for (const path of ["visuals/a.png", "voice/a.wav", "music/m.wav", "timeline/subtitles.ass", "timeline/subtitles.srt"]) {
+      expect(existsSync(join(dir, path)), path).toBe(true);
+    }
+    state.inputHash = "rerender-after-gc";
+    const rerender = await service.render(project(), new AbortController().signal);
+    expect(rerender.render.status).toBe("DONE");
+    expect(rerender.reused).toBe(false);
+  });
+
   it("renders clips, the final pass, sidecars and thumbnails, then reuses everything", async () => {
     const { harness, dir, timelines, project } = setup();
     const { tools, calls } = fakeTools();

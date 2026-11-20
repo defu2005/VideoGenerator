@@ -26,6 +26,7 @@ import { openDatabase } from "../src/db/client.js";
 import { migrateDatabase } from "../src/db/migrate.js";
 import { parseConfig, type AppConfig } from "../src/lib/config.js";
 import { NotificationService } from "../src/notifications/notificationService.js";
+import { listAgentEvents, resetAgentEvents } from "../src/events/agentBus.js";
 import { saveNotificationSettings, TELEGRAM_BOT_TOKEN_KEY } from "../src/settings/notifications.js";
 import { PublisherRegistry } from "../src/publishing/registry.js";
 import { TokenVault } from "../src/publishing/tokenVault.js";
@@ -639,6 +640,55 @@ describe("AnalyticsSyncService freshness via tick", () => {
     expect(requested).toContain(dueId);
     expect(requested).not.toContain(freshId);
   });
+
+  it("TASK-129a: publishes analytics_synced only when a sync did real work", async () => {
+    resetAgentEvents();
+    const profileId = seedProfile();
+    const accountId = seedAccount(profileId, "youtube");
+    storeTokens(accountId, youtubeScopes());
+    const { projectId, renderId } = seedProject(profileId);
+    seedPublication({
+      projectId, renderId, accountId, externalId: "due-vid",
+      publishedAt: new Date(nowMs - 3 * 3600_000).toISOString(),
+      metricsSyncedAt: new Date(nowMs - 3 * 3600_000).toISOString(),
+    });
+    const fetcher: MetricsFetcher = {
+      platform: "youtube",
+      requiredScopes: [...ANALYTICS_REQUIRED_SCOPES.youtube],
+      async fetchVideoMetrics(pubs) {
+        return new Map(pubs.map((p) => [p.publicationId, { views: 1, likes: 0, comments: 0 }]));
+      },
+    };
+    const service = makeSyncService({
+      fetchers: new Map<PlatformId, MetricsFetcher>([["youtube", fetcher]]),
+      publishers: [mockPublisher("youtube")],
+    });
+    await service.tick(AbortSignal.timeout(5_000));
+    expect(listAgentEvents({ types: ["analytics_synced"] }).length).toBeGreaterThanOrEqual(1);
+
+    // Scope: the profile belongs to ws-a, so the event must be visible to ws-a and not to ws-b.
+    // Use a separate profile so the workspace assignment does not disturb the first assertions.
+    const scopedProfile = seedProfile();
+    const scopedAccount = seedAccount(scopedProfile, "youtube");
+    storeTokens(scopedAccount, youtubeScopes());
+    const scoped = seedProject(scopedProfile);
+    seedPublication({
+      projectId: scoped.projectId, renderId: scoped.renderId, accountId: scopedAccount, externalId: "ws-vid",
+      publishedAt: new Date(nowMs - 3 * 3600_000).toISOString(),
+      metricsSyncedAt: new Date(nowMs - 3 * 3600_000).toISOString(),
+    });
+    sqlite.prepare("UPDATE profiles SET workspace_id = 'ws-a' WHERE id = ?").run(scopedProfile);
+    const aBefore = listAgentEvents({ types: ["analytics_synced"], workspaceId: "ws-a" }).length;
+    const bBefore = listAgentEvents({ types: ["analytics_synced"], workspaceId: "ws-b" }).length;
+    await service.tick(AbortSignal.timeout(5_000));
+    expect(listAgentEvents({ types: ["analytics_synced"], workspaceId: "ws-a" }).length - aBefore).toBe(1);
+    expect(listAgentEvents({ types: ["analytics_synced"], workspaceId: "ws-b" }).length - bBefore).toBe(0);
+
+    // Second tick: the only publication was just synced, so nothing is due and no event is added.
+    const before = listAgentEvents({ types: ["analytics_synced"] }).length;
+    await service.tick(AbortSignal.timeout(5_000));
+    expect(listAgentEvents({ types: ["analytics_synced"] }).length).toBe(before);
+  });
 });
 
 describe("AnalyticsSyncService quota backoff + 401 refresh", () => {
@@ -721,10 +771,13 @@ describe("AnalyticsSyncService quota backoff + 401 refresh", () => {
       publishers: [mockPublisher("youtube", refresh)],
     });
 
+    const eventsBefore = listAgentEvents({ types: ["analytics_synced"] }).length;
     const result = await service.syncAccount(accountId, AbortSignal.timeout(5_000), { force: true });
     expect(result.synced).toBe(true);
     expect(result.publicationsSynced).toBe(1);
     expect(attempts).toBe(2);
+    // TASK-129a: the refreshed-token path announces its one successful sync too.
+    expect(listAgentEvents({ types: ["analytics_synced"] }).length).toBe(eventsBefore + 1);
     expect(refresh).toHaveBeenCalledTimes(1);
     expect(vault.loadTokens(accountId)?.accessToken).toBe("refreshed-access-token");
 

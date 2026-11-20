@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import { currentWindowStart, nextReset } from "@vg/shared";
+import { listAgentEvents } from "../src/events/agentBus.js";
 import { openDatabase } from "../src/db/client.js";
 import { migrateDatabase } from "../src/db/migrate.js";
 import { parseConfig } from "../src/lib/config.js";
@@ -15,6 +16,8 @@ import { generateRoutedStructured } from "../src/providers/llm/structured.js";
 import { LlmError } from "../src/providers/llm/types.js";
 import { parseRetryAfterMs } from "../src/providers/llm/http.js";
 import { createPipelineHarness } from "./pipelineFixtures.js";
+import Fastify from "fastify";
+import { PipelineOrchestrator } from "../src/pipeline/orchestrator.js";
 import { ProjectSchema } from "@vg/shared";
 
 const roots: string[] = [];
@@ -359,6 +362,7 @@ describe("llm quota routing", () => {
     });
     harness.repository.updateJob(job.id, { status: "RUNNING", startedAt: harness.clock().toISOString() });
     const retryAt = "2026-11-03T07:00:00.000Z";
+    const waitsBefore = listAgentEvents({ types: ["quota_wait"] }).length;
     harness.orchestrator.failJob(job.id, {
       code: "LLM_QUOTA_WAIT",
       message: "Chờ quota reset lúc 07:00",
@@ -370,7 +374,28 @@ describe("llm quota routing", () => {
     expect(updated?.attempt).toBe(1);
     expect(updated?.runAfter).toBe(retryAt);
     expect(updated?.message).toBe("Chờ quota reset lúc 07:00");
+    // TASK-129a §1: exactly one quota_wait for this RUNNING→QUEUED transition
+    expect(listAgentEvents({ types: ["quota_wait"] }).length - waitsBefore).toBe(1);
     opened.sqlite.close();
+  });
+
+  it("TASK-129a: quota_wait goes through the runtime publish hook, like other orchestrator events", () => {
+    const harness = createPipelineHarness({ mode: "AUTO" });
+    harnesses.push(harness);
+    harness.repository.ensureStages(harness.projectId);
+    const job = harness.repository.createJob({ projectId: harness.projectId, stage: "SCRIPT", maxAttempts: 3, previousState: "PENDING" });
+    harness.repository.updateStage(harness.projectId, "SCRIPT", { state: "QUEUED", progress: 0, message: null, jobId: job.id, error: null });
+    harness.repository.updateJob(job.id, { status: "RUNNING", startedAt: harness.clock().toISOString() });
+    const hooked: string[] = [];
+    const orchestrator = new PipelineOrchestrator(
+      harness.repository, harness.config, Fastify({ logger: { level: "silent" } }).log, harness.clock,
+      undefined, undefined, { publishEvent: (event) => { hooked.push(event.type); } },
+    );
+    const waitsBefore = listAgentEvents({ types: ["quota_wait"] }).length;
+    orchestrator.failJob(job.id, { code: "LLM_QUOTA_WAIT", message: "Chờ quota reset", retryable: true, retryAt: "2026-11-03T07:00:00.000Z" });
+    expect(hooked).toEqual(["quota_wait"]);
+    // The hook replaced the default bus for this orchestrator, so the shared buffer gets nothing from it.
+    expect(listAgentEvents({ types: ["quota_wait"] }).length - waitsBefore).toBe(0);
   });
 
   it("uses a paid fallback under the daily cap once, and waits when the cap is already spent", async () => {

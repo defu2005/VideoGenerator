@@ -45,12 +45,17 @@ describe("budget estimate API", () => {
     expect(estimateResponse.statusCode).toBe(200);
     expect(estimateResponse.json()).toMatchObject({
       mode: "QUALITY",
-      total: { min: 12, max: 31 },
+      // Derivation (packages/shared/src/budget/modes.ts, QUALITY: storyEngine full, repairAttempts 2,
+      // guidelineCheck checkAndFix, formatPick on, factCheck off, sceneQueryAssist and continuityPlan on):
+      // TASK-141: SCRIPT max = sum of its task maxes (story engine calls each retry, so they are not one constant).
+      // SCRIPT min = 4 + 1 (guideline) + 0 + 1 (format) = 6; max = 29 (was 21 before the story-engine task sum).
+      // SCENE_PLAN min = 1 + 1 = 2; max = 1 + 2 * 1 = 3. Total min 14, max 44 (outline 2 + repairs 2 = 4 max, was 3).
+      total: { min: 14, max: 44 },
       perStage: [
         { stage: "RESEARCH", calls: { min: 2, max: 4 } },
         { stage: "VISUAL_SEARCH", calls: { min: 1, max: 4 } },
-        { stage: "SCRIPT", calls: { min: 5, max: 19 } },
-        { stage: "SCENE_PLAN", calls: { min: 1, max: 1 } },
+        { stage: "SCRIPT", calls: { min: 6, max: 30 } },
+        { stage: "SCENE_PLAN", calls: { min: 2, max: 3 } },
         { stage: "MUSIC_SEARCH", calls: { min: 1, max: 1 } },
         { stage: "TIMELINE", calls: { min: 2, max: 2 } },
       ],

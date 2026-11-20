@@ -5,7 +5,7 @@ import { saveAutonomySettings } from "../src/operator/autonomy.js";
 import { autonomyBudgetStatus, heldAutonomyUsd, holdAutonomyUsd, recordAutomaticMediaCost } from "../src/operator/autonomyBudget.js";
 import { saveGoal } from "../src/operator/autopilot.js";
 import { runPlaybooks, setGatewayBypass } from "../src/operator/playbooks.js";
-import { runStandingPlans } from "../src/operator/planner.js";
+import { digestReferenceTime, runStandingPlans } from "../src/operator/planner.js";
 import { undoAudit } from "../src/operator/undo.js";
 import { UsageService } from "../src/services/usageService.js";
 
@@ -21,7 +21,7 @@ function base(): Database.Database {
     CREATE TABLE platform_accounts (id TEXT PRIMARY KEY, profile_id TEXT);
     CREATE TABLE profile_topics (id TEXT PRIMARY KEY, profile_id TEXT, status TEXT, scheduled_for TEXT, project_id TEXT);
     CREATE TABLE publications (id TEXT PRIMARY KEY, project_id TEXT, status TEXT, visibility_used TEXT, guardrail_reason TEXT, scheduled_for TEXT, external_id TEXT, updated_at TEXT);
-    CREATE TABLE supervisor_findings (id TEXT PRIMARY KEY, dedupe_key TEXT UNIQUE, status TEXT, resolution TEXT, kind TEXT);
+    CREATE TABLE supervisor_findings (id TEXT PRIMARY KEY, dedupe_key TEXT UNIQUE, status TEXT, resolution TEXT, kind TEXT, detail TEXT, first_seen_at TEXT, last_seen_at TEXT);
     CREATE TABLE operator_tool_audit (id TEXT PRIMARY KEY, tool TEXT, summary TEXT, undo TEXT);
     CREATE TABLE operator_goals (id TEXT PRIMARY KEY, profile_id TEXT, text TEXT NOT NULL, spec TEXT NOT NULL, status TEXT NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL, source TEXT NOT NULL, workspace_id TEXT);
     CREATE TABLE operator_preferences (id TEXT PRIMARY KEY, profile_id TEXT, rule TEXT NOT NULL, quote TEXT NOT NULL, scope TEXT NOT NULL, created_at TEXT NOT NULL, active INTEGER NOT NULL, workspace_id TEXT);
@@ -32,6 +32,8 @@ function base(): Database.Database {
     CREATE TABLE project_stages (project_id TEXT, stage TEXT, state TEXT);
     CREATE TABLE jobs (id TEXT, project_id TEXT, stage TEXT, scope TEXT, status TEXT, attempt INT, usage TEXT, created_at TEXT, started_at TEXT, finished_at TEXT);
     CREATE TABLE cost_entries (id TEXT PRIMARY KEY, profile_id TEXT, project_id TEXT, kind TEXT, date TEXT, amount REAL, currency TEXT, source TEXT, note TEXT, created_at TEXT, workspace_id TEXT);
+    CREATE TABLE llm_relay_usage (id TEXT PRIMARY KEY, caller TEXT, workspace_id TEXT, model TEXT, job_id TEXT, input_tokens INTEGER,
+      output_tokens INTEGER, cost_usd REAL, estimated INTEGER, status TEXT, code TEXT, latency_ms INTEGER, created_at TEXT);
   `);
   db.prepare("INSERT INTO profiles (id, archived_at, automation) VALUES (?, NULL, NULL)").run(profile);
   const full = { level: "autonomous" as const, grants: AUTONOMY_PRESETS.autonomous };
@@ -57,6 +59,22 @@ describe("task 059 remaining rails", () => {
     expect(review.review).toBe(true);
     const after = JSON.parse((db.prepare("SELECT automation FROM profiles WHERE id = ?").get(profile) as { automation: string }).automation);
     expect(after.publishTimes).toEqual(["20:30"]);
+  });
+
+  it("fires the morning digest once at 07:00 Vietnam time, separate from the 21:00 digest", () => {
+    const db = base();
+    // 00:05 UTC is 07:05 in Asia/Ho_Chi_Minh.
+    const morning = new Date("2026-11-17T00:05:00.000Z");
+    expect(runStandingPlans(db, morning).morningDigest).toBe(true);
+    expect(runStandingPlans(db, new Date("2026-11-17T00:20:00.000Z")).morningDigest).toBe(false);
+    // Morning digest reports the day that just closed: 07:05 on 17 Nov (VN) → clock 19:05 on 16 Nov, VN date 2026-11-16.
+    const ref = digestReferenceTime(morning, true);
+    expect(new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Ho_Chi_Minh" }).format(ref)).toBe("2026-11-16");
+    expect(digestReferenceTime(morning, false)).toEqual(morning);
+    // 14:00 UTC is 21:00 in Vietnam: the evening digest still fires, and the morning one does not.
+    const evening = runStandingPlans(db, new Date("2026-11-17T14:05:00.000Z"));
+    expect(evening.digest).toBe(true);
+    expect(evening.morningDigest).toBe(false);
   });
 
   it("runs slot, topic and gateway playbooks before a model call", () => {

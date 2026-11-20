@@ -24,7 +24,9 @@ function setup() {
 describe("autonomy grants", () => {
   it("classifies all confirmation tools and holds unknown ones", () => {
     for (const tool of Object.values(ASSISTANT_TOOLS)) {
-      if (tool.risk === "confirm") expect(Object.hasOwn(TOOL_GRANTS, tool.name), tool.name).toBe(true);
+      // TASK-129c: mission writers are confirm-risk with no grant on purpose. An ungranted confirm tool is always pending
+      // (shouldCreatePending), so a grant here would let autoConfirm run them.
+      if (tool.risk === "confirm" && !tool.name.startsWith("mission_")) expect(Object.hasOwn(TOOL_GRANTS, tool.name), tool.name).toBe(true);
     }
     expect(autonomyDecision("unknown", {}, full)).toBe("pending");
     expect(autonomyDecision("run_research", {}, full)).toBe("pending");

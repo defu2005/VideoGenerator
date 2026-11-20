@@ -1,7 +1,9 @@
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { createHash } from "node:crypto";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { CompleteRequestSchema } from "@vg/shared";
 import { controlUrlProblem, EXIT_FOR_UPDATE_CODE, isPrivateHost, NodeAgent } from "../src/node/agent.js";
 import { probeReason, runRenderProbe } from "../src/node/probe.js";
 
@@ -35,6 +37,95 @@ describe("control url rules", () => {
 });
 
 describe("NodeAgent", () => {
+  it("falls back after two bad S3 downloads and mixes direct and resumable outputs", async () => {
+    const asset = "fixture input";
+    const hash = createHash("sha256").update(asset).digest("hex");
+    const fallbackUrl = `/api/nodes/agent/artifacts/${hash}?jobId=job-storage`;
+    const file = { name: "files/input.bin", sha256: hash, size: asset.length };
+    const calls: string[] = [];
+    let completed: unknown;
+    let assigned = false;
+    const report = { clipsReused: 0, clipsRendered: 1, graphicShots: [], composeWarnings: [], joinWarnings: [] };
+    const agent = new NodeAgent({ VG_CONTROL_URL: "http://127.0.0.1:1", VG_JOIN_TOKEN: "vgj_fixture", DATA_DIR: tempDir() }, {
+      log: () => undefined, checkCapabilities: async () => ["render"], probe: okProbe, heartbeatMs: 10, pollMs: 10,
+      execute: async (_bundle, io) => {
+        expect(readFileSync(io.resolve(file.name), "utf8")).toBe(asset);
+        const outputPath = io.resolve("final.mp4");
+        writeFileSync(outputPath, "render bytes");
+        return { outputPath, report };
+      },
+      fetch: async (input, init) => {
+        const url = new URL(String(input));
+        if (url.hostname === "s3.example.test") {
+          expect(new Headers(init?.headers).has("authorization")).toBe(false);
+          calls.push(`${init?.method ?? "GET"} S3`);
+          if (init?.method === "PUT") {
+            expect(await new Response(init.body).text()).toBe("render bytes");
+            return new Response(null, { status: 200 });
+          }
+          return new Response("fixture wrong");
+        }
+        const path = url.pathname;
+        if (path.endsWith("/join")) return json({ nodeId: "node", nodeToken: "vgn_fixture", desiredConfig: desired });
+        if (path.endsWith("/heartbeat")) return json({ desiredConfig: desired, cancel: [] });
+        if (path.endsWith("/lease") && !assigned) {
+          assigned = true;
+          return json({
+            jobId: "job-storage", leaseId: "lease-storage", leaseUntil: "2030-01-01T00:00:00Z", stage: "RENDER", storageUpload: true,
+            manifest: [{ ...file, artifactUrls: { preferredUrl: "https://s3.example.test/input?sig=fixture", fallbackUrl } }],
+            bundle: {
+              bundleVersion: 1, appVersion: "fixture", composeRenderVersion: 1, projectId: "fixture", profileId: null,
+              renderId: "render-fixture", aspect: "16:9", composePlan: null, videoStyle: null, assText: null,
+              wordsByScene: {}, sfx: [], clipHashes: [], croppedNames: [], creditsText: "", recipeId: "fixture",
+              language: "vi", brandColor: null, accentColor: null, composeGraphics: "off", graphicGrain: false, hasSrt: false, files: [file],
+              timeline: { formatVersion: 1, target: { width: 320, height: 180, fps: 30 }, totalDurationSec: 0,
+                scenes: [], music: null, subtitles: null, warnings: [], licenseSummary: {} },
+            },
+          });
+        }
+        if (path.endsWith("/lease")) return new Response(null, { status: 204 });
+        if (path.includes("/artifacts/")) {
+          calls.push("GET control");
+          expect(`${path}${url.search}`).toBe(fallbackUrl);
+          return new Response(asset);
+        }
+        if (path.endsWith("/have")) return json({ have: [] });
+        if (path.endsWith("/upload-targets")) {
+          const body = JSON.parse(String(init?.body));
+          return json({ target: body.name === "final.mp4" ? {
+            url: "https://s3.example.test/output?sig=fixture", headers: { "content-length": String(body.size) },
+          } : null });
+        }
+        if (path.includes("/outputs/")) {
+          calls.push(`${init?.method} control`);
+          const sent = new Headers(init?.headers).get("upload-length");
+          if (init?.body) await new Response(init.body).arrayBuffer();
+          return new Response(null, { status: 204, headers: { "upload-offset": init?.method === "HEAD" ? "0" : sent ?? "" } });
+        }
+        if (path.endsWith("/complete")) {
+          completed = CompleteRequestSchema.parse(JSON.parse(String(init?.body)));
+          agent.stop();
+          return json({ ok: true });
+        }
+        if (path.endsWith("/fail")) { agent.stop(); throw new Error(String(init?.body)); }
+        throw new Error(`Unexpected fixture route ${path}`);
+      },
+    });
+    try {
+      const run = agent.run();
+      const fallback = setTimeout(() => agent.stop(), 3000);
+      try { expect(await run).toBe(0); } finally { clearTimeout(fallback); }
+      expect(calls).toEqual(["GET S3", "GET S3", "GET control", "PUT S3", "HEAD control", "PATCH control"]);
+      expect(completed).toMatchObject({
+        outputs: [{ name: "final.mp4", provider: "s3" }, { name: "report.json" }],
+        storageTransfers: expect.arrayContaining([
+          expect.objectContaining({ route: "control", error: "DIRECT_TRANSFER_FAILED" }),
+          expect.objectContaining({ route: "direct", bytes: 12 }),
+        ]),
+      });
+    } finally { agent.stop(); }
+  });
+
   it("exits 1 without calling anything when the control url is a public http address", async () => {
     let calls = 0;
     const agent = new NodeAgent(

@@ -1,7 +1,7 @@
 import Fastify from "fastify";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { LlmProviderRegistry } from "../src/providers/llm/registry.js";
-import { ScriptSchema } from "@vg/shared";
+import { resolveBudget, ScriptSchema } from "@vg/shared";
 import { ResearchExecutor } from "../src/stages/research/researchExecutor.js";
 import { ScriptExecutor } from "../src/stages/script/scriptExecutor.js";
 import { scriptTotalDuration } from "../src/stages/script/scriptUtils.js";
@@ -183,10 +183,13 @@ describe("research and script stages", () => {
       FAKE_STAGE_DELAY_MS: 0,
     });
     const initialProject = harness.repository.getProject(harness.projectId)!;
+    const budgetSettings = mode === "ECO"
+      ? { mode }
+      : { mode: "CUSTOM" as const, features: { ...resolveBudget(mode), storyEngine: "off" as const } };
     harness.sqlite.prepare("UPDATE projects SET settings = ? WHERE id = ?")
       .run(JSON.stringify({
         ...initialProject.settings,
-        budget: { mode },
+        budget: budgetSettings,
       }), harness.projectId);
     const registry = new LlmProviderRegistry(harness.config);
     const provider = registry.get("mock")!;
@@ -225,7 +228,7 @@ describe("research and script stages", () => {
       .run(JSON.stringify({
         ...initialProject.settings,
         format: "explainer",
-        budget: { mode: "BALANCED" },
+        budget: { mode: "CUSTOM", features: { ...resolveBudget("BALANCED"), storyEngine: "off" } },
       }), harness.projectId);
     const registry = new LlmProviderRegistry(harness.config);
     const provider = registry.get("mock")!;
@@ -260,7 +263,7 @@ describe("research and script stages", () => {
     });
     const project = harness.repository.getProject(harness.projectId)!;
     harness.sqlite.prepare("UPDATE projects SET settings = ? WHERE id = ?")
-      .run(JSON.stringify({ ...project.settings, budget: { mode: "QUALITY" } }), harness.projectId);
+      .run(JSON.stringify({ ...project.settings, budget: { mode: "CUSTOM", features: { ...resolveBudget("QUALITY"), storyEngine: "off" } } }), harness.projectId);
     const registry = new LlmProviderRegistry(harness.config);
     const provider = registry.get("mock")!;
     const generate = vi.spyOn(provider, "generate");
@@ -275,6 +278,7 @@ describe("research and script stages", () => {
     expect(JSON.parse(saved.review_notes)).toEqual([
       "Tightened the opening for clarity.",
       "Tightened the opening for clarity.",
+      expect.stringContaining("[lint] LONG_SENTENCE (opening)"),
     ]);
     expect(saved.version).toBe(2);
     expect(generate).toHaveBeenCalledTimes(6);
@@ -296,7 +300,7 @@ describe("research and script stages", () => {
       .run(JSON.stringify({
         ...project.settings,
         targetDurationSec: 60,
-        budget: { mode: "QUALITY" },
+        budget: { mode: "CUSTOM", features: { ...resolveBudget("QUALITY"), storyEngine: "off" } },
       }), harness.projectId);
     const registry = new LlmProviderRegistry(harness.config);
     const provider = registry.get("mock")!;
@@ -325,7 +329,7 @@ describe("research and script stages", () => {
     const saved = harness.sqlite.prepare("SELECT data, review_notes FROM scripts WHERE project_id = ?")
       .get(harness.projectId) as { data: string; review_notes: string | null };
     expect(JSON.parse(saved.data)).toMatchObject({ title: "Testing pipeline behavior: A Carefully Told Story" });
-    expect(saved.review_notes).toBeNull();
+    expect(JSON.parse(saved.review_notes as string)).toEqual([expect.stringContaining("[lint] LONG_SENTENCE")]);
     expect(generate).toHaveBeenCalledTimes(7);
     const scriptJob = harness.repository.listJobs(harness.projectId, 20).find((job) => job.stage === "SCRIPT");
     expect(scriptJob?.usage).toMatchObject({
@@ -345,7 +349,7 @@ describe("research and script stages", () => {
       .run(JSON.stringify({
         ...project.settings,
         targetDurationSec: duration,
-        budget: { mode: "QUALITY" },
+        budget: { mode: "CUSTOM", features: { ...resolveBudget("QUALITY"), storyEngine: "off" } },
       }), harness.projectId);
     const registry = new LlmProviderRegistry(harness.config);
     harness.executors.set("RESEARCH", new ResearchExecutor(harness.sqlite, registry, harness.config));
@@ -387,7 +391,7 @@ describe("research and script stages", () => {
     expect(generate).toHaveBeenCalledTimes(4);
     const script = harness.sqlite.prepare("SELECT review_notes, version FROM scripts WHERE project_id = ?")
       .get(harness.projectId) as { review_notes: string; version: number };
-    expect(JSON.parse(script.review_notes)).toEqual(["Tightened the opening for clarity."]);
+    expect(JSON.parse(script.review_notes)).toEqual(["Tightened the opening for clarity.", expect.stringContaining("[lint] LONG_SENTENCE")]);
     expect(script.version).toBe(2);
   });
 
@@ -403,6 +407,7 @@ describe("research and script stages", () => {
         ...project.settings,
         researchMode: "off",
         userSet: ["researchMode"],
+        budget: { mode: "CUSTOM", features: { ...resolveBudget("BALANCED"), storyEngine: "off" } },
       }), harness.projectId);
     const registry = new LlmProviderRegistry(harness.config);
     const provider = registry.get("mock")!;
@@ -551,7 +556,9 @@ describe("research and script stages", () => {
     const generate = vi.spyOn(provider, "generate");
     const researchExecutor = new ResearchExecutor(harness.sqlite, registry, harness.config);
     const scriptExecutor = new ScriptExecutor(harness.sqlite, registry, harness.config);
-    harness.sqlite.prepare("UPDATE projects SET run_mode = 'ALL' WHERE id = ?").run(harness.projectId);
+    const project = harness.repository.getProject(harness.projectId)!;
+    harness.sqlite.prepare("UPDATE projects SET run_mode = 'ALL', settings = ? WHERE id = ?")
+      .run(JSON.stringify({ ...project.settings, budget: { mode: "CUSTOM", features: { ...resolveBudget("BALANCED"), storyEngine: "off" } } }), harness.projectId);
 
     await researchExecutor.run(contextFor(harness, "RESEARCH").context);
     harness.sqlite.prepare("UPDATE research_notes SET input_hash = ? WHERE project_id = ?")

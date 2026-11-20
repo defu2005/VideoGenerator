@@ -11,6 +11,7 @@ import Database from "better-sqlite3";
 import { saveAutonomyBudget } from "../src/operator/autonomyBudget.js";
 import { saveAutonomySettings } from "../src/operator/autonomy.js";
 import { recoverMissedPublications } from "../src/publishing/recoverSchedule.js";
+import { subscribeAgentEvents } from "../src/events/agentBus.js";
 
 const root = mkdtempSync(join(tmpdir(), "vg-publish-test-"));
 let config: AppConfig;
@@ -418,6 +419,22 @@ describe("canConnect / connectBlockedReason", () => {
 });
 
 describe("Publish jobs", () => {
+  it("blocks enqueuing and uploading a render completed against superseded inputs", async () => {
+    const profile = await createProfile();
+    const account = await addMockAccount(profile.id);
+    await connectMockAccount(account.id);
+    const project = await createProject(profile.id);
+    const renderId = seedRender(project.id);
+    const { sqlite } = app.vgAssistant.service.toolContext();
+    sqlite.prepare("UPDATE renders SET report=json_set(report, '$.staleInput', json('true')) WHERE id=?").run(renderId);
+    const result = await app.inject({ method: "POST", url: `/api/projects/${project.id}/publications`, payload: { accountIds: [account.id] } });
+    expect(result.statusCode).toBe(409);
+    const publicationId = randomUUID(), at = new Date().toISOString();
+    sqlite.prepare(`INSERT INTO publications(id,project_id,render_id,account_id,status,visibility_requested,visibility_used,created_at,updated_at)
+      VALUES (?,?,?,?,'QUEUED','private','private',?,?)`).run(publicationId, project.id, renderId, account.id, at, at);
+    await expect(app.vgPublish.service.prepareUpload(publicationId, new AbortController().signal))
+      .rejects.toMatchObject({ status: 409, retryable: false });
+  });
   it.each([
     { lateHours: 1, level: "autonomous", expected: "QUEUED" },
     { lateHours: 3, level: "autonomous", expected: "SCHEDULED" },
@@ -442,9 +459,19 @@ describe("Publish jobs", () => {
     sqlite.prepare(`INSERT INTO publications (id, project_id, render_id, account_id, status, visibility_requested, visibility_used,
       scheduled_for, created_at, updated_at) VALUES (?, ?, ?, ?, 'SCHEDULED', 'private', 'private', ?, ?, ?)`)
       .run(id, project.id, renderId, account.id, slot, heartbeat, heartbeat);
-    const recovered = recoverMissedPublications(sqlite, heartbeat, now);
-    expect(recovered).toEqual({ rescheduled: expected === "SCHEDULED" ? 1 : 0, needsReview: expected === "FAILED" ? 1 : 0 });
-    expect(recoverMissedPublications(sqlite, heartbeat, now)).toEqual({ rescheduled: 0, needsReview: 0 });
+    const findingHits: boolean[] = [];
+    const offFinding = subscribeAgentEvents((event) => {
+      if (event.type === "supervisor_finding") findingHits.push(sqlite.inTransaction);
+    });
+    let recovered: ReturnType<typeof recoverMissedPublications>;
+    try {
+      recovered = recoverMissedPublications(sqlite, heartbeat, now);
+      expect(recovered).toEqual({ rescheduled: expected === "SCHEDULED" ? 1 : 0, needsReview: expected === "FAILED" ? 1 : 0 });
+      // Only an open missed_publish (needs review) emits, once, after commit; a rescheduled one never emits.
+      expect(findingHits).toEqual(expected === "FAILED" ? [false] : []);
+      expect(recoverMissedPublications(sqlite, heartbeat, now)).toEqual({ rescheduled: 0, needsReview: 0 });
+      expect(findingHits).toEqual(expected === "FAILED" ? [false] : []);
+    } finally { offFinding(); }
     expect(app.vgPublish.service.promoteDueScheduled(now)).toBe(expected === "QUEUED" ? 1 : 0);
     expect(app.vgPublish.service.promoteDueScheduled(now)).toBe(0);
     const publication = app.vgPublish.service.require(id);

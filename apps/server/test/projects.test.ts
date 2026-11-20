@@ -3,26 +3,11 @@ import { mkdtempSync, existsSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import Database from "better-sqlite3";
-import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import type { Project } from "@vg/shared";
 import { buildApp } from "../src/app.js";
 import { testActor } from "./testActor.js";
 import { parseConfig, type AppConfig } from "../src/lib/config.js";
-
-const storageState = vi.hoisted(() => ({ failProjectRemoval: false }));
-
-vi.mock("../src/storage/paths.js", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("../src/storage/paths.js")>();
-  return {
-    ...actual,
-    removeProjectDir: (...args: Parameters<typeof actual.removeProjectDir>) => {
-      if (storageState.failProjectRemoval) {
-        throw new Error("Simulated project directory removal failure");
-      }
-      return actual.removeProjectDir(...args);
-    },
-  };
-});
 
 const root = mkdtempSync(join(tmpdir(), "vg-projects-test-"));
 let config: AppConfig;
@@ -204,7 +189,8 @@ describe("project API", () => {
     expect(estimate.json()).toMatchObject({
       mode: "BALANCED",
       features: { storyMode: "separate" },
-      total: { min: 10, max: 15 },
+      // 10/15 before the continuity plan. continuityPlan (BALANCED: true) adds one SCENE_PLAN call (min +1, max +2): 11/17.
+      total: { min: 11, max: 17 },
     });
   });
 
@@ -370,40 +356,32 @@ describe("project API", () => {
     });
   });
 
-  it("deletes the database row and project directory", async () => {
+  it("deletes the database row and keeps the directory through the storage grace period", async () => {
     const created = await createProject();
     const directory = join(config.DATA_DIR, "projects", created.id);
     expect(existsSync(directory)).toBe(true);
 
     const deletion = await app.inject({ method: "DELETE", url: `/api/projects/${created.id}` });
     expect(deletion.statusCode).toBe(204);
-    expect(existsSync(directory)).toBe(false);
+    expect(existsSync(directory)).toBe(true);
     const lookup = await app.inject({ method: "GET", url: `/api/projects/${created.id}` });
     expect(lookup.statusCode).toBe(404);
     expect(lookup.json().error.code).toBe("PROJECT_NOT_FOUND");
   });
 
-  it("returns deleted and warns when project directory removal fails", async () => {
-    await app.close();
-    config = { ...config, LOG_LEVEL: "warn" };
-    app = buildApp({ testActor,  config });
+  it("records a grace period for files of a deleted project", async () => {
     const created = await createProject();
-    const warning = vi.spyOn(app.log, "warn");
-
-    storageState.failProjectRemoval = true;
-    const response = await app.inject({ method: "DELETE", url: `/api/projects/${created.id}` })
-      .finally(() => {
-        storageState.failProjectRemoval = false;
-      });
-    const lookup = await app.inject({ method: "GET", url: `/api/projects/${created.id}` });
-
+    const file = join(config.DATA_DIR, "projects", created.id, "fixture.bin");
+    writeFileSync(file, "asset");
+    const response = await app.inject({ method: "DELETE", url: `/api/projects/${created.id}` });
     expect(response.statusCode).toBe(204);
-    expect(lookup.statusCode).toBe(404);
-    expect(warning).toHaveBeenCalledWith(
-      expect.objectContaining({ projectId: created.id }),
-      "Failed to remove project directory after deleting project",
-    );
-    warning.mockRestore();
+    expect(existsSync(file)).toBe(true);
+    const db = new Database(config.DATABASE_PATH);
+    try {
+      const mark = db.prepare("SELECT orphaned_at, purge_after FROM file_gc_marks WHERE project_owner_id=? AND path=?")
+        .get(created.id, file) as { orphaned_at: string; purge_after: string };
+      expect(Date.parse(mark.purge_after) - Date.parse(mark.orphaned_at)).toBe(14 * 86_400_000);
+    } finally { db.close(); }
   });
 
   it("prevents deleting projects that are generating or rendering", async () => {

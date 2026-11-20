@@ -13,6 +13,7 @@ import { FailoverTracker } from "../src/providers/llm/failover.js";
 import { LlmError } from "../src/providers/llm/types.js";
 import { AutonomySupervisor, listSupervisorState } from "../src/operator/supervisor.js";
 import { ASSISTANT_TOOLS } from "../src/assistant/tools.js";
+import { listAgentEvents } from "../src/events/agentBus.js";
 
 // TASK-127: no network and no real CLIs; providers are spied and made to throw the error codes.
 const schema = z.object({ ok: z.literal(true) });
@@ -234,5 +235,29 @@ describe("llm health, tool and anomaly", () => {
     ctx.registry.failover.recordFailover({ task: "t", from: "a/m", to: "b/m", reason: "LLM_RATE_LIMIT" });
     supervisor.runPass();
     expect(storm()).toBe(true);
+  });
+
+  it("TASK-129a: publishes supervisor_finding once when a finding opens, not on every pass", () => {
+    const ctx = app.vgAssistant.service.toolContext();
+    const { sqlite, orchestrator, usage } = ctx;
+    const supervisor = new AutonomySupervisor({
+      repository: orchestrator.repository, usage, stageTimeoutMs: 60_000, logger: app.log,
+      llmFailovers: () => ctx.registry.failover.recentFailovers().length,
+    });
+    const findingEvents = () => listAgentEvents({ types: ["supervisor_finding"] }).length;
+    // The storm finding may already be open from the test above; resolve it so this pass is a reopen.
+    sqlite.prepare("UPDATE supervisor_findings SET status = 'resolved' WHERE kind = 'llm_failover_storm'").run();
+    const before = findingEvents();
+    // A default workspace exists: a global finding (no profile) must still NOT be scoped to it.
+    sqlite.prepare("INSERT INTO organization (id,name,slug,created_at) VALUES ('ws-default','Default','ws-default',1)").run();
+    const foreignBefore = listAgentEvents({ types: ["supervisor_finding"], workspaceId: "foreign-ws" }).length;
+    for (let i = 0; i < 11; i++) ctx.registry.failover.recordFailover({ task: "t", from: "c/m", to: "d/m", reason: "LLM_RATE_LIMIT" });
+    supervisor.runPass();
+    expect(listSupervisorState(sqlite).findings.some(({ kind }) => kind === "llm_failover_storm")).toBe(true);
+    const opened = findingEvents() - before;
+    expect(opened).toBeGreaterThanOrEqual(1);
+    expect(listAgentEvents({ types: ["supervisor_finding"], workspaceId: "foreign-ws" }).length - foreignBefore).toBeGreaterThanOrEqual(1);
+    supervisor.runPass();
+    expect(findingEvents() - before).toBe(opened);
   });
 });

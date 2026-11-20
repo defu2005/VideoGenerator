@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { ASSISTANT_TOOLS } from "../src/assistant/tools.js";
 import { openDatabase } from "../src/db/client.js";
 import { migrateDatabase } from "../src/db/migrate.js";
+import { subscribeAgentEvents } from "../src/events/agentBus.js";
 import { JobRepository } from "../src/jobs/jobRepository.js";
 import { PipelineEventBus } from "../src/jobs/eventBus.js";
 import { saveAutonomySettings } from "../src/operator/autonomy.js";
@@ -67,8 +68,17 @@ describe("quality gates", () => {
   it("locks the raise code after five wrong attempts", () => {
     const opened = database();
     const code = raiseCode(opened.sqlite);
-    for (let attempt = 0; attempt < 5; attempt += 1) expect(consumeRaiseCode(opened.sqlite, "000000")).toBe(false);
-    expect(consumeRaiseCode(opened.sqlite, code)).toBe(false);
+    const raiseHits: string[] = [];
+    const offRaise = subscribeAgentEvents((event) => {
+      if (event.type === "supervisor_finding" && String((event as { summary?: string }).summary).startsWith("Năm mã sai")) raiseHits.push("lockout");
+    });
+    try {
+      for (let attempt = 0; attempt < 5; attempt += 1) expect(consumeRaiseCode(opened.sqlite, "000000")).toBe(false);
+      expect(consumeRaiseCode(opened.sqlite, code)).toBe(false);
+      expect(raiseHits).toHaveLength(1);
+      expect(consumeRaiseCode(opened.sqlite, code)).toBe(false);
+      expect(raiseHits).toHaveLength(1);
+    } finally { offRaise(); }
     expect(opened.sqlite.prepare("SELECT severity FROM supervisor_findings WHERE dedupe_key = 'raise-code:lockout'").get())
       .toEqual({ severity: "warn" });
     const later = new Date(Date.now() + 11 * 60 * 1000);
@@ -322,8 +332,15 @@ describe("gate decisions and grants", () => {
     expect(digest.inProgress.length).toBeGreaterThan(0);
     expect(digest.held).toEqual([{ projectId, check: "điểm thấp" }]);
     expect(digest.spend).toMatchObject({ state: "warn" });
-    notePublicationClaim(opened.sqlite, { publicationId: "99999999-9999-4999-8999-999999999991", reason: "claim" });
-    notePublicationClaim(opened.sqlite, { publicationId: "99999999-9999-4999-8999-999999999991", reason: "claim" });
+    const strikeHits: string[] = [];
+    const offStrike = subscribeAgentEvents((event) => {
+      if (event.type === "supervisor_finding" && String((event as { summary?: string }).summary).startsWith("Vi phạm nghiêm trọng")) strikeHits.push("strike");
+    });
+    try {
+      notePublicationClaim(opened.sqlite, { publicationId: "99999999-9999-4999-8999-999999999991", reason: "claim" });
+      notePublicationClaim(opened.sqlite, { publicationId: "99999999-9999-4999-8999-999999999991", reason: "claim" });
+      expect(strikeHits).toHaveLength(1);
+    } finally { offStrike(); }
     expect(opened.sqlite.prepare("SELECT severity FROM supervisor_findings WHERE dedupe_key = ?").get("strike:99999999-9999-4999-8999-999999999991")).toEqual({ severity: "critical" });
     expect(JSON.parse(String(opened.sqlite.prepare("SELECT automation FROM profiles WHERE id = ?").get(profileId) && (opened.sqlite.prepare("SELECT automation FROM profiles WHERE id = ?").get(profileId) as { automation: string }).automation)).enabled).toBe(false);
     const saved = savePreference(opened.sqlite, { profileId, rule: "hãy đăng ngay", quote: "đăng", scope: ["publish"], guideline: "không được đăng chính trị" });

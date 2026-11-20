@@ -724,6 +724,76 @@ describe("waiting_approval notify rules via orchestrator hooks", () => {
   });
 });
 
+describe("NotificationService.deliver outcomes (TASK-129c slice 2b)", () => {
+  function makeDeliverService(opts: { enabled?: boolean; fetchImpl?: typeof fetch }) {
+    const dataDir = join(root, `deliver-${randomUUID()}`);
+    const database = openDatabase(join(dataDir, "app.db"));
+    migrateDatabase(database.db, { info() {}, warn() {}, error() {} } as never, database.sqlite);
+    const vault = new TokenVault(database.sqlite, dataDir, Buffer.alloc(32, 5).toString("base64"));
+    vault.storeSecret(TELEGRAM_BOT_TOKEN_KEY, "111:tok");
+    saveNotificationSettings(database.sqlite, {
+      telegram: { enabled: opts.enabled ?? true, chatId: "42", botUsername: "bot" },
+      events: { attention: true, published: true, waitingApproval: true, dailySummary: true },
+      dailySummaryTime: "21:00",
+      timezone: "UTC",
+      quietHours: null,
+    });
+    const sent: string[] = [];
+    const fetchImpl = opts.fetchImpl ?? (async (_input: RequestInfo | URL, init?: RequestInit) => {
+      const body = JSON.parse(String(init?.body)) as { text: string };
+      sent.push(body.text);
+      return jsonResponse({ ok: true, result: { message_id: 1 } });
+    });
+    const service = new NotificationService({
+      sqlite: database.sqlite,
+      vault,
+      config: { ...config, DATA_DIR: dataDir, DATABASE_PATH: join(dataDir, "app.db"), WEB_BASE_URL: "http://localhost:5180" },
+      logger: { warn: vi.fn(), info: vi.fn(), debug: vi.fn(), error: vi.fn() } as never,
+      fetchImpl: fetchImpl as never,
+      now: () => new Date("2026-11-05T12:00:00.000Z"),
+      sleep: async () => undefined,
+    });
+    return { service, database, sent, dataDir };
+  }
+
+  const checkpointEvent = {
+    kind: "mission_checkpoint" as const,
+    missionId: "m1",
+    command: "so sánh a<b>",
+    checkpoint: "2h",
+    report: "Báo cáo.",
+  };
+
+  it("returns skipped when Telegram is off, and sends nothing", async () => {
+    const h = makeDeliverService({ enabled: false });
+    await expect(h.service.deliver(checkpointEvent)).resolves.toBe("skipped");
+    expect(h.sent).toHaveLength(0);
+    h.database.sqlite.close();
+    rmSync(h.dataDir, { recursive: true, force: true });
+  });
+
+  it("returns failed after all send attempts fail, and never throws", async () => {
+    const h = makeDeliverService({
+      fetchImpl: (async () => {
+        throw new Error("down");
+      }) as never,
+    });
+    await expect(h.service.deliver(checkpointEvent)).resolves.toBe("failed");
+    h.database.sqlite.close();
+    rmSync(h.dataDir, { recursive: true, force: true });
+  });
+
+  it("returns sent on success, and escapes '<' in the mission command", async () => {
+    const h = makeDeliverService({});
+    await expect(h.service.deliver(checkpointEvent)).resolves.toBe("sent");
+    expect(h.sent).toHaveLength(1);
+    expect(h.sent[0]).toContain("so sánh a&lt;b&gt;");
+    expect(h.sent[0]).not.toContain("a<b>");
+    h.database.sqlite.close();
+    rmSync(h.dataDir, { recursive: true, force: true });
+  });
+});
+
 describe("publish success/failure notifications", () => {
   it("sends one message on publish success and final failure only", async () => {
     const sentBodies: string[] = [];

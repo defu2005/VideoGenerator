@@ -211,6 +211,10 @@ describe("visual API", () => {
       url: `/api/projects/${project.id}/scenes/${sceneId}/visuals/reject`,
     });
     expect(rejected.statusCode).toBe(200);
+    const feedback = sqlite.prepare("SELECT kind, source FROM stage_feedback WHERE project_id = ? AND stage = 'VISUAL_REVIEW' ORDER BY created_at").all(project.id) as { kind: string; source: string }[];
+    // The first explicit pick on a scene with no earlier selection is not a swap (no correction to learn from).
+    expect(feedback.map((row) => row.kind)).toEqual(["gate_reject"]);
+    expect(feedback.every((row) => row.source === "user")).toBe(true);
     expect(rejected.json().selection).toMatchObject({ status: "REVIEW_REQUIRED", selectedBy: "AGENT" });
     expect(rejected.json().selection.candidateId).not.toBe(first.id);
   });

@@ -12,6 +12,8 @@ import { dutyHeartbeat } from "../src/supervision/duty.js";
 import { fleetToolDefs } from "../src/fleet/toolDefs.js";
 import { buildSupervisionSnapshot } from "../src/supervision/snapshot.js";
 import { readMcpHealth } from "../src/api/health.js";
+import { saveAgentAssignment } from "../src/agents/assignments.js";
+import { storePassingBehaviourEval } from "./helpers/behaviour.js";
 
 let opened: ReturnType<typeof openDatabase>;
 const now = new Date("2026-11-15T03:00:00Z");
@@ -28,6 +30,17 @@ function markdown(name = "video-fleet-fixture") {
 }
 const draft = (extra: object = {}) => ({ name: "video-fleet-fixture", markdown: markdown(), evidence: { reason: "Lặp lại ba lần", runIds: ["fixture-run"] }, ...extra });
 
+it("prioritises assigned role skills while keeping every skill shared", () => scoped(() => {
+  const db = opened.sqlite;
+  saveAgentAssignment(db, actorWith({ role: "owner", workspaceId: "A" }), { instance: hermes.instance, role: "visual_scout" });
+  const scout = buildFleetBundle(db, { now, instance: hermes.instance });
+  const other = buildFleetBundle(db, { now, instance: "hermes/other" });
+  expect(scout.files[0]?.path).toBe("visual-scout/SKILL.md");
+  expect(other.files[0]?.path).not.toBe("visual-scout/SKILL.md");
+  expect(other.files.map((file) => file.path).sort()).toEqual(scout.files.map((file) => file.path).sort());
+  expect(buildFleetBundle(db, { now, instance: hermes.instance }).hash).toBe(scout.hash);
+}));
+
 it("exports only active skills and safe files, keeps secrets out, and advances the version for each content change", () => scoped(() => {
   const db = opened.sqlite;
   db.prepare("INSERT INTO app_settings (key,value,updated_at) VALUES ('provider.api_key','known-fixture-secret','now')").run();
@@ -37,6 +50,7 @@ it("exports only active skills and safe files, keeps secrets out, and advances t
   expect(buildFleetBundle(db, { now }).bundleVersion).toBe(a.bundleVersion);
   const saved = saveFleetDraft(db, hermes, draft());
   expect(buildFleetBundle(db, { now }).files.some((f) => f.path.startsWith("video-fleet-fixture/"))).toBe(false);
+  storePassingBehaviourEval(db, saved.name, saved.version, { baseline: "none", activeVersion: null });
   activateSkillVersion(db, saved.name, saved.version, registry());
   const b = buildFleetBundle(db, { now }); expect(b.bundleVersion).toBeGreaterThan(a.bundleVersion);
   expect(b.skillVersions["video-fleet-fixture"]).toBe(1);
@@ -49,19 +63,20 @@ it("exports only active skills and safe files, keeps secrets out, and advances t
   expect(() => buildFleetBundle(db, { now })).toThrow("Gói chứa giá trị bí mật");
 }));
 
-it("retains separate agent drafts, marks stale parents for merge, and auto-activates read-only skills only when enabled", () => scoped(() => {
+it("retains separate agent drafts, marks stale parents for merge, and never auto-activates fleet drafts", () => scoped(() => {
   const db = opened.sqlite;
   const first = saveFleetDraft(db, hermes, draft());
   expect(first.status).toBe("draft");
   const second = saveFleetDraft(db, { ...hermes, instance: "hermes/other" }, draft());
   expect(second.version).toBe(first.version + 1);
+  storePassingBehaviourEval(db, first.name, first.version, { baseline: "none", activeVersion: null });
   activateSkillVersion(db, first.name, first.version, registry());
   const stale = saveFleetDraft(db, hermes, draft({ markdown: `${markdown()}\nThêm ghi chú.` }));
   expect(stale.status).toBe("needs_merge");
   expect(() => activateSkillVersion(db, stale.name, stale.version, registry())).toThrow("Gộp thay đổi");
   saveFleetSettings(db, { autoActivateReadOnlySkills: true });
   const fresh = saveFleetDraft(db, hermes, draft({ parentVersion: first.version, markdown: `${markdown()}\nGhi chú đã gộp.` }));
-  expect(fresh.status).toBe("active");
+  expect(fresh.status).toBe("draft");
   const mutatingMention = saveFleetDraft(db, hermes, { name: "video-no-auto", markdown: `${markdown("video-no-auto")}\nKhông dùng run_pipeline.`, evidence: { reason: "fixture" } });
   expect(mutatingMention.status).toBe("draft");
   expect(listSkillVersions(db).filter((s) => s.status === "active")).toHaveLength(1);

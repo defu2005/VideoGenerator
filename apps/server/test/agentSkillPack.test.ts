@@ -34,6 +34,7 @@ const USER_ONLY_AREAS: Record<string, string> = {
 
 /** Guide page → skill that covers it when the skill's own `area` is a different page. */
 const AREA_TO_SKILL: Record<string, string> = {
+  "so-do-va-dong-thoi-gian": "video-render-va-thumbnail",
   "agent-nhan-stage": "video-hinh-anh-va-giong",
   "phan-tich-va-tai-chinh": "video-doc-so-lieu",
   "che-do-ngan-sach": "video-mo-hinh-ai",
@@ -42,14 +43,24 @@ const AREA_TO_SKILL: Record<string, string> = {
 
 /** Registry tools no skill lists yet, each with the reason. A stale entry fails the test. */
 const UNCOVERED_TOOLS: Record<string, string> = {
+  agent_send: "Hộp thư giữa agent (TASK-129a); skill hộp thư dùng chung chưa viết, sẽ thêm cùng bước viết skill.",
+  agent_inbox: "Hộp thư giữa agent (TASK-129a); skill hộp thư dùng chung chưa viết, sẽ thêm cùng bước viết skill.",
+  agent_ack: "Hộp thư giữa agent (TASK-129a); skill hộp thư dùng chung chưa viết, sẽ thêm cùng bước viết skill.",
+  agent_thread: "Hộp thư giữa agent (TASK-129a); skill hộp thư dùng chung chưa viết, sẽ thêm cùng bước viết skill.",
+  mission_get: "Công cụ mission (TASK-129c); skill điều phối mission sẽ thêm ở lát sau.",
+  mission_set_plan: "Công cụ mission (TASK-129c); skill điều phối mission sẽ thêm ở lát sau.",
+  mission_attach_project: "Công cụ mission (TASK-129c); skill điều phối mission sẽ thêm ở lát sau.",
+  mission_move: "Công cụ mission (TASK-129c); skill điều phối mission sẽ thêm ở lát sau.",
+  mission_list: "Công cụ mission của người dùng (TASK-129c); skill điều phối mission sẽ thêm ở lát sau.",
+  mission_create: "Công cụ mission của người dùng (TASK-129c); skill điều phối mission sẽ thêm ở lát sau.",
+  mission_resume: "Công cụ mission của người dùng (TASK-129c); skill điều phối mission sẽ thêm ở lát sau.",
+  mission_cancel: "Công cụ mission của người dùng (TASK-129c); skill điều phối mission sẽ thêm ở lát sau.",
   notification_settings: "Thông báo là cài đặt riêng của người dùng.",
   update_notification_toggles: "Thông báo là cài đặt riêng của người dùng.",
   delete_project: "Xoá dự án chỉ người dùng làm; skill dự án cấm tool này.",
   list_goals: "Mục tiêu đọc qua get_goal_progress trong video-doc-so-lieu.",
   knowledge_status: "Tri thức có skill dựng sẵn knowledge_refresh; chưa có skill repo.",
-  list_knowledge: "Tri thức có skill dựng sẵn knowledge_refresh; chưa có skill repo.",
   import_knowledge: "Nhập tri thức là việc của skill dựng sẵn knowledge_refresh.",
-  propose_knowledge_change: "Đề xuất thủ công vẫn dùng được; skill nghiên cứu dùng run_research để luôn kiểm quote và giữ medium/high chờ duyệt.",
   list_change_catalog: "Thay đổi bên ngoài có skill dựng sẵn change_investigation.",
   mark_change_reviewed: "Thay đổi bên ngoài có skill dựng sẵn change_investigation.",
   resolve_change_event: "Thay đổi bên ngoài có skill dựng sẵn change_investigation.",
@@ -57,7 +68,6 @@ const UNCOVERED_TOOLS: Record<string, string> = {
   computer_use_status: "Điều khiển máy là tính năng riêng, tắt mặc định.",
   computer_observe: "Điều khiển máy là tính năng riêng, tắt mặc định.",
   computer_act: "Điều khiển máy là tính năng riêng, tắt mặc định.",
-  list_connections: "Kết nối OAuth là vùng chỉ người dùng.",
   get_provider_intel_summary: "Nghiên cứu nhà cung cấp có skill dựng sẵn research-provider.",
   list_intel_changes: "Nghiên cứu nhà cung cấp có skill dựng sẵn research-provider.",
   list_offers: "Nghiên cứu nhà cung cấp có skill dựng sẵn research-provider.",

@@ -49,6 +49,25 @@ function fill(governor: ResourceGovernor, cls: Cls) {
 }
 
 describe("resource governor: classes and settings", () => {
+  it("holds render and media fetch below five percent even when adaptive limits are disabled", async () => {
+    const harness = makeHarness();
+    const notify = vi.fn();
+    const disk = vi.fn();
+    const { governor, load } = build(harness, { onChange: notify, onDiskSample: disk });
+    writeGovernorSettings(harness.sqlite, { enabled: false, classes: {} });
+    load.state.sample.diskFreePercent = 4.9;
+    await governor.tick();
+    expect(governor.diskBlocks("RENDER")).toBe(true);
+    expect(governor.diskBlocks("MEDIA_FETCH")).toBe(true);
+    expect(governor.diskBlocks("SCRIPT")).toBe(false);
+    expect(governor.status().diskHoldVi).toContain("5%");
+    expect(disk).toHaveBeenLastCalledWith(4.9, harness.clock());
+    load.state.sample.diskFreePercent = 5;
+    await governor.tick();
+    expect(governor.diskBlocks("RENDER")).toBe(false);
+    expect(notify).toHaveBeenCalledTimes(2);
+  });
+
   it("maps stages to classes", () => {
     expect(stageClassOf("RENDER")).toBe("cpu");
     expect(stageClassOf("SCRIPT")).toBe("llm");

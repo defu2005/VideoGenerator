@@ -1,11 +1,13 @@
 import { createHash } from "node:crypto";
-import { existsSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Readable } from "node:stream";
+import Fastify from "fastify";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { Job } from "@vg/shared";
 import { readAppVersion } from "../src/render/appVersion.js";
+import { listAgentEvents } from "../src/events/agentBus.js";
 import { AppError } from "../src/lib/errors.js";
 import { ArtifactService } from "../src/node/artifactService.js";
 import { LeaseService, type RenderPort } from "../src/node/leaseService.js";
@@ -13,6 +15,10 @@ import { NodeService, type NodeRow } from "../src/node/nodeService.js";
 import { localMayTake } from "../src/node/placement.js";
 import { getRemoteRenderSettings, saveRemoteRenderSettings } from "../src/node/settings.js";
 import { createPipelineHarness } from "./pipelineFixtures.js";
+import { registerNodeRoutes } from "../src/api/nodes.js";
+import { createProjectDir } from "../src/storage/paths.js";
+import { BlobStore } from "../src/storage/blobStore.js";
+import { S3StorageProvider } from "../src/storage/provider.js";
 
 const fileSha = "a".repeat(64);
 const registered = { path: "", sha: "", size: 0 };
@@ -36,7 +42,7 @@ function sha(text: string): string {
   return createHash("sha256").update(text).digest("hex");
 }
 
-async function setup() {
+async function setup(provider?: S3StorageProvider) {
   const harness: Harness = createPipelineHarness();
   const root = mkdtempSync(join(tmpdir(), "vg-node-test-"));
   cleanups.push(() => { harness.close(); rmSync(root, { recursive: true, force: true }); });
@@ -60,10 +66,12 @@ async function setup() {
     }),
     finalize,
   };
-  const leases = new LeaseService(
+  const restartLeases = () => new LeaseService(
     harness.sqlite, harness.config, harness.repository, harness.orchestrator, nodes, renders, artifacts,
-    async () => ({ message: "xong" }), harness.clock,
+    async () => ({ message: "xong" }), harness.clock, undefined, undefined,
+    provider ? new BlobStore(harness.sqlite, () => ({ provider, id: "fixture" }), () => undefined, harness.clock) : undefined,
   );
+  const leases = restartLeases();
 
   function joinNode(name = "may-1"): { row: NodeRow; token: string } {
     const { token: joinToken } = nodes.createJoinToken(undefined);
@@ -77,8 +85,59 @@ async function setup() {
     });
   }
 
-  return { harness, root, nodes, leases, artifacts, finalize, joinNode, queueRender };
+  return { harness, root, nodes, leases, artifacts, finalize, joinNode, queueRender, restartLeases };
 }
+
+describe("direct S3 output", () => {
+  it.each([false, true])("verifies bytes under the finalize claim, corrupt=%s", async (corrupt) => {
+    const objects = new Map<string, Uint8Array>();
+    const provider = new S3StorageProvider({
+      endpoint: "https://s3.example.test", bucket: "test-bucket", region: "auto",
+      accessKeyId: "fixture", secretAccessKey: "fixture-secret", checksumSha256: false,
+    }, async (input, init) => {
+      const key = new URL(String(input)).pathname;
+      const object = objects.get(key);
+      if (!object) return new Response(null, { status: 404 });
+      const headers = { "content-length": String(object.length) };
+      return new Response(init?.method === "HEAD" ? null : Uint8Array.from(object), { headers });
+    });
+    const { leases, joinNode, queueRender, harness, finalize, root } = await setup(provider);
+    const { row } = joinNode();
+    const other = joinNode("other").row;
+    const job = queueRender();
+    const lease = (await leases.lease(row, 1, undefined, true))!;
+    expect(lease.storageUpload).toBe(true);
+    expect(lease.manifest[0]?.artifactUrls).toEqual({
+      fallbackUrl: `/api/nodes/agent/artifacts/${registered.sha}?jobId=${job.id}`,
+    });
+    const content = [
+      { name: "final.mp4", text: "video bytes" },
+      { name: "report.json", text: JSON.stringify({ clipsReused: 0, clipsRendered: 1, graphicShots: [], composeWarnings: [], joinWarnings: [] }) },
+    ];
+    const outputs = content.map(({ name, text }) => ({ name, sha256: sha(text), size: Buffer.byteLength(text), provider: "s3" as const }));
+    for (const [index, output] of outputs.entries()) {
+      const value = { jobId: job.id, leaseId: lease.leaseId, ...output };
+      await expectApp(leases.outputTarget(other, value), 409, "LEASE_STALE");
+      const signed = (await leases.outputTarget(row, value))!;
+      const uri = new URL(signed.url);
+      expect(uri.pathname).toMatch(/^\/test-bucket\/incoming\//);
+      expect(signed.url).not.toContain("fixture-secret");
+      objects.set(uri.pathname, Buffer.from(corrupt && index === 0 ? "video wrong" : content[index]!.text));
+    }
+    const request = leases.complete(row, job.id, { leaseId: lease.leaseId, outputs });
+    if (corrupt) {
+      await expectApp(request, 422, "STORAGE_HASH_MISMATCH");
+      expect(finalize).not.toHaveBeenCalled();
+      expect(harness.repository.getJob(job.id)?.error?.code).toBe("STORAGE_HASH_MISMATCH");
+      expect(harness.repository.getJobLease(job.id)).toBeNull();
+    } else {
+      await request;
+      expect(finalize).toHaveBeenCalledOnce();
+      expect(readFileSync(join(root, "render", job.projectId, "versions", "render-1", "output.mp4"), "utf8")).toBe("video bytes");
+      expect(harness.repository.getJob(job.id)?.status).toBe("SUCCEEDED");
+    }
+  });
+});
 
 function expectApp(promiseOrFn: unknown, status: number, code: string): Promise<void> | void {
   const check = (error: unknown) => {
@@ -140,6 +199,21 @@ describe("revoked node", () => {
 });
 
 describe("lease and fencing", () => {
+  it("uses persisted workspace binding for stage leases and rejects a lease after the project moves", async () => {
+    const { leases, joinNode, queueRender, harness } = await setup();
+    const { row } = joinNode();
+    harness.sqlite.prepare("UPDATE nodes SET workspace_id='A' WHERE id=?").run(row.id);
+    harness.sqlite.prepare("UPDATE projects SET workspace_id='B' WHERE id=?").run(harness.projectId);
+    const job = queueRender();
+    expect(await leases.lease(row, 1)).toBeUndefined();
+    expect(harness.repository.getJob(job.id)?.status).toBe("QUEUED");
+    harness.sqlite.prepare("UPDATE projects SET workspace_id='A' WHERE id=?").run(harness.projectId);
+    const lease = (await leases.lease(row, 1))!;
+    expect(lease.jobId).toBe(job.id);
+    harness.sqlite.prepare("UPDATE projects SET workspace_id='B' WHERE id=?").run(harness.projectId);
+    await expectApp(() => leases.fail(row, job.id, { leaseId: lease.leaseId, code: "TEST", message: "test", retryable: false }), 409, "LEASE_STALE");
+  });
+
   it("gives a job once and nothing while the node is at its limit", async () => {
     const { leases, joinNode, queueRender } = await setup();
     const { row } = joinNode();
@@ -202,9 +276,112 @@ describe("expiry sweep", () => {
     nodes.sweep();
     expect(harness.repository.getJobLease(job.id)).not.toBeNull();
   });
+
+  it("TASK-129a: node_offline fires once per transition and node_online when the worker returns", async () => {
+    const { nodes, joinNode, harness } = await setup();
+    const { row } = joinNode();
+    const count = (type: "node_offline" | "node_online") => listAgentEvents({ types: [type] }).length;
+    const offlineBefore = count("node_offline");
+    const onlineBefore = count("node_online");
+    // Give the node a real workspace so the filter assertions below are meaningful.
+    harness.sqlite.prepare("UPDATE nodes SET workspace_id = 'ws-a' WHERE id = ?").run(row.id);
+    const aBefore = listAgentEvents({ types: ["node_offline"], workspaceId: "ws-a" }).length;
+    const bBefore = listAgentEvents({ types: ["node_offline"], workspaceId: "ws-b" }).length;
+    harness.advance(61_000);
+    nodes.sweep();
+    expect(count("node_offline") - offlineBefore).toBe(1);
+    expect(listAgentEvents({ types: ["node_offline"], workspaceId: "ws-a" }).length - aBefore).toBe(1);
+    expect(listAgentEvents({ types: ["node_offline"], workspaceId: "ws-b" }).length - bBefore).toBe(0);
+    nodes.sweep();
+    expect(count("node_offline") - offlineBefore).toBe(1);
+    nodes.heartbeat(nodes.get(row.id)!, { version: readAppVersion(), capabilities: ["render"], resources: { cpus: 2, ramMb: 4096, freeDiskMb: 1 }, running: [] });
+    expect(nodes.get(row.id)?.status).toBe("online");
+    expect(count("node_online") - onlineBefore).toBe(1);
+  });
 });
 
 describe("artifacts and outputs", () => {
+  it("resumes a 40% PATCH upload after control restart and links a known report", async () => {
+    const { leases, restartLeases, harness, nodes, artifacts, joinNode, queueRender, finalize } = await setup();
+    const { row, token } = joinNode();
+    const job = queueRender();
+    const lease = (await leases.lease(row, 1))!;
+    const mount = (service: LeaseService) => {
+      const app = Fastify();
+      registerNodeRoutes(app, harness.sqlite, harness.config, nodes, service, null as never);
+      return app;
+    };
+    const report = JSON.stringify({ clipsReused: 0, clipsRendered: 1, graphicShots: [], composeWarnings: [], joinWarnings: [] });
+    const reportPath = join(createProjectDir(harness.config.DATA_DIR, job.projectId), "known-report.json");
+    writeFileSync(reportPath, report);
+    await artifacts.register(reportPath);
+    const headers = { authorization: `Bearer ${token}`, "x-lease-id": lease.leaseId };
+    const rootUrl = `/api/nodes/agent/jobs/${job.id}`;
+    const uploadUrl = `${rootUrl}/outputs/final.mp4`;
+    const video = "0123456789";
+    const partHeaders = { ...headers, "x-sha256": sha(video), "upload-length": "10", "content-type": "application/offset+octet-stream" };
+    const first = mount(leases);
+    try {
+      const partial = await first.inject({ method: "PATCH", url: uploadUrl, headers: { ...partHeaders, "upload-offset": "0" }, payload: Buffer.from(video.slice(0, 4)) });
+      expect(partial.statusCode).toBe(204);
+      expect(partial.headers["upload-offset"]).toBe("4");
+    } finally { await first.close(); }
+    const restarted = mount(restartLeases());
+    try {
+      const head = await restarted.inject({ method: "HEAD", url: uploadUrl, headers });
+      expect(head.headers["upload-offset"]).toBe("4");
+      const wrong = await restarted.inject({ method: "PATCH", url: uploadUrl, headers: { ...partHeaders, "upload-offset": "2" }, payload: Buffer.from(video.slice(4)) });
+      expect(wrong.statusCode).toBe(409);
+      const rest = await restarted.inject({ method: "PATCH", url: uploadUrl, headers: { ...partHeaders, "upload-offset": "4" }, payload: Buffer.from(video.slice(4)) });
+      expect(rest.statusCode).toBe(204);
+      expect(rest.headers["upload-offset"]).toBe("10");
+      const have = await restarted.inject({ method: "POST", url: `${rootUrl}/have`, headers, payload: { leaseId: lease.leaseId, outputs: [{ name: "report.json", sha256: sha(report), size: Buffer.byteLength(report) }] } });
+      expect(have.json()).toEqual({ have: ["report.json"] });
+      const done = await restarted.inject({ method: "POST", url: `${rootUrl}/complete`, headers, payload: { leaseId: lease.leaseId, outputs: [{ name: "final.mp4", sha256: sha(video) }, { name: "report.json", sha256: sha(report) }] } });
+      expect(done.statusCode).toBe(200);
+      expect(finalize).toHaveBeenCalledOnce();
+    } finally { await restarted.close(); }
+  });
+
+  it("rejects an expired finalizer and lets exactly one concurrent complete claim the lease", async () => {
+    const { leases, harness, joinNode, queueRender, finalize, root } = await setup();
+    const { row } = joinNode();
+    const job = queueRender();
+    const lease = (await leases.lease(row, 1))!;
+    const report = JSON.stringify({ clipsReused: 0, clipsRendered: 1, graphicShots: [], composeWarnings: [], joinWarnings: [] });
+    const files = [{ name: "final.mp4", text: "video bytes" }, { name: "report.json", text: report }];
+    for (const { name, text } of files) await leases.receiveOutput(row, job.id, lease.leaseId, name, sha(text), Readable.from([Buffer.from(text)]));
+    const request = { leaseId: lease.leaseId, outputs: files.map(({ name, text }) => ({ name, sha256: sha(text) })) };
+    const oldLease = harness.repository.getJobLease(job.id)!;
+    harness.sqlite.prepare("UPDATE jobs SET lease_until=? WHERE id=?").run(harness.clock().toISOString(), job.id);
+    await expectApp(leases.complete(row, job.id, request), 409, "LEASE_STALE");
+    expect(finalize).not.toHaveBeenCalled();
+    expect(existsSync(join(root, "render", job.projectId, "versions", "render-1", "output.mp4"))).toBe(false);
+    harness.sqlite.prepare("UPDATE jobs SET lease_until=? WHERE id=?").run(oldLease.leaseUntil, job.id);
+    const results = await Promise.allSettled([leases.complete(row, job.id, request), leases.complete(row, job.id, request)]);
+    expect(results.filter((result) => result.status === "fulfilled")).toHaveLength(1);
+    expect(results.find((result) => result.status === "rejected")).toMatchObject({ reason: { code: "LEASE_STALE" } });
+    expect(finalize).toHaveBeenCalledOnce();
+  });
+
+  it("recovers a claim left by a crashed control without another render lease", async () => {
+    const { leases, restartLeases, nodes, harness, joinNode, queueRender, finalize } = await setup();
+    const { row } = joinNode();
+    const job = queueRender();
+    const lease = (await leases.lease(row, 1))!;
+    const report = JSON.stringify({ clipsReused: 0, clipsRendered: 1, graphicShots: [], composeWarnings: [], joinWarnings: [] });
+    for (const [name, text] of [["final.mp4", "video bytes"], ["report.json", report]] as const) {
+      await leases.receiveOutput(row, job.id, lease.leaseId, name, sha(text), Readable.from([Buffer.from(text)]));
+    }
+    harness.sqlite.prepare("UPDATE jobs SET finalizing_at=? WHERE id=?").run(harness.clock().toISOString(), job.id);
+    harness.advance(2 * harness.config.NODE_LEASE_SEC * 1000);
+    nodes.sweep();
+    harness.orchestrator.resumeRunningJobs();
+    expect(harness.repository.getJob(job.id)?.status).toBe("RUNNING");
+    await restartLeases().recoverFinalizing();
+    expect(finalize).toHaveBeenCalledOnce();
+    expect(harness.repository.getJob(job.id)?.status).toBe("SUCCEEDED");
+  });
   it("serves only files in the job's manifest to the lease holder", async () => {
     const { leases, joinNode, queueRender } = await setup();
     const { row } = joinNode();
@@ -225,7 +402,7 @@ describe("artifacts and outputs", () => {
       leases.receiveOutput(row, job.id, lease.leaseId, "final.mp4", sha("expected"), Readable.from([Buffer.from("different")])),
       422, "SHA256_MISMATCH",
     );
-    const dir = join(root, "render", job.projectId, "pending", `${job.id}.uploads`);
+    const dir = join(root, "render", job.projectId, "pending", `${job.id}.uploads`, lease.leaseId);
     expect(existsSync(dir) ? readdirSync(dir) : []).toEqual([]);
   });
 

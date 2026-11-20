@@ -10,6 +10,7 @@ import { collectOperatorEvents, dispatchOperatorEvents, eventWakeRunId, saveOper
 import { setAutomationPaused } from "../src/services/automationSettings.js";
 import { claimOperatorAction, recordOperatorActionFailure } from "../src/operator/loopGuard.js";
 import { autonomyBudgetStatus, recordBudgetFindings, saveAutonomyBudget } from "../src/operator/autonomyBudget.js";
+import { subscribeAgentEvents } from "../src/events/agentBus.js";
 import { breakerAllowsStart, claimBreakerTrial, listCircuitBreakers, recordBreakerOutcome } from "../src/operator/circuitBreaker.js";
 import { saveAutonomySettings } from "../src/operator/autonomy.js";
 import { AutonomySupervisor, listSupervisorState } from "../src/operator/supervisor.js";
@@ -242,12 +243,20 @@ describe("tool registry", () => {
       cost.run("budget-test-mirror", day, 99, "usage_auto", now.toISOString());
       const warning = autonomyBudgetStatus(sqlite, usage, undefined, now);
       expect(warning).toMatchObject({ state: "warn", scopes: [{ spend: { dailyUsd: 8 } }] });
-      expect(recordBudgetFindings(sqlite, warning, now)).toHaveLength(1);
-      expect(recordBudgetFindings(sqlite, warning, now)).toHaveLength(0);
-      cost.run("budget-test-2", day, 2, "manual", now.toISOString());
-      const stop = autonomyBudgetStatus(sqlite, usage, undefined, now);
-      expect(stop).toMatchObject({ state: "stop", retryAt: "2026-11-10T17:00:00.000Z" });
-      expect(recordBudgetFindings(sqlite, stop, now)).toHaveLength(1);
+      const budgetHits: string[] = [];
+      const offBudget = subscribeAgentEvents((event) => {
+        if (event.type === "supervisor_finding") budgetHits.push(String((event as { summary?: string }).summary));
+      });
+      try {
+        expect(recordBudgetFindings(sqlite, warning, now)).toHaveLength(1);
+        expect(recordBudgetFindings(sqlite, warning, now)).toHaveLength(0);
+        expect(budgetHits).toHaveLength(1);
+        cost.run("budget-test-2", day, 2, "manual", now.toISOString());
+        const stop = autonomyBudgetStatus(sqlite, usage, undefined, now);
+        expect(stop).toMatchObject({ state: "stop", retryAt: "2026-11-10T17:00:00.000Z" });
+        expect(recordBudgetFindings(sqlite, stop, now)).toHaveLength(1);
+        expect(budgetHits).toHaveLength(2);
+      } finally { offBudget(); }
     } finally {
       sqlite.prepare("DELETE FROM cost_entries WHERE id LIKE 'budget-test-%'").run();
       sqlite.prepare("DELETE FROM app_settings WHERE key = 'autonomy.budget'").run();

@@ -60,7 +60,13 @@ async function createProject(budget: "BALANCED" | "QUALITY" = "BALANCED"): Promi
     payload: {
       title: "Scene project",
       topic: "Scene API",
-      settings: { budget: { mode: budget }, sceneDurationSec: 3, wordsPerMinute: 100 },
+      settings: {
+        budget: budget === "QUALITY"
+          ? { mode: "CUSTOM", features: { sceneQueryAssist: true, continuityPlan: false } }
+          : { mode: budget },
+        sceneDurationSec: 3,
+        wordsPerMinute: 100,
+      },
     },
   });
   expect(response.statusCode).toBe(201);
@@ -171,7 +177,7 @@ describe("SCENE_PLAN executor and API", () => {
     const noSplit = await execute(project);
     expect(noSplit.usage.reduce((sum, item) => sum + (item.llmCalls ?? 0), 0)).toBe(1);
 
-    const splitProject = { ...project, settings: { ...project.settings, budget: { mode: "QUALITY" as const } } };
+    const splitProject = { ...project, settings: { ...project.settings, budget: { mode: "CUSTOM" as const, features: { sceneQueryAssist: true, continuityPlan: false } } } };
     await saveScript(project.id, script);
     const unavailableConfig = { ...config, LLM_DEFAULT_PROVIDER: undefined, LLM_ENABLE_MOCK: false };
     const fallback = await execute(splitProject, new LlmProviderRegistry(unavailableConfig));

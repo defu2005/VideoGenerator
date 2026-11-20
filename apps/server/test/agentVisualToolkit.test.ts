@@ -6,6 +6,7 @@ import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { runAsActor } from "../src/auth/requestContext.js";
 import { AgentStageService } from "../src/agents/stageService.js";
+import { saveAgentAssignment } from "../src/agents/assignments.js";
 import { AgentVisualToolkit, agentLicense } from "../src/agents/visualToolkit.js";
 import { VisualService } from "../src/services/visualService.js";
 import { resolveAssetPath } from "../src/storage/paths.js";
@@ -14,6 +15,9 @@ import { parseImage } from "../src/services/imageStore.js";
 import { setVisualCopyrightMode } from "../src/services/visualPolicy.js";
 import { createPipelineHarness } from "./pipelineFixtures.js";
 import { actorWith } from "./testActor.js";
+import { imageVerdictContext, reusableImageCheck } from "../src/agents/visualCache.js";
+import { recordQueryOutcome } from "../src/learning/queryPatterns.js";
+import { resolveBudget } from "@vg/shared";
 
 const png = readFileSync(fileURLToPath(new URL("./fixtures/images/tiny.png", import.meta.url)));
 const jpeg = readFileSync(fileURLToPath(new URL("./fixtures/images/tiny.jpg", import.meta.url)));
@@ -27,6 +31,7 @@ afterEach(() => { fixtures.splice(0).forEach((h) => h.close()); });
 function setup(realPreview = false) {
   const h = createPipelineHarness(); fixtures.push(h);
   h.sqlite.prepare("UPDATE projects SET workspace_id='A' WHERE id=?").run(h.projectId);
+  saveAgentAssignment(h.sqlite, actorWith({ role: "owner", workspaceId: "A" }), { instance: agent.instance, role: "visual_scout" });
   h.repository.ensureStages(h.projectId);
   const scenes = [randomUUID(), randomUUID()], at = h.clock().toISOString();
   const insert = h.sqlite.prepare(`INSERT INTO scenes (id,project_id,"order",kind,label,narration,visual_notes,visual_queries,music_mood,energy,est_duration_sec,start_sec,transition_note,origin,edited,input_hash,created_at,updated_at)
@@ -50,6 +55,27 @@ function setup(realPreview = false) {
 }
 
 describe("agent visual toolkit", () => {
+  it("TASK-148d: scout context carries accepted query hints for the same workspace and topic only", () => {
+    const h = setup();
+    h.sqlite.prepare("UPDATE projects SET topic=? WHERE id=?").run("River Stories", h.projectId);
+    expect(h.toolkit.context(h.job)).not.toHaveProperty("queryHints");
+    recordQueryOutcome(h.sqlite, { workspaceId: "A", topic: "river stories", query: "Hue river at dawn 1960", accepted: true });
+    expect(h.toolkit.context(h.job).queryHints).toEqual(["Hue river at dawn 1960"]);
+    recordQueryOutcome(h.sqlite, { workspaceId: "B", topic: "river stories", query: "other workspace query 1999", accepted: true });
+    expect(h.toolkit.context(h.job).queryHints).toEqual(["Hue river at dawn 1960"]);
+    h.sqlite.prepare("UPDATE projects SET topic=? WHERE id=?").run("cooking", h.projectId);
+    expect(h.toolkit.context(h.job)).not.toHaveProperty("queryHints");
+  });
+  it("shares agent fit with the app only for the scene context actually judged", async () => {
+    const h = setup(), id = (await h.submit()).candidateIds[0];
+    h.judge(id);
+    const candidate = h.visuals.agentCandidate(id)!, project = h.repository.getProject(h.projectId)!;
+    const input = { narration: "A river at sunrise.", visualDescription: "river sunrise", aspectRatio: project.settings.aspectRatio,
+      visionThreshold: resolveBudget(project).visionThreshold };
+    expect(reusableImageCheck(h.sqlite, "A", { phash: candidate.phash!, sha256: candidate.sha256! }, "river sunrise", imageVerdictContext(input))?.checkedBy?.instance).toBe(agent.instance);
+    expect(reusableImageCheck(h.sqlite, "A", { phash: candidate.phash!, sha256: candidate.sha256! }, "river sunrise", imageVerdictContext({ ...input, narration: "The same river during a flood" }))).toBeNull();
+    expect(reusableImageCheck(h.sqlite, "A", { phash: candidate.phash!, sha256: candidate.sha256! }, "river sunrise")).toBeNull();
+  });
   it("keeps a valid selection awaiting review, but reopens it if the actual gate stops passing", async () => {
     const h = setup(), id = (await h.submit()).candidateIds[0];
     h.judge(id); await h.select(id);

@@ -5,10 +5,11 @@ import { join } from "node:path";
 import type { AddressInfo } from "node:net";
 import Database from "better-sqlite3";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
-import type { Project } from "@vg/shared";
+import type { PipelineState, Project } from "@vg/shared";
 import { buildApp } from "../src/app.js";
 import { testActor } from "./testActor.js";
 import { parseConfig, type AppConfig } from "../src/lib/config.js";
+import { StageInputVersions } from "../src/pipeline/inputVersion.js";
 
 const root = mkdtempSync(join(tmpdir(), "vg-pipeline-api-test-"));
 let config: AppConfig;
@@ -47,6 +48,16 @@ async function createProject() {
   return response.json<Project>();
 }
 
+function assertCurrentDoneVersions(state: PipelineState) {
+  const sqlite = new Database(config.DATABASE_PATH);
+  try {
+    const versions = new StageInputVersions(sqlite, config.DATA_DIR);
+    for (const stage of state.stages.filter((record) => record.state === "DONE")) {
+      expect(stage.inputVersion).toBe(versions.inputVersion(state.projectId, stage.stage));
+    }
+  } finally { sqlite.close(); }
+}
+
 describe("pipeline API", () => {
   it("supports pipeline actions, job listing, conflict responses, and recent errors", async () => {
     const project = await createProject();
@@ -57,6 +68,7 @@ describe("pipeline API", () => {
     const run = await app.inject({ method: "POST", url: `/api/projects/${project.id}/pipeline/run`, payload: {} });
     expect(run.statusCode).toBe(202);
     expect(run.json().activeJob.stage).toBe("RESEARCH");
+    assertCurrentDoneVersions(run.json<PipelineState>());
     const conflict = await app.inject({ method: "POST", url: `/api/projects/${project.id}/pipeline/run`, payload: {} });
     expect(conflict.statusCode).toBe(409);
     expect(conflict.json().error.code).toBe("INVALID_PIPELINE_STATE");
@@ -70,6 +82,8 @@ describe("pipeline API", () => {
     sqlite.close();
     const approval = await app.inject({ method: "POST", url: `/api/projects/${project.id}/pipeline/gates/VISUAL_REVIEW/approve` });
     expect(approval.statusCode).toBe(200);
+    expect(approval.json<PipelineState>().stages.find((stage) => stage.stage === "VISUAL_REVIEW")?.inputVersion).toMatch(/^[a-f0-9]{64}$/);
+    assertCurrentDoneVersions(approval.json<PipelineState>());
 
     await app.inject({ method: "POST", url: `/api/projects/${project.id}/pipeline/cancel` });
     const retryDb = new Database(config.DATABASE_PATH);

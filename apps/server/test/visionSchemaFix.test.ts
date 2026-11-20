@@ -1,5 +1,5 @@
-import { randomUUID } from "node:crypto";
-import { mkdtempSync } from "node:fs";
+import { createHash, randomUUID } from "node:crypto";
+import { mkdtempSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -21,6 +21,10 @@ import { VisualService } from "../src/services/visualService.js";
 import type { StageContext } from "../src/pipeline/stageExecutor.js";
 import { LlmError } from "../src/providers/llm/types.js";
 import type { LlmRequest, LlmResponse } from "../src/providers/llm/types.js";
+import { verifySceneVision } from "../src/services/visionVerify.js";
+import { resolveAssetPath } from "../src/storage/paths.js";
+import { visualFeaturesFor, resolveBudget } from "@vg/shared";
+import * as sharedVisualCache from "../src/agents/visualCache.js";
 
 const root = mkdtempSync(join(tmpdir(), "vg-vision-schema-"));
 let dataDir: string;
@@ -124,6 +128,40 @@ afterEach(async () => {
 });
 
 describe("BUGFIX-VISION-SCHEMA", () => {
+  it("reuses matching vision context but checks changed narration, aspect and policy again", async () => {
+    const image = new ImageStore(dataDir, config.IMAGE_SEARCH_USER_AGENT).storeBuffer(project.id, solidPng(320, 320));
+    // This regression tests context identity; perceptual hashing has its own real-image tests.
+    const fingerprint = vi.spyOn(sharedVisualCache, "visualFingerprint").mockImplementation(async (path) => ({
+      phash: "0123456789abcdef", sha256: createHash("sha256").update(readFileSync(path)).digest("hex"),
+    }));
+    const spy = vi.spyOn(llm.get("mock")!, "generate").mockImplementation(async (req) => ({
+      text: visionBatchText(req.images?.map(({ label }) => label) ?? []), usage: { inputTokens: 2, outputTokens: 3 },
+      model: "mock-v1", provider: "mock", finishReason: "stop",
+    }));
+    const run = (subjectKey: string, changed: { narration?: string; aspectRatio?: string; threshold?: number } = {}) => verifySceneVision({ project, sqlite, config, registry: llm,
+      signal: new AbortController().signal, aspectRatio: changed.aspectRatio ?? "16:9", searchMore: async () => [],
+      budget: { ...visualFeaturesFor(resolveBudget(project), "max"), visionRetryRounds: 0, visionThreshold: changed.threshold ?? 7 },
+      scene: { sceneId: sceneIds[0]!, narration: changed.narration ?? "A river", visualDescription: subjectKey, queries: [subjectKey], subjectKey,
+        candidates: [{ id: "cache-fixture", label: "cache-fixture", relevanceScore: 0.8, localPath: resolveAssetPath(dataDir, project.id, image.localPath) }] },
+    });
+    try {
+      expect((await run("river")).usage.llmCalls).toBe(1);
+      spy.mockClear();
+      const reused = await run(" River ");
+      expect(reused.checks.get("cache-fixture")?.fit).toBe(8);
+      expect(reused.usage.llmCalls).toBe(0);
+      expect(spy).not.toHaveBeenCalled();
+      expect((await run("different river")).usage.llmCalls).toBe(1);
+      for (const changed of [{ narration: "The river before the dam in 1940" }, { aspectRatio: "9:16" }, { threshold: 9 }]) {
+        spy.mockClear();
+        expect((await run("river", changed)).usage.llmCalls).toBe(1);
+        expect(spy).toHaveBeenCalledTimes(1);
+      }
+      spy.mockClear();
+      expect((await run("river")).usage.llmCalls).toBe(0);
+      expect(spy).not.toHaveBeenCalled();
+    } finally { spy.mockRestore(); fingerprint.mockRestore(); }
+  });
   it("parses blurry/fan_art with normalize and skips repair", async () => {
     const provider = llm.get("mock")!;
     const original = provider.generate.bind(provider);

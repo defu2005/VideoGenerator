@@ -3,6 +3,7 @@ import { OVERDUE_NOTICE_AFTER_MS, PROTECTED_PROJECT_ID } from "@vg/shared";
 import { ActivityTracker, OverdueRun, type OverdueAbortKind, type OverdueDeps } from "../src/jobs/overdueRun.js";
 import { getOverdueJob, listOverdueChecks, readOverdueMark } from "../src/jobs/overdueStore.js";
 import { createPipelineHarness } from "./pipelineFixtures.js";
+import { listAgentEvents, resetAgentEvents } from "../src/events/agentBus.js";
 
 const MIN = 60_000;
 const harnesses: ReturnType<typeof createPipelineHarness>[] = [];
@@ -57,6 +58,22 @@ describe("OverdueRun", () => {
     await vi.advanceTimersByTimeAsync(3 * 60 * MIN);
     expect(aborts).toEqual([]);
     expect(listOverdueChecks(harness.sqlite, job.id).length).toBeGreaterThan(3);
+    run.stop();
+  });
+
+  it("TASK-129a: publishes stage_overdue once per recorded check, never per tick", async () => {
+    resetAgentEvents();
+    const { harness, job, run } = setup();
+    run.start();
+    await vi.advanceTimersByTimeAsync(0);
+    const first = listAgentEvents({ types: ["stage_overdue"] });
+    expect(first).toHaveLength(1);
+    expect(first[0]!.projectId).toBe(harness.projectId);
+    expect(first[0]!.summary).not.toMatch(/secret|token/i);
+    // Idle time with no new check: the bus must not grow.
+    await vi.advanceTimersByTimeAsync(0);
+    expect(listAgentEvents({ types: ["stage_overdue"] })).toHaveLength(1);
+    expect(listOverdueChecks(harness.sqlite, job.id)).toHaveLength(1);
     run.stop();
   });
 

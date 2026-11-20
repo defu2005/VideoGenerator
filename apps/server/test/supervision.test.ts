@@ -124,6 +124,7 @@ function setupTestDb() {
     CREATE TABLE assistant_pending_actions (id TEXT PRIMARY KEY, status TEXT, summary TEXT, created_at TEXT);
     CREATE TABLE operator_runs (id TEXT PRIMARY KEY, status TEXT, created_at TEXT);
     CREATE TABLE operator_tool_audit (id TEXT PRIMARY KEY, run_id TEXT, agent_kind TEXT, agent_name TEXT, agent_model TEXT, tool TEXT, summary TEXT, decision TEXT, created_at TEXT);
+    CREATE TABLE missions (id TEXT PRIMARY KEY, workspace_id TEXT, created_by TEXT, command TEXT, project_ids TEXT DEFAULT '[]', plan TEXT DEFAULT '[]', state TEXT, owner TEXT, autonomy_level TEXT, created_at TEXT, updated_at TEXT);
     CREATE TABLE supervisor_findings (id TEXT PRIMARY KEY, kind TEXT, severity TEXT, dedupe_key TEXT, status TEXT);
   `);
   return sqlite;

@@ -1,4 +1,5 @@
 import { testActor } from "./testActor.js";
+import { buildApp } from "../src/app.js";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import Database from "better-sqlite3";
@@ -329,7 +330,6 @@ describe("web-search route and auto-approve gate", () => {
     const { tmpdir } = await import("node:os");
     const { join } = await import("node:path");
     const { randomUUID } = await import("node:crypto");
-    const { buildApp } = await import("../src/app.js");
     const dataDir = mkdtempSync(join(tmpdir(), "vg-web-route-"));
     const config = parseConfig({
       DATA_DIR: dataDir,

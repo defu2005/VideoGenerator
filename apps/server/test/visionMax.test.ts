@@ -71,7 +71,7 @@ beforeEach(async () => {
     `INSERT INTO scenes (id, project_id, "order", kind, section_id, label, narration, visual_notes, visual_description, visual_queries,
       music_mood, energy, est_duration_sec, duration_override_sec, start_sec, transition_note, origin, edited,
       input_hash, created_at, updated_at)
-     VALUES (?, ?, ?, 'section', NULL, ?, 'A river at sunrise.', 'river sunrise', 'documentary river sunrise', ?,
+     VALUES (?, ?, ?, 'section', NULL, ?, 'A river at sunrise.', 'river sunrise', ?, ?,
       '', 'medium', 4, NULL, ?, '', 'AGENT', 0, 'fixture', ?, ?)`,
   );
   const now = new Date().toISOString();
@@ -80,6 +80,7 @@ beforeEach(async () => {
     project.id,
     order,
     order === 0 ? "force-lowfit Scene 1" : `Scene ${order + 1}`,
+    order === 0 ? "documentary river sunrise, wide valley" : "documentary river sunrise, close riverbank",
     JSON.stringify({ primary: `river sunrise ${order}`, alternatives: [], queryVariant: false }),
     order * 4,
     now,

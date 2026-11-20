@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { PROTECTED_PROJECT_ID, STAGE_ORDER } from "@vg/shared";
 import { AgentStageService, STAGE_AGENT_LEASE_MS } from "../src/agents/stageService.js";
+import { saveAgentAssignment } from "../src/agents/assignments.js";
 import { runAsActor } from "../src/auth/requestContext.js";
 import type { TrustedAgent } from "../src/supervision/identity.js";
 import { createPipelineHarness } from "./pipelineFixtures.js";
@@ -9,6 +10,7 @@ import { StageError } from "../src/pipeline/stageExecutor.js";
 import { UsageService } from "../src/services/usageService.js";
 import { ImageProviderError } from "../src/providers/images/http.js";
 import { listOverdueChecks } from "../src/jobs/overdueStore.js";
+import type { StageAgentAdapter } from "../src/agents/stageAdapters/types.js";
 
 const agent = (name = "one"): TrustedAgent => ({ kind: "hermes", name, instance: `hermes/${name}`, trusted: true, canSupervise: false, model: null, environment: "test" });
 const asAgent = <T>(fn: () => T, workspaceId = "A") => runAsActor(actorWith({ role: "owner", kind: "apikey", workspaceId }), fn);
@@ -20,6 +22,7 @@ function setup(validateComplete = vi.fn(async () => {}), projectId?: string, ope
   if (projectId) h.sqlite.prepare("UPDATE projects SET id=? WHERE id=?").run(projectId, h.projectId);
   const id = projectId ?? h.projectId;
   h.sqlite.prepare("UPDATE projects SET workspace_id='A' WHERE id=?").run(id);
+  saveAgentAssignment(h.sqlite, actorWith({ role: "owner", workspaceId: "A" }), { instance: "*", role: "visual_scout" });
   h.repository.ensureStages(id);
   const job = h.repository.createJob({ projectId: id, stage: "VISUAL_SEARCH", maxAttempts: 3, previousState: "PENDING" });
   const service = new AgentStageService({ repository: h.repository, orchestrator: h.orchestrator, now: h.clock, context: () => ({ openScenes: [] }), validateComplete, openReason });
@@ -251,5 +254,84 @@ describe("agent stage fences (TASK-118 lease columns)", () => {
     expect(usage.totals.callsUnknown).not.toBe(true);
     expect(usage.totals.costUnknown).not.toBe(true);
     expect(usage.runs[0].calls[0]).toMatchObject({ provider: "agent:hermes/one", model: "own-model", inputTokens: 100, outputTokens: 50, costUsd: 0.2 });
+  });
+});
+
+describe("stage agent adapter framework (TASK-147a)", () => {
+  it("offers no implicit adapter when legacy context and validator are absent", () => {
+    const h = setup();
+    const service = new AgentStageService({ repository: h.repository, orchestrator: h.orchestrator });
+    expect(service.supportedStages).toEqual([]);
+    expect(service.handoff(h.job.id, "fixture")).toBeNull();
+  });
+
+  it("does not apply legacy visual quota rules to a different stage adapter", () => {
+    const h = setup();
+    const project = h.repository.getProject(h.projectId)!;
+    h.sqlite.prepare("UPDATE projects SET settings=? WHERE id=?")
+      .run(JSON.stringify({ ...project.settings, stageExecution: { RESEARCH: "app_then_agent" } }), h.projectId);
+    const job = h.repository.createJob({ projectId: h.projectId, stage: "RESEARCH", maxAttempts: 1, previousState: "PENDING" });
+    h.sqlite.prepare("UPDATE jobs SET attempt=1 WHERE id=?").run(job.id);
+    const adapter: StageAgentAdapter = { stage: "RESEARCH", role: "research_scout", buildContext: () => ({}), validateComplete: () => {}, handoffErrors: [] };
+    const service = new AgentStageService({ repository: h.repository, orchestrator: h.orchestrator, adapters: [adapter] });
+    expect(service.afterError(h.repository.getJob(job.id)!, new StageError("fixture", "IMAGE_RATE_LIMIT", true))).toBe(false);
+    expect(h.repository.getJob(job.id)!.executor).toBe("app");
+  });
+
+  it("rejects claim when caller agent does not have the required stage role", () => {
+    const h = setup();
+    h.sqlite.prepare("DELETE FROM agent_assignments").run();
+    saveAgentAssignment(h.sqlite, actorWith({ role: "owner", workspaceId: "A" }), { instance: "*", role: "researcher" });
+    h.service.handoff(h.job.id, "quota");
+    expect(asAgent(() => h.service.claim(agent()))).toBeNull();
+  });
+
+  it("excludes channel_manager role from stage claims", () => {
+    const h = setup();
+    h.sqlite.prepare("DELETE FROM agent_assignments").run();
+    saveAgentAssignment(h.sqlite, actorWith({ role: "owner", workspaceId: "A" }), { instance: "*", role: "channel_manager" });
+    h.service.handoff(h.job.id, "quota");
+    expect(asAgent(() => h.service.claim(agent()))).toBeNull();
+  });
+
+  it("does not offer a stage that has no registered adapter", () => {
+    const h = createPipelineHarness(); fixtures.push(h);
+    h.sqlite.prepare("UPDATE projects SET workspace_id='A' WHERE id=?").run(h.projectId);
+    saveAgentAssignment(h.sqlite, actorWith({ role: "owner", workspaceId: "A" }), { instance: "*", role: "scriptwriter" });
+    h.repository.ensureStages(h.projectId);
+    const scriptJob = h.repository.createJob({ projectId: h.projectId, stage: "SCRIPT", maxAttempts: 3, previousState: "PENDING" });
+    const mockAdapter: StageAgentAdapter = {
+      stage: "VISUAL_SEARCH",
+      role: "visual_scout",
+      buildContext: async () => ({ openScenes: [] }),
+      validateComplete: async () => {},
+      openReason: () => null,
+      handoffErrors: ["LLM_ALL_PROVIDERS_EXHAUSTED"],
+    };
+    const service = new AgentStageService({ repository: h.repository, orchestrator: h.orchestrator, now: h.clock, adapters: [mockAdapter] });
+    service.handoff(scriptJob.id, "quota");
+    expect(asAgent(() => service.claim(agent()))).toBeNull();
+  });
+
+  it("respects adapter handoffErrors decision in afterError", () => {
+    const h = createPipelineHarness(); fixtures.push(h);
+    h.sqlite.prepare("UPDATE projects SET workspace_id='A' WHERE id=?").run(h.projectId);
+    h.repository.ensureStages(h.projectId);
+    const job = h.repository.createJob({ projectId: h.projectId, stage: "VISUAL_SEARCH", maxAttempts: 3, previousState: "PENDING" });
+    const mockAdapter: StageAgentAdapter = {
+      stage: "VISUAL_SEARCH",
+      role: "visual_scout",
+      buildContext: async () => ({}),
+      validateComplete: async () => {},
+      openReason: () => null,
+      handoffErrors: ["CUSTOM_HANDOFF_ERROR"],
+    };
+    const service = new AgentStageService({ repository: h.repository, orchestrator: h.orchestrator, now: h.clock, adapters: [mockAdapter] });
+
+    const matchingError = new StageError("Test error", "CUSTOM_HANDOFF_ERROR", true);
+    expect(service.afterError(job, matchingError)).toBe(true);
+
+    const nonMatchingError = new StageError("Test error", "OTHER_ERROR", true);
+    expect(service.afterError(job, nonMatchingError)).toBe(false);
   });
 });

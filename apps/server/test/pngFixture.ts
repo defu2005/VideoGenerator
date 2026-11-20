@@ -10,13 +10,22 @@ function chunk(type: string, data: Buffer): Buffer {
 }
 
 /** Valid RGB PNG. Padded so a 64 px-or-larger image is also at least 2 KB. */
-export function solidPng(width: number, height: number): Buffer {
+export function solidPng(width: number, height: number, pixel?: (x: number, y: number) => number): Buffer {
   const ihdr = Buffer.alloc(13);
   ihdr.writeUInt32BE(width, 0);
   ihdr.writeUInt32BE(height, 4);
   ihdr[8] = 8;
   ihdr[9] = 2;
   const raw = Buffer.alloc((width * 3 + 1) * height);
+  if (pixel) {
+    const stride = width * 3 + 1;
+    for (let y = 0; y < height; y++) {
+      for (let x = 0; x < width; x++) {
+        const offset = y * stride + x * 3 + 1;
+        raw.fill(pixel(x, y), offset, offset + 3);
+      }
+    }
+  }
   const png = Buffer.concat([
     Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]),
     chunk("IHDR", ihdr),

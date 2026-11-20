@@ -2,7 +2,7 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { AUTONOMY_PRESETS, AutonomySettingsSchema, PROTECTED_PROJECT_ID } from "@vg/shared";
+import { AUTONOMY_PRESETS, AutonomySettingsSchema, PROTECTED_PROJECT_ID, nextLadderAction, repairActionsFor } from "@vg/shared";
 
 const hooks = vi.hoisted(() => ({
   script: async (_args: unknown, _ctx: unknown): Promise<unknown> => ({}),
@@ -27,6 +27,7 @@ import { buildDigest } from "../src/operator/autopilot.js";
 import {
   diagnose, listRepairLog, repairStats, reopenShelved, runQualityRepair, repairStep, type RepairEnv, type SceneView,
 } from "../src/operator/qualityRepair.js";
+import { listAgentEvents } from "../src/events/agentBus.js";
 import { hardBlockMessage } from "../src/registry/policy.js";
 import { UsageService } from "../src/services/usageService.js";
 
@@ -130,6 +131,33 @@ describe("diagnose", () => {
     expect(diagnose(sqlite, projectId, "VISUALS", owned)).toEqual([]);
   });
 
+  it("TASK-141 P2: continuity findings map to scene repair actions only for color_jump and motif_missing", () => {
+    const { sqlite } = setup();
+    const finding = (code: "color_jump" | "motif_missing" | "pacing" | "character_mismatch", sceneIds: string[]) =>
+      ({ code, sceneIds, message: "m", suggestedFix: "f" });
+    const withAlt = { repairSceneView: () => [view({ sceneId: sceneA }), view({ sceneId: sceneB, hasPassingAlternative: true })], repairWebAllowed: () => false };
+    const color = diagnose(sqlite, projectId, "VISUALS", withAlt, { continuityFindings: [finding("color_jump", [sceneA, sceneB])] });
+    // Hành động đi tới cảnh sau của cặp (sceneIds[1]) và chỉ có pick_next_candidate.
+    expect(color).toEqual([expect.objectContaining({ kind: "continuity_color", sceneIds: [sceneB], actions: ["pick_next_candidate"] })]);
+
+    const noAlt = { repairSceneView: () => [view({ sceneId: sceneA }), view({ sceneId: sceneB })], repairWebAllowed: () => false };
+    expect(diagnose(sqlite, projectId, "VISUALS", noAlt, { continuityFindings: [finding("color_jump", [sceneA, sceneB])] })).toEqual([]);
+
+    const motif = diagnose(sqlite, projectId, "VISUALS", withAlt, { continuityFindings: [finding("motif_missing", [sceneA])] });
+    expect(motif).toEqual([expect.objectContaining({ kind: "continuity_motif", sceneIds: [sceneA], actions: ["research_scene"] })]);
+
+    const owned = { repairSceneView: () => [view({ sceneId: sceneB, owned: true, hasPassingAlternative: true })], repairWebAllowed: () => false };
+    expect(diagnose(sqlite, projectId, "VISUALS", owned, { continuityFindings: [finding("color_jump", [sceneA, sceneB])] })).toEqual([]);
+
+    expect(diagnose(sqlite, projectId, "VISUALS", withAlt, { continuityFindings: [finding("pacing", [sceneA]), finding("character_mismatch", [sceneA])] })).toEqual([]);
+    expect(diagnose(sqlite, projectId, "VISUALS", withAlt, { continuityFindings: [] })).toEqual([]);
+  });
+
+  it("TASK-141 P2: a continuity colour repair ends when its only action is tried", () => {
+    expect(nextLadderAction("continuity_color", repairActionsFor("continuity_color", { hasPassingCandidate: true }), ["pick_next_candidate"])).toBeNull();
+    expect(nextLadderAction("continuity_motif", repairActionsFor("continuity_motif", { hasPassingCandidate: false }), ["research_scene"])).toBeNull();
+  });
+
   it("maps render failures and freeze times to scenes", () => {
     const { sqlite } = setup();
     const file = join(roots[0]!, "v.mp4");
@@ -167,6 +195,65 @@ describe("script repair", () => {
     expect(log.rows.every((row) => row.chosenBy === "ladder")).toBe(true);
     expect(sqlite.prepare("SELECT COUNT(*) AS n FROM operator_requests").get()).toEqual({ n: 0 });
     expect(sqlite.prepare("SELECT COUNT(*) AS n FROM operator_tool_audit WHERE tool = 'repair_script' AND origin = 'supervisor'").get()).toEqual({ n: 2 });
+  });
+
+  it("TASK-141 P2: a continuity colour fix runs once per window, then the VISUALS gate passes instead of shelving", async () => {
+    const { sqlite, ctx } = setup();
+    const calls: Array<Record<string, unknown>> = [];
+    hooks.scene = async (args) => { calls.push(args as Record<string, unknown>); return {}; };
+    const visuals = {
+      repairSceneView: () => [view({ sceneId: sceneA }), view({ sceneId: sceneB, hasPassingAlternative: true })],
+      repairWebAllowed: () => false,
+      repairContinuityFindings: async () => [{ code: "color_jump" as const, sceneIds: [sceneA, sceneB], message: "m", suggestedFix: "f" }],
+    };
+    const env: RepairEnv = { ctx, visuals };
+    expect((await repairStep(env, projectId, "VISUALS")).status).toBe("repairing");
+    expect(calls).toEqual([expect.objectContaining({ action: "pick_next_candidate", sceneIds: [sceneB] })]);
+    // Vòng sau: finding vẫn còn nhưng loại này đã thử trong cửa sổ, nên cổng qua; không gọi thêm và không shelve.
+    expect(await repairStep(env, projectId, "VISUALS")).toEqual({ status: "passed" });
+    expect(calls).toHaveLength(1);
+    expect(sqlite.prepare("SELECT status FROM projects WHERE id = ?").get(projectId)).not.toEqual({ status: "SHELVED" });
+  });
+
+  it("TASK-141 P2: a missing motif walks its ladder (research_scene, then pick_next_candidate) before the gate passes", async () => {
+    const { ctx } = setup();
+    const calls: Array<Record<string, unknown>> = [];
+    hooks.scene = async (args) => { calls.push(args as Record<string, unknown>); return {}; };
+    const visuals = {
+      repairSceneView: () => [view({ sceneId: sceneA, hasPassingAlternative: true })],
+      repairWebAllowed: () => false,
+      repairContinuityFindings: async () => [{ code: "motif_missing" as const, sceneIds: [sceneA], message: "m", suggestedFix: "f" }],
+    };
+    const env: RepairEnv = { ctx, visuals };
+    expect((await repairStep(env, projectId, "VISUALS")).status).toBe("repairing");
+    expect(calls.map((c) => c.action)).toEqual(["research_scene"]);
+    expect((await repairStep(env, projectId, "VISUALS")).status).toBe("repairing");
+    expect(calls.map((c) => c.action)).toEqual(["research_scene", "pick_next_candidate"]);
+    // Cả hai bậc đã thử trong cửa sổ: cổng qua, không exhausted.
+    expect(await repairStep(env, projectId, "VISUALS")).toEqual({ status: "passed" });
+    expect(calls).toHaveLength(2);
+  });
+
+  it("TASK-141 P2: with two colour jumps, one window attempt runs (the loop guard stops a repeat on the same gate input); the second pair is not retried and the gate passes", async () => {
+    const { ctx } = setup();
+    const calls: Array<Record<string, unknown>> = [];
+    hooks.scene = async (args) => { calls.push(args as Record<string, unknown>); return {}; };
+    const visuals = {
+      repairSceneView: () => [
+        view({ sceneId: sceneA }), view({ sceneId: sceneB, hasPassingAlternative: true }),
+        view({ sceneId: "scene-c" }), view({ sceneId: "scene-d", hasPassingAlternative: true }),
+      ],
+      repairWebAllowed: () => false,
+      repairContinuityFindings: async () => [
+        { code: "color_jump" as const, sceneIds: [sceneA, sceneB], message: "m", suggestedFix: "f" },
+        { code: "color_jump" as const, sceneIds: ["scene-c", "scene-d"], message: "m", suggestedFix: "f" },
+      ],
+    };
+    const env: RepairEnv = { ctx, visuals };
+    expect((await repairStep(env, projectId, "VISUALS")).status).toBe("repairing");
+    expect(calls.map((c) => c.sceneIds)).toEqual([[sceneB]]);
+    expect(await repairStep(env, projectId, "VISUALS")).toEqual({ status: "passed" });
+    expect(calls).toHaveLength(1);
   });
 
   async function exerciseShelveAt(clock: () => Date) {
@@ -214,6 +301,23 @@ describe("script repair", () => {
     expect(result).toMatchObject({ status: "exhausted", handled: "asked" });
     const request = sqlite.prepare("SELECT why_vi AS why FROM operator_requests WHERE dedupe_key = ?").get(`script-gate:${projectId}`) as { why: string };
     expect(request.why).toContain("revise_script");
+  });
+
+  it("TASK-129a: announces repair_exhausted once per exhaustion, not on each repeated call", async () => {
+    const { sqlite, ctx } = setup({ level: "supervised", repair: { maxAttemptsPerProject: 1, maxRendersPerProject: 2, maxUsdPerProject: null, onExhausted: "ask" } });
+    script(sqlite, 5);
+    const startedCount = () => listAgentEvents({ types: ["repair_started"] }).filter((e) => e.projectId === projectId).length;
+    const startedBefore = startedCount();
+    expect((await runQualityRepair({ ctx }, projectId, "SCRIPT")).status).toBe("repairing");
+    expect(startedCount() - startedBefore).toBe(1);
+    const before = listAgentEvents({ types: ["repair_exhausted"] }).length;
+    expect((await runQualityRepair({ ctx }, projectId, "SCRIPT")).status).toBe("exhausted");
+    expect((await runQualityRepair({ ctx }, projectId, "SCRIPT")).status).toBe("exhausted");
+    const events = listAgentEvents({ types: ["repair_exhausted"] });
+    expect(events.length - before).toBe(1);
+    expect(events.at(-1)).toMatchObject({ projectId, stage: "SCRIPT" });
+    // repair_started stays at one for the episode: the exhausted calls start nothing new.
+    expect(startedCount() - startedBefore).toBe(1);
   });
 
   it("falls back to the ladder when the agent picks an action outside the list, and logs it", async () => {

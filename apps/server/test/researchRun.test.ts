@@ -75,6 +75,10 @@ it("respects the page cap and stops before an LLM or fetch budget overrun", asyn
   const stopped = await new ResearchService(opened.sqlite, fixture()).run({ skill: "research-open-source", subject: "fixture" }, { manual: true });
   expect(stopped.status).toBe("budget_limited"); expect(stopped.proposalIds).toHaveLength(0);
 }));
+it("refuses the retired research-provider name after the rename to research-provider-terms", async () => scoped(async () => {
+  await expect(new ResearchService(opened.sqlite, fixture()).run({ skill: "research-provider", subject: "fixture" }, { manual: true })).rejects.toMatchObject({ code: "RESEARCH_SKILL_INVALID", statusCode: 400 });
+  expect(opened.sqlite.prepare("SELECT COUNT(*) n FROM research_runs WHERE skill=?").get("research-provider")).toMatchObject({ n: 0 });
+}));
 it("rejects disallowed output kinds and invalid research metadata", async () => scoped(async () => {
   const run = await new ResearchService(opened.sqlite, fixture()).run({ skill: "research-market", subject: "GB" }, { manual: true });
   expect(run.proposalIds).toHaveLength(0); expect(run.report).toContain("ngoài phạm vi");

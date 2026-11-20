@@ -207,6 +207,25 @@ describe("MUSIC_SEARCH executor", () => {
     expect(music.canApproveMusicReview(project).allowed).toBe(true);
   });
 
+  it("captures a music swap only for a user pick with a source (TASK-148a)", async () => {
+    const project = await createProject();
+    const music = service([new MockMusicProvider()]);
+    await music.search(project);
+    const candidates = music.getProjectMusic(project).candidates;
+    const rows = () => sqlite.prepare("SELECT kind, source, before, after FROM stage_feedback WHERE project_id = ? AND stage = 'MUSIC_REVIEW'").all(project.id) as { kind: string; source: string; before: string | null; after: string | null }[];
+    // First explicit pick: no earlier selection, so no swap.
+    await music.select(project, candidates[0].id, "USER", undefined, "user");
+    expect(rows()).toHaveLength(0);
+    // A real user change with a source: one swap row, attributed to the user.
+    await music.select(project, candidates[1].id, "USER", undefined, "user");
+    expect(rows()).toHaveLength(1);
+    expect(rows()[0]).toMatchObject({ kind: "swap", source: "user" });
+    // Negative cases: no source (internal caller) or an agent pick write no row.
+    await music.select(project, candidates[0].id, "USER");
+    await music.select(project, candidates[1].id, "AGENT", undefined, "agent");
+    expect(rows()).toHaveLength(1);
+  });
+
   it("downloads and approves the top track in AUTO mode", async () => {
     const project = await createProject("AUTO");
     const fetchImpl = fakeFetch();

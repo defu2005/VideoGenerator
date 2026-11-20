@@ -76,8 +76,9 @@ function noWaitLimiter() {
 }
 
 class OfflineImageStore extends ImageStore {
-  override async download(projectId: string, _url: string): Promise<StoredImage> {
-    return this.storeBuffer(projectId, solidPng(320, 320));
+  override async download(projectId: string, url: string): Promise<StoredImage> {
+    // The web and stock fixtures represent different images, including at dHash resolution.
+    return this.storeBuffer(projectId, solidPng(320, 320, (x) => Math.floor((url.includes("web-") ? 319 - x : x) * 255 / 319)));
   }
 }
 
@@ -206,8 +207,9 @@ describe("TASK-126 VISUAL_SEARCH never skips vision", () => {
     ).run(sceneId);
     sqlite.prepare("DELETE FROM visual_selections WHERE scene_id = ?").run(sceneId);
     expect(visuals.getProjectVisuals(project.id).scenes[0]?.selection ?? null).toBeNull();
-    // The LLM response cache would answer an identical vision prompt, so clear it to count real provider calls.
+    // Model and shared caches would answer the same image. This fixture describes an image never checked.
     sqlite.prepare("DELETE FROM llm_cache").run();
+    sqlite.prepare("DELETE FROM image_verdicts").run();
 
     searchCalls = 0;
     const spy = spyVision();
@@ -228,6 +230,34 @@ describe("TASK-126 VISUAL_SEARCH never skips vision", () => {
     const spy = spyVision();
     await visuals.executeStage(stageContext(), llm);
     expect(searchCalls).toBe(0);
+    expect(visionCalls(spy)).toBe(0);
+  });
+
+  it("does not skip a checked scene after narration changes with the same queries and image bytes", async () => {
+    const visuals = service("highfit-context");
+    await visuals.executeStage(stageContext(), llm);
+    const first = visuals.getProjectVisuals(project.id).scenes[0]!;
+    expect(first.selectedCandidate?.visionCheck?.fit).toBeGreaterThanOrEqual(7);
+    const hash = sqlite.prepare("SELECT search_hash AS hash FROM visual_search_state WHERE scene_id=?").get(sceneId);
+    sqlite.prepare("UPDATE scenes SET narration='The same river during a historical flood in 1940.' WHERE id=?").run(sceneId);
+    searchCalls = 0;
+    const spy = spyVision();
+    await visuals.executeStage(stageContext(), llm);
+    expect(sqlite.prepare("SELECT search_hash AS hash FROM visual_search_state WHERE scene_id=?").get(sceneId)).not.toEqual(hash);
+    expect(visionCalls(spy)).toBeGreaterThan(0);
+    expect(spy.mock.calls.filter(([request]) => request.schemaName === "VisionCheck").some(([request]) => JSON.stringify(request.messages).includes("historical flood in 1940"))).toBe(true);
+    expect(visuals.getProjectVisuals(project.id).scenes[0]?.selectedCandidate?.sha256).toBe(first.selectedCandidate?.sha256);
+  });
+
+  it("preserves a user's protected selection when the vision context changes", async () => {
+    const visuals = service("highfit-user-context");
+    await visuals.executeStage(stageContext(), llm);
+    const first = visuals.getProjectVisuals(project.id).scenes[0]!.selection!;
+    sqlite.prepare("UPDATE visual_selections SET selected_by='USER',status='APPROVED' WHERE scene_id=?").run(sceneId);
+    sqlite.prepare("UPDATE scenes SET narration='The owner changed the narration but kept this selected image.' WHERE id=?").run(sceneId);
+    const spy = spyVision();
+    await visuals.executeStage(stageContext(), llm);
+    expect(visuals.getProjectVisuals(project.id).scenes[0]?.selection).toMatchObject({ candidateId: first.candidateId, selectedBy: "USER", status: "APPROVED" });
     expect(visionCalls(spy)).toBe(0);
   });
 
