@@ -37,7 +37,7 @@ Một bước FAILED, app chậm, kẹt hoặc cho kết quả lạ và chưa r�
 2. `search_user_guide` tra mã lỗi trong trang Xử lý sự cố.
 3. Phân loại theo mã (xem bên dưới) rồi chọn skill đúng: model và quota `video-mo-hinh-ai`; hình và giọng `video-hinh-anh-va-giong`; render `video-render-va-thumbnail`; đăng `video-dang-bai`.
 4. Sửa nguyên nhân gốc rồi mới chạy lại một lần. Lỗi lặp lại thì dừng và báo.
-5. Cần công cụ app chưa có: `find_tools` thử tìm trước; không có thì `propose_missing_tool`.
+5. Cần công cụ app chưa có: gọi `find_tools` và `find_skills` trong cùng lượt. Nếu `find_skills` có kỹ năng phù hợp thì làm theo kỹ năng, không đề xuất. Chỉ khi cả hai đều không đủ mới gọi `propose_missing_tool`; thiếu một trong hai bước thì lệnh này bị từ chối.
 6. Cần người dùng làm tay (kết nối, tải file, duyệt): `request_user_action` kèm một câu nói rõ cần làm gì.
 
 ## Khi nào ghi vào PROPOSALS_AND_BUGS.md

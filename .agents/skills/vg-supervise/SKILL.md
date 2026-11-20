@@ -49,12 +49,18 @@ Mỗi lần chạy (qua cron hoặc thủ công), thực hiện đúng 4 bước
    - Gọi tool `hermes_duty_heartbeat({ instance: "<tên-instance>" })`.
    - Nếu kết quả `onDuty: false`, bạn đang ở chế độ dự phòng (standby): dừng lại, không gọi các tool giám sát khác.
 
+1b. **Tín hiệu đánh thức (chỉ khi đang trực):**
+   - Đọc file `vg-sync/wake-signal.json` trong thư mục Hermes (cùng thư mục với `vg-sync/events-cursor.json`). File có dạng `{"events":[{id,type,at,summary}]}`, tối đa 20 mục, là các sự kiện đã đến từ lần chạy trước.
+   - Nếu có mục, xem như có việc cần kiểm tra trong bước 3-4, dù snapshot có thể chưa thấy bất thường. Sau khi đọc xong, ghi lại file thành `{"events":[]}` để không đọc lại.
+   - Đây là tín hiệu theo lịch, không phải đánh thức tức thời: sự kiện đến giữa lúc đọc và lúc ghi lại có thể mất khỏi tín hiệu, nhưng vẫn nằm trong bus và snapshot.
+   - Không đọc `vg-skills/` để tìm tín hiệu; thư mục đó được đồng bộ lại và bị thay thế.
+
 2. **Chụp trạng thái (Snapshot):**
    - Gọi tool `supervision_snapshot({})`.
    - Đọc kết quả gọn nhẹ (< 3 KB): kiểm tra danh sách `anomalies` và `escalations.items`.
 
 3. **Kiểm tra trạng thái yên bình (Calm check):**
-   - **Nếu `anomalies.length === 0` và không có escalation nào mở (`escalations.items.length === 0`):**
+   - **Nếu `anomalies.length === 0`, không có escalation nào mở (`escalations.items.length === 0`), và tín hiệu đánh thức rỗng:**
      - **DỪNG LẠI NGAY LẬP TỨC. KHÔNG viết tin nhắn, không xuất văn bản thừa.**
      - Giữ im lặng tuyệt đối để tiết kiệm token và không làm phiền người dùng.
 

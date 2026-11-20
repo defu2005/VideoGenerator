@@ -49,11 +49,18 @@ risk: safe
 
 | Việc | Skill |
 |---|---|
+| Phong cách viết đã duyệt (`/api/stage-prompt-variants*`): agent chỉ đọc hoặc đề xuất, chỉ người dùng promote (agent nhận 403) | `video-du-an-va-pipeline` |
 | Tự nghiên cứu, tìm hiểu lại tri thức, kiểm nguồn và báo cáo (`tu-cai-tien.md`) | `video-tu-nghien-cuu` |
 | Tạo dự án, chạy pipeline, duyệt gate, retry, sửa chất lượng, SHELVED | `video-du-an-va-pipeline` |
 | Tìm ảnh, kiểm tra ảnh bằng vision, `VISUAL_NEEDS_USER`, giọng đọc | `video-hinh-anh-va-giong` |
 | Agent ngoài nhận, tìm và duyệt ảnh, hoàn tất stage (`agent-nhan-stage.md`) | `video-hinh-anh-va-giong` |
 | Render, timeline, thumbnail, bước render lỗi | `video-render-va-thumbnail` |
+| Bước RESEARCH: nghiên cứu mỏng, lệch chủ đề | `video-stage-nghien-cuu` |
+| Bước SCRIPT: kịch bản nhạt, ghi chú `[lint]`, dàn ý & hook, chấm điểm, `blocking_facts` | `video-stage-kich-ban` |
+| Bước SCENE_PLAN: số cảnh, cảnh quá dài, truy vấn ảnh chung chung | `video-stage-phan-canh` |
+| Bước VOICE và SUBTITLE: lỗi TTS, phụ đề lệch | `video-stage-giong-va-phu-de` |
+| Bước MUSIC_SEARCH và gate MUSIC_REVIEW | `video-stage-nhac` |
+| Bước TIMELINE và gate FINAL_APPROVAL | `video-stage-timeline` |
 | Metadata, đăng bài, hẹn giờ, thứ tự nền tảng | `video-dang-bai` |
 | Bình luận | `video-binh-luan` |
 | Hồ sơ kênh, guideline, style pack | `video-ho-so-kenh` |

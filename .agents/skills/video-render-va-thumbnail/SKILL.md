@@ -17,6 +17,7 @@ triggers:
   - máy worker
   - may worker
 tools:
+  - storage_report
   - get_project
   - get_pipeline
   - list_clips
@@ -32,6 +33,8 @@ risk: confirm
 # Render và thumbnail
 
 ## Khi nào dùng
+
+Ổ đĩa gần đầy hoặc cần biết tệp nào đang chờ dọn, gọi `storage_report` để đọc số liệu trong phạm vi được xem. Hướng dẫn người dùng mở Cài đặt → Lưu trữ để chạy thử hoặc xác nhận dọn. Khóa S3, thời gian giữ và thao tác xóa do người dùng cấu hình tại đó.
 
 Dự án đã qua gate giọng/hình và cần render; render lỗi; muốn xem hoặc sửa timeline; tạo Shorts.
 

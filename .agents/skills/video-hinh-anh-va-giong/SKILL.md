@@ -22,6 +22,8 @@ tools:
   - crop_scene_images
   - dedupe_scene_visuals
   - repair_scene
+  - get_continuity_plan
+  - check_continuity
   - get_project
   - get_pipeline
   - stage_claim_next
@@ -46,8 +48,9 @@ Bước hình ảnh hoặc giọng đọc chưa xong, ảnh sai chủ đề, tr�
 1. `get_pipeline` để biết bước nào lỗi; `get_project` để xem các cảnh.
 2. Tìm thêm ảnh cho cảnh thiếu: `research_scene_visuals`. Ảnh chỉ được giữ khi vision xác nhận liên quan đến lời đọc của cảnh.
 3. Ảnh trùng: `dedupe_scene_visuals`. Ảnh sai khung: `crop_scene_images`.
-4. Cảnh vẫn không đạt: `repair_scene`. Nếu stage đã giao cho agent ngoài, dùng quy trình bên dưới. Nếu chưa giao mà app gắn `VISUAL_NEEDS_USER`, người dùng chọn hoặc tải ảnh trong giao diện.
-5. Giọng đọc lỗi: kiểm tra nhà cung cấp TTS đã chọn (xem `video-mo-hinh-ai` cho chế độ ngân sách; nhà cung cấp trả phí chỉ dùng khi được ghim).
+4. Kiểm tra tính liên tục hình ảnh và nhịp: gọi `check_continuity` để phát hiện lệch màu giữa hai cảnh liền kề (> 35 Lab), lệch nhịp quá 40%, hoặc thiếu tag mô-típ. Tìm lại cảnh bị lệch bằng gợi ý sửa. Khi người vận hành duyệt cổng hình ảnh (VISUAL_REVIEW) có quyền tự sửa, lệch màu và thiếu mô-típ cũng được sửa: lệch màu chỉ chọn ứng viên khác; thiếu mô-típ tìm lại cảnh rồi mới chọn ứng viên. Mỗi bậc chỉ thử một lần trong một cửa sổ. Hết bậc thì lỗi liền mạch không làm cổng bị giữ lại, và cặp lệch màu thứ hai trong cùng cửa sổ không được thử.
+5. Cảnh vẫn không đạt: `repair_scene`. Nếu stage đã giao cho agent ngoài, dùng quy trình bên dưới. Nếu chưa giao mà app gắn `VISUAL_NEEDS_USER`, người dùng chọn hoặc tải ảnh trong giao diện.
+6. Giọng đọc lỗi: kiểm tra nhà cung cấp TTS đã chọn (xem `video-mo-hinh-ai` cho chế độ ngân sách; nhà cung cấp trả phí chỉ dùng khi được ghim).
 
 ## Quy tắc ảnh
 
@@ -63,7 +66,7 @@ Chỉ khóa máy được người dùng gắn loại agent và tên instance c�
 2. Giữ `jobId` và `leaseId`; gọi `stage_heartbeat` khoảng mỗi phút, kèm tiến độ và ghi chú thật. Tìm ảnh bằng công cụ riêng. Không dùng khóa provider của app.
 3. `visual_submit_candidates`: gửi URL ảnh và trang nguồn, tiêu đề, lý do phù hợp và ghi chú giấy phép có căn cứ. App tự tải an toàn và bỏ ảnh trùng; không gửi multipart hoặc đường dẫn máy agent. Chưa xác minh giấy phép thì giữ nguyên trạng thái đó.
 4. `visual_get_candidate_image` để nhìn đúng tệp app đã lưu. Kiểm tra chủ thể, chất lượng, khung ảnh và watermark; `visual_record_verdict` ghi pass/reject cùng lý do và model thực sự đã dùng. Không duyệt ảnh chưa nhìn, sai chủ thể hoặc có watermark.
-5. `visual_select` cho ảnh đã pass. App kiểm tra SHA, giấy phép, nguồn và ảnh trùng; một kết quả pass không bỏ qua các cổng khác. Không đổi `copyrightMode` để vượt lỗi.
+5. `visual_select` cho ảnh đã pass. (Ngữ cảnh của scout có thể có `queryHints`: các truy vấn mà chính các lượt pass của agent đã đánh dấu đạt cho cùng chủ đề trong cùng kênh (profile) của dự án. Đây chỉ là gợi ý; vẫn phải kiểm chủ thể và chất lượng từng ảnh.) App kiểm tra SHA, giấy phép, nguồn và ảnh trùng; một kết quả pass không bỏ qua các cổng khác. Không đổi `copyrightMode` để vượt lỗi.
 6. Khi mọi cảnh còn mở đã xong, `stage_complete` kèm tóm tắt. Có thể báo `usage.calls` với model, token và chi phí thực biết; không bịa số khi chưa biết. App tự gắn provider của instance.
 7. Không làm được thì `stage_release` với `reason: cannot_do` để trả về app; lý do khác trả về hàng đợi agent. `LEASE_LOST` hoặc người dùng lấy lại stage: dừng mọi lần ghi bằng lease cũ. Không tự nhận lại bằng danh tính khác.
 

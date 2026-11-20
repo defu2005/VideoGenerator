@@ -46,6 +46,10 @@ Làm video mới, xem tiến độ, duyệt các gate (kịch bản, hình ảnh
 6. Kịch bản kém: `repair_script`. Cảnh kém: `repair_scene`. Cả hai chỉ sửa phần bị đánh dấu.
 7. Dự án SHELVED (sửa chất lượng đã hết số lần cho phép): không lặp vô hạn. Báo người dùng lý do và để họ quyết định sửa tay, đổi model hoặc bỏ.
 
+## Ghi chú `[lint]` của kịch bản
+
+Sau bước SCRIPT, `review_notes` có thể chứa dòng bắt đầu bằng `[lint] MÃ (phần): nội dung ghi chú`. Đó là bộ kiểm tra bằng mã (không gọi AI): `HOOK_REPEATED`, `DATE_LIST`, `CLICHE`, `TEMPLATE_OUTRO`, `FLAT_RHYTHM`, `NO_QUESTION_PAYOFF`, `LONG_SENTENCE`. Là lỗi còn sót sau vòng đọc lại cuối, tối đa 3 dòng. Báo cho người dùng; đừng coi là lỗi bước. Kịch bản cũ không tự đổi: chạy lại SCRIPT (`run_pipeline`, việc `confirm`) để áp dụng quy tắc kể chuyện mới, và nhớ rằng chạy lại ghi đè lời thoại chưa khoá.
+
 ## Kiểm tra kết quả
 
 - `get_pipeline` cho thấy bước chuyển sang trạng thái mới; không còn `FAILED`.
