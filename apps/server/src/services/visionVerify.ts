@@ -45,6 +45,9 @@ export type VisionSceneInput = {
   subjectKey?: string;
   queries: string[];
   candidates: VisionCandidateInput[];
+  /** TASK-146: the beat's visual intent and purpose, when its script section has them. */
+  visualIntent?: string;
+  beatPurpose?: string;
 };
 
 export type VisionSceneResult = {
@@ -121,7 +124,8 @@ export async function verifySceneVision(input: {
   const workspace = visualWorkspace(input.sqlite, input.project.id);
   const subject = input.scene.subjectKey || input.scene.visualDescription || input.scene.queries[0] || "";
   const verdictContext = imageVerdictContext({ narration: input.scene.narration, visualDescription: input.scene.visualDescription,
-    aspectRatio: input.aspectRatio, visionThreshold: input.budget.visionThreshold });
+    aspectRatio: input.aspectRatio, visionThreshold: input.budget.visionThreshold,
+    visualIntent: input.scene.visualIntent, beatPurpose: input.scene.beatPurpose });
   const fingerprints = new Map<string, { phash: string; sha256: string }>();
 
   const remember = (candidate: VisionCandidateInput, check: VisionCheck) => {
@@ -169,6 +173,8 @@ export async function verifySceneVision(input: {
       narration: input.scene.narration,
       visualDescription: input.scene.visualDescription,
       aspectRatio: input.aspectRatio,
+      visualIntent: input.scene.visualIntent,
+      beatPurpose: input.scene.beatPurpose,
       images: candidates.map((candidate) => ({ label: candidate.label })),
     });
     return generateRoutedStructured({

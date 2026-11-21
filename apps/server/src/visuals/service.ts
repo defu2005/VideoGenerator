@@ -47,6 +47,7 @@ import { buildAltQueryPrompt, AltQueryResponseSchema } from "../stages/visuals/a
 import { buildRerankPrompt, RerankResponseSchema } from "../stages/visuals/rerankPrompt.js";
 import { buildVisionCheckPrompt } from "../stages/visuals/visionPrompts.js";
 import { requireVisionRoute, runConsistencyCheck, verifySceneVision } from "../services/visionVerify.js";
+import { sceneVisualBeat, sectionVisualBeats } from "../timeline/sceneBeats.js";
 import type { VisionCandidateInput } from "../services/visionVerify.js";
 import { planSceneReuse, VISION_BATCH_SIZE } from "../services/visualReuse.js";
 import type { AutoReportService } from "../services/autoReportService.js";
@@ -2127,6 +2128,8 @@ export class VisualService {
         visionChecksByCandidateKey.set(`${item.scene.id}:${key}`, check);
       }
     }
+    // TASK-146 commit B: beat intent and purpose by section id, resolved once per run for both vision passes below.
+    const visualBeats = sectionVisualBeats(this.sqlite, project.id);
     if (budgetFeatures.visionCheck) {
       requireVisionRoute(llmProviders, project, this.sqlite);
       context.reportProgress(70, "Vision-checking candidate images");
@@ -2155,6 +2158,7 @@ export class VisualService {
             candidate,
           }];
         }))).flat();
+        const beat = sceneVisualBeat(visualBeats, entry.item.scene.sectionId);
         const verified = await verifySceneVision({
           project,
           scene: {
@@ -2163,6 +2167,8 @@ export class VisualService {
             visualDescription: entry.item.scene.visualDescription || entry.item.scene.visualNotes,
             subjectKey: entry.item.scene.visualDescription || entry.item.scene.visualQueries.primary,
             queries: [entry.item.scene.visualQueries.primary, ...entry.item.scene.visualQueries.alternatives],
+            visualIntent: beat?.visualIntent,
+            beatPurpose: beat?.beatPurpose,
             candidates: labeled.map(({ id, label, localPath, relevanceScore, textRerank }) => ({
               id, label, localPath, relevanceScore, textRerank,
             })),
@@ -2330,6 +2336,7 @@ export class VisualService {
             visionUnavailableScenes.add(sceneId);
             continue;
           }
+          const beat = sceneVisualBeat(visualBeats, entry.item.scene.sectionId);
           const verified = await verifySceneVision({
             project,
             scene: {
@@ -2338,6 +2345,8 @@ export class VisualService {
               visualDescription: entry.item.scene.visualDescription || entry.item.scene.visualNotes,
               subjectKey: entry.item.scene.visualDescription || entry.item.scene.visualQueries.primary,
               queries: [entry.item.scene.visualQueries.primary, ...entry.item.scene.visualQueries.alternatives],
+              visualIntent: beat?.visualIntent,
+              beatPurpose: beat?.beatPurpose,
               candidates: labeled,
             },
             budget: { ...budgetFeatures, visionRetryRounds: 0 },
@@ -3316,10 +3325,13 @@ export class VisualService {
     const localPath = await this.visionCandidateFile(projectId, candidate, signal);
     const scene = this.loadScenes(projectId).find((item) => item.id === sceneId)!;
     const route = llmProviders.resolveTask("visionCheck", project, getAppLlmSettings(this.sqlite));
+    const beat = sceneVisualBeat(sectionVisualBeats(this.sqlite, projectId), scene.sectionId);
     const prompt = buildVisionCheckPrompt({
       narration: scene.narration,
       visualDescription: scene.visualDescription || scene.visualNotes,
       aspectRatio: project.settings.aspectRatio,
+      visualIntent: beat?.visualIntent,
+      beatPurpose: beat?.beatPurpose,
       images: [{ label: candidate.id }],
     });
     try {

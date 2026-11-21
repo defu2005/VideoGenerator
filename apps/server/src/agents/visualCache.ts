@@ -25,10 +25,14 @@ export const VISUAL_VERDICT_POLICY_VERSION = "vision-fit-v2";
 export function imageVerdictContext(input: {
   narration: string; visualDescription: string; aspectRatio: string; visionThreshold: number;
   policyVersion?: string;
+  /** TASK-146: beat fields, passed only where a verdict is read or written (never into the search hash). */
+  visualIntent?: string; beatPurpose?: string;
 }) {
   const prompt = buildVisionCheckPrompt({
     narration: input.narration.normalize("NFKC").trim().replace(/\s+/g, " "),
     visualDescription: normalize(input.visualDescription), aspectRatio: input.aspectRatio, images: [],
+    ...(input.visualIntent ? { visualIntent: normalize(input.visualIntent) } : {}),
+    ...(input.beatPurpose ? { beatPurpose: input.beatPurpose } : {}),
   });
   return createHash("sha256").update(JSON.stringify({ policy: input.policyVersion ?? VISUAL_VERDICT_POLICY_VERSION,
     visionThreshold: input.visionThreshold, schemaVersion: "2", ...prompt })).digest("hex");

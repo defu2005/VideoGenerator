@@ -15,7 +15,14 @@ export function buildVisionCheckPrompt(input: {
   visualDescription: string;
   aspectRatio: string;
   images: { label: string }[];
+  /** TASK-146: the beat's visual intent and purpose. Added to the prompt only when present. */
+  visualIntent?: string;
+  beatPurpose?: string;
 }): { system: string; prompt: string } {
+  const beat = Boolean(input.visualIntent || input.beatPurpose);
+  const instruction = beat
+    ? "For each image label, return fit (0-10), depicts, issues[], cropOk. The image must show visualIntent for this beat (beatPurpose says what the shot is for). An image that does not show visualIntent is wrong_subject."
+    : "For each image label, return fit (0-10), depicts, issues[], cropOk.";
   return {
     system: [
       "You are a vision model checking whether candidate images fit a video scene.",
@@ -30,8 +37,10 @@ export function buildVisionCheckPrompt(input: {
       narration: input.narration,
       visualDescription: input.visualDescription,
       aspectRatio: input.aspectRatio,
+      ...(input.visualIntent ? { visualIntent: input.visualIntent } : {}),
+      ...(input.beatPurpose ? { beatPurpose: input.beatPurpose } : {}),
       images: input.images,
-      instruction: "For each image label, return fit (0-10), depicts, issues[], cropOk.",
+      instruction,
     }, null, 2),
   };
 }

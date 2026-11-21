@@ -26,6 +26,7 @@ import { readContinuity } from "../continuity/store.js";
 import { fetchResponseSafely, validatePublicHttpUrl, unknownWebLicense, type SafeFetchDependencies } from "../providers/images/webCrawl.js";
 import type { AgentStageService } from "./stageService.js";
 import { imageVerdictContext, readImageVerdict, visualSubjectKey, visualWorkspace, writeImageVerdict, writeVisualQuery } from "./visualCache.js";
+import { sceneVisualBeat, sectionVisualBeats } from "../timeline/sceneBeats.js";
 import { queryHints, recordQueryOutcome } from "../learning/queryPatterns.js";
 
 export const AgentVisualItemSchema = z.object({
@@ -78,6 +79,10 @@ export class AgentVisualToolkit {
     const linked = project.profileId ? new StyleService(this.repo.sqlite).linkedPack(project.profileId) : null;
     // TASK-148d: queries that the agent's own pass verdicts marked accepted for this topic in this workspace (not the owner's choices). Exact normalised topic match only; the key is omitted when empty.
     const hints = queryHints(this.repo.sqlite, visualWorkspace(this.repo.sqlite, job.projectId), project.topic, project.profileId ?? "");
+    // TASK-146 commit B: beat intent per open scene. agentOpenScenes has no section id, so read it from scenes.
+    const beats = sectionVisualBeats(this.repo.sqlite, job.projectId);
+    const sectionOf = new Map((this.repo.sqlite.prepare("SELECT id, section_id FROM scenes WHERE project_id=?").all(job.projectId) as Array<{ id: string; section_id: string | null }>)
+      .map((row) => [row.id, row.section_id]));
     return {
       ...(hints.length ? { queryHints: hints } : {}),
       projectId: job.projectId, stage: job.stage, aspectRatio: project.settings.aspectRatio,
@@ -94,7 +99,10 @@ export class AgentVisualToolkit {
         const checkpoint = this.repo.sqlite.prepare("SELECT queries FROM visual_search_checkpoints WHERE project_id=? AND scene_id=?").get(job.projectId, scene.sceneId) as { queries: string } | undefined;
         let initialQueries: string[] = [];
         try { const parsed: unknown = JSON.parse(checkpoint?.queries ?? "[]"); if (Array.isArray(parsed)) initialQueries = parsed.filter((value): value is string => typeof value === "string"); } catch { /* Older damaged checkpoints do not hide the current scene. */ }
+        const beat = sceneVisualBeat(beats, sectionOf.get(scene.sceneId) ?? null);
         return { sceneId: scene.sceneId, order: scene.order, narration: scene.narration,
+          ...(beat?.visualIntent ? { visualIntent: beat.visualIntent } : {}),
+          ...(beat?.beatPurpose ? { beatPurpose: beat.beatPurpose } : {}),
           subject: scene.visualDescription || scene.visualQueries.primary,
           subjectKey: visualSubjectKey(scene.visualDescription || scene.visualQueries.primary), queries: scene.visualQueries,
           reason: scene.attentionReason ?? (scene.selectedCandidate ? "Ảnh đã chọn chưa qua cổng chất lượng" : "Chưa có ảnh"),
@@ -177,10 +185,12 @@ export class AgentVisualToolkit {
       const saved = this.visuals.agentRecordVerdict(candidateId, check);
       if (candidate.phash) {
         const project = this.repo.getProject(job.projectId)!;
-        const notes = this.repo.sqlite.prepare("SELECT visual_notes FROM scenes WHERE id=? AND project_id=?").get(candidate.sceneId, job.projectId) as { visual_notes: string };
+        const notes = this.repo.sqlite.prepare("SELECT visual_notes, section_id FROM scenes WHERE id=? AND project_id=?").get(candidate.sceneId, job.projectId) as { visual_notes: string; section_id: string | null };
+        const beat = sceneVisualBeat(sectionVisualBeats(this.repo.sqlite, job.projectId), notes.section_id);
         const features = visualFeaturesFor(resolveBudget(project), project.settings.visuals?.quality ?? visualQuality(this.repo.sqlite, project.profileId));
         const context = imageVerdictContext({ narration: scene.narration, visualDescription: scene.visualDescription || notes.visual_notes,
-          aspectRatio: project.settings.aspectRatio, visionThreshold: features.visionThreshold });
+          aspectRatio: project.settings.aspectRatio, visionThreshold: features.visionThreshold,
+          visualIntent: beat?.visualIntent, beatPurpose: beat?.beatPurpose });
         writeImageVerdict(this.repo.sqlite, visualWorkspace(this.repo.sqlite, job.projectId), candidate.phash,
           scene.visualDescription || scene.visualQueries.primary, check, new Date(), context);
         // TASK-148d: learn which query shapes this topic accepts (code only).

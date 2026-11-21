@@ -233,6 +233,33 @@ describe("TASK-126 VISUAL_SEARCH never skips vision", () => {
     expect(visionCalls(spy)).toBe(0);
   });
 
+  it("a beat scene reruns with zero search and zero vision calls and an unchanged search hash (TASK-146 commit B)", async () => {
+    // The beat's intent reaches the vision check and the verdict key, but never the search hash, so a stored beat scene is still reused.
+    sqlite.prepare("DELETE FROM scripts WHERE project_id = ?").run(project.id);
+    sqlite.prepare(
+      "INSERT INTO scripts (project_id, data, origin, edited, input_hash, version, updated_at) VALUES (?, ?, 'fixture', 0, 'fixture', 1, ?)",
+    ).run(project.id, JSON.stringify({
+      title: "Visual reuse fixture", hook: "", outro: "",
+      sections: [{ id: "sec-beat", heading: "Beat", narration: "A river at sunrise.", beatPurpose: "reveal", visualIntent: "the finished machine on a workbench" }],
+    }), new Date().toISOString());
+    sqlite.prepare("UPDATE scenes SET section_id = 'sec-beat' WHERE id = ?").run(sceneId);
+    const visuals = service("highfit-beat");
+    const spy = spyVision();
+    await visuals.executeStage(stageContext(), llm);
+    expect(visionCalls(spy)).toBeGreaterThan(0);
+    expect(JSON.stringify(spy.mock.calls.filter(([request]) => request.schemaName === "VisionCheck").map(([request]) => request.messages)))
+      .toContain("the finished machine on a workbench");
+    expect(visuals.getProjectVisuals(project.id).scenes[0]?.selectedCandidate?.visionCheck?.fit).toBeGreaterThanOrEqual(7);
+    const hash = sqlite.prepare("SELECT search_hash AS hash FROM visual_search_state WHERE scene_id=?").get(sceneId);
+    const visionBefore = visionCalls(spy);
+
+    searchCalls = 0;
+    await visuals.executeStage(stageContext(), llm);
+    expect(sqlite.prepare("SELECT search_hash AS hash FROM visual_search_state WHERE scene_id=?").get(sceneId)).toEqual(hash);
+    expect(searchCalls).toBe(0);
+    expect(visionCalls(spy)).toBe(visionBefore);
+  });
+
   it("does not skip a checked scene after narration changes with the same queries and image bytes", async () => {
     const visuals = service("highfit-context");
     await visuals.executeStage(stageContext(), llm);
