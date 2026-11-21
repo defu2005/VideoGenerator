@@ -50,7 +50,7 @@ Sửa bản sao bằng `sed`, chạy test, khôi phục bằng `cp` từ bản s
 
 - **Phía agent:** chỉ đọc mã (500 đến `/fail`, và không biết node có render lại hay chỉ upload lại). Không đo.
 - **Fixture và thời gian giả:** stub render, mock `remoteBundle`, advance 25 giờ và advance theo backoff.
-- **Không đo hết attempt (`FAILED`):** chỉ đọc mã. Nếu ENOENT xảy ra khi `attempt == maxAttempts` (sau các lần retry khác không liên quan), `/fail` hoặc sweep đưa B sang `FAILED` terminal (`orchestrator.ts:799`, `:828`). Đây là đọc mã, chưa đo; TASK-164 sẽ đo kịch bản này.
+- **Không đo hết attempt (`FAILED`):** chỉ đọc mã. Nếu ENOENT xảy ra khi `attempt == maxAttempts` (sau các lần retry khác không liên quan), `/fail` hoặc sweep đưa B sang `FAILED` terminal (`orchestrator.ts:799`, `:828`). Đây là đọc mã ở TASK-163. TASK-164 (`12f75d9`) đo đường `/fail` ở attempt cuối, không đo đường sweep.
 - **Chưa đo GC chạy sau khi A hoàn tất**, và GC có làm mới hàng `artifacts` (qua `remember` upsert khi `references.ts:172` đăng ký lại file) trong lúc B đang RUNNING hay không. Có thể đưa job thứ ba vào chuỗi. Chưa đo.
 - **Hàng lease cũ** còn tới khi job kết thúc và cleanup sau 24 giờ (nhánh d, không đụng file). Đọc mã, chưa đo.
 - **`/fail` đến muộn sau khi lease đã hết hạn:** `holding` live sẽ từ chối. Đọc mã, chưa đo.
@@ -58,4 +58,4 @@ Sửa bản sao bằng `sed`, chạy test, khôi phục bằng `cp` từ bản s
 
 ## Kết luận ngắn
 
-Với fixture, ENOENT của B không làm job treo. B được re-queue một lần (`attempt` 2), qua `/fail` hoặc qua hết hạn lease. Re-lease upload lại bytes và hoàn tất. Chi phí là một attempt, khi còn attempt trong `maxAttempts` = 3. Nếu hết attempt, B thành `FAILED` (đọc mã, chưa đo; xem TASK-164). Hàng `artifacts` cũ vẫn trỏ tới file đã xóa. Không gây lỗi trong đường này, vì `locate` trả `undefined` và job upload lại. Hệ quả của việc GC làm mới hàng đó chưa được đo.
+Với fixture, ENOENT của B không làm job treo. B được re-queue một lần (`attempt` 2), qua `/fail` hoặc qua hết hạn lease. Re-lease upload lại bytes và hoàn tất. Chi phí là một attempt, khi còn attempt trong `maxAttempts` = 3. Nếu hết attempt, B thành `FAILED`: TASK-164 (`12f75d9`) đo đường `/fail`, không đo đường sweep. Hàng `artifacts` cũ vẫn trỏ tới file đã xóa. Không gây lỗi trong đường này, vì `locate` trả `undefined` và job upload lại. Hệ quả của việc GC làm mới hàng đó chưa được đo.

@@ -23,7 +23,9 @@ Không `UPDATE jobs`, không hàng tự chèn. Fixture và thời gian giả nh�
 ## Kết quả
 
 - `leaseRetryAfterMissingLink.test.ts`: 3/3 xanh ở lần chạy đầu (2 test của TASK-163 và test mới).
-- Không sửa assertion nào sau lần chạy đầu.
+- Sau lần chạy đầu có hai thay đổi, cả hai trước commit: (a) xóa biến `realA` không dùng (`realpathSync.native(fileA)`), không phải khẳng định; (b) thêm `existsSync(s.pendingJson(jobB.id)) === true` ngay sau ENOENT, trước `/fail` cuối. Chạy lại: 3/3 xanh.
+- `npx tsc --noEmit` (apps/server): exit 0, chạy sau hai thay đổi trên.
+- Hồi quy 8 file (7 file của TASK-162 cộng test mới): 49/49 xanh.
 
 ## Mutant
 
@@ -36,6 +38,7 @@ Cách làm: sao lưu `orchestrator.ts` bằng `cp`, sửa một dòng bằng `se
 ## Không kiểm / giới hạn
 
 - **Phía agent:** chỉ đọc mã (500 đến `/fail`). Không đo node có render lại hay chỉ upload lại.
+- **Chỉ đo đường `/fail` ở attempt cuối.** Đường `NODE_LOST` (sweep) ở attempt 3 chỉ đọc mã (`nodeService.ts` sweep, `retryable: true`, đi qua cùng `failJob`), chưa đo.
 - **Fixture và thời gian giả:** stub render, mock `remoteBundle`, advance 25 giờ, advance theo backoff.
 - **Hậu quả của `FAILED` ở tầng project/stage:** `failJob` sau dòng `:828` gọi `emitAgentEvent` và xử lý job phụ (CLIP, publish). Chỉ đọc mã, chưa đo trạng thái project sau FAILED.
 - **Retry thủ công sau FAILED** và việc đẩy lại job: không đo.

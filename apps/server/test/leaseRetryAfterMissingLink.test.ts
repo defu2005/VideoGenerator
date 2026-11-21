@@ -210,7 +210,6 @@ describe("TASK-163: job B after its complete fails with ENOENT (TASK-162 chain),
     const s = setup();
     try {
       const { fileA } = await completeA(s);
-      const realA = realpathSync.native(fileA);
       const rowB = s.joinNode("may-2");
       const jobB = s.queueRender();
       const backoff = (attempt: number) => s.harness.config.JOB_RETRY_BASE_MS * 2 ** (attempt - 1);
@@ -243,6 +242,7 @@ describe("TASK-163: job B after its complete fails with ENOENT (TASK-162 chain),
       s.renew(rowB, jobB.id, lease3.leaseId);
       const error = await s.leases.complete(rowB, jobB.id, s.completeBody(lease3.leaseId)).then(() => undefined, (e: unknown) => e);
       expect(error).toMatchObject({ code: "ENOENT" });
+      expect(existsSync(s.pendingJson(jobB.id))).toBe(true);
 
       // agent.ts:807-811 posts the retryable /fail on the last attempt: it must be terminal.
       failRetryable(lease3.leaseId);
