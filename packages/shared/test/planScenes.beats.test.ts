@@ -176,3 +176,52 @@ describe("TASK-146 slice 2: visualIntent leads the search queries", () => {
     ]);
   });
 });
+
+// TASK-146 slice 2 commit C red tests: an evidence section prefers the recipe's chart and text kinds
+// over photo and illustration. Guards (no chart or text kind, or other purposes) must stay identical to today.
+const evidenceScript = (purpose: string, intent?: string) => ScriptSchema.parse({
+  title: "Evidence",
+  hook: "Hook opens the story.",
+  sections: [{ ...sectionBase("e1", THREE_SCENES), beatPurpose: purpose, ...(intent ? { visualIntent: intent } : {}) }],
+  outro: "Closing words here now.",
+  music: { mood: "", energy: "medium", keywords: [] },
+});
+
+describe("TASK-146 slice 2 commit C: evidence beats prefer chart and text kinds", () => {
+  it("gives every evidence scene the chart kind and never the photo kind when the mix has chart", () => {
+    const body = planScenes(evidenceScript("evidence"), { ...settings, visualMix: ["photo", "chart"] })
+      .filter((scene) => scene.sectionId === "e1");
+    for (const scene of body) {
+      expect(scene.visualQueries.primary).toContain("chart");
+      expect(scene.visualQueries.primary).not.toContain("photograph");
+    }
+  });
+
+  it("gives an evidence intent scene the chart kind at position 0", () => {
+    const body = planScenes(evidenceScript("evidence", INTENT), { ...settings, visualMix: ["photo", "chart"] })
+      .filter((scene) => scene.sectionId === "e1");
+    expect(body[0]!.visualQueries.primary).toBe(`${INTENT} chart`);
+    for (const scene of body) expect(scene.visualQueries.alternatives.length).toBeLessThanOrEqual(3);
+  });
+
+  it("keeps an evidence section identical to a setup twin when the mix has no chart or text kind", () => {
+    const mix = { ...settings, visualMix: ["photo", "illustration"] as ("photo" | "illustration")[] };
+    const queries = (purpose: string) => planScenes(evidenceScript(purpose), mix)
+      .filter((scene) => scene.sectionId === "e1")
+      .map((scene) => [scene.visualQueries, scene.queryVariant]);
+    expect(queries("evidence")).toEqual(queries("setup"));
+  });
+
+  it("keeps an evidence section identical to a setup twin when the recipe has no mix", () => {
+    const queries = (purpose: string) => planScenes(evidenceScript(purpose), settings)
+      .filter((scene) => scene.sectionId === "e1")
+      .map((scene) => scene.visualQueries);
+    expect(queries("evidence")).toEqual(queries("setup"));
+  });
+
+  it("keeps the hook identical to a setup twin in the evidence fixture", () => {
+    const mix = { ...settings, visualMix: ["photo", "chart"] };
+    const hook = (purpose: string) => planScenes(evidenceScript(purpose), mix).find((scene) => scene.kind === "hook")?.visualQueries;
+    expect(hook("evidence")).toEqual(hook("setup"));
+  });
+});

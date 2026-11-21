@@ -293,6 +293,14 @@ export function planScenes(script: Script, settings: Settings): SceneDraft[] {
   // A section with a visualIntent leads each of its scenes with the intent and repeats it with
   // modifiers. It rotates on its own key, so the hook and the first section scene do not share a position.
   const intentPositions = new Map<string, number>();
+  // TASK-146 commit C: a section's own evidence scenes keep only the recipe's chart and text kinds, in recipe order,
+  // when the mix has any. Hook and outro borrow a section's queries (ownSection false) and keep the full mix.
+  const mixFor = (section: { beatPurpose?: string | undefined }, ownSection: boolean) => {
+    const mix = settings.visualMix ?? [];
+    if (!ownSection || section.beatPurpose !== "evidence") return mix;
+    const evidenceKinds = mix.filter((kind) => kind === "chart" || kind === "text");
+    return evidenceKinds.length > 0 ? evidenceKinds : mix;
+  };
   const assignIntentQueries = (section: ScriptSection, intent: string): QueryAssignment => {
     let index = intentPositions.get(section.id) ?? 0;
     let primary: string;
@@ -308,7 +316,7 @@ export function planScenes(script: Script, settings: Settings): SceneDraft[] {
       index += 1;
     } while (primary === previousPrimary);
     intentPositions.set(section.id, index);
-    const mix = settings.visualMix ?? [];
+    const mix = mixFor(section, true);
     if (mix.length > 0) {
       const kind = mix[(index - 1) % mix.length];
       const word = kind === "photo" ? "photograph" : kind === "text" ? "text graphic" : kind;
@@ -347,7 +355,7 @@ export function planScenes(script: Script, settings: Settings): SceneDraft[] {
       position += 1;
     } while (primary === previousPrimary);
     queryPositions.set(positionKey, position);
-    const mix = settings.visualMix ?? [];
+    const mix = mixFor(section, useIntent);
     if (mix.length > 0) {
       const kind = mix[(position - 1) % mix.length];
       const word = kind === "photo" ? "photograph" : kind === "text" ? "text graphic" : kind;
