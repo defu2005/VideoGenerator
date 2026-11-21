@@ -16,6 +16,11 @@ const FREQUENCY: Record<EditPresetId, number> = {
   story: 15,
 };
 
+/** Minimum seconds between two punch_in moves: the same spacing as graphics for this preset. */
+export function strongMoveEverySec(preset: EditPresetId): number {
+  return FREQUENCY[preset];
+}
+
 export type MotionScene = {
   sceneId: string;
   startSec: number;

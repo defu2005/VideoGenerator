@@ -1,4 +1,6 @@
 import { z } from "zod";
+import { applyBeatMotion, type BeatMark } from "../motion/beatMotion.js";
+import { strongMoveEverySec } from "../motion/plan.js";
 
 /** Curated ffmpeg xfade names, plus `cut` (no transition). */
 export const TRANSITION_TYPES = [
@@ -262,7 +264,13 @@ export function fallbackEmphasis(input: {
   return picked;
 }
 
-export type EmphasisScene = { sceneId: string; startSec: number; durationSec: number; incomingTransition?: TransitionType };
+export type EmphasisScene = {
+  sceneId: string;
+  startSec: number;
+  durationSec: number;
+  incomingTransition?: TransitionType;
+  beat?: BeatMark;
+};
 
 export function clampEmphasis(
   points: EditPlan["emphasis"],
@@ -314,11 +322,16 @@ export function validateEditPlan(
       durationSec: found.data.type === "cut" ? 0 : clampTransitionDuration(found.data.durationSec),
     };
   });
-  const motions = alternateMotions(scenes.map((scene) => scene.sceneId)).map((item) => {
+  const fixed = new Set<string>();
+  const cycle = alternateMotions(scenes.map((scene) => scene.sceneId)).map((item) => {
     const found = (body.motions ?? []).map((entry) => z.object({ sceneId: z.string(), preset: MotionPresetSchema }).safeParse(entry))
       .find((entry) => entry.success && entry.data.sceneId === item.sceneId);
-    return found?.success && known.has(found.data.sceneId) ? found.data : item;
+    if (!found?.success || !known.has(found.data.sceneId)) return item;
+    fixed.add(found.data.sceneId);
+    return found.data;
   });
+  // Beats never override a motion the LLM chose for its own scene.
+  const motions = applyBeatMotion(cycle, scenes, strongMoveEverySec(preset), fixed);
   const emphasis = clampEmphasis(
     (body.emphasis ?? []).flatMap((entry) => {
       const point = z.object({
@@ -380,7 +393,7 @@ export function fallbackEditPlan(input: {
   return {
     preset,
     transitions,
-    motions: alternateMotions(input.scenes.map((scene) => scene.sceneId)),
+    motions: applyBeatMotion(alternateMotions(input.scenes.map((scene) => scene.sceneId)), input.scenes, strongMoveEverySec(preset)),
     emphasis,
     subtitleStyle,
     source: "fallback",

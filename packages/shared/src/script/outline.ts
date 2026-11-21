@@ -9,6 +9,7 @@ export type StoryFramework = z.infer<typeof StoryFrameworkSchema>;
 export const BeatPurposeSchema = z.enum([
   "hook", "setup", "reveal", "evidence", "tension", "explanation", "payoff", "reflection", "transition", "cta",
 ]);
+export type BeatPurpose = z.infer<typeof BeatPurposeSchema>;
 export const BeatEmotionSchema = z.enum(["curious", "tense", "awe", "sad", "warm", "urgent", "calm", "playful"]);
 const id = z.string().trim().min(1).max(120);
 const text = z.string().trim().min(1).max(4000);

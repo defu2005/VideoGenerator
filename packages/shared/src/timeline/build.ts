@@ -1,5 +1,6 @@
-import { alternateMotions, fallbackEditPlan, type EditPresetId, type MotionPreset } from "../edit/plan.js";
+import { fallbackEditPlan, type EditPresetId, type MotionPreset } from "../edit/plan.js";
 import type { AspectRatio, LicenseKind } from "../enums.js";
+import type { BeatMark } from "../motion/beatMotion.js";
 import type {
   RenderTarget,
   Timeline,
@@ -49,6 +50,8 @@ export type TimelineSceneInput = {
     /** Copyrighted stills stay on screen for at most four seconds. */
     commentary?: boolean;
   }[];
+  /** Script beat of the scene's section. Only the first scene of a beat starts its camera move. */
+  beat?: BeatMark;
 };
 
 export type TimelineMusicInput = Omit<TimelineMusic, "loop">;
@@ -191,6 +194,7 @@ export function buildTimeline(input: TimelineBuildInput): TimelineBuildResult {
       visuals,
       fadeInSec: index === 0 ? round3(Math.min(VIDEO_FADE_IN_SEC, maxFade)) : 0,
       fadeOutSec: index === ordered.length - 1 ? round3(Math.min(VIDEO_FADE_OUT_SEC, maxFade)) : 0,
+      ...(scene.beat ? { beat: scene.beat } : {}),
     };
   });
 
@@ -203,9 +207,10 @@ export function buildTimeline(input: TimelineBuildInput): TimelineBuildResult {
       startSec: scene.startSec,
       durationSec: scene.durationSec,
       hook: index === 0,
+      ...(scene.beat ? { beat: scene.beat } : {}),
     })),
   });
-  const motionByScene = new Map(alternateMotions(scenes.map((scene) => scene.sceneId)).map((item) => [item.sceneId, item.preset]));
+  const motionByScene = new Map(editPlan.motions.map((item) => [item.sceneId, item.preset]));
   const transitionByScene = new Map(editPlan.transitions.map((item) => [item.afterSceneId, item]));
   for (const scene of scenes) {
     const preset = motionByScene.get(scene.sceneId);

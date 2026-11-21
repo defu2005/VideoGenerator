@@ -23,6 +23,7 @@ import type { AppConfig } from "../lib/config.js";
 import { StageError } from "../pipeline/stageExecutor.js";
 import { writeSubtitleFiles } from "../stages/subtitle/subtitleExecutor.js";
 import { projectDir } from "../storage/paths.js";
+import { sceneBeatMarks } from "../timeline/sceneBeats.js";
 import { rememberTimelineSnapshot, undoTimelineSnapshot, type SnapshotSource } from "../timeline/snapshots.js";
 
 const READY_STATUSES = new Set(["APPROVED", "CUSTOM", "AI_GENERATED"]);
@@ -141,11 +142,14 @@ export class TimelineService {
       throw new StageError(`Tệp giọng đọc của cảnh ${lostFile.order + 1} không còn — chạy lại bước Giọng đọc.`, "VOICE_FILE_MISSING", false);
     }
 
+    const beats = sceneBeatMarks(this.sqlite, project.id, scenes);
     const sceneInputs: TimelineSceneInput[] = scenes.map((scene) => {
       const voice = scene.narration.trim() ? voices.get(scene.id) : undefined;
+      const beat = beats.get(scene.id);
       return {
         id: scene.id,
         order: scene.order,
+        ...(beat ? { beat } : {}),
         label: scene.label,
         noVisual: Boolean(scene.no_visual),
         durationOverrideSec: scene.duration_override_sec,

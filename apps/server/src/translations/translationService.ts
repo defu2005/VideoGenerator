@@ -38,6 +38,7 @@ import type { ProfileService } from "../services/profileService.js";
 import type { TokenVault } from "../publishing/tokenVault.js";
 import { createProjectDir, projectDir } from "../storage/paths.js";
 import { applyYoutubeLanguageExtras } from "./youtubeExtras.js";
+import { sceneBeatMarks } from "../timeline/sceneBeats.js";
 
 type SceneRow = {
   id: string;
@@ -432,6 +433,7 @@ export function createTranslationService(deps: {
       start_offset_sec: number;
     } | undefined;
 
+    const beats = sceneBeatMarks(deps.sqlite, input.childId, scenes);
     const built = buildTimeline({
       aspectRatio: settings.aspectRatio,
       musicEnabled: settings.music.enabled,
@@ -456,6 +458,7 @@ export function createTranslationService(deps: {
           licenseKind: null,
           motion: null,
         }));
+        const beat = beats.get(scene.id);
         return {
           id: scene.id,
           order: scene.order,
@@ -465,6 +468,7 @@ export function createTranslationService(deps: {
           estDurationSec: scene.est_duration_sec,
           voice: { trackId: scene.id, path: voice.path, durationSec: voice.durationSec },
           visuals,
+          ...(beat ? { beat } : {}),
         };
       }),
     });

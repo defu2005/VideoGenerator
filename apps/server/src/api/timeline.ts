@@ -38,6 +38,7 @@ export function registerTimelineRoutes(
       startSec: scene.startSec,
       durationSec: scene.durationSec,
       incomingTransition: index === 0 ? undefined : current.scenes[index - 1]?.transitionOut?.type,
+      ...(scene.beat ? { beat: scene.beat } : {}),
     }));
     let raw: unknown = null;
     if (planWithLlm) {

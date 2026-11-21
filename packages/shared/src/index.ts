@@ -57,6 +57,7 @@ export { historyBucket, stageTimeoutHash } from "./pipeline/stageTimeouts.js";
 export * from "./pipeline/overdue.js";
 export * from "./motion/templates.js";
 export * from "./motion/plan.js";
+export * from "./motion/beatMotion.js";
 export * from "./visuals/license.js";
 export * from "./visuals/sourcePriority.js";
 export * from "./visuals/rank.js";

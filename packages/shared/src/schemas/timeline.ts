@@ -3,6 +3,7 @@ import { EditPlanSchema, MotionPresetSchema, TransitionTypeSchema } from "../edi
 import { TimelineGraphicSchema } from "../motion/templates.js";
 import { LicenseKindSchema } from "../enums.js";
 import { VisualMotionSchema } from "./visual.js";
+import { BeatPurposeSchema } from "../script/outline.js";
 
 export const RenderTargetSchema = z.object({
   width: z.number().int().positive(),
@@ -47,6 +48,11 @@ export const TimelineSceneSchema = z.object({
   transitionOut: z.object({
     type: TransitionTypeSchema,
     durationSec: z.number().nonnegative(),
+  }).strict().optional(),
+  /** Script beat of the scene's section. Absent when the script has no beat purpose. */
+  beat: z.object({
+    purpose: BeatPurposeSchema,
+    start: z.boolean(),
   }).strict().optional(),
 }).strict();
 export type TimelineScene = z.infer<typeof TimelineSceneSchema>;
