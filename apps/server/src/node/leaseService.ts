@@ -630,7 +630,16 @@ export class LeaseService {
     const pending = this.readPending(job);
     const records = this.uploads.ready(job.id, body.leaseId);
     for (const record of records.values()) {
-      if (record.status === "linked" && await sha256File(record.path) !== record.sha256) {
+      if (record.status !== "linked") continue;
+      // TASK-167: a linked file that is gone is a 422 the agent retries via /fail, not a raw 500.
+      // Only ENOENT/ENOTDIR map; any other read error is rethrown unchanged.
+      const digest = await sha256File(record.path).catch((error: NodeJS.ErrnoException) => {
+        if (error.code === "ENOENT" || error.code === "ENOTDIR") {
+          throw new AppError(422, "LINKED_FILE_MISSING", `Tệp ${record.name} liên kết tới đã không còn trên đĩa.`);
+        }
+        throw error;
+      });
+      if (digest !== record.sha256) {
         throw new AppError(422, "SHA256_MISMATCH", `Tệp ${record.name} trong kho đã thay đổi.`);
       }
     }

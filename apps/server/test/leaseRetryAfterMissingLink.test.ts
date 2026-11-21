@@ -122,7 +122,7 @@ async function completeA(s: ReturnType<typeof setup>) {
   return { fileA };
 }
 
-/** The TASK-162 chain up to B's ENOENT. B keeps its lease (renewed) and the linked row. */
+/** The TASK-162 chain up to B's complete failure (LINKED_FILE_MISSING, TASK-167). B keeps its lease (renewed) and the linked row. */
 async function reachEnoent(s: ReturnType<typeof setup>) {
   const { fileA } = await completeA(s);
   const realA = realpathSync.native(fileA);
@@ -138,13 +138,13 @@ async function reachEnoent(s: ReturnType<typeof setup>) {
   expect(existsSync(fileA)).toBe(false);
   s.renew(rowB, jobB.id, leaseB.leaseId);
   const error = await s.leases.complete(rowB, jobB.id, s.completeBody(leaseB.leaseId)).then(() => undefined, (e: unknown) => e);
-  expect(error).toMatchObject({ code: "ENOENT" });
+  expect(error).toMatchObject({ statusCode: 422, code: "LINKED_FILE_MISSING" });
   expect(s.harness.repository.getJob(jobB.id)!.status).toBe("RUNNING");
   expect(existsSync(s.pendingJson(jobB.id))).toBe(true);
   return { realA, rowB, jobB, leaseB };
 }
 
-describe("TASK-163: job B after its complete fails with ENOENT (TASK-162 chain); fail and sweep go through real methods, file removal is a direct unlink", () => {
+describe("TASK-163: job B after its complete fails with LINKED_FILE_MISSING, 422 (TASK-167; TASK-162 chain); fail and sweep go through real methods, file removal is a direct unlink", () => {
   it("fail path: a retryable /fail re-queues B with the base backoff; a re-lease uploads fresh bytes and completes", async () => {
     const s = setup();
     try {
@@ -242,7 +242,7 @@ describe("TASK-163: job B after its complete fails with ENOENT (TASK-162 chain);
       expect(existsSync(fileA)).toBe(false);
       s.renew(rowB, jobB.id, lease3.leaseId);
       const error = await s.leases.complete(rowB, jobB.id, s.completeBody(lease3.leaseId)).then(() => undefined, (e: unknown) => e);
-      expect(error).toMatchObject({ code: "ENOENT" });
+      expect(error).toMatchObject({ statusCode: 422, code: "LINKED_FILE_MISSING" });
       expect(existsSync(s.pendingJson(jobB.id))).toBe(true);
 
       // agent.ts:807-811 posts the retryable /fail on the last attempt: it must be terminal.
