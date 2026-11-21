@@ -204,4 +204,56 @@ describe("TASK-163: job B after its complete fails with ENOENT (TASK-162 chain),
       void rowB;
     } finally { s.harness.close(); }
   });
+
+  // TASK-164: the last attempt. Expectations written before the first run.
+  it("last attempt: a retryable /fail on attempt 3 of 3 makes B FAILED, not re-queued", async () => {
+    const s = setup();
+    try {
+      const { fileA } = await completeA(s);
+      const realA = realpathSync.native(fileA);
+      const rowB = s.joinNode("may-2");
+      const jobB = s.queueRender();
+      const backoff = (attempt: number) => s.harness.config.JOB_RETRY_BASE_MS * 2 ** (attempt - 1);
+      const failRetryable = (leaseId: string) => s.leases.fail(rowB, jobB.id, {
+        leaseId, code: "NODE_RENDER_FAILED", message: "complete 500", retryable: true,
+      });
+
+      // Attempt 1 and attempt 2: lease, then a retryable /fail. No haveOutputs, so no link is made.
+      const lease1 = (await s.leases.lease(rowB, 1))!;
+      failRetryable(lease1.leaseId);
+      expect(s.harness.repository.getJob(jobB.id)!.attempt).toBe(2);
+      s.harness.advance(backoff(1) + 1);
+      s.beat(rowB);
+      const lease2 = (await s.leases.lease(rowB, 1))!;
+      failRetryable(lease2.leaseId);
+      expect(s.harness.repository.getJob(jobB.id)!.status).toBe("QUEUED");
+      expect(s.harness.repository.getJob(jobB.id)!.attempt).toBe(3);
+
+      // Attempt 3 of 3: the chain from TASK-162/163 runs on the last lease.
+      s.harness.advance(backoff(2) + 1);
+      s.beat(rowB);
+      const lease3 = (await s.leases.lease(rowB, 1))!;
+      expect(s.harness.repository.getJob(jobB.id)!.attempt).toBe(3);
+      expect(s.leases.haveOutputs(rowB, jobB.id, lease3.leaseId, [{ name: "final.mp4", sha256: sha(VIDEO), size: Buffer.byteLength(VIDEO) }]))
+        .toEqual(["final.mp4"]);
+      await s.leases.receiveOutput(rowB, jobB.id, lease3.leaseId, "report.json", sha(REPORT), Readable.from([Buffer.from(REPORT)]));
+      s.harness.advance(25 * HOUR);
+      s.leases.cleanupFinishedUploads();
+      expect(existsSync(fileA)).toBe(false);
+      s.renew(rowB, jobB.id, lease3.leaseId);
+      const error = await s.leases.complete(rowB, jobB.id, s.completeBody(lease3.leaseId)).then(() => undefined, (e: unknown) => e);
+      expect(error).toMatchObject({ code: "ENOENT" });
+
+      // agent.ts:807-811 posts the retryable /fail on the last attempt: it must be terminal.
+      failRetryable(lease3.leaseId);
+      const failed = s.harness.repository.getJob(jobB.id)!;
+      expect(failed.status).toBe("FAILED");
+      expect(failed.attempt).toBe(3);
+      expect(failed.error?.code).toBe("NODE_RENDER_FAILED");
+      expect(failed.finishedAt).toBeTruthy();
+      expect(s.leaseOf(jobB.id)).toEqual({ l: null, f: null });
+      expect(existsSync(s.pendingJson(jobB.id))).toBe(false);
+      expect(s.finalize).toHaveBeenCalledTimes(1);
+    } finally { s.harness.close(); }
+  });
 });
