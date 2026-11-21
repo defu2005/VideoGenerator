@@ -13,6 +13,7 @@ import { projectDir } from "../src/storage/paths.js";
 import { createPipelineHarness } from "./pipelineFixtures.js";
 
 // TASK-170: four cache states of collectReferences' registerSync (references.ts:172, artifactService.ts:37).
+// TASK-171: the stuck case is split by render id (retained row vs A's row) and by the shape of A's renders row.
 //
 // Run options: every measured pass calls run({ purge: true, ephemeralOnly: true }), the literal call at
 // app.ts:801 (disk pressure). app.ts:767 passes only { purge: true }. Those options reach file deletion
@@ -38,7 +39,7 @@ const RESOURCES = { cpus: 2, ramMb: 4096, freeDiskMb: 50_000 };
 const S = createHash("sha256").update(VIDEO).digest("hex");
 const REPORT_SHA = createHash("sha256").update(REPORT).digest("hex");
 
-type Label = "versions" | "pending" | undefined | string;
+type Label = "versions" | "retained-versions" | "pending" | undefined | string;
 
 function setup() {
   const harness = createPipelineHarness();
@@ -66,7 +67,11 @@ function setup() {
   // The one long-lived instance, as app.ts:255 builds it.
   const gc = new FileGc(harness.sqlite, dataDir, () => ({ graceDays: 14, postPublishDays: 7 }), harness.clock);
 
-  const versionFile = join(renderDirFor(harness.projectId), "versions", "render-1", "output.mp4");
+  // A's output is render-1 (prepare returns it). The retained row is render-1 by default (collision case),
+  // or render-0 in the separate-id cases.
+  const versionFileOf = (renderId: string) => join(renderDirFor(harness.projectId), "versions", renderId, "output.mp4");
+  const versionFile = versionFileOf("render-1");
+  const retainedFile = versionFileOf("render-0");
   let pendingFile = "";
 
   function joinNode(name: string): NodeRow {
@@ -77,12 +82,15 @@ function setup() {
   const queueRender = () => harness.repository.createJob({
     projectId: harness.projectId, stage: "RENDER", maxAttempts: 3, previousState: "PENDING", runAfter: harness.clock(),
   });
-  // The versions file may not exist yet (miss/hit pass 1 has no renders row), so do not realpath it unconditionally.
-  const realVersions = () => (existsSync(versionFile) ? realpathSync.native(versionFile) : versionFile);
+  // A version file may not exist yet, so do not realpath it unconditionally.
+  const realOf = (file: string) => (existsSync(file) ? realpathSync.native(file) : file);
+  const realVersions = () => realOf(versionFile);
+  const realRetained = () => realOf(retainedFile);
   const artifactPath = () => (harness.sqlite.prepare("SELECT path FROM artifacts WHERE sha256 = ?").get(S) as { path: string } | undefined)?.path;
   const label = (p: string | undefined): Label => {
     if (p === undefined) return undefined;
     if (p === realVersions()) return "versions";
+    if (p === realRetained()) return "retained-versions";
     if (p === pendingFile) return "pending";
     return p;
   };
@@ -100,12 +108,25 @@ function setup() {
     return result;
   }
 
-  function insertRenderRow() {
-    mkdirSync(dirname(versionFile), { recursive: true });
-    writeFileSync(versionFile, VIDEO);
+  // A DONE render row with its output file already on disk (the retained row, or the collision row).
+  function insertRenderRow(renderId = "render-1") {
+    const file = versionFileOf(renderId);
+    mkdirSync(dirname(file), { recursive: true });
+    writeFileSync(file, VIDEO);
     harness.sqlite.prepare(`INSERT INTO renders(id,project_id,input_hash,status,output_path,duration_sec,size_bytes,width,height,report,created_at)
-      VALUES ('render-1',?,'fixture-hash','DONE',?,1,?,1920,1080,?,?)`)
-      .run(harness.projectId, versionFile, Buffer.byteLength(VIDEO), REPORT, harness.clock().toISOString());
+      VALUES (?,?,'fixture-hash','DONE',?,1,?,1920,1080,?,?)`)
+      .run(renderId, harness.projectId, file, Buffer.byteLength(VIDEO), REPORT, harness.clock().toISOString());
+  }
+
+  // A row with the column set of the real finalize INSERT (renderService.ts:996–1003). The file is not written here:
+  // complete has already renamed the output into place (leaseService.ts:672), before finalize runs (:673).
+  function insertFinalizeRow(renderId: string) {
+    harness.sqlite.prepare(`INSERT INTO renders (id, project_id, input_hash, status, output_path, credits_path, srt_path,
+        duration_sec, size_bytes, width, height, report, created_at, version, note, pinned, deleted_at, review_thread_id,
+        metadata_snapshot, aspect_ratio, variant_of)
+      VALUES (?, ?, 'fixture-hash-a', 'DONE', ?, NULL, NULL, 1, ?, 1920, 1080, ?, ?, 2, NULL, 0, NULL, NULL, NULL, NULL, NULL)`)
+      .run(renderId, harness.projectId, versionFileOf(renderId), Buffer.byteLength(VIDEO), REPORT,
+        new Date(harness.clock().getTime() + 1000).toISOString());
   }
 
   // A leases the job and uploads S. The pending file is the realpath of final.mp4.
@@ -126,10 +147,13 @@ function setup() {
     expect(harness.repository.getJob(a.jobA.id)!.status).toBe("SUCCEEDED");
   }
 
-  return { harness, leases, gc, pass, artifactPath, insertRenderRow, startA, completeA, realVersions, versionFile, dataDir, pendingFile: () => pendingFile };
+  return {
+    harness, leases, gc, pass, artifactPath, insertRenderRow, insertFinalizeRow, startA, completeA,
+    realVersions, realRetained, versionFile, dataDir, pendingFile: () => pendingFile,
+  };
 }
 
-describe("TASK-170 cache cases for the shared sha S (one long-lived FileGc)", () => {
+describe("TASK-170/171 cache cases for the shared sha S (one long-lived FileGc)", () => {
   it("miss/miss: both paths unregistered; the pass writes versions then pending, so pending wins", async () => {
     const s = setup();
     try {
@@ -155,7 +179,7 @@ describe("TASK-170 cache cases for the shared sha S (one long-lived FileGc)", ()
     } finally { s.harness.close(); }
   });
 
-  it("stuck: A completes; the long-lived pass writes nothing; after 25 h the pending file is gone and the row still names it", async () => {
+  it("collision (same render id): the retained row and A both use render-1; completion replaces the file, the cache misses, the row repoints to versions", async () => {
     const s = setup();
     try {
       const a = await s.startA();
@@ -169,17 +193,17 @@ describe("TASK-170 cache cases for the shared sha S (one long-lived FileGc)", ()
         before: [statBefore.ino, statBefore.size, statBefore.mtimeNs, statBefore.ctimeNs].map(String),
         after: [statAfter.ino, statAfter.size, statAfter.mtimeNs, statAfter.ctimeNs].map(String),
       }));
-      // Predicted seq: [] (pending unreferenced after SUCCEEDED, versions hit). Final: pending. Soft, so the tail still runs.
+      // Observed (TASK-170 run): seq [versions], path versions. Pinned green here; the TASK-170 prediction ([] / pending) is recorded in the report.
       const afterComplete = s.pass();
-      expect.soft(afterComplete.seq).toEqual([]);
-      expect.soft(afterComplete.path).toBe("pending");
-      // Attribution check: the file must still exist before cleanup runs.
+      expect(afterComplete.seq).toEqual(["versions"]);
+      expect(afterComplete.path).toBe("versions");
+      // The file must still exist before cleanup runs.
       expect(existsSync(a.fileA)).toBe(true);
       s.harness.advance(25 * HOUR);
       s.leases.cleanupFinishedUploads();
-      // Predicted: the pending file is removed by cleanup, and the row still names it.
-      expect.soft(existsSync(a.fileA)).toBe(false);
-      expect.soft(s.artifactPath()).toBe(a.fileA);
+      // Observed: cleanup removes the pending file, and the row already names versions.
+      expect(existsSync(a.fileA)).toBe(false);
+      expect(s.artifactPath()).toBe(s.realVersions());
     } finally { s.harness.close(); }
   });
 
@@ -195,6 +219,53 @@ describe("TASK-170 cache cases for the shared sha S (one long-lived FileGc)", ()
       const result = s.pass(fresh);
       expect(result.seq).toEqual(["versions"]);
       expect(result.path).toBe("versions");
+    } finally { s.harness.close(); }
+  });
+
+  it("separate ids, no render row for A (mock finalize inserts nothing; not production order): the retained render-0 hits, the row stays on pending until cleanup", async () => {
+    const s = setup();
+    try {
+      s.insertRenderRow("render-0");
+      const a = await s.startA();
+      // Predicted pass 1 (A RUNNING): renders first (render-0 writes retained-versions), then pending wins. Path pending.
+      const first = s.pass();
+      expect.soft(first.seq).toEqual(["retained-versions", "pending"]);
+      expect.soft(first.path).toBe("pending");
+      await s.completeA(a);
+      // Predicted pass 2 (A SUCCEEDED, no render-1 row): retained hits, pending unreferenced. seq [], path pending.
+      const second = s.pass();
+      expect.soft(second.seq).toEqual([]);
+      expect.soft(second.path).toBe("pending");
+      expect(existsSync(a.fileA)).toBe(true);
+      s.harness.advance(25 * HOUR);
+      s.leases.cleanupFinishedUploads();
+      // Predicted: cleanup removes the pending file and the row still names it (the stuck shape).
+      expect.soft(existsSync(a.fileA)).toBe(false);
+      expect.soft(s.artifactPath()).toBe(a.fileA);
+    } finally { s.harness.close(); }
+  });
+
+  it("separate ids, real finalize shape (render-1 row inserted after complete): the cache misses on render-1, the row repoints to versions, and cleanup does not strand it", async () => {
+    const s = setup();
+    try {
+      s.insertRenderRow("render-0");
+      const a = await s.startA();
+      // Predicted pass 1 (A RUNNING): [retained-versions, pending], path pending.
+      const first = s.pass();
+      expect.soft(first.seq).toEqual(["retained-versions", "pending"]);
+      expect.soft(first.path).toBe("pending");
+      await s.completeA(a);
+      s.insertFinalizeRow("render-1");
+      // Predicted pass 2: render-0 hits (no write); render-1 is a new inode, so it misses and writes versions last. Path versions.
+      const second = s.pass();
+      expect.soft(second.seq).toEqual(["versions"]);
+      expect.soft(second.path).toBe("versions");
+      expect(existsSync(a.fileA)).toBe(true);
+      s.harness.advance(25 * HOUR);
+      s.leases.cleanupFinishedUploads();
+      // Predicted: cleanup removes pending; the row names versions, so nothing is stranded.
+      expect.soft(existsSync(a.fileA)).toBe(false);
+      expect.soft(s.artifactPath()).toBe(s.realVersions());
     } finally { s.harness.close(); }
   });
 
