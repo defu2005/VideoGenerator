@@ -91,7 +91,7 @@ Kết luận:
 Đọc (không đo trừ khi ghi chú):
 - `readPending` (`leaseService.ts:464–468`) đọc file pending. `Pending.files` là `ArtifactRef[]` (`leaseService.ts:84–87`), và `ArtifactRef` là `{name, sha256, size}` strict (`packages/shared/src/schemas/renderBundle.ts:7–11`). **Pending không có path.** Vì vậy "registerSync trước locate" trong `artifactFor` không có path để đăng ký. Sửa cần lấy path từ nơi khác (ví dụ lưu path lúc dựng bundle, `leaseService.ts:353–354`): đó là thay đổi src.
 - Cửa sổ dựng → tải: bundle được dựng và pending ghi **mỗi lần lease** (`leaseService.ts:354` dựng, `:370–372` ghi pending và `setJobLease`). Lease mới dựng lại bundle và register lại P (`remoteBundle.ts:53`).
-- Phía node: tải đầu vào nằm trong `runJob` (`agent.ts:825–828`). `installArtifact` ném lỗi khi không ok (`agent.ts:613–615`). Lỗi rơi vào `catch` (`agent.ts:868`), gửi `POST /fail` với `retryable: true`, code `NODE_RENDER_FAILED` (`agent.ts:871–878`). Server: `failJob` retryable → QUEUED nếu còn lượt (`orchestrator.ts:799–815`). Lease mới register lại P, row về P. **Suy ra từ đọc: mỗi 404 tốn một lượt retry và tự phục hồi; chỉ thành terminal khi hết `maxAttempts`.** Nhánh QUEUED với `retryable: true` chưa đo.
+- Phía node: tải đầu vào nằm trong `runJob` (`agent.ts:825–828`). `installArtifact` ném lỗi khi không ok (`agent.ts:613–615`). Lỗi rơi vào `catch` (`agent.ts:868`), gửi `POST /fail` với `retryable: true`, code `NODE_RENDER_FAILED` (`agent.ts:871–878`). Server: `failJob` retryable → QUEUED nếu còn lượt (`orchestrator.ts:799–815`). Lease mới register lại P, row về P. **Suy ra từ đọc: mỗi 404 tốn một lượt retry và tự phục hồi; chỉ thành terminal khi hết `maxAttempts`.** Nhánh QUEUED với `retryable: true` đã đo (mục "Đo heal"): QUEUED, nhưng bị giữ đến `runAfter`.
 - Tải đầu vào ưu tiên `preferredUrl` (`agent.ts:585–601`, lỗi được nuốt), rồi fallback `/api/nodes/agent/artifacts/:sha?jobId=` (`agent.ts:603`). Chỉ fallback đi qua `artifactFor`. Đọc, chưa đo.
 - Điều kiện để (b) xảy ra trong thực tế: X cùng bytes và bị xóa **trong cửa sổ lease** của B. Pending của job đã xong bị dọn sau 24 h (`leaseService.ts:424–428`), GC chạy mỗi 24 h (`app.ts:757–775`). Đường giảm áp lực đĩa (`app.ts:801`) chưa đọc hết. Chưa đo.
 
@@ -102,9 +102,38 @@ Kết luận:
 | (a) stamp đổi, cùng path | 404 `ARTIFACT_NOT_FOUND`; P còn | khớp |
 | (b) repoint sang X, rồi xóa X | trước xóa: path = X; sau xóa: 404; P còn | khớp |
 
-Chạy: `npx vitest run test/workerNodes.test.ts -t "stale stamp|repointed to a copy|artifactFor|serves only files"` (trong `apps/server`): 3/3 xanh (1 ca cũ, 2 ca mới). Chỉ chạy lọc theo tên, không chạy cả file.
+**Lưu ý (b):** repoint trong test là một lời gọi `artifacts.registerSync(copy)` trực tiếp, **không phải** một lượt GC. Ca này chỉ chứng minh cơ chế (row trỏ tới file đã xóa). Nó không chứng minh GC có thể làm việc đó (xem mục "Khả năng tới được" bên dưới).
 
-Kết luận tạm: (b) là một lượt retry lãng phí, không phải lỗi vĩnh viễn trừ khi rơi vào lượt cuối. Chưa đủ để chọn src change. Quyết định chờ advisor.
+#### Đo heal (advisor 2026-11-21, dự đoán viết trước lần chạy)
+
+Lần chạy đầu: **cả ba ca đỏ** ở `leases.lease` thứ hai (trả undefined). Dự đoán H1/H2 sai ở bước này, không phải ở heal. Nguyên nhân: retry đặt `runAfter = now + backoff` (`orchestrator.ts:800–810`), nên job không thể lease lại cho tới khi đồng hồ vượt `runAfter`. Sửa test: `harness.advance(24 h)` sau `failJob`. Ghi chú không đổi giá trị dự đoán, chỉ thêm bước đồng hồ.
+
+| Ca | Dự đoán | Quan sát |
+|---|---|---|
+| (a-heal) stamp đổi, `failJob` retryable, lease lại, `register(P)` | QUEUED; sau register artifactFor trả P | khớp sau khi thêm advance |
+| (b-heal) repoint, xóa X, `failJob` retryable, lease lại, `register(P)` | QUEUED; sau register artifactFor trả P | khớp sau khi thêm advance |
+| (b-control) như (b-heal) nhưng không `register` | 404 còn | khớp |
+
+Ý nghĩa: heal phụ thuộc vào việc lease lại **gọi register** trên P. Production làm điều này (`remoteBundle.ts:53`). Module mock của `buildRemoteBundle` trong test không gọi, nên mỗi ca heal tự gọi `artifacts.register(P)`. Không có register thì không heal (ca control).
+
+Chạy: `npx vitest run test/workerNodes.test.ts` (đầy đủ): **36/36 xanh**. Trước đó chỉ chạy lọc tên (3/3), nên đã thiếu bước kiểm tra trạng thái dùng chung. Chạy đầy đủ đã chứng minh: các ca mới không làm đỏ ca cũ. `npx tsc --noEmit -p .` (trong `apps/server`): exit 0.
+
+Kết luận tạm (chưa khóa): nếu requeue + lease lại + register heal được (đã đo ở trên), (b) là một lượt retry lãng phí, không phải lỗi vĩnh viễn trừ khi rơi vào lượt cuối. Chưa đủ để chọn src change, vì còn câu hỏi có tới được (b) trong production không.
+
+#### Khả năng tới được (đọc, advisor 2026-11-21)
+
+Câu hỏi: có đường production nào vừa đăng ký X cùng bytes, vừa xóa X, trong khi lease của B còn sống?
+
+- **Lease:** `NODE_LEASE_SEC` mặc định 60 s (`src/lib/config.ts:65`, min 10, max 600). Lease được ghi tại `leaseService.ts:369`.
+- **Điều kiện xóa trong purge** (`src/storage/fileGc.ts`):
+  - Ứng viên phải có **mark cũ**: lần đầu thấy file không được tham chiếu, `purge_after = startedAt + grace` (`:425–431`). Grace là 1 ngày với `ephemeral` (`:425`), và `graceDays` với project file. Vậy X không thể bị xóa trong cùng lượt nó vừa xuất hiện. X phải đã unreferenced ít nhất một ngày trước đó.
+  - Trong transaction (`:457–471`): `registerSync(target)` tại `:465` **ghi row trỏ tới X trước khi kiểm tra** (`:466`). Nếu `sha` của X không được tham chiếu (`index.isReferenced(file.path, sha)`, `references.ts:432`), `unlinkSync(X)` tại `:467`. Kết quả: row trỏ tới X đã xóa, đúng hình dạng (b). Thao tác này do chính GC gây ra, không cần writer bên ngoài.
+  - Chặn duy nhất là kiểm tra theo **sha** ở `:466`: sha được coi là tham chiếu khi có giá trị `*sha256` trong bảng project hoặc trong JSON của job RUNNING/QUEUED, hoặc `node_uploads.sha256` của job đó (`dataContract.ts:115`, `references.ts:125`).
+- **Lịch chạy:** `app.ts:766–767` mỗi 24 h (`fileGc.run({purge:true})`). `app.ts:801` chạy `run({purge:true, ephemeralOnly:true})` mỗi ≥5 phút khi đĩa dưới 15% (`:789–800`). Cleanup pending chạy trước GC trong cùng tick (`app.ts:761`, 24 h cutoff).
+
+**Kết luận đọc:** (b) **có thể tới được** từ đường purge (cả hai nhánh, nhưng `ephemeralOnly` chỉ với file `ephemeral`), **với điều kiện**: sha của input P không được tham chiếu bởi bất kỳ row nào tại thời điểm purge, trong khi lease của B còn sống. Nếu input của B được tham chiếu bởi timeline hoặc asset (path hoặc sha), `:466` chặn xóa và không có (b). **Chưa đo:** toàn bộ tập input của bundle (`renderService.ts:828` trở đi) có luôn được tham chiếu bởi row project hay không. Đây là câu hỏi quyết định. Không đề xuất src fix trước khi trả lời.
+
+Lưu ý: `:465` làm GC tự repoint một row về file sắp xóa. Đây là điểm mà advisor cần biết, dù (b) có tới được hay không.
 
 **Tuổi thọ cache:** cache thuộc từng instance `ArtifactService`. Ngoài `FileGc` (`fileGc.ts:70`), các instance khác cũng ghi bảng `artifacts`: `projectSnapshot.ts:97` và `:165`, `inputVersion.ts:46`, `runTransport.ts:52`, `app.ts:686`. `RunTransportService` được tạo một lần ở `app.ts:636` (đọc); vòng đời theo hàm dựng app, chưa đọc hàm đó. Tác động của các instance này lên row chưa đo.
 
@@ -120,7 +149,8 @@ Khuyến nghị của báo cáo: làm (1) trước, vì nó sửa gốc (row dan
 
 ## Chưa đo
 
-- `artifactFor` (b): chỉ đo repoint rồi xóa trong một lượt. Chưa đo X bị xóa trong cửa sổ lease của B (GC khi áp lực đĩa, `app.ts:801`, chưa đọc hết). Chưa đo nhánh QUEUED với `retryable: true`. Chưa đo đường `preferredUrl`, vì nó không đọc row.
+- `artifactFor` (b): chỉ đo repoint bằng `registerSync` trực tiếp rồi xóa, không đo bằng GC. Chưa đo GC tự repoint-rồi-xóa (`fileGc.ts:465–467`) với một input thực, chưa đo tập input của bundle có luôn được tham chiếu hay không (`renderService.ts:828`). Đây là hai điểm quyết định cho "Khả năng tới được".
+- Chưa đo đường `preferredUrl` (`agent.ts:585–601`), vì nó không đi qua `artifactFor`.
 - Đường cancel (`orchestrator.cancel`) và NODE_LOST (`nodeService.sweep`, `revoke`).
 - Đường failJob có retry (QUEUED, rồi chạy lại trên lease mới).
 - Đường upload lại S: `remember` ghi đè path khi đăng ký file mới cùng sha (đọc, chưa đo).

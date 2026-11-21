@@ -423,6 +423,64 @@ describe("artifacts and outputs", () => {
     expect(existsSync(registered.path)).toBe(true);
   });
 
+  // Heal measurement (advisor 2026-11-21). Predictions written before the first run:
+  // H1 (a): after a retryable fail the job is QUEUED with attempts left; a re-lease plus register(P) heals the stamp, artifactFor returns P.
+  // H2 (b): same; register(P) repoints S back to P, artifactFor returns P.
+  // H0 (b) control: a re-lease WITHOUT register keeps the 404. Production re-lease calls register (remoteBundle.ts:53);
+  // the module mock of buildRemoteBundle does not, so each heal case calls artifacts.register(P) itself.
+  it("(a-heal) a retryable fail and re-lease heal the stale stamp once the input is re-registered", async () => {
+    const { leases, joinNode, queueRender, harness, artifacts } = await setup();
+    const { row } = joinNode();
+    const job = queueRender();
+    const lease = (await leases.lease(row, 1))!;
+    const later = new Date(Date.now() + 5_000);
+    utimesSync(registered.path, later, later);
+    expectApp(() => leases.artifactFor(row, job.id, lease.leaseId, registered.sha), 404, "ARTIFACT_NOT_FOUND");
+    harness.orchestrator.failJob(job.id, { code: "NODE_RENDER_FAILED", message: "fixture", retryable: true });
+    expect(harness.repository.getJob(job.id)?.status).toBe("QUEUED");
+    // The retry sets runAfter = now + backoff (orchestrator.ts:800–810), so the job is not leasable until the clock passes it.
+    harness.advance(24 * 60 * 60_000);
+    const again = (await leases.lease(row, 1))!;
+    await artifacts.register(registered.path);
+    expect(leases.artifactFor(row, job.id, again.leaseId, registered.sha).path).toBe(registered.path);
+  });
+
+  it("(b-heal) a retryable fail and re-lease repoint the row back to the input once it is re-registered", async () => {
+    const { leases, joinNode, queueRender, harness, artifacts, root } = await setup();
+    const { row } = joinNode();
+    const job = queueRender();
+    const lease = (await leases.lease(row, 1))!;
+    const copy = join(root, "copy.bin");
+    writeFileSync(copy, "input data");
+    artifacts.registerSync(copy);
+    rmSync(copy);
+    expectApp(() => leases.artifactFor(row, job.id, lease.leaseId, registered.sha), 404, "ARTIFACT_NOT_FOUND");
+    harness.orchestrator.failJob(job.id, { code: "NODE_RENDER_FAILED", message: "fixture", retryable: true });
+    expect(harness.repository.getJob(job.id)?.status).toBe("QUEUED");
+    // The retry sets runAfter = now + backoff (orchestrator.ts:800–810), so the job is not leasable until the clock passes it.
+    harness.advance(24 * 60 * 60_000);
+    const again = (await leases.lease(row, 1))!;
+    await artifacts.register(registered.path);
+    expect(leases.artifactFor(row, job.id, again.leaseId, registered.sha).path).toBe(registered.path);
+  });
+
+  it("(b-control) a re-lease without re-registering the input keeps the 404", async () => {
+    const { leases, joinNode, queueRender, harness, artifacts, root } = await setup();
+    const { row } = joinNode();
+    const job = queueRender();
+    const lease = (await leases.lease(row, 1))!;
+    const copy = join(root, "copy.bin");
+    writeFileSync(copy, "input data");
+    artifacts.registerSync(copy);
+    rmSync(copy);
+    harness.orchestrator.failJob(job.id, { code: "NODE_RENDER_FAILED", message: "fixture", retryable: true });
+    harness.advance(24 * 60 * 60_000);
+    const again = (await leases.lease(row, 1))!;
+    expectApp(() => leases.artifactFor(row, job.id, again.leaseId, registered.sha), 404, "ARTIFACT_NOT_FOUND");
+    expect(existsSync(registered.path)).toBe(true);
+    expect(lease.leaseId).not.toBe(again.leaseId);
+  });
+
   it("rejects an upload whose sha256 does not match and deletes the temp file", async () => {
     const { leases, joinNode, queueRender, root } = await setup();
     const { row } = joinNode();
