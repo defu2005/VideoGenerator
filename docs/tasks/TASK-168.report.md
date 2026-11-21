@@ -35,7 +35,7 @@ Kết luận bước 2: cùng đường `artifacts.locate` như TASK-161, nhưng
 
 ### 4. Có gì dọn hàng `run_uploads` không
 
-- `cleanupFinishedUploads` (`leaseService.ts:416–437`) chỉ đọc và xóa **`node_uploads`** (`DELETE FROM node_uploads`, dòng 437). Guard của TASK-166 (`linkedByUnfinishedJob`) cũng chỉ truy vấn `node_uploads` joined `jobs`. **Hàng `run_uploads` không được cleanup đụng tới và không được guard.**
+- `cleanupFinishedUploads` (`leaseService.ts:424–439`; sửa từ 416–437 theo đọc bổ sung dưới đây) chỉ đọc và xóa **`node_uploads`** (`DELETE FROM node_uploads`, dòng 437). Guard của TASK-166 (`linkedByUnfinishedJob`) cũng chỉ truy vấn `node_uploads` joined `jobs`. **Hàng `run_uploads` không được cleanup đụng tới và không được guard.**
 - Không có `DELETE FROM run_uploads` và không có delete qua Drizzle trên `runUploads` trong `apps/server/src` (grep).
 - Hàng chỉ mất khi xóa `project_runs` cha, qua FK `ON DELETE CASCADE` (`db/schema.ts:401`).
 - Ngoài ra `references.ts:126`, `:348`, `:509` chỉ coi `run_uploads` là tham chiếu khi `activeRuns.has(row.run_id)`. Run không active thì hàng không giữ file.
@@ -62,6 +62,55 @@ Khác với TASK-166 ở chỗ: TASK-166 guard cho `node_uploads` của job **ch
 
 - **Không sửa** trong TASK-168 khi chưa có quyết định advisor. Đề xuất thử nghiệm trước: viết test đỏ mô tả chuỗi 1–4 qua hàm thật (`runTransport.have` rồi `cleanupFinishedUploads` rồi checkpoint), khẳng định kết quả trước khi chạy.
 - Hướng sửa có thể xét (chưa chọn): (a) mở rộng guard TASK-166 để tính cả `run_uploads` của run chưa kết thúc; (b) để `checkpoint` ném `AppError` 409 `RUN_FILE_CHANGED`-like khi file mất, theo mẫu TASK-167; (c) không cho `linkKnown` link tới `render/pending` (theo mẫu option 3 của TASK-165, có rủi ro orphan như đã ghi ở đó).
+
+## Đọc bổ sung (2026-11-21, theo yêu cầu advisor, vẫn chỉ đọc)
+
+Không có test, không sửa `src/`. Các đọc dưới đây thay thế các dòng sai nêu trên.
+
+### Sửa các dòng sai
+- **Cleanup:** `leaseService.ts:424–439` (không phải 416–437). Dòng 416 nằm trong vòng lặp của hàm trước đó, gọi `uploads.ready(row.id, row.lease_id)` cho `node_uploads` của job. Guard `linkedByUnfinishedJob` (442–450) và `DELETE` (437) chỉ đụng `node_uploads`. Đã xác nhận từ file.
+- **`dataContract.ts:61`:** `childTable(schema.runUploads, "control", "run_id", schema.projectRuns)`. Owner là `control`. Người dùng đã đọc: `projectSnapshot.ts:65` (`contracts = PROJECT_TABLES.filter(owner !== "control")`) loại bảng control khỏi snapshot, nên `run_uploads` không vào snapshot. `runCheckpoint.ts:61` lọc theo owner của stage. `references.ts:126/348/509` (đã nêu). `inputVersion.ts` import `PROJECT_TABLES`, **chưa đọc** có duyệt bảng control không. Kết luận "không có delete ngoài FK cascade" vẫn đúng với grep trong `src`.
+- **Phản ứng agent khi checkpoint không ok (thay cho "409"):** `request()` (`agent.ts:516`) ném `AppError(status, code)`. `send` (`projectRunner.ts:227–231`) không bắt. `executeProjectRun` (`agent.ts:237–239`) chỉ bỏ `RUN_REBASE`, còn lại ném tiếp. `startProject` (`agent.ts:498–503`) ghi log `Đoạn chạy … lỗi: <code>` và xóa khỏi `running` trong `finally`. Agent **không gửi `/finish`, không gửi `/fail`, không retry**. Heartbeat chỉ gửi các run còn trong `running` (`nodeService.ts:233–236`), nên `projectRuns.expire()` (`runService.ts:140–143`) đặt `LOST` với `end_reason='HEARTBEAT_LOST'` khi lease hết. Hệ quả: **run mất (LOST), không tự chạy lại.** Khác job (job được retry qua `/fail`).
+- **Chuỗi bước 4:** `have` và checkpoint dùng cùng lease (`runTransport.ts:56` `ready(run.id, run.leaseId)`). Tên phải bắt đầu bằng `files/<sha>` (`runTransport.ts:90`).
+
+### Câu hỏi 1: có nội dung chung không? **Có.**
+- Job pending: sha được kiểm ở `leaseService.ts:655–657`. Rồi `copyFile(final.path → versions/output.mp4.node-part)` và `renameSync` (`:670–672`). Đây là **cùng byte, cùng sha**, nằm trong dự án.
+- Bảng `renders` (owner `RENDER`) tham chiếu `output.mp4` qua cột path. `exportProjectRows(owner=stage)` (`projectRunner.ts:292`) đưa file này vào `checkpoint.files` khi checkpoint `RENDER` `DONE`. Tên thành `files/<sha>.mp4`.
+- Đường dùng lại: `apps/server/src/services/renderService.ts:806–809` (dòng 808 là "Dùng lại bản render trước"; đường dẫn đầy đủ, sửa từ tên file rút gọn) trả render cũ, nên run có thể xuất lại đúng hàng đó.
+- Tên khác (`final.mp4` so với `files/<sha>`) không quan trọng: `linkKnown` khớp theo sha (`uploadStore.ts:52`).
+- **Chưa đo:** `artifacts` có khóa theo sha, mỗi sha một hàng (`artifactService.ts:55–60`, `ON CONFLICT(sha256) DO UPDATE SET path=excluded.path`). Người ghi cuối quyết định `locate` trả pending hay versions. Các người ghi: GC `references.ts:166–177` (pending khi job còn active; versions khi render còn được tham chiếu), `remoteBundle.ts:53` (input job), `inputVersion.ts:100`, `runTransport.ts:58` (cùng path, không đổi). Sau khi A hoàn tất, ai ghi lại path versions và khi nào: chưa đo.
+
+### Điểm mới: `linkKnown` bỏ qua kiểm tra file khi đã có hàng
+- `uploadStore.ts:50–51`: nếu đã có hàng (job/lease/tên) thì trả `existing.status !== "partial"` **mà không** `locate`, không `existsSync`. `have()` (`runTransport.ts:94–99`) trả tên đó. Agent (`uploadOutputs`, `agent.ts:663`) bỏ qua upload.
+- Vậy một hàng linked cũ được coi là "đã có" ở checkpoint sau, cùng lease, cùng tên `files/<sha>`. Checkpoint áp dụng: `ready()` (gồm `linked`, `runTransport.ts:56`), rồi `registerSync(file.path)` (`:58`) gặp ENOENT thô (`artifactService.ts:33`). HTTP cuối cùng là 500 theo suy luận từ TASK-163 (`app.ts:1188`), **chưa đo trên route run**.
+- Agent gọi `have` rồi post checkpoint ngay (`agent.ts:558–560`). Vì vậy:
+  - Chuỗi 24 giờ của mục 3–4 chỉ xảy ra khi **cùng S được tham chiếu ở hai checkpoint trong cùng lease**, với A bị cleanup xóa giữa hai lần.
+  - Với một checkpoint, cửa sổ là từ `have` đến checkpoint đi ngay sau (vài giây). Cleanup phải chạy đúng lúc đó. Hẹp.
+
+### Chuỗi đã sửa (đọc mã, chưa đo)
+1. A RUNNING. GC đăng ký `pending/<A>.uploads/…/final.mp4` cho sha S (`references.ts:166–177`).
+2. A hoàn tất: copy sang `versions/output.mp4` (`leaseService.ts:670–672`). Bảng `renders` tham chiếu. Người ghi cuối cho S: **chưa đo**.
+3. R (lease L) checkpoint k xuất S. `have` → `linkKnown` → `locate(S)`. Nếu người ghi cuối là pending, hàng linked trỏ pending (`uploadStore.ts:54`).
+4. Cleanup của A sau 24 giờ xóa pending (`leaseService.ts:435`; guard chỉ tính `node_uploads`).
+5. R checkpoint m > k xuất S cùng lease. `have` trả S từ hàng cũ (`uploadStore.ts:50–51`), agent không upload. Checkpoint: `registerSync` ENOENT → 500 → run LOST sau khi lease hết.
+
+### Kết luận đọc bổ sung
+- Điều kiện 1 (nội dung chung): **có**. Theo quy tắc advisor, TASK-168 không đóng là "không có nội dung chung". Cần đo.
+- Chưa đo: người ghi cuối của `artifacts` cho S sau khi A hoàn tất; ENOENT trên route run; LOST sau lease.
+- Hướng sửa, đã đổi thứ tự:
+  - (b) đổi ENOENT thành `AppError`: **không đổi kết quả**. Run không `/fail`, nên mã lỗi không đổi trạng thái LOST. Ít giá trị.
+  - (d) mới: trong `linkKnown`, khi hàng cũ là `linked`, kiểm `existsSync(existing.path)` và size trước khi trả true. Nếu mất, trả false để agent upload lại (phải thay hàng cũ, không chỉ bỏ qua). Sửa nguyên nhân gần nhất.
+  - (a) mở rộng guard TASK-166 cho `run_uploads` của run chưa kết thúc: chỉ bảo vệ khi người ghi cuối là pending.
+
+### Đề xuất test (chưa viết, chờ advisor quyết định)
+Qua hàm thật, khẳng định trước khi chạy:
+- GC `run({purge:true, ephemeralOnly:true})` lúc A RUNNING. Khẳng định hàng `artifacts` cho S trỏ pending.
+- A complete. Khẳng định hàng `artifacts` cho S: pending hay versions (đây là điều cần đo).
+- `runTransport.have` cho R, cùng lease: khẳng định hàng linked trỏ pending.
+- `cleanupFinishedUploads()` sau 25 giờ. Khẳng định file pending bị xóa.
+- `runTransport.have` lần hai, cùng lease: khẳng định trả tên (hàng cũ, không kiểm file).
+- Checkpoint thứ hai nêu S: khẳng định ENOENT thô (không phải AppError).
+- Đối chứng: GC chạy sau khi A hoàn tất, trước `have` của R. Khẳng định `artifacts` trỏ versions và không có hàng linked. Đây là bằng chứng cho câu hỏi người ghi cuối.
 
 ## Liên kết
 
