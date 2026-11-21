@@ -70,7 +70,7 @@ Không có test, không sửa `src/`. Các đọc dưới đây thay thế các 
 ### Sửa các dòng sai
 - **Cleanup:** `leaseService.ts:424–439` (không phải 416–437). Dòng 416 nằm trong vòng lặp của hàm trước đó, gọi `uploads.ready(row.id, row.lease_id)` cho `node_uploads` của job. Guard `linkedByUnfinishedJob` (442–450) và `DELETE` (437) chỉ đụng `node_uploads`. Đã xác nhận từ file.
 - **`dataContract.ts:61`:** `childTable(schema.runUploads, "control", "run_id", schema.projectRuns)`. Owner là `control`. Người dùng đã đọc: `projectSnapshot.ts:65` (`contracts = PROJECT_TABLES.filter(owner !== "control")`) loại bảng control khỏi snapshot, nên `run_uploads` không vào snapshot. `runCheckpoint.ts:61` lọc theo owner của stage. `references.ts:126/348/509` (đã nêu). `inputVersion.ts` import `PROJECT_TABLES`, **chưa đọc** có duyệt bảng control không. Kết luận "không có delete ngoài FK cascade" vẫn đúng với grep trong `src`.
-- **Phản ứng agent khi checkpoint không ok (thay cho "409"):** `request()` (`agent.ts:516`) ném `AppError(status, code)`. `send` (`projectRunner.ts:227–231`) không bắt. `executeProjectRun` (`agent.ts:237–239`) chỉ bỏ `RUN_REBASE`, còn lại ném tiếp. `startProject` (`agent.ts:498–503`) ghi log `Đoạn chạy … lỗi: <code>` và xóa khỏi `running` trong `finally`. Agent **không gửi `/finish`, không gửi `/fail`, không retry**. Heartbeat chỉ gửi các run còn trong `running` (`nodeService.ts:233–236`), nên `projectRuns.expire()` (`runService.ts:140–143`) đặt `LOST` với `end_reason='HEARTBEAT_LOST'` khi lease hết. Hệ quả: **run mất (LOST), không tự chạy lại.** Khác job (job được retry qua `/fail`).
+- **Phản ứng agent khi checkpoint không ok (thay cho "409"):** `request()` (`agent.ts:516`) ném `AppError(status, code)`. `send` (`projectRunner.ts:227–231`) không bắt. vòng lặp đoạn chạy (`projectRunner.ts:239`) chỉ bỏ `RUN_REBASE`, còn lại ném tiếp; `executeProjectRun` (`agent.ts`, quanh dòng 507) không bắt lỗi nào. (Sửa: trước đó ghi `agent.ts:237–239`, dòng đó thuộc `projectCapabilities`.) `startProject` (`agent.ts:498–503`) ghi log `Đoạn chạy … lỗi: <code>` và xóa khỏi `running` trong `finally`. Agent **không gửi `/finish`, không gửi `/fail`, không retry**. Heartbeat chỉ gửi các run còn trong `running` (`nodeService.ts:233–236`), nên `projectRuns.expire()` (`runService.ts:140–143`) đặt `LOST` với `end_reason='HEARTBEAT_LOST'` khi lease hết. Hệ quả: **run mất (LOST), không tự chạy lại.** Khác job (job được retry qua `/fail`).
 - **Chuỗi bước 4:** `have` và checkpoint dùng cùng lease (`runTransport.ts:56` `ready(run.id, run.leaseId)`). Tên phải bắt đầu bằng `files/<sha>` (`runTransport.ts:90`).
 
 ### Câu hỏi 1: có nội dung chung không? **Có.**
@@ -111,6 +111,18 @@ Qua hàm thật, khẳng định trước khi chạy:
 - `runTransport.have` lần hai, cùng lease: khẳng định trả tên (hàng cũ, không kiểm file).
 - Checkpoint thứ hai nêu S: khẳng định ENOENT thô (không phải AppError).
 - Đối chứng: GC chạy sau khi A hoàn tất, trước `have` của R. Khẳng định `artifacts` trỏ versions và không có hàng linked. Đây là bằng chứng cho câu hỏi người ghi cuối.
+
+## Đọc bổ sung 2 (theo yêu cầu advisor, chỉ đọc)
+
+- **Cache trong `registerSync`** (`artifactService.ts:31–53`): cache `registeredVersions` (dòng 36–37) trả về **trước** `remember`. Cache hit không ghi lại hàng `artifacts`. Cache là theo instance: mỗi `new ArtifactService(...)` bắt đầu rỗng, nên lần gọi đầu tiên trên instance đó luôn `remember`.
+- **Điểm ghi lên `artifacts` (đã liệt kê):** `projectSnapshot.ts:118` (`exportProjectRows`), `projectSnapshot.ts:168`, `runTransport.ts:58` và `:84`, `remoteBundle.ts:53` (`register`), `inputVersion.ts:100`, `fileGc.ts:451/465`, `references.ts:172/252`. Không có lệnh đăng ký nào trong `renderService` hay `leaseService` (grep).
+- **Thứ tự trên đường RENDER DONE (kết luận mới):** `exportProjectRows` chạy **trước** `transport.checkpoint` → `uploadOutputs` → `have` của cùng checkpoint (`projectRunner.ts:292`, rồi `send` ở `:228–230`). Vì vậy `versions/output.mp4` được `remember` (`ON CONFLICT(sha256) DO UPDATE path=excluded.path`, `artifactService.ts:57–58`) **trước** khi `have` tra S. Nếu node và server dùng chung một handle SQLite, `have` sẽ tra ra versions và liên kết versions. Chuỗi pending không xảy ra trên đường này.
+- **Khi nào hai handle khác nhau:** `app.ts:702` truyền `database.sqlite` cho `createStockExecutors` của worker nhúng trong server. Runtime của đoạn chạy (`projectRunner.ts:292` dùng `runtime.repository.sqlite`; `runnerRuntime.ts:26` tạo `JobRepository(input.sqlite)`) nhận `input.sqlite` từ nơi khác. **Chưa đọc** nguồn `input.sqlite` của agent từ xa. Nếu agent từ xa có DB riêng, export không ghi vào `artifacts` của server.
+- **Điều kiện chuỗi (nếu DB riêng):** (1) server không chạy GC sau khi A hoàn tất, vì GC đăng ký lại mọi đường dẫn tham chiếu qua graph, gồm đầu ra `renders` (`references.ts:166–177`) và sẽ đưa hàng về versions; (2) R `have` trước mọi lần ghi khác lên S ở phía server.
+- **Hệ quả cho kế hoạch đo (thay thế đề xuất test ở trên):** test chuỗi phải dựng R qua đường lease run thật, đo cả hai cấu hình:
+  - Chung DB: dự đoán `have` trả versions, không lỗi. Đây là khẳng định âm (chuỗi bị chặn).
+  - DB riêng: chuỗi đúng chỉ khi không có GC server giữa lúc A hoàn tất và `have` của R. Chưa đo lịch GC.
+- **Chưa đo:** nguồn `input.sqlite` của agent từ xa; lịch chạy GC tự động của server trong khoảng A hoàn tất → `have` của R.
 
 ## Liên kết
 
