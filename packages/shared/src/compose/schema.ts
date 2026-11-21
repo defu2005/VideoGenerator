@@ -6,7 +6,7 @@ import { DiagramSourceSchema, TimelineSourceSchema } from "./structuredGraphic.j
 
 export const COMPOSE_VERSION = 1;
 /** Bump when compose templates, fonts or common.js change, so scene clips are not reused. */
-export const COMPOSE_RENDER_VERSION = 2;
+export const COMPOSE_RENDER_VERSION = 3;
 export const SHOT_KINDS = ["still", "footage", "kinetic_text", "chart", "map", "compare", "quote_full", "list_full", "diagram", "timeline"] as const;
 export const ShotKindSchema = z.enum(SHOT_KINDS);
 export type ShotKind = z.infer<typeof ShotKindSchema>;
