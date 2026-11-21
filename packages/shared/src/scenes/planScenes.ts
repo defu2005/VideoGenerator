@@ -32,7 +32,8 @@ type QueryAssignment = {
   queryVariant: boolean;
 };
 
-type AssignQueries = (section: ScriptSection | null) => QueryAssignment;
+// useIntent is true only for a section's own scenes; hook and outro scenes borrow a neighbour's queries and never take its intent.
+type AssignQueries = (section: ScriptSection | null, useIntent: boolean) => QueryAssignment;
 
 const QUERY_VARIANT_MODIFIERS = ["close-up", "wide shot", "archival photo", "detail", "portrait", "illustration"];
 
@@ -125,7 +126,7 @@ function sceneDraft(
   assignQueries: AssignQueries,
 ): SceneDraft {
   const section = unit.section ?? unit.queriesFrom;
-  const queryAssignment = assignQueries(section);
+  const queryAssignment = assignQueries(section, unit.kind === "section");
   return {
     ...beatFields(unit),
     order: 0,
@@ -289,10 +290,46 @@ export function planScenes(script: Script, settings: Settings): SceneDraft[] {
   // and the first section scene never reuse the same primary query.
   const queryPositions = new Map<string, number>();
   let previousPrimary: string | undefined;
-  const assignQueries: AssignQueries = (section) => {
+  // A section with a visualIntent leads each of its scenes with the intent and repeats it with
+  // modifiers. It rotates on its own key, so the hook and the first section scene do not share a position.
+  const intentPositions = new Map<string, number>();
+  const assignIntentQueries = (section: ScriptSection, intent: string): QueryAssignment => {
+    let index = intentPositions.get(section.id) ?? 0;
+    let primary: string;
+    let queryVariant: boolean;
+    do {
+      if (index === 0) {
+        primary = intent;
+        queryVariant = false;
+      } else {
+        primary = `${intent} ${QUERY_VARIANT_MODIFIERS[(index - 1) % QUERY_VARIANT_MODIFIERS.length]!}`;
+        queryVariant = true;
+      }
+      index += 1;
+    } while (primary === previousPrimary);
+    intentPositions.set(section.id, index);
+    const mix = settings.visualMix ?? [];
+    if (mix.length > 0) {
+      const kind = mix[(index - 1) % mix.length];
+      const word = kind === "photo" ? "photograph" : kind === "text" ? "text graphic" : kind;
+      if (word && !primary.toLowerCase().includes(word)) primary = `${primary} ${word}`;
+    }
+    previousPrimary = primary;
+    const oldQueries = [...new Set([section.visualQueries.primary, ...section.visualQueries.alternatives])]
+      .filter((query) => query.length > 0);
+    return {
+      visualQueries: {
+        primary,
+        alternatives: oldQueries.filter((query) => query !== primary).slice(0, 3),
+      },
+      queryVariant,
+    };
+  };
+  const assignQueries: AssignQueries = (section, useIntent) => {
     if (!section) {
       return { visualQueries: { primary: "", alternatives: [] }, queryVariant: false };
     }
+    if (useIntent && section.visualIntent) return assignIntentQueries(section, section.visualIntent);
     const pool = [...new Set([section.visualQueries.primary, ...section.visualQueries.alternatives])];
     const positionKey = section.id;
     let position = queryPositions.get(positionKey) ?? 0;

@@ -135,3 +135,44 @@ describe("TASK-146 slice 1: guards that must stay green", () => {
     }
   });
 });
+
+// TASK-146 slice 2 commit A red tests: an intent section's first scene leads with the intent;
+// later scenes of the section repeat it with a modifier; the hook keeps today's query.
+const INTENT = "the finished machine on a workbench";
+const THREE_SCENES = "Alpha has five words here. Bravo has five words here. Charlie has five words here.";
+const intentScript = ScriptSchema.parse({
+  title: "Intent",
+  hook: "Hook opens the story.",
+  sections: [{ ...sectionBase("s1", THREE_SCENES), visualIntent: INTENT }],
+  outro: "Closing words here now.",
+  music: { mood: "", energy: "medium", keywords: [] },
+});
+
+describe("TASK-146 slice 2: visualIntent leads the search queries", () => {
+  it("makes the intent the primary of each section scene, with modifiers on repeats and the old queries as alternatives", () => {
+    const scenes = planScenes(intentScript, settings);
+    const hook = scenes.find((scene) => scene.kind === "hook");
+    expect(hook?.visualQueries.primary).toBe("s1 primary");
+    // The hook took base position 0 and section scenes no longer use the base rotation, so the outro gets the next base query.
+    expect(scenes.find((scene) => scene.kind === "outro")?.visualQueries.primary).toBe("s1 alt one");
+    const body = scenes.filter((scene) => scene.sectionId === "s1");
+    expect(body.map((scene) => scene.visualQueries.primary)).toEqual([
+      INTENT,
+      `${INTENT} close-up`,
+      `${INTENT} wide shot`,
+    ]);
+    for (const scene of body) {
+      expect(scene.visualQueries.alternatives).toEqual(["s1 primary", "s1 alt one", "s1 alt two"]);
+    }
+  });
+
+  it("still appends the recipe visualMix word to the intent query", () => {
+    const scenes = planScenes(intentScript, { ...settings, visualMix: ["photo", "chart", "text"] });
+    const body = scenes.filter((scene) => scene.sectionId === "s1");
+    expect(body.map((scene) => scene.visualQueries.primary)).toEqual([
+      `${INTENT} photograph`,
+      `${INTENT} close-up chart`,
+      `${INTENT} wide shot text graphic`,
+    ]);
+  });
+});
