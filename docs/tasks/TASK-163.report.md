@@ -2,6 +2,8 @@
 
 Trạng thái: thêm test (`apps/server/test/leaseRetryAfterMissingLink.test.ts`, mới, LF, 2 test); không đổi `src/`. Commit cục bộ theo quyết định advisor (2026-11-21), không phải xác nhận trực tiếp của người dùng. **Chưa push, không có `.done`.**
 
+Cập nhật (TASK-166, `aae87cf`): bước cleanup trong `reachEnoent` nay là unlink trực tiếp (`rmSync`, giả lập), vì cleanup giờ giữ file mà job chưa kết thúc còn liên kết. Hướng 1 của TASK-165 đã triển khai trong `aae87cf`.
+
 ## Đọc mã trước khi viết test
 
 - **Node sau complete lỗi (đọc mã, chưa đo phía agent).** ENOENT thô thành 500 `INTERNAL_ERROR` (`apps/server/src/app.ts:1188–1189`). Đây không phải 409/410, nên agent throw và POST `/fail` với `retryable: true`, lỗi của POST bị nuốt (`apps/server/src/node/agent.ts:795–811`).

@@ -2,6 +2,8 @@
 
 Trạng thái: thêm test thứ ba (`apps/server/test/leaseRetryAfterMissingLink.test.ts`, LF, cùng file với TASK-163); không đổi `src/`. Commit cục bộ theo quyết định advisor (2026-11-21), không phải xác nhận trực tiếp của người dùng. **Chưa push, không có `.done`.**
 
+Cập nhật (TASK-166, `aae87cf`): bước cleanup trong test attempt cuối nay là unlink trực tiếp (`rmSync`, giả lập), như `reachEnoent` của TASK-163. Hướng 1 của TASK-165 đã triển khai trong `aae87cf`.
+
 ## Đọc mã trước khi viết test
 
 - **`failJob` (`apps/server/src/pipeline/orchestrator.ts:758–828`):** retry khi `error.retryable && job.attempt < job.maxAttempts` (`:799`). Khi retry, `attempt + 1` và `runAfter = now + JOB_RETRY_BASE_MS × 2^(attempt−1)` (`:800`, `:809`). Khi không retry, ghi `FAILED` với `finishedAt` (`:828`).

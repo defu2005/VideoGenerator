@@ -22,6 +22,7 @@ Trạng thái: thay đổi `src/` đầu tiên của chuỗi TASK-159…165, the
   - Xác nhận bảng artifacts còn trỏ tới file đã xóa (TASK-163 đã đo).
 - `leaseRetryAfterMissingLink.test.ts`: bước cleanup trong `reachEnoent` và test attempt cuối được thay bằng `rmSync(fileA)`, ghi rõ là **giả lập**. Mục đích: vẫn tạo được ENOENT để giữ phần phủ retry của TASK-163/164.
 - Đỏ trước guard: keep-row test đỏ tại `existsSync(fileA)` (`true` mong đợi). Các test retry vẫn xanh vì dùng unlink trực tiếp.
+- Thứ tự thực tế, để báo cáo đúng: lần chạy đầu tiên **có guard** đỏ tại assertion hàng `report.json` của A (test dòng 154). Kỳ vọng ban đầu sai; đã sửa theo hành vi đúng (chỉ `final.mp4` được liên kết nên được giữ, `report.json` không ai liên kết nên bị dọn). Các assertion bảng `artifacts` stale được thêm **sau** lần chạy đó, không nằm trong lần đỏ đầu tiên.
 
 ## Kết quả
 
@@ -29,6 +30,8 @@ Trạng thái: thay đổi `src/` đầu tiên của chuỗi TASK-159…165, the
 - `npx tsc --noEmit` (apps/server): exit 0.
 - Toàn bộ `apps/server`: 305 file đạt, 4 bỏ qua; 2508 test đạt, 9 bỏ qua.
 - Mutant M5 (xóa dòng guard trong `leaseService.ts`): keep-row test **đỏ** như dự đoán. Đã khôi phục bằng `cp` từ bản sao lưu, `cmp` khớp.
+- Mutant M6 (chỉ bỏ dòng `paths.add(realpathSync.native(file))`): keep-row test vẫn **xanh**. Trên máy này dạng join và realpath trùng nhau, nên nhánh realpath chưa được đo. Đã khôi phục, `cmp` khớp với bản sao lưu.
+- Sau khi sửa test (bỏ hằng `HOUR` không dùng, cập nhật comment và tên `describe` trong `leaseRetryAfterMissingLink.test.ts`): năm file 30/30 xanh, `tsc` exit 0.
 
 ## Hạn chế cần nêu
 
@@ -37,4 +40,6 @@ Trạng thái: thay đổi `src/` đầu tiên của chuỗi TASK-159…165, the
 - `report.json` của A không bị liên kết nên vẫn bị dọn như cũ. Chỉ file được liên kết mới được giữ.
 - Bảng `artifacts` vẫn có thể trỏ tới file đã dọn (stale), đúng như TASK-163 đã ghi. `locate` trả `undefined` và job tải lại.
 - Chưa đo phía agent, và chưa đo GC chạy giữa lúc A kết thúc và B được lease.
+- Nhánh realpath chưa được đo: M6 xanh vì hai dạng đường dẫn trùng nhau trên máy này. Nhánh có tác dụng khi chúng khác nhau (ví dụ đường dẫn có symlink hoặc tên ngắn 8.3). Chưa có test cho trường hợp đó.
+- `run_uploads` chưa được guard. `runTransport.ts:54` tạo `NodeUploadStore` với scope `run`, và `linkKnown` (`uploadStore.ts:52–54`) lấy đường dẫn từ cùng `artifacts.locate`. Một run có thể liên kết file pending của A, nhưng guard chỉ truy vấn `node_uploads`, nên file đó vẫn có thể bị dọn. Không mở rộng TASK-166. Ghi nhận làm ứng viên TASK-168.
 - Option 2 (TASK-167) chưa làm. Nó chỉ đổi mã lỗi, không thuộc phạm vi task này.

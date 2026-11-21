@@ -1,6 +1,6 @@
 # TASK-165 — các hướng sửa chuỗi TASK-159…164 (ghi chú, chưa sửa)
 
-Trạng thái: chỉ đọc mã và tra cứu test (grep). **Không sửa `src/`, không chạy mutant, không có test mới.** Commit cục bộ theo quyết định advisor (2026-11-21), không phải xác nhận trực tiếp của người dùng. **Chưa push, không có `.done`.** Việc triển khai chờ advisor duyệt hướng.
+Trạng thái: chỉ đọc mã và tra cứu test (grep). **Không sửa `src/`, không chạy mutant, không có test mới.** Commit cục bộ theo quyết định advisor (2026-11-21), không phải xác nhận trực tiếp của người dùng. **Chưa push, không có `.done`.** Cập nhật: hướng 1 (giữ file và hàng khi job chưa kết thúc còn liên kết) đã triển khai trong `aae87cf` (TASK-166), theo quyết định advisor 2026-11-21. Hướng 2 là TASK-167. Phần khuyến nghị và "chưa biết" bên dưới là trạng thái trước khi triển khai.
 
 ## Chuỗi cần sửa (đã đo qua TASK-162 đến TASK-164, fixture)
 

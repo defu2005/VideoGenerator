@@ -16,8 +16,9 @@ import { createPipelineHarness } from "./pipelineFixtures.js";
 // (2) no /fail arrives and the lease lapses, so the real node sweep runs (nodeService.ts:340-372).
 // Both go through the real methods. No UPDATE on jobs and no hand-inserted rows.
 //
-// Fixture, not production: remoteBundle is mocked, the render port is a stub, and the 25 h advance
-// and heartbeats are fabricated timing. Production uses the real agent and real timing.
+// Fixture, not production: remoteBundle is mocked, the render port is a stub, and the file removal
+// that reaches B's ENOENT is a fabricated direct unlink (rmSync), since TASK-166 cleanup keeps a file
+// an unfinished job links. Heartbeats are fabricated timing. Production uses the real agent and real timing.
 
 vi.mock("../src/node/remoteBundle.js", () => ({
   RemoteBundleError: class RemoteBundleError extends Error {},
@@ -25,7 +26,6 @@ vi.mock("../src/node/remoteBundle.js", () => ({
   buildRemoteBundle: async () => ({ bundle: { bundleVersion: 1, renderId: "render-1" }, files: [] }),
 }));
 
-const HOUR = 3_600_000;
 const VIDEO = "video bytes";
 const REPORT = JSON.stringify({ clipsReused: 0, clipsRendered: 1, graphicShots: [], composeWarnings: [], joinWarnings: [] });
 const RESOURCES = { cpus: 2, ramMb: 4096, freeDiskMb: 50_000 };
@@ -144,7 +144,7 @@ async function reachEnoent(s: ReturnType<typeof setup>) {
   return { realA, rowB, jobB, leaseB };
 }
 
-describe("TASK-163: job B after its complete fails with ENOENT (TASK-162 chain), real methods", () => {
+describe("TASK-163: job B after its complete fails with ENOENT (TASK-162 chain); fail and sweep go through real methods, file removal is a direct unlink", () => {
   it("fail path: a retryable /fail re-queues B with the base backoff; a re-lease uploads fresh bytes and completes", async () => {
     const s = setup();
     try {
