@@ -3,7 +3,8 @@ import { BeatPurposeSchema, type BeatMark } from "@vg/shared";
 
 /**
  * Beat per scene from its script section's beatPurpose. Only the section's first scene starts the beat.
- * Used for the parent project and for translated child projects, which carry their own script row.
+ * Used for the parent project only. Translated children have no beat source of their own: their
+ * section_id holds the parent scene id, so the translation service resolves beats through the parent.
  */
 export function sceneBeatMarks(
   sqlite: Database.Database,

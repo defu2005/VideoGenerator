@@ -433,7 +433,12 @@ export function createTranslationService(deps: {
       start_offset_sec: number;
     } | undefined;
 
-    const beats = sceneBeatMarks(deps.sqlite, input.childId, scenes);
+    // Child scenes carry the parent scene id in section_id and no beat source of their own,
+    // so beats resolve through the parent's script and scenes.
+    const parentScenes = deps.sqlite.prepare(
+      "SELECT id, section_id FROM scenes WHERE project_id = ? ORDER BY \"order\"",
+    ).all(input.parentId) as Array<{ id: string; section_id: string | null }>;
+    const beats = sceneBeatMarks(deps.sqlite, input.parentId, parentScenes);
     const built = buildTimeline({
       aspectRatio: settings.aspectRatio,
       musicEnabled: settings.music.enabled,
@@ -458,7 +463,7 @@ export function createTranslationService(deps: {
           licenseKind: null,
           motion: null,
         }));
-        const beat = beats.get(scene.id);
+        const beat = beats.get(scene.section_id);
         return {
           id: scene.id,
           order: scene.order,

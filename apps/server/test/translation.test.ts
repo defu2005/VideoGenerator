@@ -186,4 +186,49 @@ describe("translation children", () => {
     const paths = sqlite().prepare("SELECT audio_path FROM voice_tracks WHERE project_id = ?").all(childId) as Array<{ audio_path: string }>;
     expect(paths.every((row) => row.audio_path === audioPath)).toBe(true);
   });
+
+  it("carries the parent section beat onto the child timeline's first scene of that section", async () => {
+    const profile = await app.inject({
+      method: "POST",
+      url: "/api/profiles",
+      payload: {
+        name: `Beat dịch ${randomUUID().slice(0, 6)}`,
+        direction: "Lịch sử",
+        language: "vi",
+        automation: { enabled: true, timezone: "Asia/Ho_Chi_Minh", videosPerDay: 1, publishTimes: ["19:00"] },
+        translations: [{ language: "en", accountIds: [], mode: "dub", voice: "en-US-AriaNeural" }],
+      },
+    });
+    const profileId = profile.json<{ id: string }>().id;
+    const { projectId, sceneIds } = await finishedProject(profileId);
+    // Parent section "sec-reveal" holds both scenes; the first scene starts the reveal beat.
+    sqlite().prepare("UPDATE scenes SET section_id = 'sec-reveal' WHERE project_id = ?").run(projectId);
+    const parentScript = {
+      title: "Đông Sơn",
+      hook: "",
+      sections: [{ id: "sec-reveal", heading: "Lộ diện", narration: "", beatPurpose: "reveal", visualQueries: { primary: "", alternatives: [] }, visualNotes: "", estDurationSec: 4 }],
+      outro: "",
+      music: { mood: "", energy: "medium", keywords: [] },
+    };
+    sqlite().prepare(
+      `INSERT INTO scripts (project_id, data, origin, edited, input_hash, version, provider, model, updated_at, merged_call, review_notes)
+       VALUES (?, ?, 'AGENT', 0, ?, 1, 'mock', 'mock-v1', ?, 0, NULL)`,
+    ).run(projectId, JSON.stringify(parentScript), hash("beat-parent"), new Date().toISOString());
+    const started = await app.inject({
+      method: "POST",
+      url: `/api/projects/${projectId}/translations`,
+      payload: { language: "en" },
+    });
+    expect(started.statusCode).toBe(200);
+    const childId = started.json<{ childId: string }>().childId;
+    const firstChild = sqlite().prepare(
+      "SELECT id FROM scenes WHERE project_id = ? AND section_id = ? ORDER BY \"order\"",
+    ).get(childId, sceneIds[0]) as { id: string };
+    const timeline = JSON.parse((sqlite().prepare("SELECT data FROM timelines WHERE project_id = ?").get(childId) as { data: string }).data) as {
+      scenes: Array<{ sceneId: string; beat?: { purpose: string; start: boolean }; visuals: Array<{ motionPreset?: string }> }>;
+    };
+    const first = timeline.scenes.find((item) => item.sceneId === firstChild.id);
+    expect(first?.beat).toEqual({ purpose: "reveal", start: true });
+    expect(first?.visuals[0]?.motionPreset).toBe("punch_in");
+  });
 });
