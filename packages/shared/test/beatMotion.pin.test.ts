@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { fallbackEditPlan } from "../src/edit/plan.js";
+import { fallbackEditPlan, validateEditPlan } from "../src/edit/plan.js";
 import { buildTimeline, type TimelineSceneInput } from "../src/timeline/build.js";
 
 // TASK-146 slice 3 pin: today's camera-motion defaults for scenes with NO beat data.
@@ -30,6 +30,17 @@ describe("TASK-146 slice 3 pin: motion defaults without beat data", () => {
     });
     expect(plan.motions.map((item) => item.preset)).toEqual(EXPECTED_CYCLE);
     expect(plan.motions.map((item) => item.sceneId)).toEqual(scenes.map((item) => item.id));
+  });
+
+  it("validateEditPlan with no raw plan assigns the same cycle", () => {
+    const plan = validateEditPlan({}, scenes.map((item) => ({ sceneId: item.id, startSec: 0, durationSec: 5 })), "story");
+    expect(plan.motions.map((item) => item.preset)).toEqual(EXPECTED_CYCLE);
+  });
+
+  it("one LLM motion overrides only its own scene", () => {
+    const raw = { motions: [{ sceneId: "s2", preset: "punch_in" }] };
+    const plan = validateEditPlan(raw, scenes.map((item) => ({ sceneId: item.id, startSec: 0, durationSec: 5 })), "story");
+    expect(plan.motions.map((item) => item.preset)).toEqual(EXPECTED_CYCLE.map((preset, index) => (index === 2 ? "punch_in" : preset)));
   });
 
   it("buildTimeline puts the same preset on the first visual of each scene", () => {
