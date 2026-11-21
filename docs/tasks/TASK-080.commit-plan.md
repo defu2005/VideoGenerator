@@ -138,7 +138,7 @@ User yêu cầu Claude commit C1–C12 theo thứ tự trong file này (advisor 
 
 ## Cập nhật TASK-085 (2026-11-21)
 
-Các commit TASK-085 nằm trên `dev`, SAU C1–C12 (C1–C12 là `9dd85a3`…`7135860`; `838b617` và các commit TASK-153/154 nằm giữa). Thứ tự: `a4cd921`, `fd02232`, `0967d10`, `5946672`, `5e5f6e5`, `f4b261f`. C1–C12 chứa các file trước khi tách, nên không entry C nào cần sửa.
+Các commit TASK-085 nằm trên `dev`, SAU C1–C12 (C1–C12 là `9dd85a3`…`7135860`). Giữa C1–C12 và các commit 085 có `838b617` và các commit TASK-153 đến TASK-174 (`9d7d220` … `23b8505`, `6c29794`, `89a1841`; `6c29794` là thay đổi source cuối cùng trước 085, `89a1841` là docs). Thứ tự 085: `a4cd921`, `fd02232`, `0967d10`, `5946672`, `5e5f6e5`, `f4b261f`. C1–C12 chứa các file trước khi tách, nên không entry C nào cần sửa.
 
 Đường dẫn đã chuyển trong 085 và commit làm việc đó (không thuộc C nào, vì xảy ra sau C1–C12):
 - `apps/server/src/db/schema.ts` thành `apps/server/src/db/schema/`; `apps/server/drizzle.config.ts` trỏ tới thư mục này. Commit `a4cd921`.
