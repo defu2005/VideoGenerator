@@ -34,6 +34,8 @@ Lần chạy đầu của full suite có 2528 passed và 1 fail (chính test ki�
 
 ## Ghi chú về load
 
+- Typecheck toàn repo (`npm run typecheck`) tại commit `6c29794`, chạy một mình: **xanh, exit 0** (đây cũng là baseline typecheck cho TASK-085).
+
 Lần chạy full suite đầu tiên (`baseline-test.log`) bị nhiễm vì hai lần chạy chồng nhau. Có 6 fail (visionMax 4, clips 1, thumbnails 1). Lần chạy sạch `clean-test-run.log` và lần chạy này đều không tái hiện. Ghi nhận là test nhạy với tải, không phải lỗi do task này.
 
 ## Ngoài phạm vi (không làm)
