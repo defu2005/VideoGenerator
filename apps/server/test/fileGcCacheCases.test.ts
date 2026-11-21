@@ -365,3 +365,72 @@ describe("TASK-172 terminal without complete: A uploads S, a pass runs, A goes F
     } finally { s.harness.close(); }
   });
 });
+
+// TASK-172 follow-up (advisor 2026-11-21). Predictions below were written before the first run; a red result is a finding.
+describe("TASK-172 follow-up: restart and hand-deleted row (fixture R and N)", () => {
+  it("R, then a FRESH FileGc after cleanup (restart, empty cache): render-0 is re-registered, the row repoints to it, and locate returns it", async () => {
+    const s = setup();
+    try {
+      s.insertRenderRow("render-0");
+      const a = await s.startA();
+      s.pass();
+      await s.failA(a);
+      s.harness.advance(25 * HOUR);
+      s.leases.cleanupFinishedUploads();
+      expect(existsSync(a.fileA)).toBe(false);
+      expect(s.artifactPath()).toBe(a.fileA);
+      const fresh = new FileGc(s.harness.sqlite, s.dataDir, () => ({ graceDays: 14, postPublishDays: 7 }), s.harness.clock);
+      // Predicted: render-0 misses in the empty cache and writes retained-versions (repoint). pending is not active. seq [retained-versions], path retained-versions.
+      const result = s.pass(fresh);
+      expect(result.seq).toEqual(["retained-versions"]);
+      expect(result.path).toBe("retained-versions");
+      // Predicted: locate returns render-0 (exists; size and mtime match the row written by the pass).
+      const found = new ArtifactService(s.harness.sqlite, s.harness.clock).locate(S);
+      expect(found).toBeDefined();
+      expect(realpathSync.native(found!.path)).toBe(s.realRetained());
+    } finally { s.harness.close(); }
+  });
+
+  it("N, then a FRESH FileGc after cleanup: nothing heals; the row stays on pending and locate returns undefined", async () => {
+    const s = setup();
+    try {
+      const a = await s.startA();
+      s.pass();
+      await s.failA(a);
+      s.harness.advance(25 * HOUR);
+      s.leases.cleanupFinishedUploads();
+      expect(existsSync(a.fileA)).toBe(false);
+      const fresh = new FileGc(s.harness.sqlite, s.dataDir, () => ({ graceDays: 14, postPublishDays: 7 }), s.harness.clock);
+      // Predicted: no active reference to S and no render row, so no write. seq [], path pending.
+      const result = s.pass(fresh);
+      expect(result.seq).toEqual([]);
+      expect(result.path).toBe("pending");
+      expect(new ArtifactService(s.harness.sqlite, s.harness.clock).locate(S)).toBeUndefined();
+    } finally { s.harness.close(); }
+  });
+
+  it("R, hand-delete the S row after cleanup, then a pass on the SAME FileGc: the cache hit suppresses the rewrite, so no row is recreated; a fresh FileGc then recreates it", async () => {
+    const s = setup();
+    try {
+      s.insertRenderRow("render-0");
+      const a = await s.startA();
+      s.pass();
+      await s.failA(a);
+      s.pass();
+      s.harness.advance(25 * HOUR);
+      s.leases.cleanupFinishedUploads();
+      s.harness.sqlite.prepare("DELETE FROM artifacts WHERE sha256 = ?").run(S);
+      expect(s.artifactPath()).toBeUndefined();
+      // Predicted: render-0 hits the cache entry from pass 1 (artifactService.ts:37), so there is no remember and no row. seq [], no row.
+      const same = s.pass();
+      expect(same.seq).toEqual([]);
+      expect(same.path).toBeUndefined();
+      expect(new ArtifactService(s.harness.sqlite, s.harness.clock).locate(S)).toBeUndefined();
+      // Predicted: a fresh FileGc (empty cache) misses render-0 and recreates the row.
+      const fresh = new FileGc(s.harness.sqlite, s.dataDir, () => ({ graceDays: 14, postPublishDays: 7 }), s.harness.clock);
+      const healed = s.pass(fresh);
+      expect(healed.seq).toEqual(["retained-versions"]);
+      expect(healed.path).toBe("retained-versions");
+    } finally { s.harness.close(); }
+  });
+});

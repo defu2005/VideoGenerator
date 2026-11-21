@@ -1,6 +1,6 @@
 # TASK-172 — đường kết thúc không complete và các reader của `artifacts.path` (chỉ test + đọc)
 
-Trạng thái: **đã đo bằng test** (bốn ca mới). Không đổi `src`. File test: `apps/server/test/fileGcCacheCases.test.ts` (hai `describe` mới ở cuối file).
+Trạng thái: **đã đo bằng test**. Không đổi `src`. File test: `apps/server/test/fileGcCacheCases.test.ts`: hai ca TASK-172 (describe "terminal without complete") và ba ca follow-up (describe "restart and hand-deleted row", cuối file). Tổng file: 13 ca; cùng hai ca pin TASK-168: 15 ca.
 
 Lý do: advisor (2026-11-21) đánh giá `23a13c0` (TASK-171). Kết luận "hình dạng kẹt chỉ xuất hiện ở mock" chưa đúng. Một job đi tới FAILED hoặc CANCELLED sau khi đã upload đạt cùng trạng thái kết thúc (job terminal, không có row render cho id của A, row trỏ pending) mà không gọi `finalize`. `cleanupFinishedUploads` chọn cả ba trạng thái (`leaseService.ts:427`), và `references.ts:115` loại chúng khỏi `activeJobs`.
 
@@ -24,7 +24,7 @@ Lý do: advisor (2026-11-21) đánh giá `23a13c0` (TASK-171). Kết luận "hì
 | `references.ts:439–446` | **Không** | Sha → path của row (`validSha`), cho oracle. |
 | `references.ts:520–522` | Không liên quan | Chỉ lấy sha của class `global`, không đọc file. |
 
-Các reader không có kiểm tra tồn tại đều nằm trong GC và oracle. Không tìm thấy reader nào ở đường upload hoặc tải file mà thiếu kiểm tra.
+Phạm vi câu này: **chỉ các reader của `artifacts.path`**. Reader thiếu kiểm tra đều nằm trong GC và oracle. `linkKnown` (`uploadStore.ts:52`) không đọc `artifacts.path` trực tiếp: nó gọi `locate`, nên có `existsSync`. Riêng nhánh `validate` (`uploadStore.ts:50`) trả về row `node_uploads` đã `linked` mà không kiểm tra file của row đó. Đây là đường upload, không phải `artifacts.path`, và được ghi là gợi ý cứng hóa (d), chưa đo.
 
 ## Ca đo (mỗi ca: một `FileGc` dài hạn; cleanup sau 25 h kể từ lúc FAILED)
 
@@ -45,28 +45,49 @@ Dự đoán được viết trong test trước lần chạy đầu:
 | N | sau cleanup, pass 3 | seq `[]`, path pending | khớp |
 | N | `locate(S)` sau cleanup | undefined | khớp |
 
-Chạy: `npx vitest run test/fileGcCacheCases.test.ts test/runSnapshotRepointsPending.test.ts` (trong `apps/server`): 12/12 xanh, trong đó 10 ca của file cache (8 cũ + 2 mới) và 2 ca pin TASK-168.
+Chạy: `npx vitest run test/fileGcCacheCases.test.ts test/runSnapshotRepointsPending.test.ts` (trong `apps/server`): 15/15 xanh, trong đó 13 ca của file cache (8 cũ + 2 TASK-172 + 3 follow-up) và 2 ca pin TASK-168. Lần chạy trước follow-up là 12/12.
 
 **Probe (một lần, sau cleanup):** `isReferencedInGraph` không kiểm tra tồn tại. Trong fixture R, pass 3 chạy trên row đang trỏ file đã xóa, và `render-0` vẫn còn. Kết quả này chỉ cho biết fixture R không mất file; không cô lập được nhánh `isReferencedInGraph` là nguyên nhân.
 
 ## Phát hiện
 
 1. **Trạng thái "kẹt ở pending" xảy ra trên đường FAILED không complete**, cả khi có bản sao hợp lệ (fixture R) và khi không có (fixture N). Đây là đường production đã đọc được, không chỉ mock.
-2. **Row dangling che bản sao hợp lệ:** trong fixture R, `locate(S)` trả undefined dù `render-0` có cùng bytes. Ai dùng `locate` (upload có sha đã biết, `linkKnown`) sẽ coi S là chưa có và phải upload lại. Đây là lỗi hiệu quả, chưa thấy lỗi dữ liệu.
+2. **Row dangling che bản sao hợp lệ:** trong fixture R, `locate(S)` trả undefined dù `render-0` có cùng bytes. Ai dùng `locate` (upload có sha đã biết, `linkKnown`) nhận undefined. **Đọc từ mã, chưa đo:** khi đó `linkKnown` trả false và caller phải upload lại. Đây là lỗi hiệu quả, chưa thấy lỗi dữ liệu. `remember` (`artifactService.ts:58`) là upsert theo sha: lần ghi sau thắng, nó đặt `path`, `size`, `mtime_ms` về file mới. Vì vậy khi S được đăng ký lại ở path mới, row sẽ trỏ tới path đó (đọc, chưa đo trên đường upload).
 3. Trong fixture R, lượt GC sau cleanup không ghi lại row (`retained-versions` hit), nên row không được sửa.
+
+## Đo thêm (follow-up, advisor 2026-11-21)
+
+Dự đoán được viết trước lần chạy đầu. Cả bốn khớp; file và pin 15/15 xanh.
+
+| Ca | Dự đoán | Quan sát |
+|---|---|---|
+| R, FileGc mới sau cleanup (restart, cache trống) | seq [retained-versions], path retained-versions; `locate` trả `render-0` | khớp |
+| N, FileGc mới sau cleanup | seq [], path pending, locate undefined | khớp |
+| R, xóa row S bằng tay sau cleanup, pass trên cùng FileGc | seq [], không có row, locate undefined | khớp |
+| (cùng ca) FileGc mới sau đó | seq [retained-versions], path retained-versions | khớp |
+
+Kết luận:
+- **Restart là cách sửa row đã đo.** Trong FileGc mới, cache trống nên `render-0` miss, được ghi (repoint row), và `locate` trả lại bản sao hợp lệ. Thời gian row dangling tồn tại là tới khi cache mất (restart, hoặc cache đạt 4096 mục rồi bị xóa). Chỉ restart được đo; việc xóa cache đầy đủ là đọc, chưa đo.
+- **Ca N không tự sửa:** không có ghi nào, row vẫn trỏ pending.
+- **Xóa row bằng tay không được khôi phục trên cùng FileGc.** Cache hit ở `artifactService.ts:37` trả về sớm, không gọi `remember`, nên row không được tạo lại và `locate` vẫn undefined dù `render-0` còn. Vì vậy phương án 1 không thể chỉ "xóa row": cần xóa mục cache của path, hoặc repoint tường minh.
 
 ## Phương án sửa (chưa thực hiện)
 
-1. **Khi job kết thúc không complete hoặc khi cleanup xóa pending:** nếu row của sha trỏ tới file sắp xóa, xóa row hoặc repoint tới bản sao còn tồn tại (`registerSync`) trước khi xóa file. Test: ca R và N ở trên, kỳ vọng `locate(S)` trả bản sao còn tồn tại (R) hoặc undefined (N) và row không trỏ file đã xóa.
+1. **Khi job kết thúc không complete hoặc khi cleanup xóa pending:** nếu row của sha trỏ tới file sắp xóa, xóa row hoặc repoint tới bản sao còn tồn tại (`registerSync`) trước khi xóa file. Test: ca R và N ở trên, kỳ vọng `locate(S)` trả bản sao còn tồn tại (R) hoặc undefined (N) và row không trỏ file đã xóa. Hai ràng buộc, lấy từ đo follow-up và đọc:
+   - (i) `artifacts` chỉ giữ một path cho mỗi sha, nên "bản sao còn tồn tại" không có sẵn trong bảng. Phải lấy từ row `renders` DONE còn `output_path` (đọc: INSERT của fixture không có cột sha trong `renders`), rồi `registerSync` để hash và ghi row.
+   - (ii) Cache early return (`artifactService.ts:37`) không đọc row. Cache hit trả sha mà không ghi lại row. Ca hand-delete cho thấy xóa row một mình không khôi phục `locate` trong cùng FileGc, nên phương án 1 phải xóa mục cache của path (hoặc repoint tường minh).
 2. **Cleanup giữ file mà row đang trỏ tới:** giống hướng đã làm cho file linked ở TASK-166. Đánh đổi là đĩa tốn thêm đến khi row được repoint. Test: pending còn sau cleanup khi row trỏ tới nó.
 3. **Thêm kiểm tra tồn tại vào `isReferencedInGraph` và `references.ts:266`/`:439`:** chỉ sửa đọc, không sửa row. Đánh đổi: không xóa row dangling, chỉ tránh suy luận từ path đã mất. Cần một ca cô lập nhánh này trước khi làm.
 
-Khuyến nghị của báo cáo: làm (1) trước, vì nó sửa gốc (row dangling) và có test rõ ràng. (2) và (3) là phương án dự phòng.
+Khuyến nghị của báo cáo: làm (1) trước, vì nó sửa gốc (row dangling) và có test rõ ràng, nhưng phải kèm xóa mục cache và lấy bản sao từ `renders` DONE qua `registerSync` (xem ràng buộc (i), (ii)). (2) và (3) là phương án dự phòng.
 
 ## Chưa đo
 
 - Đường cancel (`orchestrator.cancel`) và NODE_LOST (`nodeService.sweep`, `revoke`).
 - Đường failJob có retry (QUEUED, rồi chạy lại trên lease mới).
+- Đường upload lại S: `remember` ghi đè path khi đăng ký file mới cùng sha (đọc, chưa đo).
+- Xóa cache đầy đủ khi đạt 4096 mục (`artifactService.ts:49`): đọc, chưa đo.
+- `locate` ở đường upload sau khi row dangling: chỉ suy ra từ đọc (`linkKnown` trả false), chưa đo.
 - Finalize lỗi giữa `renameSync` và INSERT (đã nêu ở TASK-170).
 - Thứ tự cleanup và GC trong cùng chu kỳ (đã đọc, chưa đo).
 - `references.ts:266` và `:439` chưa có ca riêng; chỉ có probe gián tiếp ở ca R.

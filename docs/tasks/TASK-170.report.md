@@ -3,7 +3,7 @@
 Trạng thái: **đã đo bằng test.** Không đổi `src`. File test: `apps/server/test/fileGcCacheCases.test.ts`.
 
 Kết quả lần chạy đầu (TASK-170): 7 xanh, 1 đỏ (ca "stuck", 3 assertion soft).
-Cập nhật theo TASK-171 (advisor 2026-11-21): nguyên nhân đỏ là **trùng render id** trong fixture, không phải "file versions chưa tồn tại trước complete" như cách giải thích cũ. Ca đỏ được đổi tên thành "collision", ghim giá trị quan sát (xanh). Thêm hai ca tách id (TASK-171). Cập nhật theo TASK-172 (advisor 2026-11-21): thêm hai ca "terminal không complete" (xem `TASK-172.report.md`). Hiện tại: file test 10/10 xanh; cùng TASK-168 pin, 12/12 xanh.
+Cập nhật theo TASK-171 (advisor 2026-11-21): nguyên nhân đỏ là **trùng render id** trong fixture, không phải "file versions chưa tồn tại trước complete" như cách giải thích cũ. Ca đỏ được đổi tên thành "collision", ghim giá trị quan sát (xanh). Thêm hai ca tách id (TASK-171). Cập nhật theo TASK-172 (advisor 2026-11-21): thêm hai ca "terminal không complete" (xem `TASK-172.report.md`). Cập nhật theo follow-up TASK-172 (advisor 2026-11-21): thêm ba ca restart và xóa row bằng tay (xem `TASK-172.report.md`). Hiện tại: file test 13/13 xanh; cùng TASK-168 pin, 15/15 xanh.
 
 ## Cấu hình đo
 
@@ -94,5 +94,5 @@ Không đổi giá trị dự đoán. Ba lỗi nằm trong harness, không nằm
 
 ## Kiểm tra
 
-- `npx vitest run test/fileGcCacheCases.test.ts test/runSnapshotRepointsPending.test.ts` (trong `apps/server`): 10/10 xanh.
+- `npx vitest run test/fileGcCacheCases.test.ts test/runSnapshotRepointsPending.test.ts` (trong `apps/server`): 15/15 xanh (13 ca file cache, 2 ca pin TASK-168). Lần chạy trước follow-up TASK-172 là 12/12.
 - `npx tsc --noEmit -p .` (trong `apps/server`): exit 0.
