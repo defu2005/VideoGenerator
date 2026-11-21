@@ -24,6 +24,7 @@ Trạng thái: thay đổi `src/` (`apps/server/src/node/leaseService.ts`, `fina
 ## Không kiểm / giới hạn
 
 - **Phía agent:** chỉ đọc mã. Chưa chạy agent thật để xác nhận 422 đi tới `/fail` retryable.
+- **Tầng test:** khẳng định trên `AppError` thrown từ method service (`complete`), không qua HTTP. Việc `app.ts` map `AppError` thành HTTP 422 qua route là đọc mã, chưa đo.
 - **`ENOTDIR`** được map cùng ENOENT. Chưa có test riêng cho `ENOTDIR`.
 - **Phạm vi:** mapping chỉ áp cho hàng `linked` trong `finalizeHeld`. Các đường khác (`completeVoice`, `completeMedia`) không đổi, chưa đo.
 - **Không đổi số attempt:** vẫn tốn một attempt. Ở attempt cuối vẫn thành `FAILED` (TASK-164). Option 2 chỉ đổi mã lỗi, không ngăn mất file.

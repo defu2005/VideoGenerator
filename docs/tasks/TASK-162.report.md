@@ -24,7 +24,7 @@ Test "chain":
 - B `lease` trên node 2, `haveOutputs` trả `["final.mp4"]`, hàng B là `linked` với đường dẫn của artifact.
 - Upload `report.json` của B thật. Sau đó: hàng B là `[final.mp4 linked, report.json ready]`.
 - Sau 25 giờ, `cleanupFinishedUploads()`: file A và hàng A bị xóa; hàng B còn.
-- Heartbeat gia hạn lease B. `complete` của B **ném `code === "ENOENT"`, không phải `AppError`**. (Được thêm sau lần chạy đầu: `path` bằng đường dẫn linked, và `finalizing_at` của B là NULL.) `finalize` vẫn 1 lần. B vẫn `RUNNING`. Hàng B không đổi.
+- Heartbeat gia hạn lease B. `complete` của B **ném `code === "ENOENT"`, không phải `AppError`**. (Được thêm sau lần chạy đầu: `path` bằng đường dẫn linked, và `finalizing_at` của B là NULL.) `finalize` vẫn 1 lần. B vẫn `RUNNING`. Hàng B không đổi. *Cập nhật (TASK-167, `f5d2464`, 2026-11-21):* hiện `complete` ném `AppError` 422 `LINKED_FILE_MISSING` (đo ở tầng service qua method thật; route HTTP chỉ đọc mã, chưa đo). Khẳng định ENOENT ở trên là trạng thái trước TASK-167.
 
 Test "control" (không GC):
 - Không có hàng artifact cho sha video. `haveOutputs` của B trả `[]`. Không có hàng `linked`.

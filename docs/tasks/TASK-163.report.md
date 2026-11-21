@@ -6,7 +6,7 @@ Cập nhật (TASK-166, `aae87cf`): bước cleanup trong `reachEnoent` nay là 
 
 ## Đọc mã trước khi viết test
 
-- **Node sau complete lỗi (đọc mã, chưa đo phía agent).** ENOENT thô thành 500 `INTERNAL_ERROR` (`apps/server/src/app.ts:1188–1189`). Đây không phải 409/410, nên agent throw và POST `/fail` với `retryable: true`, lỗi của POST bị nuốt (`apps/server/src/node/agent.ts:795–811`).
+- **Node sau complete lỗi (đọc mã, chưa đo phía agent).** ENOENT thô thành 500 `INTERNAL_ERROR` (`apps/server/src/app.ts:1188–1189`). *Cập nhật (TASK-167, `f5d2464`):* `finalizeHeld` nay ném 422 `LINKED_FILE_MISSING` thay vì ENOENT thô; đường `/fail` retryable ở đây không đổi. Các khẳng định ENOENT trong báo cáo này là trạng thái trước TASK-167. Đây không phải 409/410, nên agent throw và POST `/fail` với `retryable: true`, lỗi của POST bị nuốt (`apps/server/src/node/agent.ts:795–811`).
 - **`fail()` (`leaseService.ts:797–801`):** `holding(...)` (mặc định live, yêu cầu lease còn hạn), rồi `failJob`, rồi `setJobLease(null)`, rồi `discard` (xóa `pending/<job>.json`, không xóa `<job>.uploads/`).
 - **Hết hạn lease (`nodeService.ts:354–366`):** `failJob` với `NODE_LOST`, `retryable: true`, rồi `setJobLease(null)`, rồi `onReleased` → `discard`.
 - **Retry (`orchestrator.ts:799–809`):** khi `error.retryable && attempt < maxAttempts`, đặt `attempt + 1` và `runAfter = now + JOB_RETRY_BASE_MS × 2^(attempt−1)`. Test đọc giá trị từ harness config, không hard-code. Mặc định: `JOB_RETRY_BASE_MS` 2000, `JOB_MAX_ATTEMPTS` 3 (`apps/server/src/lib/config.ts:138–139`), `NODE_LEASE_SEC` 60 (`config.ts:65`).
