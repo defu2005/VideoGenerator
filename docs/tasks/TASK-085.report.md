@@ -10,13 +10,15 @@
 | 2 | `fd02232` | `assistant/tools.ts` → `registry/tools/<group>.ts`, order kept |
 | 3 | `0967d10` | `services/visualService.ts` → `visuals/{service,types,query,candidate,download}.ts`, facade kept |
 | tests | `5946672` | `test/toolOrder.test.ts`: tool-order snapshot (209 names) |
+| docs | `5e5f6e5` | `docs/architecture/module-split-task-085.md` and this report |
+| docs | `f4b261f` | corrections to the report and the module-split note |
 
 ## Checks
 
 - `npx drizzle-kit generate`: "No schema changes, nothing to migrate" (after step 1 and again after step 3).
 - Server `tsc --noEmit` exit 0; root `npm run typecheck` exit 0 (after step 3).
 - Server suite (`apps/server`, `npx vitest run`):
-  - **Before** (commit `6c29794`, the last commit before TASK-085; source: `docs/tasks/TASK-174.report.md`): 307 files passed | 4 skipped; 2529 passed | 9 skipped (2538).
+  - **Before** (commit `6c29794`, the last source change before TASK-085; `89a1841` is docs-only and comes right before `a4cd921`; source: `docs/tasks/TASK-174.report.md`): 307 files passed | 4 skipped; 2529 passed | 9 skipped (2538).
   - **After** the split and the new test (`5946672`): 308 files passed | 4 skipped; 2530 passed | 9 skipped (2539). The rise is the one new file and one new test.
   - The suite counts after step 2 and after step 3 (before the test was added) were both 2529 | 9.
 - Root `npm test`: see the result line below.
@@ -44,14 +46,15 @@
 
 ## Docs still pointing at the old path (not updated)
 
-- `docs/ARCHITECTURE-TARGET.md:189` and `docs/BLUEPRINT.md:174` describe `services/visualService.ts` as the big file.
+- `docs/BLUEPRINT.md:174` describes `services/visualService.ts` as the big file. (`docs/ARCHITECTURE-TARGET.md:189` was updated to say the split is partial.)
 - Several `docs/cursor/TASK-*.md` specs refer to `services/visualService.ts` line numbers. Those line numbers no longer match.
 - The dynamic imports in `operator/qualityRepair.ts`, `operator/repairActions.ts` and `registry/tools/operator.ts` still use the old path. The facade serves them, so they are fine.
 
 ## Next
 
-- Refresh the TASK-080 commit plan and the architecture references once, after this task (not done here).
-- User: push, and create `docs/tasks/TASK-085.done` when satisfied.
+- Done in the docs commit: the TASK-080 commit plan (status block, TASK-085 section) and the `ARCHITECTURE-TARGET.md` row (partial, not marked done).
+- Open, not done in this task: splitting `VisualService` by filter step (the Gap above). This is a logic change and needs a separate decision.
+- User: push, and create `docs/tasks/TASK-085.done` when satisfied. Not created here.
 
 ## Root `npm test`
 

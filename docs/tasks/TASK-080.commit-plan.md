@@ -1,5 +1,7 @@
 # TASK-080 — kế hoạch commit (chỉ kế hoạch; chưa stage, chưa commit, chưa push)
 
+> **Trạng thái cập nhật 2026-11-21:** C1–C12 đã commit trên `dev`, theo thứ tự: `9dd85a3` (C1), `9e36378` (C2), `54f95ea` (C3), `2f8312a` (C4), `006361a` (C5), `ef4e0f6` (C6), `9c73dbb` (C7), `e0bc68d` (C8), `6e550f7` (C9), `6ef5a2d` (C10), `8db78aa` (C11), `7135860` (C12). `apps/server/test/storageProvider.test.ts` được commit riêng ở `838b617`. Working tree sạch. **Chưa push.** `TASK-080.done` chưa tạo (gắn với push của user). Các mục "Việc tiếp theo" và "Cập nhật 2026-11-21" bên dưới là lịch sử, không còn là việc đang chờ.
+
 Ngày: 2026-11-21. Base: HEAD `f367f14` (guide ghi `adba5d5`, đã cũ). Nguồn: `git status --short`, đo lại ngày 2026-11-21: 755 dòng (263 M, 492 ??). Số 753/490 cũ chụp trước khi viết `docs/cursor/TASK-153.md`; chênh lệch 2 dòng `??` là file mới (gồm `docs/cursor/TASK-153.md` và file kế hoạch này). Danh sách đầy đủ: `scratchpad/080-changed-paths.txt` (chưa đối chiếu lại với số đo mới). Người commit và push là user. Claude không chạy `git add`, `git commit` hay `git push`.
 
 ## Cách nhóm và giới hạn
@@ -133,3 +135,16 @@ Một dòng. Đã quyết định: có trong commit (advisor 2026-11-21). Messag
 
 ## Cập nhật 2026-11-21: user yêu cầu Claude commit
 User yêu cầu Claude commit C1–C12 theo thứ tự trong file này (advisor 2026-11-21). Chỉ commit, không push. `storageProvider.test.ts` vẫn giữ ngoài commit. `TASK-080.done` chưa tạo (gắn với push).
+
+## Cập nhật TASK-085 (2026-11-21)
+
+Các commit TASK-085 nằm trên `dev`, SAU C1–C12 (C1–C12 là `9dd85a3`…`7135860`; `838b617` và các commit TASK-153/154 nằm giữa). Thứ tự: `a4cd921`, `fd02232`, `0967d10`, `5946672`, `5e5f6e5`, `f4b261f`. C1–C12 chứa các file trước khi tách, nên không entry C nào cần sửa.
+
+Đường dẫn đã chuyển trong 085 và commit làm việc đó (không thuộc C nào, vì xảy ra sau C1–C12):
+- `apps/server/src/db/schema.ts` thành `apps/server/src/db/schema/`; `apps/server/drizzle.config.ts` trỏ tới thư mục này. Commit `a4cd921`.
+- `apps/server/src/assistant/tools.ts` thành `apps/server/src/registry/tools/`. Commit `fd02232`.
+- `apps/server/src/services/visualService.ts` thành `apps/server/src/visuals/`; file cũ còn lại làm facade. Commit `0967d10`.
+- `apps/server/test/toolOrder.test.ts` (mới). Commit `5946672`.
+- `docs/architecture/module-split-task-085.md` và `docs/tasks/TASK-085.report.md`. Commit `5e5f6e5` và `f4b261f`.
+
+Số đếm 755 / 234 / 184 / 118 / 55 ở trên là số đo trước khi commit, không còn đúng. Tại thời điểm viết, `docs/ARCHITECTURE-TARGET.md` và file này chưa commit; chúng được commit ở một bước docs riêng.

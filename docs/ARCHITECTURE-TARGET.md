@@ -186,7 +186,7 @@ Nguyên tắc: thứ gì agent cần thêm thường xuyên phải là dữ li�
 
 | Module | Vấn đề | Đích |
 |---|---|---|
-| `services/visualService.ts` (3 017 dòng) | Agent phải grep, dễ sửa lệch | `visuals/` theo bước lọc: `query`, `relevance`, `vision`, `license`, `assign`, `dedupe`, `gate`, `service` (điều phối). Ngưỡng liên quan chuyển vào param registry |
+| `services/visualService.ts` (3 017 dòng) | Agent phải grep, dễ sửa lệch | **Tách một phần (TASK-085, chưa hoàn thành).** Đã có: helper chuyển sang `visuals/{types,query,candidate,download}.ts`; class `VisualService` chuyển nguyên văn sang `visuals/service.ts`; `services/visualService.ts` là facade. Chưa có: tách class theo bước lọc (`relevance`, `vision`, `license`, `assign`, `dedupe`, `gate`); ngưỡng liên quan chưa chuyển vào param registry. Chưa đánh dấu xong |
 | `assistant/tools.ts` (2 028 dòng) | Mọi tool trong một file, hai task không sửa song song được | `registry/tools/<nhóm>.ts` |
 | `db/schema.ts` (1 601 dòng) | Mọi task có bảng đều chạm cùng file | `db/schema/<miền>.ts` |
 | `operator/service.ts` (1 560 dòng) | Trộn phiên, hàng đợi, lệnh | Tách khi 074 chạm tới, không làm riêng |
