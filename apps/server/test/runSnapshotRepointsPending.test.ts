@@ -178,7 +178,7 @@ describe("TASK-168 negative pin: run-start snapshot repoints S to versions befor
     } finally { s.harness.close(); }
   });
 
-  it("control (NOT a production order): the same flow without the run-start snapshot; have links pending, cleanup removes it, the checkpoint throws raw ENOENT", async () => {
+  it("control (NOT a production order): the same flow without the run-start snapshot; have links pending, cleanup removes it, the checkpoint throws RUN_FILE_CHANGED (409; raw ENOENT before TASK-174)", async () => {
     const s = setup();
     try {
       const { fileA } = await s.completeA();
@@ -196,7 +196,7 @@ describe("TASK-168 negative pin: run-start snapshot repoints S to versions befor
 
       let caught: unknown;
       try { transport.checkpoints.apply(rowR, run.id, s.checkpointBody(run.leaseId)); } catch (error) { caught = error; }
-      expect((caught as NodeJS.ErrnoException | undefined)?.code).toBe("ENOENT");
+      expect(caught).toMatchObject({ code: "RUN_FILE_CHANGED", statusCode: 409 });
     } finally { s.harness.close(); }
   });
 });

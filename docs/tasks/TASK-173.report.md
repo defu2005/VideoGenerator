@@ -30,7 +30,7 @@ Trạng thái: **đã đọc, không đo.** Không đổi `src`, không có test
 
 ## Điểm không thuộc (d), ghi nhận
 
-`registerSync` (`artifactService.ts:33`) gọi `statSync` không bắt lỗi. Khi file liên kết của run đã mất, `checkpoint` accept (`runTransport.ts:58`) ném `ENOENT` thay vì 409 `RUN_FILE_CHANGED` mà đoạn mã ngay trước đó định dùng. Chưa đọc node làm gì với lỗi này. Đây là một vấn đề khác, chưa sửa.
+`registerSync` (`artifactService.ts:33`) gọi `statSync` không bắt lỗi. Khi file liên kết của run đã mất, `checkpoint` accept (`runTransport.ts:58`) ném `ENOENT` thay vì 409 `RUN_FILE_CHANGED` mà đoạn mã ngay trước đó định dùng. Chưa đọc node làm gì với lỗi này. Đây là một vấn đề khác. Đã sửa ở TASK-174: ENOENT ở checkpoint accept nay trả 409 `RUN_FILE_CHANGED` (xem `docs/tasks/TASK-174.report.md`).
 
 ## Premise TASK-172 (`composeBridge.ts`)
 

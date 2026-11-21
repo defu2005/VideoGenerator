@@ -55,7 +55,12 @@ export class RunTransportService {
     this.checkpoints = new RunCheckpointService(db, runs, orchestrator, config.DATA_DIR, (run, name) => {
       const file = this.uploads.ready(run.id, run.leaseId).get(name);
       if (!file) throw new AppError(409, "RUN_FILE_NOT_READY", "Tệp checkpoint chưa được tải lên đầy đủ.");
-      const actual = this.artifacts.registerSync(file.path);
+      let actual: ReturnType<ArtifactService["registerSync"]>;
+      try { actual = this.artifacts.registerSync(file.path); }
+      catch (error) {
+        if ((error as NodeJS.ErrnoException)?.code === "ENOENT") throw new AppError(409, "RUN_FILE_CHANGED", "Tệp checkpoint đã thay đổi hoặc ngoài phạm vi dự án.");
+        throw error;
+      }
       if (actual.sha256 !== file.sha256 || actual.size !== file.size || !this.insideProject(run.projectId, file.path)) throw new AppError(409, "RUN_FILE_CHANGED", "Tệp checkpoint đã thay đổi hoặc ngoài phạm vi dự án.");
       return file.path;
     }, (run, checkpoint) => {

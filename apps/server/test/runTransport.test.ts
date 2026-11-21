@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { ProfileDefaultBriefSchema, GuidelineSettingsSchema } from "@vg/shared";
 import { Readable } from "node:stream";
-import { writeFileSync } from "node:fs";
+import { unlinkSync, writeFileSync } from "node:fs";
 import Fastify from "fastify";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createPipelineHarness } from "./pipelineFixtures.js";
@@ -98,6 +98,19 @@ describe("project run transport", () => {
     const body = { leaseId: h.run.leaseId, seq: 1, stage: "SUBTITLE", inputVersion: h.orchestrator.inputVersions.inputVersion(h.projectId, "SUBTITLE"),
       tables: { subtitle_tracks: [{ id: "subtitles", project_id: h.projectId, cues: "[]", srt_path: output.name, ass_path: output.name, input_hash: "hash", created_at: h.clock().toISOString(), updated_at: h.clock().toISOString() }] }, costs: [] };
     expect(() => h.transport().checkpoints.apply(h.node, h.run.id, body)).toThrowError(expect.objectContaining({ code: "RUN_FILE_CHANGED" }));
+    expect(h.runs.get(h.run.id)?.lastSeq).toBe(0);
+    expect(h.sqlite.prepare("SELECT COUNT(*) AS n FROM subtitle_tracks").get()).toEqual({ n: 0 });
+  });
+
+  it("maps a checkpoint file deleted after upload to RUN_FILE_CHANGED, not a raw ENOENT", async () => {
+    const h = setup(), bytes = Buffer.from("removed"), sha256 = createHash("sha256").update(bytes).digest("hex");
+    const output = { jobId: h.run.id, leaseId: h.run.leaseId, name: `files/${sha256}.srt`, sha256, size: bytes.length };
+    const stored = await h.transport().append(h.node, output, 0, Readable.from([bytes]));
+    unlinkSync(stored.path);
+    h.repository.ensureStages(h.projectId); h.repository.updateStage(h.projectId, "VOICE", { state: "DONE" });
+    const body = { leaseId: h.run.leaseId, seq: 1, stage: "SUBTITLE", inputVersion: h.orchestrator.inputVersions.inputVersion(h.projectId, "SUBTITLE"),
+      tables: { subtitle_tracks: [{ id: "subtitles", project_id: h.projectId, cues: "[]", srt_path: output.name, ass_path: output.name, input_hash: "hash", created_at: h.clock().toISOString(), updated_at: h.clock().toISOString() }] }, costs: [] };
+    expect(() => h.transport().checkpoints.apply(h.node, h.run.id, body)).toThrowError(expect.objectContaining({ code: "RUN_FILE_CHANGED", statusCode: 409 }));
     expect(h.runs.get(h.run.id)?.lastSeq).toBe(0);
     expect(h.sqlite.prepare("SELECT COUNT(*) AS n FROM subtitle_tracks").get()).toEqual({ n: 0 });
   });
