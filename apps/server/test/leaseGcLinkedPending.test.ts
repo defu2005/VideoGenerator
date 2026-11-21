@@ -3,7 +3,6 @@ import { existsSync, realpathSync } from "node:fs";
 import { join } from "node:path";
 import { Readable } from "node:stream";
 import { describe, expect, it, vi } from "vitest";
-import { AppError } from "../src/lib/errors.js";
 import { readAppVersion } from "../src/render/appVersion.js";
 import { ArtifactService } from "../src/node/artifactService.js";
 import { LeaseService, type RenderPort } from "../src/node/leaseService.js";
@@ -13,7 +12,9 @@ import { projectDir } from "../src/storage/paths.js";
 import { createPipelineHarness } from "./pipelineFixtures.js";
 
 // TASK-162: measures the chain in TASK-161 §5. A linked row's path sits under render/pending/
-// of another job, and cleanup then removes that file while the linked row survives.
+// of another job. Before TASK-166, cleanup removed that file while the linked row survived, and B's
+// complete then failed with the raw ENOENT. TASK-166 adds a guard: cleanup keeps a file that an
+// unfinished job still links, so the first test now asserts the keep-row outcome.
 //
 // Fixture, not production: the remoteBundle mock and the render stub are test doubles. The clock
 // advance (25 h) and the lease kept alive by heartbeat are fabricated timing. This test shows the
@@ -122,7 +123,7 @@ async function completeA(s: ReturnType<typeof setup>, gcWhileRunning: boolean) {
 }
 
 describe("TASK-162: linked row under render/pending (TASK-161 §5), measured through the real methods", () => {
-  it("chain: GC while A RUNNING registers A's pending file; B links to it; cleanup removes it; B's complete fails with raw ENOENT", async () => {
+  it("keep-row (TASK-166): GC while A RUNNING registers A's pending file; B links to it; cleanup keeps A's file and rows while B is unfinished; B completes; a later cleanup removes them", async () => {
     const s = setup();
     try {
       const { fileA, jobAId } = await completeA(s, true);
@@ -141,32 +142,37 @@ describe("TASK-162: linked row under render/pending (TASK-161 §5), measured thr
 
       // Upload B's report.json for real, so only final.mp4 is linked.
       await s.leases.receiveOutput(rowB, jobB.id, leaseB.leaseId, "report.json", sha(REPORT), Readable.from([Buffer.from(REPORT)]));
-
-      // B's linked path, captured before cleanup, to compare with the error path later.
       const linkedPathB = s.uploadRows(jobB.id)[0]!.path;
       expect(linkedPathB).toBe(realpathSync.native(fileA));
 
-      // Fabricated timing: 25 h passes. Cleanup should delete A's row and file (strict branch), and leave B's linked row.
+      // Fabricated timing: 25 h passes. B is unfinished and still links A's file, so cleanup keeps
+      // A's file and A's rows (the guard runs before rmSync and DELETE, leaseService.ts cleanupFinishedUploads).
       s.harness.advance(25 * HOUR);
-      expect(existsSync(fileA)).toBe(true);
       s.leases.cleanupFinishedUploads();
-      expect(existsSync(fileA)).toBe(false);
-      expect(s.uploadRows(jobAId)).toEqual([]);
+      expect(existsSync(fileA)).toBe(true);
+      // Only final.mp4 is linked. A's report.json is linked by nobody, so cleanup removes it as before.
+      expect(s.uploadRows(jobAId).map((row) => [row.name, row.status])).toEqual([["final.mp4", "ready"]]);
       expect(s.uploadRows(jobB.id).map((row) => [row.name, row.status])).toEqual([["final.mp4", "linked"], ["report.json", "ready"]]);
 
       // Fabricated: B's lease kept alive by the real heartbeat path, so the 'live' holding check passes.
       s.renew(rowB, jobB.id, leaseB.leaseId);
       expect(new Date(s.harness.repository.getJobLease(jobB.id)!.leaseUntil).getTime()).toBeGreaterThan(s.harness.clock().getTime());
 
-      // Expected: B's complete reads the linked record at leaseService.ts:620 and throws the raw ENOENT.
-      const error = await s.leases.complete(rowB, jobB.id, s.completeBody(leaseB.leaseId)).then(() => undefined, (e: unknown) => e);
-      expect(error).toMatchObject({ code: "ENOENT", path: linkedPathB });
-      expect(error).not.toBeInstanceOf(AppError);
-      // finalizing_at NULL: the throw came before claimFinalization, i.e. from the linked-record loop, not after a claim.
-      expect(s.harness.sqlite.prepare("SELECT finalizing_at FROM jobs WHERE id = ?").get(jobB.id)).toEqual({ finalizing_at: null });
-      expect(s.finalize).toHaveBeenCalledOnce();
-      expect(s.harness.repository.getJob(jobB.id)!.status).toBe("RUNNING");
-      expect(s.uploadRows(jobB.id).map((row) => [row.name, row.status])).toEqual([["final.mp4", "linked"], ["report.json", "ready"]]);
+      // B's complete reads A's file, which is still present, so it succeeds and finalizes B.
+      await s.leases.complete(rowB, jobB.id, s.completeBody(leaseB.leaseId));
+      expect(s.finalize).toHaveBeenCalledTimes(2);
+      expect(s.harness.repository.getJob(jobB.id)!.status).toBe("SUCCEEDED");
+      expect(existsSync(fileA)).toBe(true);
+
+      // Once B is finished, the next 25 h cleanup removes A's file and A's rows. B's own rows go too.
+      s.harness.advance(25 * HOUR);
+      s.leases.cleanupFinishedUploads();
+      expect(existsSync(fileA)).toBe(false);
+      expect(s.uploadRows(jobAId)).toEqual([]);
+      expect(s.uploadRows(jobB.id)).toEqual([]);
+      // The artifacts row for the video is stale: it still points at the file cleanup removed (as TASK-163 measured).
+      expect(s.artifactPath(sha(VIDEO))).toBeDefined();
+      expect(existsSync(s.artifactPath(sha(VIDEO))!)).toBe(false);
     } finally { s.harness.close(); }
   });
 

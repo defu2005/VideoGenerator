@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { existsSync, realpathSync } from "node:fs";
+import { existsSync, realpathSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { Readable } from "node:stream";
 import { describe, expect, it, vi } from "vitest";
@@ -132,8 +132,9 @@ async function reachEnoent(s: ReturnType<typeof setup>) {
   expect(s.leases.haveOutputs(rowB, jobB.id, leaseB.leaseId, [{ name: "final.mp4", sha256: sha(VIDEO), size: Buffer.byteLength(VIDEO) }]))
     .toEqual(["final.mp4"]);
   await s.leases.receiveOutput(rowB, jobB.id, leaseB.leaseId, "report.json", sha(REPORT), Readable.from([Buffer.from(REPORT)]));
-  s.harness.advance(25 * HOUR);
-  s.leases.cleanupFinishedUploads();
+  // Fabricated: the file is unlinked directly to reach B's ENOENT. Since TASK-166 cleanup keeps a file that
+  // an unfinished job links, so the removal the chain needs no longer happens on its own.
+  rmSync(fileA, { force: true });
   expect(existsSync(fileA)).toBe(false);
   s.renew(rowB, jobB.id, leaseB.leaseId);
   const error = await s.leases.complete(rowB, jobB.id, s.completeBody(leaseB.leaseId)).then(() => undefined, (e: unknown) => e);
@@ -236,8 +237,8 @@ describe("TASK-163: job B after its complete fails with ENOENT (TASK-162 chain),
       expect(s.leases.haveOutputs(rowB, jobB.id, lease3.leaseId, [{ name: "final.mp4", sha256: sha(VIDEO), size: Buffer.byteLength(VIDEO) }]))
         .toEqual(["final.mp4"]);
       await s.leases.receiveOutput(rowB, jobB.id, lease3.leaseId, "report.json", sha(REPORT), Readable.from([Buffer.from(REPORT)]));
-      s.harness.advance(25 * HOUR);
-      s.leases.cleanupFinishedUploads();
+      // Fabricated: direct unlink, as in reachEnoent (TASK-166 cleanup keeps a file an unfinished job links).
+      rmSync(fileA, { force: true });
       expect(existsSync(fileA)).toBe(false);
       s.renew(rowB, jobB.id, lease3.leaseId);
       const error = await s.leases.complete(rowB, jobB.id, s.completeBody(lease3.leaseId)).then(() => undefined, (e: unknown) => e);

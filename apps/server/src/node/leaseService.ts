@@ -430,10 +430,23 @@ export class LeaseService {
       if (row.status !== "linked" && /^[a-f0-9-]{36}$/i.test(row.lease_id) && ANY_OUTPUT.some((pattern) => pattern.test(row.name))) {
         const expected = join(this.uploadsDir(row.project_id, row.job_id), row.lease_id, row.name.replaceAll("/", "__"));
         if (expected !== row.path) continue;
+        // TASK-166: a file that an unfinished job still links stays, with its row, so a later pass can reclaim it.
+        if (this.linkedByUnfinishedJob(expected)) continue;
         try { rmSync(expected, { force: true }); } catch { continue; }
       }
       this.sqlite.prepare("DELETE FROM node_uploads WHERE job_id=? AND lease_id=? AND name=?").run(row.job_id, row.lease_id, row.name);
     }
+  }
+
+  /** True when a linked row of a job that has not finished points at this file. Matches both path forms: the owner row stores the joined path, the linked row stores the realpath (uploadStore.ts:54, references.ts:170). */
+  private linkedByUnfinishedJob(file: string): boolean {
+    const paths = new Set([file]);
+    try { paths.add(realpathSync.native(file)); } catch { /* file already gone: the joined path is enough */ }
+    const list = [...paths];
+    const marks = list.map(() => "?").join(",");
+    const hit = this.sqlite.prepare(`SELECT 1 FROM node_uploads u JOIN jobs j ON j.id=u.job_id
+      WHERE u.status='linked' AND u.path IN (${marks}) AND j.status NOT IN ('SUCCEEDED','FAILED','CANCELLED') LIMIT 1`).get(...list);
+    return hit !== undefined;
   }
 
   /**
