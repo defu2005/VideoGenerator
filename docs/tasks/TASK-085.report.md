@@ -9,15 +9,19 @@
 | 1 | `a4cd921` | `db/schema.ts` → `db/schema/<domain>.ts`, `drizzle.config.ts` points at the folder |
 | 2 | `fd02232` | `assistant/tools.ts` → `registry/tools/<group>.ts`, order kept |
 | 3 | `0967d10` | `services/visualService.ts` → `visuals/{service,types,query,candidate,download}.ts`, facade kept |
+| tests | `5946672` | `test/toolOrder.test.ts`: tool-order snapshot (209 names) |
 
 ## Checks
 
 - `npx drizzle-kit generate`: "No schema changes, nothing to migrate" (after step 1 and again after step 3).
 - Server `tsc --noEmit` exit 0; root `npm run typecheck` exit 0 (after step 3).
-- Server suite (`apps/server`, `npx vitest run`): **2529 passed | 9 skipped** (2538 total), 307 files passed | 4 skipped. The same counts were recorded after step 2 and after step 3. I did not record a pre-TASK-085 run in this task, so this report does not claim a before/after comparison beyond that.
+- Server suite (`apps/server`, `npx vitest run`):
+  - **Before** (commit `6c29794`, the last commit before TASK-085; source: `docs/tasks/TASK-174.report.md`): 307 files passed | 4 skipped; 2529 passed | 9 skipped (2538).
+  - **After** the split and the new test (`5946672`): 308 files passed | 4 skipped; 2530 passed | 9 skipped (2539). The rise is the one new file and one new test.
+  - The suite counts after step 2 and after step 3 (before the test was added) were both 2529 | 9.
 - Root `npm test`: see the result line below.
 - Step 3 proofs:
-  - `visuals/service.ts` lines 1–3376 equal HEAD `services/visualService.ts` lines 164–3539 byte for byte (EOL-insensitive), in order.
+  - `visuals/service.ts` lines 59–3434 equal HEAD (`fd02232`) `services/visualService.ts` lines 164–3539 byte for byte (EOL-insensitive), in order.
   - Helper files: every non-blank body line of HEAD lines 112–3748 appears in the new files, with a leading `export ` allowed on declarations. Nothing is missing and nothing is added.
   - Module specifiers: the 9 sibling imports (`./x.js`) became `../services/x.js`; the four helper modules import each other with `./`.
   - Facade re-exports exactly `VisualService` and `isRetryableDownloadError`. HEAD had only these two top-level exports.
@@ -30,7 +34,9 @@
 - **Tool groups:** the names follow the existing grouping in `registry/tools/`, not the spec's example list.
 - **Hand edit:** after the move script ran, one unused import (`downloadError`) was removed from `visuals/candidate.ts` by hand. The proof ignores import lines, so tsc and `--noUnusedLocals` are what cover that. The script is scratch and is not a reproducible generator.
 - **Import order** in the moved files differs from HEAD; helper-only imports now load through the helper files. The server suite and the fresh-process check both pass.
-- **Tests:** no test files were moved or edited. No test imports private paths.
+- **Tests:** no existing test was moved or edited, and no test imports private paths. One test was added:
+  - **Tool-order snapshot.** The spec asked for a snapshot taken before the split. None was captured. The list was rebuilt from git instead: `apps/server/src/assistant/tools.ts` at `89a1841`, the commit before `a4cd921`, was loaded with tsx, and its 209 names were recorded in order. The current registry order matched that list exactly, checked before the test was written.
+  - The test is `apps/server/test/toolOrder.test.ts` (`5946672`, after `fd02232`). It asserts exact, ordered equality with the list. No other test pins the full ordered list; `test/registry.test.ts:461` compares sorted names.
 
 ## Known issues, not fixed (behaviour unchanged)
 
@@ -49,4 +55,10 @@
 
 ## Root `npm test`
 
-Result: exit 0. Four suites ran, all passing: 98 files / 788 tests, 7 files / 66 tests, 307 files / 2529 passed + 9 skipped (server), 95 files / 303 tests. Log: scratchpad `task085-root-npm-test.log`. Suite labels were not captured in the log, so the per-package mapping is not recorded here.
+Result: exit 0. Four suites, all passing, mapped by line in the log:
+- `@vg/shared`: 98 files, 788 tests
+- `@vg/mcp`: 7 files, 66 tests
+- `@vg/server`: 307 files passed | 4 skipped; 2529 passed | 9 skipped
+- `@vg/web`: 95 files, 303 tests
+
+This run was before `test/toolOrder.test.ts` was added. The server suite after the test is in the Checks section above. Log: scratchpad `task085-root-npm-test.log`.
