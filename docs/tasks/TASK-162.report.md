@@ -15,7 +15,7 @@ Trạng thái: thêm test (`apps/server/test/leaseGcLinkedPending.test.ts`, mớ
 - **Fixture, không phải production:** mock `remoteBundle` (trả `files: []`) và stub `renders` (`prepare`, `finalize` là `vi.fn`).
 - **Thời gian giả:** đồng hồ tiến 25 giờ; lease của B được gia hạn bằng heartbeat do test gọi.
 
-## Kỳ vọng (viết trong test trước khi chạy)
+## Kỳ vọng (viết trước lần chạy đầu; hai khẳng định ENOENT về `path` và `finalizing_at` được thêm sau lần chạy đầu, xem Kết quả)
 
 Test "chain":
 - GC `run({purge:true, ephemeralOnly:true})` lúc A RUNNING: `marked 0`, `purged 0`.
@@ -24,7 +24,7 @@ Test "chain":
 - B `lease` trên node 2, `haveOutputs` trả `["final.mp4"]`, hàng B là `linked` với đường dẫn của artifact.
 - Upload `report.json` của B thật. Sau đó: hàng B là `[final.mp4 linked, report.json ready]`.
 - Sau 25 giờ, `cleanupFinishedUploads()`: file A và hàng A bị xóa; hàng B còn.
-- Heartbeat gia hạn lease B. `complete` của B **ném `code === "ENOENT"` với `path` bằng đường dẫn linked, không phải `AppError`**. `finalize` vẫn 1 lần. `finalizing_at` của B là NULL. B vẫn `RUNNING`. Hàng B không đổi.
+- Heartbeat gia hạn lease B. `complete` của B **ném `code === "ENOENT"`, không phải `AppError`**. (Được thêm sau lần chạy đầu: `path` bằng đường dẫn linked, và `finalizing_at` của B là NULL.) `finalize` vẫn 1 lần. B vẫn `RUNNING`. Hàng B không đổi.
 
 Test "control" (không GC):
 - Không có hàng artifact cho sha video. `haveOutputs` của B trả `[]`. Không có hàng `linked`.
