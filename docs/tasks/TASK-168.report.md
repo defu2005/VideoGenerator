@@ -1,6 +1,6 @@
 # TASK-168 — `run_uploads` liên kết tới file pending không được cleanup bảo vệ (báo cáo đọc mã)
 
-Trạng thái: **chỉ đọc mã và grep. Không sửa `src/`, không sửa test, không chạy test hay mutant.** Commit cục bộ, docs only, theo quyết định advisor (2026-11-21). **Chưa push, không có `.done`.** Kết luận: chuỗi **có thể tiếp cận** trên đường đọc mã (không đóng là "không tiếp cận"). Chưa đo.
+Trạng thái: đọc mã, thêm một test ghim âm `apps/server/test/runSnapshotRepointsPending.test.ts` (2 test, xanh) và chạy mutant M8. **Không sửa `src/`.** Theo quyết định advisor (2026-11-21). Commit cục bộ, **chưa push, không có `.done`.** Kết luận: nhánh "R bắt đầu trước khi A hoàn tất" bị đóng bởi guard lúc bắt đầu run; snapshot đầu đoạn chạy đưa `artifacts` của S về versions trước `have`. Nhánh còn lại (job A được lease trong lúc run R đang chạy) **chưa đo**.
 
 ## Câu hỏi advisor đặt ra (4 mục)
 
@@ -102,7 +102,7 @@ Không có test, không sửa `src/`. Các đọc dưới đây thay thế các 
   - (d) mới: trong `linkKnown`, khi hàng cũ là `linked`, kiểm `existsSync(existing.path)` và size trước khi trả true. Nếu mất, trả false để agent upload lại (phải thay hàng cũ, không chỉ bỏ qua). Sửa nguyên nhân gần nhất.
   - (a) mở rộng guard TASK-166 cho `run_uploads` của run chưa kết thúc: chỉ bảo vệ khi người ghi cuối là pending.
 
-### Đề xuất test (chưa viết, chờ advisor quyết định)
+### Đề xuất test (đã viết một phần: xem §Pin âm bên dưới)
 Qua hàm thật, khẳng định trước khi chạy:
 - GC `run({purge:true, ephemeralOnly:true})` lúc A RUNNING. Khẳng định hàng `artifacts` cho S trỏ pending.
 - A complete. Khẳng định hàng `artifacts` cho S: pending hay versions (đây là điều cần đo).
@@ -117,15 +117,38 @@ Qua hàm thật, khẳng định trước khi chạy:
 - **Cache trong `registerSync`** (`artifactService.ts:31–53`): cache `registeredVersions` (dòng 36–37) trả về **trước** `remember`. Cache hit không ghi lại hàng `artifacts`. Cache là theo instance: mỗi `new ArtifactService(...)` bắt đầu rỗng, nên lần gọi đầu tiên trên instance đó luôn `remember`.
 - **Điểm ghi lên `artifacts` (đã liệt kê):** `projectSnapshot.ts:118` (`exportProjectRows`), `projectSnapshot.ts:168`, `runTransport.ts:58` và `:84`, `remoteBundle.ts:53` (`register`), `inputVersion.ts:100`, `fileGc.ts:451/465`, `references.ts:172/252`. Không có lệnh đăng ký nào trong `renderService` hay `leaseService` (grep).
 - **Thứ tự trên đường RENDER DONE (kết luận mới):** `exportProjectRows` chạy **trước** `transport.checkpoint` → `uploadOutputs` → `have` của cùng checkpoint (`projectRunner.ts:292`, rồi `send` ở `:228–230`). Vì vậy `versions/output.mp4` được `remember` (`ON CONFLICT(sha256) DO UPDATE path=excluded.path`, `artifactService.ts:57–58`) **trước** khi `have` tra S. Nếu node và server dùng chung một handle SQLite, `have` sẽ tra ra versions và liên kết versions. Chuỗi pending không xảy ra trên đường này.
-- **Khi nào hai handle khác nhau:** `app.ts:702` truyền `database.sqlite` cho `createStockExecutors` của worker nhúng trong server. Runtime của đoạn chạy (`projectRunner.ts:292` dùng `runtime.repository.sqlite`; `runnerRuntime.ts:26` tạo `JobRepository(input.sqlite)`) nhận `input.sqlite` từ nơi khác. **Chưa đọc** nguồn `input.sqlite` của agent từ xa. Nếu agent từ xa có DB riêng, export không ghi vào `artifacts` của server.
-- **Điều kiện chuỗi (nếu DB riêng):** (1) server không chạy GC sau khi A hoàn tất, vì GC đăng ký lại mọi đường dẫn tham chiếu qua graph, gồm đầu ra `renders` (`references.ts:166–177`) và sẽ đưa hàng về versions; (2) R `have` trước mọi lần ghi khác lên S ở phía server.
-- **Hệ quả cho kế hoạch đo (thay thế đề xuất test ở trên):** test chuỗi phải dựng R qua đường lease run thật, đo cả hai cấu hình:
-  - Chung DB: dự đoán `have` trả versions, không lỗi. Đây là khẳng định âm (chuỗi bị chặn).
-  - DB riêng: chuỗi đúng chỉ khi không có GC server giữa lúc A hoàn tất và `have` của R. Chưa đo lịch GC.
-- **Chưa đo:** nguồn `input.sqlite` của agent từ xa; lịch chạy GC tự động của server trong khoảng A hoàn tất → `have` của R.
+- **Đã sửa: không có cấu hình "chung DB" trên đường run.** Báo cáo trước nhầm: `app.ts:702` là `JobWorker` (stock executors của job), không phải đường run. `createStockRunner` chỉ được gọi từ `agent.ts:543` (grep). Đoạn chạy mở DB riêng của node tại `nodeDataDir/runs/<run.id>/db.sqlite` (`projectRunner.ts:34`, `:36`, `:56–57`). Export RENDER DONE (`projectRunner.ts:292`) chỉ ghi `artifacts` của DB node. Server biết S qua upload/`have`, và hàng `artifacts` phía server chỉ được ghi bởi các đường server liệt kê ở trên. Nhánh "chung DB" không xảy ra trên đường run.
+- **Ghi phía server (DB server), đã đọc:** `runTransport.snapshot` (`runTransport.ts:75–78`) gọi `exportProjectSnapshot(this.db, …)` trên DB server. Được gọi ở đầu đoạn chạy (`projectRunner.ts:205`), khi REBASE (`:214`), và qua route `artifact` (`runTransport.ts:80–81`, `api/nodes.ts:191–195`) khi node tải input. Mỗi lần gọi, `exportProjectRows` (`projectSnapshot.ts:97–120`, `new ArtifactService` mới, cache rỗng) ghi lại mọi đường dẫn cột path, gồm `renders` → `versions/output.mp4`. Nếu hàng `renders` đã có trước lúc snapshot (A đã hoàn tất), hàng `artifacts` của S bị trỏ về versions.
+- **GC định kỳ:** `fileGc.run({purge:true})` chạy mỗi 24 giờ (`app.ts:763–767`, `nextFileGcSweep = now + 86_400_000`). Trong cùng sweep, `leaseService.cleanupFinishedUploads()` (`app.ts:761`) chạy **trước** GC. `collectReferences` đăng ký đường dẫn qua đồ thị (`references.ts:166–177`). `app.ts:801` (`ephemeralOnly`) chỉ là nhánh áp lực đĩa.
+- **Sửa về "cache đã link":** `linkKnown` trả `existing.status !== "partial"` mà không `locate` và không `existsSync` (`uploadStore.ts:50–51`). Hàng linked giữ đường dẫn pending lúc `have` k, dù `artifacts` sau đó bị GC trỏ về versions. Vì vậy GC repoint sau `have` k **không** cứu checkpoint m. Điều quyết định là `artifacts` có trỏ pending đúng lúc `have` k hay không.
+- **Chuỗi (đọc mã, chưa đo):** (i) A RUNNING và một lần GC đã đăng ký pending của A cho S. (ii) `have` k của R trước khi đường nào ghi S sang versions (snapshot đầu đoạn chạy, REBASE, route `artifact`, GC kế tiếp). (iii) Cleanup xóa pending của A, sau 24 giờ kể từ khi A kết thúc (`leaseService.ts:424–439`). (iv) R checkpoint m > k có cùng S, lease còn sống: `have` trả tên từ hàng cũ, agent bỏ qua upload, checkpoint ném ENOENT thô (`runTransport.ts:58`).
+- **Ràng buộc thời gian (suy luận từ lịch GC 24 giờ, chưa đo):** nếu R bắt đầu sau khi A hoàn tất, snapshot đầu đoạn chạy đã trỏ S về versions, nên (ii) thất bại. Nếu R bắt đầu trước khi A hoàn tất, snapshot đầu đoạn không thấy hàng `renders`, nên (ii) còn có thể xảy ra, nhưng khi đó cần không có GC tick nào giữa lúc A hoàn tất và `have` k. Cleanup chạy ở mỗi sweep (`app.ts:761`) với ngưỡng tuổi 24 giờ tính từ khi job kết thúc; chỉ GC bị giới hạn 24 giờ (`app.ts:763–767`). Khoảng này hẹp.
+- **Hệ quả cho kế hoạch đo:** dựng R qua đường lease run thật. Đo (a) hàng `artifacts` của S lúc `have` k (pending hay versions), với R bắt đầu trước và sau lúc A hoàn tất; (b) lịch GC tick và cleanup; (c) m có thất bại không.
+- **Chưa đo:** GC có đăng ký `renders` như path-only reference hay không (mới đọc `references.ts:166–177`); lịch sweep thực tế; hành vi checkpoint trên route run khi ENOENT.
+
+## Đọc bổ sung 3 (câu hỏi advisor a và b, chỉ đọc)
+
+- **(a) Nguồn hàng `renders` (phía server):** `renders.finalize` tạo hàng khi job RENDER hoàn tất (`leaseService.ts:655–681`, `completeRender`). `completeRender` không đăng ký `artifacts`. Hàng `renders` trong DB node đến từ hai nguồn: import snapshot lúc bắt đầu run (`projectRunner.ts:60`), và export RENDER DONE của chính đoạn chạy (`projectRunner.ts:292`). **Chưa đo:** node tự render cùng byte có tạo hàng `artifacts` phía server không. Theo đọc, không: chỉ các đường ghi phía server đăng ký `artifacts` (§Đọc bổ sung 2). Pin dùng hàng `renders` giả lập vì harness TASK-162 stub `finalize`.
+- **Guard lúc bắt đầu run:** `grant` từ chối (`RUN_PROJECT_BUSY`, 409) khi có job active của project (`runService.ts:57–59`). Snapshot đầu đoạn (`projectRunner.ts:205`) chỉ chạy sau `grant`, nên với R bắt đầu sau A, hàng `renders` đã có khi snapshot chạy. Nhánh "R bắt đầu trước khi A hoàn tất" bị loại.
+- **(b) Chiều ngược lại (job được lease trong lúc run chạy): không có guard.** `grep` không thấy `project_runs`, `projectRuns` hay `activeRun` trong `leaseService.ts` và `pipeline/orchestrator.ts`. Nghĩa là không có chặn ở `candidates` (`leaseService.ts:160–176`) và `canStartQueuedJob` (`orchestrator.ts:430–431`). **Chưa đo** (chưa dựng job A lease trong lúc R chạy).
+
+## Pin âm và mutant M8 (2026-11-21)
+
+Test: `apps/server/test/runSnapshotRepointsPending.test.ts`. Phần giả lập, ghi rõ trong file: hàng `renders` và file versions do test ghi tay; bước thời gian 60 giây (TTL lease run là 90 giây, `runService.ts` `ttlMs`), lease R được gia hạn qua heartbeat ở mỗi bước.
+
+- **Khẳng định trước (pre-assert):** sau GC lúc A RUNNING, `artifacts` của S trỏ pending. A complete, `artifacts` vẫn trỏ pending.
+- **Pin:** R được grant sau khi A complete. `transport.snapshot` đăng ký `files/<S>.mp4` và đưa `artifacts` của S về versions. `have` link versions. Sau 25 giờ, cleanup xóa pending của A, versions còn. `have` lần hai trả tên; checkpoint SUBTITLE áp dụng `ok: true`.
+- **Đối chứng (KHÔNG phải thứ tự production):** bỏ `transport.snapshot`. `have` link pending; cleanup xóa pending; checkpoint ném ENOENT thô (`code === "ENOENT"`).
+- **Kết quả:** 2/2 xanh. `tsc` cho file test (qua tsconfig tạm có `rootDir: "."`, đã xóa): exit 0. Lưu ý: `apps/server/tsconfig.json` loại `test/`, nên `npx tsc --noEmit` không kiểm file này.
+- **Mutant M8:** thay `artifacts.registerSync(real)` ở `projectSnapshot.ts:118` bằng hash trực tiếp không đăng ký. Pin **đỏ** ở khẳng định sau snapshot: `artifacts` vẫn trỏ `…/render/pending/…/final.mp4`, không phải `…/render/versions/render-1/output.mp4`. Đối chứng vẫn xanh (không đi qua snapshot). `projectSnapshot.ts` được khôi phục từ bản sao lưu, `cmp` khớp, `git status` sạch.
+
+**Chưa đo (nhánh còn lại):** job A được lease trong lúc R chạy, và GC repoint S sang pending trong lúc R chạy. Cần thêm một job B đang giữ hàng `node_uploads` linked tới file pending của A. Thứ tự pending/versions trong một lượt `collectReferences` chưa đọc. Nếu cả hai đúng, `have` k của R có thể link pending, và checkpoint m ném ENOENT sau cleanup. Chưa dựng.
+
+**Hardening (không làm trong TASK-168, không đổi `src`):** (d) `linkKnown` kiểm `existsSync` và size của hàng linked đã có trước khi trả true (`uploadStore.ts:50–51`). Các hướng (a)–(c) ở trên vẫn là lựa chọn, chưa chọn.
 
 ## Liên kết
 
+- TASK-168 pin: `apps/server/test/runSnapshotRepointsPending.test.ts`.
 - TASK-161 (chuỗi gốc từ `node_uploads`): `docs/tasks/TASK-161.report.md`.
 - TASK-166 (guard cho `node_uploads`): `docs/tasks/TASK-166.report.md`, §Hạn chế nêu run-scope là TASK-168.
 - TASK-167 (422 `LINKED_FILE_MISSING` trong `finalizeHeld`, không áp cho đường run): `docs/tasks/TASK-167.report.md`.
