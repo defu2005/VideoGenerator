@@ -24,7 +24,7 @@ Lý do: advisor (2026-11-21) đánh giá `23a13c0` (TASK-171). Kết luận "hì
 | `references.ts:439–446` | **Không** | Sha → path của row (`validSha`), cho oracle. |
 | `references.ts:520–522` | Không liên quan | Chỉ lấy sha của class `global`, không đọc file. |
 
-Phạm vi câu này: **chỉ các reader của `artifacts.path`**. Reader thiếu kiểm tra đều nằm trong GC và oracle. `linkKnown` (`uploadStore.ts:52`) không đọc `artifacts.path` trực tiếp: nó gọi `locate`, nên có `existsSync`. Riêng nhánh `validate` (`uploadStore.ts:50`) trả về row `node_uploads` đã `linked` mà không kiểm tra file của row đó. Đây là đường upload, không phải `artifacts.path`, và được ghi là gợi ý cứng hóa (d), chưa đo.
+Phạm vi câu này: **chỉ các reader của `artifacts.path`**. Reader thiếu kiểm tra đều nằm trong GC và oracle. `linkKnown` (`uploadStore.ts:52`) không đọc `artifacts.path` trực tiếp: nó gọi `locate`, nên có `existsSync`. Riêng `validate` (`uploadStore.ts:32–42`) đọc `${this.table}` (node_uploads hoặc run_uploads) theo (owner, lease, name) và trả row hiện có khi sha và size khớp, không kiểm tra file. `linkKnown` (`:50–51`) coi mọi status trừ `partial` là thành công. Đây là đường upload, không phải reader của `artifacts.path`; ghi là gợi ý cứng hóa (d), chưa đo.
 
 ## Ca đo (mỗi ca: một `FileGc` dài hạn; cleanup sau 25 h kể từ lúc FAILED)
 
@@ -71,10 +71,24 @@ Kết luận:
 - **Ca N không tự sửa:** không có ghi nào, row vẫn trỏ pending.
 - **Xóa row bằng tay không được khôi phục trên cùng FileGc.** Cache hit ở `artifactService.ts:37` trả về sớm, không gọi `remember`, nên row không được tạo lại và `locate` vẫn undefined dù `render-0` còn. Vì vậy phương án 1 không thể chỉ "xóa row": cần xóa mục cache của path, hoặc repoint tường minh.
 
+## Caller của `locate` (kiểm tra đọc, advisor 2026-11-21)
+
+Đọc, không đo. `locate` trả undefined (`artifactService.ts:63–70`) khi: không có row; file tại `row.path` không tồn tại; **hoặc** size/mtime của file khác row. Điều kiện thứ ba xảy ra cả khi file vẫn còn (ví dụ file bị ghi đè cùng bytes, như ca collision ở TASK-170).
+
+| Caller | Khi undefined | Đăng ký lại trước đó? | Kết luận |
+|---|---|---|---|
+| `leaseService.ts:528` (`artifactFor`, tải đầu vào của job) | 404 `ARTIFACT_NOT_FOUND` (`:529`) | Không trong `artifactFor`. Bundle được dựng trước đó ở `leaseService.ts:354` → `remoteBundle.ts:53` `register` (không cache, ghi lại row). Phản hồi phía node với 404 chưa đọc (ngoài repo). | **Có thể lỗi trên file còn tồn tại**: nếu stamp của file đổi sau lần `register` cuối và không có ghi lại, 404 xảy ra dù file còn. Chưa đo. |
+| `uploadStore.ts:52` (`linkKnown`) | `false` (`:53`); node upload lại (`leaseService.ts:507` không đưa sha vào `have`) | Không | Upload lại, không lỗi. Đường upload sau đó (có `remember` hay không) chưa đo. |
+| `runTransport.ts:83` (`artifact`) | 404 `ARTIFACT_NOT_FOUND` (`:84`) | Có, gián tiếp: `snapshot()` (`:81`) chạy `exportProjectSnapshot` và `registerSync` cho file trong `projectSnapshot.ts:118`, trên instance mới (cache rỗng). Với file đã liệt kê, row được repoint trước `locate`. | Không lỗi trên file còn tồn tại khi file nằm trong snapshot. Đọc, chưa đo end to end. |
+
+**Điều kiện dừng (advisor):** `leaseService.artifactFor` có thể 404 trên file còn tồn tại. Chưa đóng luồng. Không đổi `src`. Hướng xử lý do advisor quyết: ca đo cho đường tải đầu vào (file bị ghi đè cùng bytes sau bundle, rồi tải), hoặc thêm `registerSync` trước `locate` trong `artifactFor`, như `runTransport.ts:84`.
+
+**Tuổi thọ cache:** cache thuộc từng instance `ArtifactService`. Ngoài `FileGc` (`fileGc.ts:70`), các instance khác cũng ghi bảng `artifacts`: `projectSnapshot.ts:97` và `:165`, `inputVersion.ts:46`, `runTransport.ts:52`, `app.ts:686`. `RunTransportService` được tạo một lần ở `app.ts:636` (đọc); vòng đời theo hàm dựng app, chưa đọc hàm đó. Tác động của các instance này lên row chưa đo.
+
 ## Phương án sửa (chưa thực hiện)
 
 1. **Khi job kết thúc không complete hoặc khi cleanup xóa pending:** nếu row của sha trỏ tới file sắp xóa, xóa row hoặc repoint tới bản sao còn tồn tại (`registerSync`) trước khi xóa file. Test: ca R và N ở trên, kỳ vọng `locate(S)` trả bản sao còn tồn tại (R) hoặc undefined (N) và row không trỏ file đã xóa. Hai ràng buộc, lấy từ đo follow-up và đọc:
-   - (i) `artifacts` chỉ giữ một path cho mỗi sha, nên "bản sao còn tồn tại" không có sẵn trong bảng. Phải lấy từ row `renders` DONE còn `output_path` (đọc: INSERT của fixture không có cột sha trong `renders`), rồi `registerSync` để hash và ghi row.
+   - (i) `artifacts` chỉ giữ một path cho mỗi sha, nên "bản sao còn tồn tại" không có sẵn trong bảng. Phải lấy từ row `renders` DONE còn `output_path`. Trong fixture R, bản sao còn lại duy nhất là row `renders` của `render-0`; row này không có cột sha, nên phải `registerSync` file của nó để lấy sha và ghi row.
    - (ii) Cache early return (`artifactService.ts:37`) không đọc row. Cache hit trả sha mà không ghi lại row. Ca hand-delete cho thấy xóa row một mình không khôi phục `locate` trong cùng FileGc, nên phương án 1 phải xóa mục cache của path (hoặc repoint tường minh).
 2. **Cleanup giữ file mà row đang trỏ tới:** giống hướng đã làm cho file linked ở TASK-166. Đánh đổi là đĩa tốn thêm đến khi row được repoint. Test: pending còn sau cleanup khi row trỏ tới nó.
 3. **Thêm kiểm tra tồn tại vào `isReferencedInGraph` và `references.ts:266`/`:439`:** chỉ sửa đọc, không sửa row. Đánh đổi: không xóa row dangling, chỉ tránh suy luận từ path đã mất. Cần một ca cô lập nhánh này trước khi làm.
@@ -83,6 +97,7 @@ Khuyến nghị của báo cáo: làm (1) trước, vì nó sửa gốc (row dan
 
 ## Chưa đo
 
+- `leaseService.artifactFor` 404 trên file còn tồn tại (stamp lệch sau lần `register` cuối): chưa có ca đo; là điều kiện dừng ở đợt kiểm tra caller.
 - Đường cancel (`orchestrator.cancel`) và NODE_LOST (`nodeService.sweep`, `revoke`).
 - Đường failJob có retry (QUEUED, rồi chạy lại trên lease mới).
 - Đường upload lại S: `remember` ghi đè path khi đăng ký file mới cùng sha (đọc, chưa đo).
