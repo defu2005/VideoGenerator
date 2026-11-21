@@ -1,7 +1,7 @@
 import { rmSync } from "node:fs";
 import {
   buildSceneClipPlan,
-  defaultMotion,
+  presetMotion,
   type MotionPreset,
   type RenderTarget,
   type Shot,
@@ -55,19 +55,8 @@ function visual(path: string | null, candidateId: string | null, preset: MotionP
     path,
     startSec: 0,
     endSec: durationSec,
-    motion: motionFor(preset),
+    motion: presetMotion(preset),
     motionPreset: preset,
     licenseKind: null,
   };
-}
-
-function motionFor(preset: MotionPreset): TimelineVisual["motion"] {
-  const wide = { zoom: 1, x: 0.5, y: 0.5 };
-  const close = { zoom: 1.12, x: 0.5, y: 0.5 };
-  if (preset === "static") return { type: "kenburns", from: wide, to: wide };
-  if (preset === "pull_out") return { type: "kenburns", from: close, to: wide };
-  if (preset === "pan_left") return { type: "pan", from: { zoom: 1.08, x: 0.62, y: 0.5 }, to: { zoom: 1.08, x: 0.38, y: 0.5 } };
-  if (preset === "pan_right") return { type: "pan", from: { zoom: 1.08, x: 0.38, y: 0.5 }, to: { zoom: 1.08, x: 0.62, y: 0.5 } };
-  if (preset === "pan_up") return { type: "pan", from: { zoom: 1.08, x: 0.5, y: 0.62 }, to: { zoom: 1.08, x: 0.5, y: 0.38 } };
-  return defaultMotion(preset === "punch_in" ? 0 : 1);
 }

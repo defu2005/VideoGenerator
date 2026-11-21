@@ -3,7 +3,7 @@ import { existsSync, readFileSync, readdirSync, realpathSync } from "node:fs";
 import { dirname, isAbsolute, join, relative, sep } from "node:path";
 import { homedir } from "node:os";
 import { pathToFileURL } from "node:url";
-import { defaultMotion, PLACEHOLDER_COLOR, zoompanExprs, type RenderTarget, type Shot, type TimelineVisual } from "@vg/shared";
+import { presetMotion, PLACEHOLDER_COLOR, zoompanExprs, type RenderTarget, type Shot } from "@vg/shared";
 import type { Browser, Page } from "puppeteer-core";
 import { composeAssetRoot } from "../compose/hyperframes.js";
 import { graphicVariables } from "../compose/render/graphicVars.js";
@@ -128,29 +128,17 @@ export async function warmPreviewRuntime(load: () => Promise<PuppeteerModule> = 
   }
 }
 
-function motion(preset: string): TimelineVisual["motion"] {
-  const wide = { zoom: 1, x: 0.5, y: 0.5 }, close = { zoom: 1.12, x: 0.5, y: 0.5 };
-  if (preset === "static") return { type: "kenburns", from: wide, to: wide };
-  if (preset === "pull_out") return { type: "kenburns", from: close, to: wide };
-  if (preset === "pan_left" || preset === "pan_right") {
-    const left = preset === "pan_left";
-    return { type: "pan", from: { zoom: 1.08, x: left ? 0.62 : 0.38, y: 0.5 }, to: { zoom: 1.08, x: left ? 0.38 : 0.62, y: 0.5 } };
-  }
-  if (preset === "pan_up") return { type: "pan", from: { zoom: 1.08, x: 0.5, y: 0.62 }, to: { zoom: 1.08, x: 0.5, y: 0.38 } };
-  return defaultMotion(preset === "punch_in" ? 0 : 1);
-}
-
 /** Same shared zoompan equations as RENDER, evaluated only over the requested range. */
 export function stillPreviewFilter(shot: Shot, target: RenderTarget, offsetSec: number, frames: number, fps: number): string {
   const total = shotFrameCount(shot, target.fps);
   const source = shot.source.kind === "still" ? shot.source : null;
-  const expr = zoompanExprs(motion(source?.motion ?? "static"), total);
+  const expr = zoompanExprs(presetMotion(source?.motion ?? "static"), total);
   const frame = Math.round(offsetSec * target.fps);
   const clock = frames === 1 ? String(frame) : `(${frame}+on*${target.fps}/${fps})`;
   const at = (value: string) => value.replace(/\bon\b/g, clock);
   const { width: w, height: h } = target;
   // RENDER uses a 2x cover crop before zoompan, focused at motion.from.
-  const focus = motion(source?.motion ?? "static")?.from ?? { x: 0.5, y: 0.5 };
+  const focus = presetMotion(source?.motion ?? "static")?.from ?? { x: 0.5, y: 0.5 };
   return `scale=${w * 2}:${h * 2}:force_original_aspect_ratio=increase:flags=lanczos,crop=${w * 2}:${h * 2}:(iw-${w * 2})*${focus.x}:(ih-${h * 2})*${focus.y},setsar=1,`
     + `zoompan=z='${at(expr.z)}':x='${at(expr.x)}':y='${at(expr.y)}':d=${frames}:s=${w}x${h}:fps=${fps},setsar=1`;
 }
