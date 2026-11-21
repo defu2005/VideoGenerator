@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { ContinuityEnvelopeSchema } from "./continuity.js";
+import { BeatEmotionSchema, BeatPurposeSchema } from "../script/outline.js";
 
 export const SceneEnergySchema = z.enum(["low", "medium", "high"]);
 export const SceneKindSchema = z.enum(["hook", "section", "outro"]);
@@ -34,6 +35,10 @@ export const SceneSchema = z.object({
   durationOverrideSec: z.number().min(1).max(60).nullable(),
   startSec: z.number().nonnegative(),
   transitionNote: z.string(),
+  beatPurpose: BeatPurposeSchema.optional(),
+  emotion: BeatEmotionSchema.optional(),
+  visualIntent: z.string().optional(),
+  factIds: z.array(z.string()).optional(),
   origin: SceneOriginSchema,
   edited: z.boolean(),
   inputHash: z.string(),

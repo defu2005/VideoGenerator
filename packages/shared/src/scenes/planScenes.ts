@@ -127,6 +127,7 @@ function sceneDraft(
   const section = unit.section ?? unit.queriesFrom;
   const queryAssignment = assignQueries(section);
   return {
+    ...beatFields(unit),
     order: 0,
     kind: unit.kind,
     sectionId: unit.sectionId,
@@ -145,11 +146,18 @@ function sceneDraft(
   } as SceneDraft;
 }
 
-function packUnit(unit: Unit, settings: Settings, assignQueries: AssignQueries): SceneDraft[] {
-  const sentences = splitSentences(unit.narration, settings.language)
-    .flatMap((sentence) => splitLongSentence(sentence, settings));
-  if (sentences.length === 0) return [];
+function beatFields(unit: Unit): Partial<Pick<SceneDraft, "beatPurpose" | "emotion" | "visualIntent" | "factIds">> {
+  const section = unit.kind === "section" ? unit.section : null;
+  if (!section) return {};
+  return {
+    ...(section.beatPurpose !== undefined ? { beatPurpose: section.beatPurpose } : {}),
+    ...(section.emotion !== undefined ? { emotion: section.emotion } : {}),
+    ...(section.visualIntent !== undefined ? { visualIntent: section.visualIntent } : {}),
+    ...(section.factIds !== undefined ? { factIds: [...section.factIds] } : {}),
+  };
+}
 
+function packSentences(sentences: string[], settings: Settings): string[] {
   const target = sceneTarget(settings);
   const packed: string[] = [];
   let current: string[] = [];
@@ -215,6 +223,19 @@ function packUnit(unit: Unit, settings: Settings, assignQueries: AssignQueries):
       index = Math.max(0, left - 1);
     }
   }
+
+  return packed;
+}
+
+function packUnit(unit: Unit, settings: Settings, assignQueries: AssignQueries): SceneDraft[] {
+  const sentences = splitSentences(unit.narration, settings.language);
+  // A reveal section opens with its own scene: its first sentence is cut alone and the rest pack normally.
+  const reveal = unit.kind === "section" && unit.section?.beatPurpose === "reveal" && sentences.length > 1;
+  const headPieces = reveal ? packSentences(splitLongSentence(sentences[0]!, settings), settings) : [];
+  const restSentences = (reveal ? sentences.slice(1) : sentences)
+    .flatMap((sentence) => splitLongSentence(sentence, settings));
+  const packed = [...headPieces, ...packSentences(restSentences, settings)];
+  if (packed.length === 0) return [];
 
   let startSec = 0;
   return packed.map((narration) => {
