@@ -5,6 +5,7 @@ import {
   buildSceneClipPlan,
   concatListText,
   duckVolumeExpr,
+  musicCurveExpr,
   parseBlackdetect,
   parseProgressSeconds,
   splitFrames,
@@ -252,6 +253,127 @@ describe("music chain pin (TASK-146 slice 5 commit A)", () => {
     expect(plan.filter).toContain(
       `[3:a]atrim=start=1,asetpts=PTS-STARTPTS,aresample=48000,aformat=sample_fmts=fltp:channel_layouts=stereo,atrim=0:8,volume=0.2,volume='${duck}':eval=frame,afade=t=in:st=0:d=2,afade=t=out:st=5:d=3[music]`,
     );
+  });
+});
+
+// TASK-146 slice 5 commit B red tests: beat purposes shape the music volume on the video clock.
+// tension and reflection runs lower it (-3 dB), a reveal start dips it (-6 dB, 1.5 s), a payoff run lifts it (+2 dB).
+// Expected strings are hand-computed; the helper is not used to build them.
+describe("music curve (TASK-146 slice 5 commit B)", () => {
+  const music = (duckingDb: number) => ({
+    candidateId: "m",
+    title: "Calm",
+    path: "music/a.mp3",
+    sourceDurationSec: 4,
+    loop: true,
+    startOffsetSec: 1,
+    volume: 0.2,
+    fadeInSec: 2,
+    fadeOutSec: 3,
+    duckingDb,
+    licenseKind: null,
+  });
+  const filterFor = (scenes: TimelineScene[], duckingDb = -12) =>
+    buildFinalPlan({
+      totalDurationSec: 8,
+      scenes,
+      music: music(duckingDb),
+      concatListPath: "/r/clips.txt",
+      resolvePath: (path) => `/p/${path}`,
+      assFileName: null,
+    }).filter;
+  const setup = scene({ startSec: 0, endSec: 3, voice: null, beat: { purpose: "setup", start: true } });
+  const tension = (startSec: number, endSec: number) =>
+    scene({ sceneId: `t${startSec}`, startSec, endSec, voice: null, beat: { purpose: "tension", start: true } });
+
+  it("gives no curve for scenes without beats or with neutral purposes", () => {
+    const neutral = [setup, scene({ sceneId: "s2", order: 1, startSec: 3, endSec: 8, voice: null, beat: { purpose: "explanation", start: true } })];
+    expect(musicCurveExpr(neutral)).toBeNull();
+    expect(musicCurveExpr([scene()])).toBeNull();
+  });
+
+  it("keeps the chain byte-identical when beats are all neutral", () => {
+    const withBeats = [setup, scene({ sceneId: "s2", order: 1, startSec: 3, endSec: 8, voice: null, beat: { purpose: "explanation", start: true } })];
+    const withoutBeats = withBeats.map(({ beat: _beat, ...rest }) => rest as TimelineScene);
+    expect(filterFor(withBeats)).toBe(filterFor(withoutBeats));
+  });
+
+  it("lowers by 3 dB across a tension run, with 0.25 s ramps on each side", () => {
+    const expr = musicCurveExpr([setup, tension(3, 5), scene({ sceneId: "s3", order: 2, startSec: 5, endSec: 8, voice: null })]);
+    expect(expr).toBe("1-0.2921*(clip((t-2.75)/0.25,0,1)*clip((5.25-t)/0.25,0,1))");
+  });
+
+  it("treats a tension run and an adjacent reflection run as one run", () => {
+    const reflection = scene({ sceneId: "r", order: 2, startSec: 5, endSec: 7, voice: null, beat: { purpose: "reflection", start: true } });
+    const expr = musicCurveExpr([setup, tension(3, 5), reflection]);
+    expect(expr).toBe("1-0.2921*(clip((t-2.75)/0.25,0,1)*clip((7.25-t)/0.25,0,1))");
+  });
+
+  it("dips by 6 dB over 1.5 s ending at a reveal start", () => {
+    const reveal = scene({ sceneId: "rv", order: 1, startSec: 5, endSec: 8, voice: null, beat: { purpose: "reveal", start: true } });
+    expect(musicCurveExpr([setup, reveal])).toBe("1-0.4988*(clip((t-3.5)/1.5,0,1)*clip((5.25-t)/0.25,0,1))");
+  });
+
+  it("dips once for a reveal section: the start scene dips, its follower with start false does not", () => {
+    const startScene = scene({ sceneId: "rv", startSec: 5, endSec: 6, voice: null, beat: { purpose: "reveal", start: true } });
+    const follower = scene({ sceneId: "rv2", order: 2, startSec: 6, endSec: 8, voice: null, beat: { purpose: "reveal", start: false } });
+    expect(musicCurveExpr([setup, startScene, follower])).toBe("1-0.4988*(clip((t-3.5)/1.5,0,1)*clip((5.25-t)/0.25,0,1))");
+  });
+
+  it("clamps the dip rise to the start time when a reveal starts at t=1", () => {
+    const reveal = scene({ sceneId: "rv", startSec: 1, endSec: 4, voice: null, beat: { purpose: "reveal", start: true } });
+    expect(musicCurveExpr([reveal])).toBe("1-0.4988*(clip((t-0)/1,0,1)*clip((1.25-t)/0.25,0,1))");
+  });
+
+  it("stacks a tension run and the reveal dip directly after it", () => {
+    const reveal = scene({ sceneId: "rv", order: 2, startSec: 5, endSec: 8, voice: null, beat: { purpose: "reveal", start: true } });
+    expect(musicCurveExpr([setup, tension(3, 5), reveal])).toBe(
+      "(1-0.2921*(clip((t-2.75)/0.25,0,1)*clip((5.25-t)/0.25,0,1)))*(1-0.4988*(clip((t-3.5)/1.5,0,1)*clip((5.25-t)/0.25,0,1)))",
+    );
+  });
+
+  it("gives no dip for a reveal at t=0, because the dip would have no length", () => {
+    const reveal = scene({ sceneId: "rv", startSec: 0, endSec: 3, voice: null, beat: { purpose: "reveal", start: true } });
+    expect(musicCurveExpr([reveal])).toBeNull();
+  });
+
+  it("takes the deeper of two overlapping reveal dips with max, not a sum", () => {
+    const first = scene({ sceneId: "a", startSec: 4, endSec: 5, voice: null, beat: { purpose: "reveal", start: true } });
+    const second = scene({ sceneId: "b", order: 2, startSec: 5, endSec: 8, voice: null, beat: { purpose: "reveal", start: true } });
+    expect(musicCurveExpr([scene({ startSec: 0, endSec: 4, voice: null }), first, second])).toBe(
+      "1-0.4988*max(clip((t-2.5)/1.5,0,1)*clip((4.25-t)/0.25,0,1),clip((t-3.5)/1.5,0,1)*clip((5.25-t)/0.25,0,1))",
+    );
+  });
+
+  it("lifts by 2 dB across a payoff run, so the gain goes above 1", () => {
+    const payoff = scene({ sceneId: "p", startSec: 0, endSec: 3, voice: null, beat: { purpose: "payoff", start: true } });
+    expect(musicCurveExpr([payoff])).toBe("1+0.2589*(clip((t+0.25)/0.25,0,1)*clip((3.25-t)/0.25,0,1))");
+  });
+
+  it("applies the curve after the voice duck and before the fades, even with no duck", () => {
+    const plain = filterFor([setup, tension(3, 5), scene({ sceneId: "s3", order: 2, startSec: 5, endSec: 8, voice: null })], 0);
+    expect(plain).toContain(
+      "volume=0.2,volume='1-0.2921*(clip((t-2.75)/0.25,0,1)*clip((5.25-t)/0.25,0,1))':eval=frame,afade=t=in:st=0:d=2",
+    );
+    const ducked = filterFor([
+      scene({ startSec: 0, endSec: 3, voice: { trackId: "v", path: "voice/a.mp3", startSec: 1, durationSec: 2 }, beat: { purpose: "setup", start: true } }),
+      tension(3, 5),
+    ]);
+    const duck = duckVolumeExpr([[1, 3]], -12)!;
+    expect(ducked.indexOf(`volume='${duck}':eval=frame`)).toBeLessThan(ducked.indexOf("volume='1-0.2921"));
+    expect(ducked.indexOf("volume='1-0.2921")).toBeLessThan(ducked.indexOf("afade=t=in"));
+  });
+
+  it("adds nothing when music is null", () => {
+    const plan = buildFinalPlan({
+      totalDurationSec: 8,
+      scenes: [tension(0, 8)],
+      music: null,
+      concatListPath: "/r/clips.txt",
+      resolvePath: (path) => path,
+      assFileName: null,
+    });
+    expect(plan.filter).not.toContain("volume=");
   });
 });
 

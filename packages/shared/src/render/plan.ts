@@ -162,6 +162,71 @@ export function duckVolumeExpr(intervals: [number, number][], duckingDb: number,
   return `1-${num(1 - gain)}*(${terms.join("+")})`;
 }
 
+// TASK-146 slice 5: beat purposes shape the music volume on the video clock.
+// Design defaults, not sourced rules.
+export const MUSIC_CURVE_LOWER_DB = -3;
+export const MUSIC_CURVE_DIP_DB = -6;
+export const MUSIC_CURVE_DIP_SEC = 1.5;
+export const MUSIC_CURVE_LIFT_DB = 2;
+
+/** `t-x` or `t+x`, so a negative edge never prints as `t--x`. */
+const tMinus = (x: number) => (x < 0 ? `t+${num(-x)}` : `t-${num(x)}`);
+/** Largest of several 0–1 terms, so overlapping windows do not add up. */
+const maxOf = (terms: string[]) => terms.reduce((acc, term) => `max(${acc},${term})`);
+/** One term is used as is inside a factor; several are combined with max. */
+const envelope = (terms: string[]) => (terms.length === 1 ? `(${terms[0]})` : maxOf(terms));
+
+/** A 0–1 window over [start, end] with DUCK_RAMP_SEC ramps on both sides. */
+const windowTerm = (start: number, end: number) =>
+  `clip((${tMinus(start - DUCK_RAMP_SEC)})/${num(DUCK_RAMP_SEC)},0,1)*clip((${num(end + DUCK_RAMP_SEC)}-t)/${num(DUCK_RAMP_SEC)},0,1)`;
+
+/** Consecutive scenes whose beat purpose is in `purposes`, as [start, end] runs on the video clock. */
+function purposeRuns(scenes: TimelineScene[], purposes: readonly string[]): [number, number][] {
+  const runs: [number, number][] = [];
+  let open = false;
+  for (const scene of [...scenes].sort((a, b) => a.startSec - b.startSec)) {
+    if (!scene.beat || !purposes.includes(scene.beat.purpose)) {
+      open = false;
+      continue;
+    }
+    if (open) runs[runs.length - 1]![1] = scene.endSec;
+    else {
+      runs.push([scene.startSec, scene.endSec]);
+      open = true;
+    }
+  }
+  return runs;
+}
+
+/** One dip per reveal start: a rise over up to MUSIC_CURVE_DIP_SEC that ends at the start, then a short return. */
+function dipTerms(scenes: TimelineScene[]): string[] {
+  const terms: string[] = [];
+  for (const scene of scenes) {
+    if (scene.beat?.purpose !== "reveal" || !scene.beat.start) continue;
+    const at = scene.startSec;
+    const rise = Math.min(MUSIC_CURVE_DIP_SEC, at);
+    if (rise <= 0) continue;
+    terms.push(`clip((${tMinus(at - rise)})/${num(rise)},0,1)*clip((${num(at + DUCK_RAMP_SEC)}-t)/${num(DUCK_RAMP_SEC)},0,1)`);
+  }
+  return terms;
+}
+
+/**
+ * Deterministic music gain from beat purposes: lower under tension and reflection, dip before a reveal,
+ * lift on payoff. Each kind is one factor; factors multiply. Returns null when no scene asks for a change.
+ */
+export function musicCurveExpr(scenes: TimelineScene[]): string | null {
+  const factors: string[] = [];
+  const lower = purposeRuns(scenes, ["tension", "reflection"]).map(([a, b]) => windowTerm(a, b));
+  if (lower.length) factors.push(`1-${num(1 - 10 ** (MUSIC_CURVE_LOWER_DB / 20))}*${envelope(lower)}`);
+  const dips = dipTerms(scenes);
+  if (dips.length) factors.push(`1-${num(1 - 10 ** (MUSIC_CURVE_DIP_DB / 20))}*${envelope(dips)}`);
+  const lift = purposeRuns(scenes, ["payoff"]).map(([a, b]) => windowTerm(a, b));
+  if (lift.length) factors.push(`1+${num(10 ** (MUSIC_CURVE_LIFT_DB / 20) - 1)}*${envelope(lift)}`);
+  if (factors.length === 0) return null;
+  return factors.length === 1 ? factors[0]! : factors.map((factor) => `(${factor})`).join("*");
+}
+
 export type FinalPlanInput = {
   totalDurationSec: number;
   scenes: TimelineScene[];
@@ -276,6 +341,8 @@ export function buildFinalPlan(input: FinalPlanInput): { inputArgs: string[]; fi
     ];
     const duck = duckVolumeExpr(voiceIntervals(input.scenes), music.duckingDb);
     if (duck) chain.push(`volume='${duck}':eval=frame`);
+    const curve = musicCurveExpr(input.scenes);
+    if (curve) chain.push(`volume='${curve}':eval=frame`);
     if (music.fadeInSec > 0) chain.push(`afade=t=in:st=0:d=${num(music.fadeInSec)}`);
     if (music.fadeOutSec > 0) {
       chain.push(`afade=t=out:st=${num(Math.max(0, input.totalDurationSec - music.fadeOutSec))}:d=${num(music.fadeOutSec)}`);
