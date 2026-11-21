@@ -1,6 +1,6 @@
 # TASK-168 — `run_uploads` liên kết tới file pending không được cleanup bảo vệ (báo cáo đọc mã)
 
-Trạng thái: đọc mã, thêm một test ghim âm `apps/server/test/runSnapshotRepointsPending.test.ts` (2 test, xanh) và chạy mutant M8. **Không sửa `src/`.** Theo quyết định advisor (2026-11-21). Commit cục bộ, **chưa push, không có `.done`.** Kết luận: nhánh "R bắt đầu trước khi A hoàn tất" bị đóng bởi guard lúc bắt đầu run; snapshot đầu đoạn chạy đưa `artifacts` của S về versions trước `have`. Nhánh còn lại (job A được lease trong lúc run R đang chạy) **chưa đo**.
+Trạng thái: đọc mã, thêm một test ghim âm `apps/server/test/runSnapshotRepointsPending.test.ts` (2 test, xanh) và chạy mutant M8. **Không sửa `src/`.** Theo quyết định advisor (2026-11-21). Commit cục bộ, **chưa push, không có `.done`.** Kết luận: nhánh "R bắt đầu trước khi A hoàn tất" bị đóng bởi guard lúc bắt đầu run; snapshot đầu đoạn chạy đưa `artifacts` của S về versions trước `have`. Nhánh còn lại (job A được lease trong lúc run R đang chạy) **chưa đo**. Điều kiện cache lạnh: repoint chỉ được chứng minh ở lần đăng ký đầu tiên của file versions trên instance `ArtifactService` có cache rỗng. Snapshot thứ hai trên cùng instance (cache hit, không `remember`) **chưa đo**.
 
 ## Câu hỏi advisor đặt ra (4 mục)
 
@@ -141,6 +141,8 @@ Test: `apps/server/test/runSnapshotRepointsPending.test.ts`. Phần giả lập,
 - **Đối chứng (KHÔNG phải thứ tự production):** bỏ `transport.snapshot`. `have` link pending; cleanup xóa pending; checkpoint ném ENOENT thô (`code === "ENOENT"`).
 - **Kết quả:** 2/2 xanh. `tsc` cho file test (qua tsconfig tạm có `rootDir: "."`, đã xóa): exit 0. Lưu ý: `apps/server/tsconfig.json` loại `test/`, nên `npx tsc --noEmit` không kiểm file này.
 - **Mutant M8:** thay `artifacts.registerSync(real)` ở `projectSnapshot.ts:118` bằng hash trực tiếp không đăng ký. Pin **đỏ** ở khẳng định sau snapshot: `artifacts` vẫn trỏ `…/render/pending/…/final.mp4`, không phải `…/render/versions/render-1/output.mp4`. Đối chứng vẫn xanh (không đi qua snapshot). `projectSnapshot.ts` được khôi phục từ bản sao lưu, `cmp` khớp, `git status` sạch.
+
+**Chưa đo (điều kiện cache lạnh):** pin chỉ chứng minh repoint khi snapshot là lần đăng ký đầu tiên của file versions trên instance cache rỗng. Nếu một snapshot trước đã đăng ký file versions, rồi có thứ gì repoint S sang pending, snapshot của run sau sẽ cache hit và để S ở pending. Nhánh này không cần job nào được lease trong lúc run, nên guard lúc bắt đầu run không đóng nó. Không thêm test hay đổi `src` cho điều kiện này trong TASK-168.
 
 **Chưa đo (nhánh còn lại):** job A được lease trong lúc R chạy, và GC repoint S sang pending trong lúc R chạy. Cần thêm một job B đang giữ hàng `node_uploads` linked tới file pending của A. Thứ tự pending/versions trong một lượt `collectReferences` chưa đọc. Nếu cả hai đúng, `have` k của R có thể link pending, và checkpoint m ném ENOENT sau cleanup. Chưa dựng.
 
