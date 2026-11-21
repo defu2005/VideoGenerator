@@ -116,7 +116,7 @@ Lần chạy đầu: **cả ba ca đỏ** ở `leases.lease` thứ hai (trả un
 
 Ý nghĩa: heal phụ thuộc vào việc lease lại **gọi register** trên P. Production làm điều này (`remoteBundle.ts:53`). Module mock của `buildRemoteBundle` trong test không gọi, nên mỗi ca heal tự gọi `artifacts.register(P)`. Không có register thì không heal (ca control).
 
-Chạy: `npx vitest run test/workerNodes.test.ts` (đầy đủ): **36/36 xanh**. Trước đó chỉ chạy lọc tên (3/3), nên đã thiếu bước kiểm tra trạng thái dùng chung. Chạy đầy đủ đã chứng minh: các ca mới không làm đỏ ca cũ. `npx tsc --noEmit -p .` (trong `apps/server`): exit 0.
+Chạy: `npx vitest run test/workerNodes.test.ts` (đầy đủ): **36/36 xanh**. Trước đó chỉ chạy lọc tên (3/3), nên đã thiếu bước kiểm tra trạng thái dùng chung. Chạy đầy đủ đã chứng minh: các ca mới không làm đỏ ca cũ. `npx tsc --noEmit -p .` (trong `apps/server`) exit 0, nhưng tsconfig của server **không** bao phủ `test/`. Các ca heal không được type-check. Không chặn kết luận, vì các ca đã chạy và xanh.
 
 Kết luận tạm (chưa khóa): nếu requeue + lease lại + register heal được (đã đo ở trên), (b) là một lượt retry lãng phí, không phải lỗi vĩnh viễn trừ khi rơi vào lượt cuối. Chưa đủ để chọn src change, vì còn câu hỏi có tới được (b) trong production không.
 
@@ -128,10 +128,16 @@ Câu hỏi: có đường production nào vừa đăng ký X cùng bytes, vừa 
 - **Điều kiện xóa trong purge** (`src/storage/fileGc.ts`):
   - Ứng viên phải có **mark cũ**: lần đầu thấy file không được tham chiếu, `purge_after = startedAt + grace` (`:425–431`). Grace là 1 ngày với `ephemeral` (`:425`), và `graceDays` với project file. Vậy X không thể bị xóa trong cùng lượt nó vừa xuất hiện. X phải đã unreferenced ít nhất một ngày trước đó.
   - Trong transaction (`:457–471`): `registerSync(target)` tại `:465` **ghi row trỏ tới X trước khi kiểm tra** (`:466`). Nếu `sha` của X không được tham chiếu (`index.isReferenced(file.path, sha)`, `references.ts:432`), `unlinkSync(X)` tại `:467`. Kết quả: row trỏ tới X đã xóa, đúng hình dạng (b). Thao tác này do chính GC gây ra, không cần writer bên ngoài.
-  - Chặn duy nhất là kiểm tra theo **sha** ở `:466`: sha được coi là tham chiếu khi có giá trị `*sha256` trong bảng project hoặc trong JSON của job RUNNING/QUEUED, hoặc `node_uploads.sha256` của job đó (`dataContract.ts:115`, `references.ts:125`).
+  - Chặn duy nhất là kiểm tra theo **sha** ở `:466` (`index.isReferenced`, `references.ts:432`): sha được coi là tham chiếu khi nằm trong tập `*sha256` của các bảng được duyệt (`dataContract.ts:106–129`), gồm `node_uploads` của job RUNNING/QUEUED (`references.ts:125`) và `run_uploads` của run đang hoạt động (`:126`); hoặc path (hoặc tổ tiên) của file nằm trong tập path được bảo vệ. **File `render/pending/*.json` không được duyệt.** `Pending.files` (sha của input, ghi tại `leaseService.ts:370–371`) chỉ nằm ở đó, nên sha của input không vào tập sha, trừ khi một row khác đang được duyệt mang đúng sha đó (ví dụ `visual_candidates.sha256`, khi row không bị bỏ qua tại `references.ts:122`).
 - **Lịch chạy:** `app.ts:766–767` mỗi 24 h (`fileGc.run({purge:true})`). `app.ts:801` chạy `run({purge:true, ephemeralOnly:true})` mỗi ≥5 phút khi đĩa dưới 15% (`:789–800`). Cleanup pending chạy trước GC trong cùng tick (`app.ts:761`, 24 h cutoff).
 
-**Kết luận đọc:** (b) **có thể tới được** từ đường purge (cả hai nhánh, nhưng `ephemeralOnly` chỉ với file `ephemeral`), **với điều kiện**: sha của input P không được tham chiếu bởi bất kỳ row nào tại thời điểm purge, trong khi lease của B còn sống. Nếu input của B được tham chiếu bởi timeline hoặc asset (path hoặc sha), `:466` chặn xóa và không có (b). **Chưa đo:** toàn bộ tập input của bundle (`renderService.ts:828` trở đi) có luôn được tham chiếu bởi row project hay không. Đây là câu hỏi quyết định. Không đề xuất src fix trước khi trả lời.
+**Kết luận đọc (cập nhật, advisor 2026-11-21):** đường này **không bị chặn** với input chỉ được nhắc trong pending JSON. Hai điều kiện, đều đọc chứ chưa đo:
+1. Không row nào đang được duyệt tham chiếu input theo path hoặc theo sha tại thời điểm purge.
+2. Input đã qua grace: 1 ngày với `ephemeral` (cũng là đường disk-pressure, `ephemeralOnly`), `graceDays` với file project.
+
+Khi đó GC đăng ký input (`:465`) rồi xóa nó (`:467`). `artifactFor` trả 404 **kể cả khi chỉ có P**, không cần bản sao X, vì row đã trỏ tới P đã bị xóa. Ca (b) đã đo dùng bản sao; chuỗi đơn giản hơn là tự xóa input. Ứng viên cụ thể đã đọc, chưa đo: `visual_candidates` bị discard (`discarded_at`, bị bỏ qua tại `references.ts:122`) mà job đang dùng làm input; và file ephemeral mà không bảng nào nêu.
+
+**Chưa đo:** tập input thực của bundle (`renderService.ts:828` trở đi, `buildRemoteBundle` tại `remoteBundle.ts:53`) và path nào trong đó được row đang duyệt bảo vệ. Đây là câu hỏi quyết định trước khi đề xuất src fix. Không đề xuất fix theo quy tắc advisor: đây là điểm dừng, không phải kết thúc.
 
 Lưu ý: `:465` làm GC tự repoint một row về file sắp xóa. Đây là điểm mà advisor cần biết, dù (b) có tới được hay không.
 
