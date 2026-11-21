@@ -26,7 +26,7 @@ describe("presetMotion pin (current behaviour)", () => {
     expect(presetMotion("punch_in")).toEqual({ type: "kenburns", from: wide, to: close });
   });
 
-  it("push_in currently falls through to the zoom-out branch (fixed in the next commit)", () => {
-    expect(presetMotion("push_in")).toEqual({ type: "kenburns", from: close, to: wide });
+  it("push_in zooms in, like punch_in (it used to zoom out)", () => {
+    expect(presetMotion("push_in")).toEqual({ type: "kenburns", from: wide, to: close });
   });
 });

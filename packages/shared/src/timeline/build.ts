@@ -87,7 +87,8 @@ export function presetMotion(preset: MotionPreset): TimelineVisual["motion"] {
   if (preset === "pan_left") return { type: "pan", from: { zoom: 1.08, x: 0.62, y: 0.5 }, to: { zoom: 1.08, x: 0.38, y: 0.5 } };
   if (preset === "pan_right") return { type: "pan", from: { zoom: 1.08, x: 0.38, y: 0.5 }, to: { zoom: 1.08, x: 0.62, y: 0.5 } };
   if (preset === "pan_up") return { type: "pan", from: { zoom: 1.08, x: 0.5, y: 0.62 }, to: { zoom: 1.08, x: 0.5, y: 0.38 } };
-  return defaultMotion(preset === "punch_in" ? 0 : 1);
+  // push_in and punch_in both zoom in; the old fallback sent push_in to the zoom-out branch.
+  return defaultMotion(0);
 }
 
 function sceneLength(scene: TimelineSceneInput, warnings: TimelineWarning[]): number {
