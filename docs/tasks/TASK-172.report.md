@@ -52,7 +52,7 @@ Chạy: `npx vitest run test/fileGcCacheCases.test.ts test/runSnapshotRepointsPe
 ## Phát hiện
 
 1. **Trạng thái "kẹt ở pending" xảy ra trên đường FAILED không complete**, cả khi có bản sao hợp lệ (fixture R) và khi không có (fixture N). Đây là đường production đã đọc được, không chỉ mock.
-2. **Row dangling che bản sao hợp lệ:** trong fixture R, `locate(S)` trả undefined dù `render-0` có cùng bytes. Ai dùng `locate` (upload có sha đã biết, `linkKnown`) nhận undefined. **Đọc từ mã, chưa đo:** khi đó `linkKnown` trả false và caller phải upload lại. Đây là lỗi hiệu quả, chưa thấy lỗi dữ liệu. `remember` (`artifactService.ts:58`) là upsert theo sha: lần ghi sau thắng, nó đặt `path`, `size`, `mtime_ms` về file mới. Vì vậy khi S được đăng ký lại ở path mới, row sẽ trỏ tới path đó (đọc, chưa đo trên đường upload).
+2. **Row dangling che bản sao hợp lệ:** trong fixture R, `locate(S)` trả undefined dù `render-0` có cùng bytes. Ai dùng `locate` (upload có sha đã biết, `linkKnown`) nhận undefined. **Đọc từ mã, chưa đo:** khi đó `linkKnown` trả false và caller phải upload lại. Đây là lỗi hiệu quả cho đường upload (`linkKnown` → upload lại). Trên đường tải đầu vào (`artifactFor`), cùng trạng thái trả 404, không upload lại: xem mục Caller của `locate`. `remember` (`artifactService.ts:58`) là upsert theo sha: lần ghi sau thắng, nó đặt `path`, `size`, `mtime_ms` về file mới. Vì vậy khi S được đăng ký lại ở path mới, row sẽ trỏ tới path đó (đọc, chưa đo trên đường upload).
 3. Trong fixture R, lượt GC sau cleanup không ghi lại row (`retained-versions` hit), nên row không được sửa.
 
 ## Đo thêm (follow-up, advisor 2026-11-21)
@@ -77,11 +77,34 @@ Kết luận:
 
 | Caller | Khi undefined | Đăng ký lại trước đó? | Kết luận |
 |---|---|---|---|
-| `leaseService.ts:528` (`artifactFor`, tải đầu vào của job) | 404 `ARTIFACT_NOT_FOUND` (`:529`) | Không trong `artifactFor`. Bundle được dựng trước đó ở `leaseService.ts:354` → `remoteBundle.ts:53` `register` (không cache, ghi lại row). Phản hồi phía node với 404 chưa đọc (ngoài repo). | **Có thể lỗi trên file còn tồn tại**: nếu stamp của file đổi sau lần `register` cuối và không có ghi lại, 404 xảy ra dù file còn. Chưa đo. |
+| `leaseService.ts:528` (`artifactFor`, tải đầu vào của job) | 404 `ARTIFACT_NOT_FOUND` (`:529`) | Không trong `artifactFor`. Bundle được dựng trước đó ở `leaseService.ts:354` → `remoteBundle.ts:53` `register` (không cache, ghi lại row). Phản hồi phía node đã đọc, nằm trong repo (`agent.ts:825–878`): xem mục artifactFor bên dưới. | **Có thể 404 khi file còn tồn tại**, theo hai trường hợp (a) và (b) bên dưới. |
 | `uploadStore.ts:52` (`linkKnown`) | `false` (`:53`); node upload lại (`leaseService.ts:507` không đưa sha vào `have`) | Không | Upload lại, không lỗi. Đường upload sau đó (có `remember` hay không) chưa đo. |
 | `runTransport.ts:83` (`artifact`) | 404 `ARTIFACT_NOT_FOUND` (`:84`) | Có, gián tiếp: `snapshot()` (`:81`) chạy `exportProjectSnapshot` và `registerSync` cho file trong `projectSnapshot.ts:118`, trên instance mới (cache rỗng). Với file đã liệt kê, row được repoint trước `locate`. | Không lỗi trên file còn tồn tại khi file nằm trong snapshot. Đọc, chưa đo end to end. |
 
-**Điều kiện dừng (advisor):** `leaseService.artifactFor` có thể 404 trên file còn tồn tại. Chưa đóng luồng. Không đổi `src`. Hướng xử lý do advisor quyết: ca đo cho đường tải đầu vào (file bị ghi đè cùng bytes sau bundle, rồi tải), hoặc thêm `registerSync` trước `locate` trong `artifactFor`, như `runTransport.ts:84`.
+**Điều kiện dừng (advisor) và kết quả đợt sau:** `leaseService.artifactFor` 404 trên file còn tồn tại. Advisor tách thành hai trường hợp, đo bên dưới. Không đổi `src`.
+
+### artifactFor: (a) và (b) (advisor 2026-11-21)
+
+- **(a) Stamp đổi trên cùng path.** Input bị ghi lại sau `register` của bundle. `locate` trả undefined theo hợp đồng (`artifactService.ts:62`, "changed since it was hashed"). Đây là thiết kế, không phải kết quả của luồng TASK-172.
+- **(b) Row bị repoint rồi file đích bị xóa.** Bundle `register` trỏ S tới input P. Một writer sau đó (`registerSync`, last writer wins) trỏ S tới bản sao X cùng bytes. X bị xóa. `artifactFor` trả 404 trong khi P còn. Đây là cơ chế của luồng TASK-172, và là trường hợp duy nhất có thể biện minh cho src change.
+
+Đọc (không đo trừ khi ghi chú):
+- `readPending` (`leaseService.ts:464–468`) đọc file pending. `Pending.files` là `ArtifactRef[]` (`leaseService.ts:84–87`), và `ArtifactRef` là `{name, sha256, size}` strict (`packages/shared/src/schemas/renderBundle.ts:7–11`). **Pending không có path.** Vì vậy "registerSync trước locate" trong `artifactFor` không có path để đăng ký. Sửa cần lấy path từ nơi khác (ví dụ lưu path lúc dựng bundle, `leaseService.ts:353–354`): đó là thay đổi src.
+- Cửa sổ dựng → tải: bundle được dựng và pending ghi **mỗi lần lease** (`leaseService.ts:354` dựng, `:370–372` ghi pending và `setJobLease`). Lease mới dựng lại bundle và register lại P (`remoteBundle.ts:53`).
+- Phía node: tải đầu vào nằm trong `runJob` (`agent.ts:825–828`). `installArtifact` ném lỗi khi không ok (`agent.ts:613–615`). Lỗi rơi vào `catch` (`agent.ts:868`), gửi `POST /fail` với `retryable: true`, code `NODE_RENDER_FAILED` (`agent.ts:871–878`). Server: `failJob` retryable → QUEUED nếu còn lượt (`orchestrator.ts:799–815`). Lease mới register lại P, row về P. **Suy ra từ đọc: mỗi 404 tốn một lượt retry và tự phục hồi; chỉ thành terminal khi hết `maxAttempts`.** Nhánh QUEUED với `retryable: true` chưa đo.
+- Tải đầu vào ưu tiên `preferredUrl` (`agent.ts:585–601`, lỗi được nuốt), rồi fallback `/api/nodes/agent/artifacts/:sha?jobId=` (`agent.ts:603`). Chỉ fallback đi qua `artifactFor`. Đọc, chưa đo.
+- Điều kiện để (b) xảy ra trong thực tế: X cùng bytes và bị xóa **trong cửa sổ lease** của B. Pending của job đã xong bị dọn sau 24 h (`leaseService.ts:424–428`), GC chạy mỗi 24 h (`app.ts:757–775`). Đường giảm áp lực đĩa (`app.ts:801`) chưa đọc hết. Chưa đo.
+
+Đo (`apps/server/test/workerNodes.test.ts`, describe artifactFor, dự đoán viết trước lần chạy). Các ca này ghim hành vi quan sát, không phải ca đỏ:
+
+| Ca | Dự đoán | Quan sát |
+|---|---|---|
+| (a) stamp đổi, cùng path | 404 `ARTIFACT_NOT_FOUND`; P còn | khớp |
+| (b) repoint sang X, rồi xóa X | trước xóa: path = X; sau xóa: 404; P còn | khớp |
+
+Chạy: `npx vitest run test/workerNodes.test.ts -t "stale stamp|repointed to a copy|artifactFor|serves only files"` (trong `apps/server`): 3/3 xanh (1 ca cũ, 2 ca mới). Chỉ chạy lọc theo tên, không chạy cả file.
+
+Kết luận tạm: (b) là một lượt retry lãng phí, không phải lỗi vĩnh viễn trừ khi rơi vào lượt cuối. Chưa đủ để chọn src change. Quyết định chờ advisor.
 
 **Tuổi thọ cache:** cache thuộc từng instance `ArtifactService`. Ngoài `FileGc` (`fileGc.ts:70`), các instance khác cũng ghi bảng `artifacts`: `projectSnapshot.ts:97` và `:165`, `inputVersion.ts:46`, `runTransport.ts:52`, `app.ts:686`. `RunTransportService` được tạo một lần ở `app.ts:636` (đọc); vòng đời theo hàm dựng app, chưa đọc hàm đó. Tác động của các instance này lên row chưa đo.
 
@@ -97,7 +120,7 @@ Khuyến nghị của báo cáo: làm (1) trước, vì nó sửa gốc (row dan
 
 ## Chưa đo
 
-- `leaseService.artifactFor` 404 trên file còn tồn tại (stamp lệch sau lần `register` cuối): chưa có ca đo; là điều kiện dừng ở đợt kiểm tra caller.
+- `artifactFor` (b): chỉ đo repoint rồi xóa trong một lượt. Chưa đo X bị xóa trong cửa sổ lease của B (GC khi áp lực đĩa, `app.ts:801`, chưa đọc hết). Chưa đo nhánh QUEUED với `retryable: true`. Chưa đo đường `preferredUrl`, vì nó không đọc row.
 - Đường cancel (`orchestrator.cancel`) và NODE_LOST (`nodeService.sweep`, `revoke`).
 - Đường failJob có retry (QUEUED, rồi chạy lại trên lease mới).
 - Đường upload lại S: `remember` ghi đè path khi đăng ký file mới cùng sha (đọc, chưa đo).

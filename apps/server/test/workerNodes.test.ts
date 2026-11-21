@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Readable } from "node:stream";
@@ -391,6 +391,36 @@ describe("artifacts and outputs", () => {
     expect(found.size).toBe(registered.size);
     expectApp(() => leases.artifactFor(row, job.id, lease.leaseId, fileSha), 404, "ARTIFACT_NOT_FOUND");
     expectApp(() => leases.artifactFor(row, job.id, "other", registered.sha), 404, "ARTIFACT_NOT_FOUND");
+  });
+
+  // TASK-172 follow-up, advisor 2026-11-21. Predictions written before the first run:
+  // (a) same path, rewritten with a new mtime: locate misses on the stamp, 404, input still exists (by design).
+  // (b) row repointed to a same-bytes copy by a later writer, copy deleted: 404 while the input still exists.
+  it("(a) 404s on a stale stamp at the row's own path while the file still exists", async () => {
+    const { leases, joinNode, queueRender } = await setup();
+    const { row } = joinNode();
+    const job = queueRender();
+    const lease = (await leases.lease(row, 1))!;
+    expect(leases.artifactFor(row, job.id, lease.leaseId, registered.sha).size).toBe(registered.size);
+    const later = new Date(Date.now() + 5_000);
+    utimesSync(registered.path, later, later);
+    expectApp(() => leases.artifactFor(row, job.id, lease.leaseId, registered.sha), 404, "ARTIFACT_NOT_FOUND");
+    expect(existsSync(registered.path)).toBe(true);
+  });
+
+  it("(b) 404s when the row was repointed to a copy that is then deleted, while the input still exists", async () => {
+    const { leases, joinNode, queueRender, artifacts, root } = await setup();
+    const { row } = joinNode();
+    const job = queueRender();
+    const lease = (await leases.lease(row, 1))!;
+    expect(leases.artifactFor(row, job.id, lease.leaseId, registered.sha).path).toBe(registered.path);
+    const copy = join(root, "copy.bin");
+    writeFileSync(copy, "input data");
+    artifacts.registerSync(copy);
+    expect(leases.artifactFor(row, job.id, lease.leaseId, registered.sha).path).toBe(copy);
+    rmSync(copy);
+    expectApp(() => leases.artifactFor(row, job.id, lease.leaseId, registered.sha), 404, "ARTIFACT_NOT_FOUND");
+    expect(existsSync(registered.path)).toBe(true);
   });
 
   it("rejects an upload whose sha256 does not match and deletes the temp file", async () => {
