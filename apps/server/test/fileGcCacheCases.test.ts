@@ -147,9 +147,15 @@ function setup() {
     expect(harness.repository.getJob(a.jobA.id)!.status).toBe("SUCCEEDED");
   }
 
+  // TASK-172: A goes terminal without complete. retryable:false, so failJob ends the job FAILED (orchestrator.ts:799).
+  async function failA(a: Awaited<ReturnType<typeof startA>>) {
+    leases.fail(a.rowA, a.jobA.id, { leaseId: a.leaseA.leaseId, code: "NODE_RENDER_FAILED", message: "fixture: terminal without complete", retryable: false });
+    expect(harness.repository.getJob(a.jobA.id)!.status).toBe("FAILED");
+  }
+
   return {
-    harness, leases, gc, pass, artifactPath, insertRenderRow, insertFinalizeRow, startA, completeA,
-    realVersions, realRetained, versionFile, dataDir, pendingFile: () => pendingFile,
+    harness, leases, gc, pass, artifactPath, insertRenderRow, insertFinalizeRow, startA, completeA, failA,
+    realVersions, realRetained, versionFile, retainedFile, dataDir, pendingFile: () => pendingFile,
   };
 }
 
@@ -222,7 +228,7 @@ describe("TASK-170/171 cache cases for the shared sha S (one long-lived FileGc)"
     } finally { s.harness.close(); }
   });
 
-  it("separate ids, no render row for A (mock finalize inserts nothing; not production order): the retained render-0 hits, the row stays on pending until cleanup", async () => {
+  it("separate ids, no render row for A (mock shape: the mock finalize inserts nothing; the successful-complete path in the lines read always inserts one): the retained render-0 hits, the row stays on pending until cleanup", async () => {
     const s = setup();
     try {
       s.insertRenderRow("render-0");
@@ -298,6 +304,64 @@ describe("TASK-170/171 cache cases for the shared sha S (one long-lived FileGc)"
       const second = s.pass();
       expect(second.seq).toEqual(["pending"]);
       expect(second.path).toBe("pending");
+    } finally { s.harness.close(); }
+  });
+});
+
+describe("TASK-172 terminal without complete: A uploads S, a pass runs, A goes FAILED, cleanup after 25 h", () => {
+  it("fixture R (retained render-0, same bytes): the pending file is removed, the row stays on pending, and the valid copy is hidden from locate", async () => {
+    const s = setup();
+    try {
+      s.insertRenderRow("render-0");
+      const a = await s.startA();
+      // Predicted pass 1 (A RUNNING): [retained-versions, pending], path pending.
+      const first = s.pass();
+      expect(first.seq).toEqual(["retained-versions", "pending"]);
+      expect(first.path).toBe("pending");
+      await s.failA(a);
+      // Predicted pass 2 (A FAILED): pending is no longer active (references.ts:115, :125), retained hits. seq [], path pending. File still on disk.
+      const second = s.pass();
+      expect(second.seq).toEqual([]);
+      expect(second.path).toBe("pending");
+      expect(existsSync(a.fileA)).toBe(true);
+      s.harness.advance(25 * HOUR);
+      s.leases.cleanupFinishedUploads();
+      // Predicted: cleanup removes the pending file and the row still names it.
+      expect(existsSync(a.fileA)).toBe(false);
+      expect(s.artifactPath()).toBe(a.fileA);
+      // Predicted pass 3: nothing to write (retained hits). The retained copy is kept (renders retention, references.ts:124).
+      const third = s.pass();
+      expect(third.seq).toEqual([]);
+      expect(third.path).toBe("pending");
+      expect(existsSync(s.retainedFile)).toBe(true);
+      // Predicted: locate checks existsSync on the row's path (artifactService.ts:66), so it returns undefined although render-0 holds the same bytes.
+      expect(new ArtifactService(s.harness.sqlite, s.harness.clock).locate(S)).toBeUndefined();
+    } finally { s.harness.close(); }
+  });
+
+  it("fixture N (no other copy of S): the pending file is removed, the row stays on pending, and locate returns undefined", async () => {
+    const s = setup();
+    try {
+      const a = await s.startA();
+      // Predicted pass 1 (A RUNNING): [pending], path pending.
+      const first = s.pass();
+      expect(first.seq).toEqual(["pending"]);
+      expect(first.path).toBe("pending");
+      await s.failA(a);
+      // Predicted pass 2 (A FAILED): seq [], path pending. File still on disk.
+      const second = s.pass();
+      expect(second.seq).toEqual([]);
+      expect(second.path).toBe("pending");
+      expect(existsSync(a.fileA)).toBe(true);
+      s.harness.advance(25 * HOUR);
+      s.leases.cleanupFinishedUploads();
+      expect(existsSync(a.fileA)).toBe(false);
+      expect(s.artifactPath()).toBe(a.fileA);
+      // Predicted pass 3: seq [], path pending (the row names a removed file; no copy exists anywhere).
+      const third = s.pass();
+      expect(third.seq).toEqual([]);
+      expect(third.path).toBe("pending");
+      expect(new ArtifactService(s.harness.sqlite, s.harness.clock).locate(S)).toBeUndefined();
     } finally { s.harness.close(); }
   });
 });

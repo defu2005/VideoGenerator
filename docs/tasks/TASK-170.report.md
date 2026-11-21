@@ -3,7 +3,7 @@
 Trạng thái: **đã đo bằng test.** Không đổi `src`. File test: `apps/server/test/fileGcCacheCases.test.ts`.
 
 Kết quả lần chạy đầu (TASK-170): 7 xanh, 1 đỏ (ca "stuck", 3 assertion soft).
-Cập nhật theo TASK-171 (advisor 2026-11-21): nguyên nhân đỏ là **trùng render id** trong fixture, không phải "file versions chưa tồn tại trước complete" như cách giải thích cũ. Ca đỏ được đổi tên thành "collision", ghim giá trị quan sát (xanh). Thêm hai ca tách id (TASK-171). Hiện tại: file test 8/8 xanh; cùng TASK-168 pin, 10/10 xanh.
+Cập nhật theo TASK-171 (advisor 2026-11-21): nguyên nhân đỏ là **trùng render id** trong fixture, không phải "file versions chưa tồn tại trước complete" như cách giải thích cũ. Ca đỏ được đổi tên thành "collision", ghim giá trị quan sát (xanh). Thêm hai ca tách id (TASK-171). Cập nhật theo TASK-172 (advisor 2026-11-21): thêm hai ca "terminal không complete" (xem `TASK-172.report.md`). Hiện tại: file test 10/10 xanh; cùng TASK-168 pin, 12/12 xanh.
 
 ## Cấu hình đo
 
@@ -51,10 +51,11 @@ Lưu ý thứ tự: `renders` được duyệt trước `node_uploads` (`dataCon
 Fixture: row retained là `render-0` (cùng bytes), A là `render-1`.
 
 - **(a) không có row cho render-1 sau complete.** Dự đoán và quan sát khớp: pass 1 [retained-versions, pending] path pending; pass sau complete [] path pending; cleanup xóa file pending, row vẫn trỏ pending. Đây là hình dạng "stuck" của giả thuyết TASK-169.
-  **Không phải thứ tự production.** `leaseService.ts:673` gọi `renders.finalize` sau khi đổi tên file. Finalize luôn INSERT một row cho `renderId` của A (`renderService.ts:996–1003`). Nhánh `reused` (`renderService.ts:891–894`) chỉ trả về khi đã có row DONE cùng id A, tức là đường collision, không phải đường có row khác id. Mock `finalize` không insert nên (a) chỉ là hình dạng của mock.
+  **Không đạt được trên đường complete thành công (trong các dòng đã đọc).** `leaseService.ts:673` gọi `renders.finalize` sau khi đổi tên file. Trong các dòng đã đọc, `finalize` INSERT một row cho `renderId` của A (`renderService.ts:996–1003`); `renderService.ts:895–969` không chứa INSERT. Nhánh `reused` (`renderService.ts:891–894`) trả về khi có row cùng id, trạng thái DONE **và** cùng `input_hash`. Fixture collision có hash khác nhau, và cách `prepare` gán `renderId` chưa đọc, nên không gọi `reused` là "đường collision". Mock `finalize` không insert nên (a) chỉ là hình dạng của mock trên đường complete thành công.
+  **Không phải đường duy nhất để kẹt.** Job đi tới FAILED hoặc CANCELLED sau khi đã upload cũng để lại trạng thái (job kết thúc, không có row render cho id A, row trỏ pending) mà không gọi `finalize`. Đường này được đo ở TASK-172.
 - **(b) row render-1 đúng shape finalize, chèn sau complete.** Dự đoán khớp: render-0 hit (không ghi); render-1 có inode mới nên miss và ghi versions; path versions. Cleanup xóa pending nhưng row đã trỏ versions, không có row nào trỏ file đã xóa.
 
-Kết luận cho giả thuyết "kẹt ở pending" (TASK-169): trong thứ tự production đã đọc, sau complete có row render-1 với file mới, nên row được repoint sang versions và không kẹt. Giả thuyết chỉ tái hiện ở hình dạng (a), không phải production. Chưa loại trừ:
+Kết luận cho giả thuyết "kẹt ở pending" (TASK-169), **chỉ trên đường complete thành công đã đọc**: sau complete có row render-1 với file mới, nên row được repoint sang versions và không kẹt. Giả thuyết tái hiện ở hình dạng (a), là hình dạng mock; đường FAILED/CANCELLED không complete có cùng hình dạng kết thúc và được đo riêng ở TASK-172. Chưa loại trừ:
 - finalize lỗi giữa `renameSync` (`leaseService.ts:672`) và INSERT (`renderService.ts:996`), để lại file mới không có row;
 - row render-1 bị xóa hoặc không còn DONE trước một lượt GC;
 - nhiều lượt GC xen với nhiều lần complete.
@@ -64,7 +65,8 @@ Kết luận cho giả thuyết "kẹt ở pending" (TASK-169): trong thứ tự
 - `renderService.ts`: `finalize` không gọi `registerSync` hay `artifacts`. Việc đăng ký chỉ xảy ra trong `collectReferences` và các writer khác (đã ghi ở TASK-169).
 - `cleanupFinishedUploads` (`leaseService.ts:424–425`): cutoff là `finished_at` cách hiện tại 24 h, chỉ xóa job SUCCEEDED/FAILED/CANCELLED đã qua cutoff và không còn `finalizing_at`.
 - `app.ts:757–775`: mỗi lượt sweep gọi `leaseService.cleanupFinishedUploads()`. `fileGc.run({ purge: true })` chỉ chạy khi `Date.now() >= nextFileGcSweep`, tức lần đầu ngay sweep đầu tiên sau boot, sau đó mỗi 24 h; khi lỗi thì thử lại sau 1 h.
-- Hệ quả: không có đảm bảo lượt GC chạy giữa complete và cleanup. Câu "luôn có GC pass giữa completion và cleanup" là sai.
+- Đã đọc (TASK-172): trong cùng lượt sweep, cleanup chạy trước GC (`app.ts:761`, rồi `:763–767`). GC chạy bất đồng bộ sau `runBlobs`; lỗi ở đó bỏ qua `run` trong 1 h. Cả hai chu kỳ đều 24 h, nên thứ tự phụ thuộc thời điểm tick. **Chưa đo.**
+- Hệ quả: không có đảm bảo lượt GC chạy giữa complete và cleanup (đã đọc, chưa đo).
 
 ## Sửa lại trong báo cáo này
 
@@ -85,6 +87,9 @@ Không đổi giá trị dự đoán. Ba lỗi nằm trong harness, không nằm
 - Thứ tự giữa nhiều project (`references.ts:98`, không có `ORDER BY`).
 - Finalize lỗi giữa `renameSync` và INSERT (đường để lại file mới không có row).
 - Nhiều lượt GC xen với nhiều lần complete.
+- `renders.finalize` thật: case (b) dùng row chèn tay đúng shape cột, không gọi finalize thật.
+- Thời điểm cleanup so với GC trong cùng chu kỳ (chỉ đọc, chưa đo).
+- Đường cancel (`orchestrator.cancel`) và NODE_LOST (`nodeService.sweep`): TASK-172 chỉ đo đường `fail` (retryable:false).
 - Ca control và bốn ca không complete vẫn dùng cùng id `render-1` cho row retained và A. Không ảnh hưởng vì chúng không có complete, nhưng ca control chỉ là đo collision, không phải hình dạng tách id.
 
 ## Kiểm tra
