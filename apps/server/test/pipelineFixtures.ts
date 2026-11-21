@@ -19,6 +19,7 @@ type HarnessOptions = {
   failures?: Partial<Record<PipelineStage, FakeFailure>>;
   mode?: "AUTO" | "ASSISTED" | "MANUAL";
   autoRender?: boolean;
+  scriptOutlineApproval?: "off" | "outline" | "script";
   canApprove?: ApprovalCheck;
   autoBlock?: (project: Project, gate: PipelineStage) => string | null;
   runtime?: PipelineRuntime;
@@ -70,6 +71,7 @@ export function createPipelineHarness(options: HarnessOptions = {}) {
       edit: { engine: "legacy" },
       stageExecutors: {},
       autoRender: options.autoRender ?? false,
+      ...(options.scriptOutlineApproval ? { scriptOutlineApproval: options.scriptOutlineApproval } : {}),
     }),
     "DRAFT",
     "TOPIC",

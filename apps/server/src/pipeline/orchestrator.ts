@@ -20,6 +20,7 @@ import {
   type RenderVariantAspect,
   type StageRecord,
   type StageState,
+  gateAutomatic,
   scriptReviewAutoPasses,
   storyModeForProject,
 } from "@vg/shared";
@@ -1083,7 +1084,7 @@ export class PipelineOrchestrator {
       return;
     }
     if (isGate(stage)) {
-      const autoApprove = project.mode === "AUTO" && (stage !== "FINAL_APPROVAL" || project.settings.autoRender);
+      const autoApprove = gateAutomatic(stage, project.mode, project.settings);
       const approval = this.canApprove(project, stage);
       const blockReason = autoApprove && approval.allowed ? this.autoBlock(project, stage) : null;
       if (blockReason) this.logger.warn({ projectId, gate: stage, reason: blockReason }, "AUTO approval paused");
@@ -1197,11 +1198,12 @@ export class PipelineOrchestrator {
 
   /**
    * waiting_approval only when a person must act.
-   * AUTO / automation projects: no approval notify; unexpected stuck gate → attention.
+   * AUTO / automation projects: a gate that should have passed and stopped is an unexpected auto stop → attention.
+   * SCRIPT_REVIEW reaches here only when the user asked for it, so it always gets the approval notice.
    */
   private emitWaitingApproval(project: Project, gate: PipelineStage): void {
     const link = `${this.webBaseUrl()}/projects/${project.id}`;
-    const isAuto = project.mode === "AUTO" || Boolean(project.settings.autoRender);
+    const isAuto = gate !== "SCRIPT_REVIEW" && (project.mode === "AUTO" || Boolean(project.settings.autoRender));
     const detail = this.repository.getStage(project.id, gate).message ?? undefined;
     if (isAuto) {
       safeNotify(this.notifications, {

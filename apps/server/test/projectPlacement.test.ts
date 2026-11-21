@@ -18,8 +18,8 @@ import { createPipelineHarness } from "./pipelineFixtures.js";
 const fixtures: Array<ReturnType<typeof createPipelineHarness>> = [];
 afterEach(() => { for (const fixture of fixtures.splice(0)) fixture.close(); });
 
-function setup() {
-  const h = createPipelineHarness();
+function setup(options: Parameters<typeof createPipelineHarness>[0] = {}) {
+  const h = createPipelineHarness(options);
   fixtures.push(h);
   const { sqlite: db, orchestrator, repository, config, clock, projectId } = h;
   db.prepare("UPDATE projects SET execution_mode='node',workspace_id='W',settings=json_set(settings,'$.stageExecution.VISUAL_SEARCH','app') WHERE id=?").run(projectId);
@@ -98,6 +98,18 @@ it.each(["control", "wait"])("uses the configured %s fallback after waiting for 
   h.advance(31_000);
   h.sweep();
   expect(h.repository.getActiveJobs(h.projectId).map(({ stage }) => stage)).toEqual(fallback === "wait" ? [] : ["RESEARCH"]);
+});
+
+it("a running AUTO segment holds SCRIPT_REVIEW when the setting flips to script", async () => {
+  const h = setup({ mode: "AUTO" });
+  const node = h.join();
+  h.orchestrator.runAll(h.projectId);
+  const run = h.runs.pendingFor(node)!;
+  h.sqlite.prepare("UPDATE projects SET settings = json_set(settings, '$.scriptOutlineApproval', 'script') WHERE id = ?").run(h.projectId);
+  h.sweep();
+  const commands = await h.commands.poll(node, run.id, run.leaseId, 0, new AbortController().signal, 0);
+  const stop = commands.find((command) => command.kind === "stopBefore") as { stages?: string[] } | undefined;
+  expect(stop?.stages).toContain("SCRIPT_REVIEW");
 });
 
 it("runs placed segments across human gates on the same warm database and registers the final artifact", async () => {

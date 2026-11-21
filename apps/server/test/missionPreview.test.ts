@@ -12,6 +12,7 @@ function db() {
   add("auto", "AUTO", {});
   add("auto-render", "AUTO", { autoRender: true });
   add("manual-script", "MANUAL", { scriptOutlineApproval: "script" });
+  add("auto-script", "AUTO", { scriptOutlineApproval: "script" });
   return sqlite;
 }
 
@@ -44,6 +45,14 @@ describe("mission gate preview", () => {
     expect(byGate.VISUAL_REVIEW).toBe(false);
     expect(byGate.MUSIC_REVIEW).toBe(false);
     expect(byGate.FINAL_APPROVAL).toBe(true);
+  });
+
+  it("an AUTO project with script outline approval waits at script review but auto-approves the other review gates", () => {
+    const [project] = missionPreview(db(), { projectIds: ["auto-script"] }).projects;
+    const byGate = Object.fromEntries(project!.gates.map((gate) => [gate.gate, gate.stopsForUser]));
+    expect(byGate.SCRIPT_REVIEW).toBe(true);
+    expect(byGate.VISUAL_REVIEW).toBe(false);
+    expect(byGate.MUSIC_REVIEW).toBe(false);
   });
 
   it("an AUTO project with autoRender auto-approves final approval too", () => {

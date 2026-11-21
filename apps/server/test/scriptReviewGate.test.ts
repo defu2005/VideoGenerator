@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { STAGE_ORDER, type PipelineStage } from "@vg/shared";
+import type { NotificationService } from "../src/notifications/notificationService.js";
 import { markStaleFrom } from "../src/pipeline/invalidation.js";
 import { createPipelineHarness, drainUntilGate } from "./pipelineFixtures.js";
 
@@ -151,5 +152,66 @@ describe("TASK-146 slice 6 commit A: SCRIPT_REVIEW in off mode", () => {
     // No job row of any stage: a re-enqueued gate would leave one here, and the failure names the stage.
     expect(harness.sqlite.prepare("SELECT stage FROM jobs WHERE project_id = ?").all(harness.projectId)).toEqual([]);
     expect(stateOf(harness, "SCRIPT_REVIEW")).toBe("DONE");
+  });
+});
+
+// TASK-146 slice 6 commit B: outline/script wait for the user in every mode, AUTO included.
+describe("TASK-146 slice 6 commit B: SCRIPT_REVIEW in script mode", () => {
+  it("waits for the user in AUTO mode and does not start SCENE_PLAN or VISUAL_REVIEW", async () => {
+    const harness = makeHarness({ mode: "AUTO", scriptOutlineApproval: "script" });
+    harness.orchestrator.runAll(harness.projectId);
+    await drainUntilGate(harness);
+    expect(stateOf(harness, "SCRIPT_REVIEW")).toBe("WAITING_USER");
+    expect(stateOf(harness, "SCENE_PLAN")).toBe("PENDING");
+    expect(stateOf(harness, "VISUAL_REVIEW")).toBe("PENDING");
+  });
+
+  it("approving in AUTO mode marks the gate DONE and the run continues", async () => {
+    const harness = makeHarness({ mode: "AUTO", scriptOutlineApproval: "script" });
+    harness.orchestrator.runAll(harness.projectId);
+    await drainUntilGate(harness);
+    harness.orchestrator.approveGate(harness.projectId, "SCRIPT_REVIEW");
+    expect(harness.repository.getStage(harness.projectId, "SCRIPT_REVIEW")).toMatchObject({ state: "DONE", message: "Approved by user" });
+    await settleUntilIdle(harness);
+    expect(stateOf(harness, "SCENE_PLAN")).not.toBe("PENDING");
+  });
+
+  it("a resubmitted script after approval sends the gate back to waiting, and SCENE_PLAN does not run", async () => {
+    const harness = makeHarness({ mode: "AUTO", scriptOutlineApproval: "script" });
+    harness.orchestrator.runAll(harness.projectId);
+    await drainUntilGate(harness);
+    harness.orchestrator.approveGate(harness.projectId, "SCRIPT_REVIEW");
+    await settleUntilIdle(harness);
+    markStaleFrom(harness.repository, harness.projectId, "SCRIPT");
+    expect(stateOf(harness, "SCRIPT_REVIEW")).toBe("STALE");
+    harness.orchestrator.runAll(harness.projectId);
+    await drainUntilGate(harness);
+    expect(stateOf(harness, "SCRIPT_REVIEW")).toBe("WAITING_USER");
+    expect(stateOf(harness, "SCENE_PLAN")).toBe("STALE");
+  });
+
+  it("in MANUAL mode, approving leaves the run mode unset", async () => {
+    const harness = makeHarness({ mode: "MANUAL", scriptOutlineApproval: "script" });
+    // The gate is reached by the run-all advance loop; a single-stage SCRIPT run does not start gates.
+    harness.orchestrator.runAll(harness.projectId);
+    await drainUntilGate(harness);
+    expect(stateOf(harness, "SCRIPT_REVIEW")).toBe("WAITING_USER");
+    harness.orchestrator.approveGate(harness.projectId, "SCRIPT_REVIEW");
+    expect(stateOf(harness, "SCRIPT_REVIEW")).toBe("DONE");
+    const row = harness.sqlite.prepare("SELECT run_mode FROM projects WHERE id = ?").get(harness.projectId) as { run_mode: string | null };
+    expect(row.run_mode).toBeNull();
+  });
+
+  it("the SCRIPT_REVIEW stop in AUTO mode sends the approval notice, not an unexpected auto-stop", async () => {
+    const harness = makeHarness({ mode: "AUTO", scriptOutlineApproval: "script" });
+    const sent: Array<Record<string, unknown>> = [];
+    harness.orchestrator.setNotificationService({
+      notify: async (event: Record<string, unknown>) => { sent.push(event); return "sent"; },
+    } as unknown as NotificationService);
+    harness.orchestrator.runAll(harness.projectId);
+    await drainUntilGate(harness);
+    const waiting = sent.filter((event) => event.kind === "waiting_approval");
+    expect(waiting).toEqual([expect.objectContaining({ gate: "SCRIPT_REVIEW" })]);
+    expect(waiting[0]).not.toHaveProperty("unexpectedAutoStop");
   });
 });

@@ -1,5 +1,5 @@
 import type Database from "better-sqlite3";
-import { GATES, scriptReviewAutoPasses, type ScriptOutlineApproval } from "@vg/shared";
+import { GATES, gateAutomatic, type ScriptOutlineApproval } from "@vg/shared";
 
 // TASK-129c: what will stop for the user, read from the same inputs the orchestrator uses for gates:
 // project.mode, settings.autoRender, and the gate's readiness check. The gate path (pipeline/orchestrator.ts)
@@ -44,14 +44,17 @@ export function missionPreview(sqlite: Database.Database, mission: { projectIds:
     } catch { autoRender = false; }
     const gates = GATES.map((gate): GatePreview => {
       const label = GATE_LABEL[gate] ?? gate;
-      if (gate === "SCRIPT_REVIEW" && scriptReviewAutoPasses(approval)) {
-        return { gate, label, stopsForUser: false, reason: "Tắt duyệt kịch bản: qua ngay, không chờ bạn." };
+      const automatic = gateAutomatic(gate, row.mode, { autoRender, scriptOutlineApproval: approval });
+      if (gate === "SCRIPT_REVIEW") {
+        return automatic
+          ? { gate, label, stopsForUser: false, reason: "Tắt duyệt kịch bản: qua ngay, không chờ bạn." }
+          : { gate, label, stopsForUser: true, reason: "Duyệt kịch bản đang bật (outline hoặc script): dừng chờ bạn ở mọi chế độ." };
       }
-      if (row.mode !== "AUTO") {
-        return { gate, label, stopsForUser: true, reason: "Dự án không ở chế độ AUTO: chờ bạn duyệt." };
-      }
-      if (gate === "FINAL_APPROVAL" && !autoRender) {
-        return { gate, label, stopsForUser: true, reason: "Dự án AUTO nhưng chưa bật tự render: dừng chờ bạn." };
+      if (!automatic) {
+        const reason = row.mode !== "AUTO"
+          ? "Dự án không ở chế độ AUTO: chờ bạn duyệt."
+          : "Dự án AUTO nhưng chưa bật tự render: dừng chờ bạn.";
+        return { gate, label, stopsForUser: true, reason };
       }
       return { gate, label, stopsForUser: false, reason: "Tự duyệt khi dự án ở chế độ AUTO. Vẫn dừng nếu chưa đạt điều kiện duyệt hoặc còn lỗi MUST về nội dung." };
     });

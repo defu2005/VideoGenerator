@@ -114,6 +114,18 @@ export type ScriptOutlineApproval = z.infer<typeof ScriptOutlineApprovalSchema>;
 export function scriptReviewAutoPasses(approval: ScriptOutlineApproval | undefined): boolean {
   return (approval ?? "off") === "off";
 }
+/**
+ * TASK-146 slice 6: true when a gate passes without waiting for the user. SCRIPT_REVIEW is automatic only when off,
+ * in every mode. Other gates follow AUTO mode, and FINAL_APPROVAL also needs autoRender.
+ */
+export function gateAutomatic(
+  gate: string,
+  mode: string,
+  settings: { autoRender?: boolean; scriptOutlineApproval?: ScriptOutlineApproval },
+): boolean {
+  if (gate === "SCRIPT_REVIEW") return scriptReviewAutoPasses(settings.scriptOutlineApproval);
+  return mode === "AUTO" && (gate !== "FINAL_APPROVAL" || settings.autoRender === true);
+}
 
 export const ProjectSettingsSchema = z.object({
   scriptOutlineApproval: ScriptOutlineApprovalSchema.default("off"),
