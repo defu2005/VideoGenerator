@@ -14,6 +14,7 @@ const project: Project = {
   description: "",
   mode: "AUTO",
   settings: {
+    scriptOutlineApproval: "off",
     budget: { mode: "BALANCED" }, language: "en", targetDurationSec: 120, aspectRatio: "16:9",
     platform: "youtube", style: "documentary", tone: "neutral", audience: "general",
     wordsPerMinute: 150, sceneDurationSec: 7, visualStyle: "mixed",

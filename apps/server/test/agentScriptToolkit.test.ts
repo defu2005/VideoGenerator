@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { dependentStages, PROTECTED_PROJECT_ID, ScriptSchema, type Job } from "@vg/shared";
+import { PROTECTED_PROJECT_ID, ScriptSchema, type Job } from "@vg/shared";
 import { runAsActor } from "../src/auth/requestContext.js";
 import { AgentStageService } from "../src/agents/stageService.js";
 import { saveAgentAssignment } from "../src/agents/assignments.js";
@@ -239,22 +239,24 @@ describe("script_writer agent submit gate (TASK-147d)", () => {
 
   it("marks a DONE downstream stage stale when the agent completes", async () => {
     const h = setup();
-    const later = dependentStages("SCRIPT").find((stage) => stage !== "SCRIPT");
-    expect(later).toBeDefined();
-    h.repository.updateStage(h.projectId, later!, { state: "DONE", progress: 100 });
+    // SCRIPT_REVIEW is the first dependent now; it is an auto-passed gate, so the work stage SCENE_PLAN is pinned here.
+    h.repository.updateStage(h.projectId, "SCRIPT_REVIEW", { state: "DONE", progress: 100 });
+    h.repository.updateStage(h.projectId, "SCENE_PLAN", { state: "DONE", progress: 100 });
     await h.submit();
     await scoped(() => h.stages.complete(agent, h.job.id, h.claim.leaseId, "Đã nộp kịch bản."));
     expect(h.repository.getJob(h.job.id)!.status).toBe("SUCCEEDED");
     expect(h.repository.getStage(h.projectId, "SCRIPT").state).toBe("DONE");
-    expect(h.repository.getStage(h.projectId, later!).state).toBe("STALE");
+    expect(h.repository.getStage(h.projectId, "SCENE_PLAN").state).toBe("STALE");
+    // The gate went STALE on submit and was passed again when SCRIPT completed; the message shows the auto-pass ran.
+    expect(h.repository.getStage(h.projectId, "SCRIPT_REVIEW").state).toBe("DONE");
+    expect(h.repository.getStage(h.projectId, "SCRIPT_REVIEW").message).toBe("Passed automatically (script review is off)");
   });
 
   it("leaves a DONE downstream stage alone when the submit is held", async () => {
     const h = setup({ critique: critique(LOW_SCORES) });
-    const later = dependentStages("SCRIPT").find((stage) => stage !== "SCRIPT");
-    h.repository.updateStage(h.projectId, later!, { state: "DONE", progress: 100 });
+    h.repository.updateStage(h.projectId, "SCENE_PLAN", { state: "DONE", progress: 100 });
     expect(await h.submit()).toMatchObject({ status: "held" });
-    expect(h.repository.getStage(h.projectId, later!).state).toBe("DONE");
+    expect(h.repository.getStage(h.projectId, "SCENE_PLAN").state).toBe("DONE");
   });
 
   it("redacts agent text before it is stored in the script row", async () => {

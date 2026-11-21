@@ -13,6 +13,7 @@ const project = {
   mode: "ASSISTED",
   profileId: null,
   settings: {
+    scriptOutlineApproval: "off",
     budget: { mode: "ECO" }, language: "vi", targetDurationSec: 60, aspectRatio: "16:9",
     platform: "youtube", style: "documentary", tone: "neutral", audience: "general",
     wordsPerMinute: 150, sceneDurationSec: 7, visualStyle: "mixed",

@@ -250,6 +250,40 @@ describe("project API", () => {
     expect(updated.version).toBe(1);
   });
 
+  it("stores the script outline approval sent on create, defaults to off when omitted, and rejects unknown values", async () => {
+    const sent = await createProject({ topic: "topic", settings: { scriptOutlineApproval: "script" } });
+    expect(sent.settings.scriptOutlineApproval).toBe("script");
+
+    const omitted = await createProject({ topic: "topic" });
+    expect(omitted.settings.scriptOutlineApproval).toBe("off");
+
+    const invalid = await app.inject({
+      method: "POST",
+      url: "/api/projects",
+      payload: { topic: "topic", settings: { scriptOutlineApproval: "always" } },
+    });
+    expect(invalid.statusCode).toBe(400);
+    expect(invalid.json().error.code).toBe("VALIDATION_ERROR");
+  });
+
+  it("keeps the script outline approval through a settings patch and a recomputing patch", async () => {
+    const created = await createProject({ topic: "An introduction to science" });
+    const patched = await app.inject({
+      method: "PATCH",
+      url: `/api/projects/${created.id}`,
+      payload: { settings: { scriptOutlineApproval: "outline" } },
+    });
+    expect(patched.json<Project>().settings.scriptOutlineApproval).toBe("outline");
+
+    // A topic change recomputes the brief; the approval must survive that path too.
+    const recomputed = await app.inject({
+      method: "PATCH",
+      url: `/api/projects/${created.id}`,
+      payload: { topic: "How to learn science" },
+    });
+    expect(recomputed.json<Project>().settings.scriptOutlineApproval).toBe("outline");
+  });
+
   it("rejects an empty patch body", async () => {
     const created = await createProject();
     const response = await app.inject({

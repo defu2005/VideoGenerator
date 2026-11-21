@@ -456,6 +456,7 @@ function stubProject(llm?: LlmSettings): Project {
     topic: "advisor",
     mode: "ASSISTED",
     settings: {
+      scriptOutlineApproval: "off",
       language: "vi",
       targetDurationSec: 120,
       wordsPerMinute: 150,

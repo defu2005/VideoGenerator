@@ -63,7 +63,8 @@ describe("pipeline API", () => {
     const project = await createProject();
     const initial = await app.inject({ method: "GET", url: `/api/projects/${project.id}/pipeline` });
     expect(initial.statusCode).toBe(200);
-    expect(initial.json().stages).toHaveLength(12);
+    // 13 = STAGE_ORDER after TASK-146 slice 6 added SCRIPT_REVIEW.
+    expect(initial.json().stages).toHaveLength(13);
 
     const run = await app.inject({ method: "POST", url: `/api/projects/${project.id}/pipeline/run`, payload: {} });
     expect(run.statusCode).toBe(202);

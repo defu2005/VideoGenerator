@@ -11,6 +11,7 @@ const project: Project = {
   description: "",
   mode: "ASSISTED",
   settings: {
+    scriptOutlineApproval: "off",
     budget: { mode: "BALANCED" },
     language: "vi",
     targetDurationSec: 60,

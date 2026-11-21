@@ -56,7 +56,10 @@ it.each([false, true])("applies runner stage transitions exclusively through fen
       runtime, run, dataDir: opened.dataDir, cursor: projectSnapshotCursor(snapshot), signal,
       send: async (checkpoint) => { checkpoints.apply(node, run.id, checkpoint); }, now: runner.clock,
     });
-    expect(result).toMatchObject({ lastSeq: failScript ? 2 : 4, reason: failScript ? "FAILED" : "BOUNDARY" });
+    const checkpointStages = control.sqlite.prepare("SELECT stage FROM run_checkpoints WHERE run_id=? ORDER BY seq").all(run.id).map((row) => (row as { stage: string }).stage);
+    // The off-mode SCRIPT_REVIEW pass is a real stage update on the node, so it crosses the fence as its own checkpoint.
+    expect(checkpointStages).toEqual(failScript ? ["RESEARCH", "SCRIPT"] : ["RESEARCH", "SCRIPT", "SCRIPT_REVIEW", "SCENE_PLAN", "VISUAL_SEARCH"]);
+    expect(result).toMatchObject({ lastSeq: failScript ? 2 : 5, reason: failScript ? "FAILED" : "BOUNDARY" });
     expect(control.repository.getStage(projectId, "RESEARCH").state).toBe("SKIPPED");
     expect(control.repository.getStage(projectId, "SCRIPT").state).toBe(failScript ? "FAILED" : "DONE");
     expect(control.repository.getStage(projectId, "VISUAL_REVIEW").state).toBe("PENDING");

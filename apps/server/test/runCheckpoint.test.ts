@@ -35,6 +35,8 @@ describe("fenced project checkpoints", () => {
   it("preserves downstream rows when the checkpoint retains the parent scene", () => {
     const h = setup(), at = h.clock().toISOString();
     h.repository.updateStage(h.projectId, "SCRIPT", { state: "DONE" });
+    // A node sends the SCRIPT_REVIEW gate as its own checkpoint before SCENE_PLAN, so control holds it DONE here.
+    h.repository.updateStage(h.projectId, "SCRIPT_REVIEW", { state: "DONE" });
     h.sqlite.prepare(`INSERT INTO scenes(id,project_id,"order",kind,label,narration,visual_notes,visual_queries,music_mood,energy,est_duration_sec,start_sec,transition_note,input_hash,origin,created_at,updated_at)
       VALUES ('scene',?,0,'content','Scene','old','','{}','neutral','low',3,0,'','hash','AGENT',?,?)`).run(h.projectId, at, at);
     h.sqlite.prepare("INSERT INTO visual_search_state(scene_id,project_id,search_hash,updated_at) VALUES ('scene',?,'old',?)").run(h.projectId, at);
@@ -44,6 +46,30 @@ describe("fenced project checkpoints", () => {
       tables: { scenes: [{ ...scene, narration: "new" }] }, costs: [] });
     expect(h.sqlite.prepare("SELECT narration FROM scenes WHERE id='scene'").get()).toEqual({ narration: "new" });
     expect(h.sqlite.prepare("SELECT search_hash FROM visual_search_state WHERE scene_id='scene'").get()).toEqual({ search_hash: "old" });
+  });
+
+  it("a SCENE_PLAN checkpoint waits while control still holds the script review gate pending", () => {
+    const h = setup();
+    h.repository.updateStage(h.projectId, "SCRIPT", { state: "DONE" });
+    expect(() => h.checkpoints.apply(h.node, h.run.id, { leaseId: h.run.leaseId, seq: 1, stage: "SCENE_PLAN",
+      inputVersion: h.orchestrator.inputVersions.inputVersion(h.projectId, "SCENE_PLAN"), tables: { scenes: [] }, costs: [] }))
+      .toThrowError(expect.objectContaining({ code: "RUN_DEPENDENCY_PENDING" }));
+    expect(h.repository.getStage(h.projectId, "SCRIPT_REVIEW").state).toBe("PENDING");
+  });
+
+  it("a run granted from the script review gate accepts the gate checkpoint, then SCENE_PLAN", () => {
+    const h = setup();
+    h.repository.updateStage(h.projectId, "SCRIPT", { state: "DONE" });
+    // The planner starts at the earliest unfinished stage, so an off gate that is PENDING is the grant's first stage.
+    h.runs.cancel(h.projectId, "USER_CANCELLED");
+    const gateRun = h.runs.grant(h.node, { projectId: h.projectId, fromStage: "SCRIPT_REVIEW", stopBefore: ["VISUAL_REVIEW"], budgetCapUsd: 1 });
+    // No commit assertion here: the setup's afterCommit expects seq 1 only, and this test commits two checkpoints.
+    const checkpoints = new RunCheckpointService(h.sqlite, h.runs, h.orchestrator, h.config.DATA_DIR, () => { throw new Error("unexpected file"); }, () => undefined, h.clock);
+    expect(checkpoints.apply(h.node, gateRun.id, { leaseId: gateRun.leaseId, seq: 1, stage: "SCRIPT_REVIEW",
+      inputVersion: h.orchestrator.inputVersions.inputVersion(h.projectId, "SCRIPT_REVIEW"), tables: {}, costs: [] })).toEqual({ ok: true, seq: 1, duplicate: false });
+    expect(h.repository.getStage(h.projectId, "SCRIPT_REVIEW").state).toBe("DONE");
+    expect(checkpoints.apply(h.node, gateRun.id, { leaseId: gateRun.leaseId, seq: 2, stage: "SCENE_PLAN",
+      inputVersion: h.orchestrator.inputVersions.inputVersion(h.projectId, "SCENE_PLAN"), tables: { scenes: [] }, costs: [] })).toEqual({ ok: true, seq: 2, duplicate: false });
   });
 
   it("applies once, publishes after commit and adds costs to the ledger once", () => {

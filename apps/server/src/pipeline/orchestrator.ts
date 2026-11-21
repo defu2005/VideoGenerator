@@ -20,6 +20,7 @@ import {
   type RenderVariantAspect,
   type StageRecord,
   type StageState,
+  scriptReviewAutoPasses,
   storyModeForProject,
 } from "@vg/shared";
 import type { FastifyBaseLogger } from "fastify";
@@ -200,6 +201,7 @@ export class PipelineOrchestrator {
         this.waitForUser(projectId, stage);
         return;
       }
+      this.passOffScriptReview(projectId);
       const unmet = this.unmetDependency(projectId, stage);
       if (unmet) this.invalid(`Complete ${unmet} before running ${stage}.`);
       if (stage === "VOICE" && project.settings.stageExecutors.voice === "USER") {
@@ -734,6 +736,7 @@ export class PipelineOrchestrator {
         message: message ?? `${job.stage} completed`,
         error: null,
       });
+      if (job.stage === "SCRIPT") this.passOffScriptReview(job.projectId);
       const runMode = this.repository.getRunMode(job.projectId);
       if (runMode === "ALL") {
         this.repository.updateProject(job.projectId, { stage: job.stage });
@@ -1075,6 +1078,10 @@ export class PipelineOrchestrator {
       this.skipResearch(projectId, "Skipped (research mode is off)");
       return;
     }
+    if (stage === "SCRIPT_REVIEW" && scriptReviewAutoPasses(project.settings.scriptOutlineApproval)) {
+      this.passOffScriptReview(projectId);
+      return;
+    }
     if (isGate(stage)) {
       const autoApprove = project.mode === "AUTO" && (stage !== "FINAL_APPROVAL" || project.settings.autoRender);
       const approval = this.canApprove(project, stage);
@@ -1138,6 +1145,31 @@ export class PipelineOrchestrator {
         this.repository.updateStage(projectId, stage, { message: null });
       }
     }
+  }
+
+  /**
+   * TASK-146 slice 6: with the script review off, SCRIPT_REVIEW passes as soon as SCRIPT is settled.
+   * Called from the ALL-mode gate path, after a SCRIPT job finishes (single-stage runs too), and before a
+   * downstream single-stage run checks its dependencies. Only PENDING or STALE gates pass; a WAITING gate
+   * left by an earlier non-off setting is not reopened or passed here.
+   */
+  private passOffScriptReview(projectId: string): void {
+    const project = this.requireProject(projectId);
+    if (!scriptReviewAutoPasses(project.settings.scriptOutlineApproval)) return;
+    // A node run that holds the gate in its stop set must not pass it: the run ends at the boundary and control decides.
+    if (this.runtime.allowedStage?.(project, "SCRIPT_REVIEW") === false) return;
+    const gate = this.repository.getStage(projectId, "SCRIPT_REVIEW").state;
+    if (gate !== "PENDING" && gate !== "STALE") return;
+    const script = this.repository.getStage(projectId, "SCRIPT").state;
+    if (script !== "DONE" && script !== "SKIPPED") return;
+    this.repository.updateStage(projectId, "SCRIPT_REVIEW", {
+      state: "DONE",
+      inputVersion: this.inputVersions.inputVersion(projectId, "SCRIPT_REVIEW"),
+      progress: 100,
+      message: "Passed automatically (script review is off)",
+      jobId: null,
+      error: null,
+    });
   }
 
   private assertCanStart(projectId: string, stage: PipelineStage): void {

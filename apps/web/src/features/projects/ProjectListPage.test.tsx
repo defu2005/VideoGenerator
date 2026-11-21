@@ -13,6 +13,7 @@ const project: Project = {
   description: "A short video",
   mode: "ASSISTED",
   settings: {
+    scriptOutlineApproval: "off",
     budget: { mode: "BALANCED" },
     language: "en",
     targetDurationSec: 120,

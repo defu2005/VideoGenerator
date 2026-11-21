@@ -524,7 +524,8 @@ describe("assistant API — mock LLM loop", () => {
     // Cap raised 40 000 → 41 000 for TASK-129a's four mailbox tools (~640 chars of compact signatures); see the 129a Vòng entry.
     // Cap raised 41 000 → 42 000 for TASK-129c's four mission tools (2026-11-18).
     // Cap raised 42 000 → 42 500 for TASK-147d script_submit_draft: its description names the three results and the stage_complete step.
-    expect(text.length).toBeLessThan(42_500);
+    // Cap raised 42 500 → 42 600 for TASK-146 slice 6: the SCRIPT_REVIEW stage in PipelineStageSchema (stage and gate args) and the scriptOutlineApproval values in CreateProjectInputSchema. Measured 42 558.
+    expect(text.length).toBeLessThan(42_600);
     const deleteProject = catalog.find((entry) => entry.name === "delete_project");
     expect(deleteProject?.args).toHaveProperty("projectId", "string");
   });

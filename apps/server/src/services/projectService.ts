@@ -250,6 +250,7 @@ export function createProjectService(
       if (derived) aspectRatio = derived;
     }
     const settings: ProjectSettings = {
+      scriptOutlineApproval: inputSettings.scriptOutlineApproval ?? "off",
       ...(inputSettings.market ? { market: inputSettings.market } : {}),
       language: resolved.values.settings.language,
       targetDurationSec: resolved.values.settings.targetDurationSec,

@@ -11,7 +11,7 @@ import { JobRepository } from "../src/jobs/jobRepository.js";
 import { JobWorker } from "../src/jobs/worker.js";
 import { createExecutorRegistry } from "../src/pipeline/executorRegistry.js";
 import type { FakeFailure } from "../src/pipeline/fakeExecutor.js";
-import { PipelineOrchestrator, type ApprovalCheck } from "../src/pipeline/orchestrator.js";
+import { PipelineOrchestrator, type ApprovalCheck, type PipelineRuntime } from "../src/pipeline/orchestrator.js";
 import type { PipelineStage, Project } from "@vg/shared";
 
 type HarnessOptions = {
@@ -21,6 +21,7 @@ type HarnessOptions = {
   autoRender?: boolean;
   canApprove?: ApprovalCheck;
   autoBlock?: (project: Project, gate: PipelineStage) => string | null;
+  runtime?: PipelineRuntime;
 };
 
 export function createPipelineHarness(options: HarnessOptions = {}) {
@@ -41,7 +42,7 @@ export function createPipelineHarness(options: HarnessOptions = {}) {
   const events = new PipelineEventBus();
   const repository = new JobRepository(database.sqlite, events, clock);
   const logger = Fastify({ logger: { level: "silent" } }).log;
-  const orchestrator = new PipelineOrchestrator(repository, config, logger, clock, options.canApprove, options.autoBlock);
+  const orchestrator = new PipelineOrchestrator(repository, config, logger, clock, options.canApprove, options.autoBlock, options.runtime);
   const executors = createExecutorRegistry({ delayMs: config.FAKE_STAGE_DELAY_MS, failures: options.failures });
   const worker = new JobWorker(
     repository,

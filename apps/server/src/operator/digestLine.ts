@@ -18,6 +18,7 @@ export function digestProject(): Project {
     topic: "bản tin",
     mode: "ASSISTED",
     settings: {
+      scriptOutlineApproval: "off",
       language: "vi",
       targetDurationSec: 60,
       wordsPerMinute: 150,

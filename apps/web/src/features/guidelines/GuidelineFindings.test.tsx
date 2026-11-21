@@ -11,6 +11,7 @@ const project = {
   description: "",
   mode: "AUTO",
   settings: {
+    scriptOutlineApproval: "off",
     language: "vi",
     targetDurationSec: 120,
     aspectRatio: "16:9",

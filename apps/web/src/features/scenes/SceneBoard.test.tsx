@@ -20,6 +20,7 @@ const project: Project = {
   description: "",
   mode: "ASSISTED",
   settings: {
+    scriptOutlineApproval: "off",
     budget: { mode: "BALANCED" },
     language: "en",
     targetDurationSec: 120,

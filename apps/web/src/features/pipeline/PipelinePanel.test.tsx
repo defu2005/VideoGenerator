@@ -102,6 +102,7 @@ describe("PipelinePanel", () => {
       topic: "Test topic",
       mode: "ASSISTED",
       settings: {
+        scriptOutlineApproval: "off",
         budget: { mode: "BALANCED" },
         language: "en",
         targetDurationSec: 120,
@@ -149,6 +150,7 @@ describe("PipelinePanel", () => {
       topic: "Test topic",
       mode: "ASSISTED",
       settings: {
+        scriptOutlineApproval: "off",
         budget: { mode: "QUALITY" },
         language: "en",
         targetDurationSec: 120,
@@ -208,7 +210,8 @@ describe("PipelinePanel", () => {
       `/api/projects/${projectId}/pipeline/gates/VISUAL_REVIEW/approve`,
       expect.objectContaining({ method: "POST" }),
     ));
-    expect(screen.getAllByText("Review gate")).toHaveLength(3);
+    // 4 = SCRIPT_REVIEW, VISUAL_REVIEW, MUSIC_REVIEW, FINAL_APPROVAL (SCRIPT_REVIEW joined GATES in TASK-146 slice 6).
+    expect(screen.getAllByText("Review gate")).toHaveLength(4);
     expect(await screen.findByText("Đã duyệt cổng")).toBeInTheDocument();
   });
 
@@ -261,6 +264,7 @@ describe("PipelinePanel", () => {
         topic: "Test topic",
         mode: "ASSISTED",
         settings: {
+          scriptOutlineApproval: "off",
           budget: { mode: "BALANCED" },
           language: "en",
           targetDurationSec: 120,

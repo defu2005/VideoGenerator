@@ -1,5 +1,5 @@
 import type Database from "better-sqlite3";
-import { GATES } from "@vg/shared";
+import { GATES, scriptReviewAutoPasses, type ScriptOutlineApproval } from "@vg/shared";
 
 // TASK-129c: what will stop for the user, read from the same inputs the orchestrator uses for gates:
 // project.mode, settings.autoRender, and the gate's readiness check. The gate path (pipeline/orchestrator.ts)
@@ -11,6 +11,7 @@ export type ProjectPreview = { projectId: string; title: string; mode: string; g
 export type MissionPreview = { projects: ProjectPreview[]; alwaysStops: string[]; note: string | null };
 
 const GATE_LABEL: Record<string, string> = {
+  SCRIPT_REVIEW: "Duyệt kịch bản",
   VISUAL_REVIEW: "Duyệt hình ảnh",
   MUSIC_REVIEW: "Duyệt nhạc",
   FINAL_APPROVAL: "Duyệt bản cuối",
@@ -35,9 +36,17 @@ export function missionPreview(sqlite: Database.Database, mission: { projectIds:
     const row = read.get(projectId) as { id: string; title: string; mode: string; settings: string } | undefined;
     if (!row) continue;
     let autoRender = false;
-    try { autoRender = (JSON.parse(row.settings) as { autoRender?: unknown }).autoRender === true; } catch { autoRender = false; }
+    let approval: ScriptOutlineApproval | undefined;
+    try {
+      const parsed = JSON.parse(row.settings) as { autoRender?: unknown; scriptOutlineApproval?: ScriptOutlineApproval };
+      autoRender = parsed.autoRender === true;
+      approval = parsed.scriptOutlineApproval;
+    } catch { autoRender = false; }
     const gates = GATES.map((gate): GatePreview => {
       const label = GATE_LABEL[gate] ?? gate;
+      if (gate === "SCRIPT_REVIEW" && scriptReviewAutoPasses(approval)) {
+        return { gate, label, stopsForUser: false, reason: "Tắt duyệt kịch bản: qua ngay, không chờ bạn." };
+      }
       if (row.mode !== "AUTO") {
         return { gate, label, stopsForUser: true, reason: "Dự án không ở chế độ AUTO: chờ bạn duyệt." };
       }

@@ -104,6 +104,7 @@ function stubAssistantProject(): Project {
     topic: "assistant",
     mode: "ASSISTED",
     settings: {
+      scriptOutlineApproval: "off",
       language: "vi",
       targetDurationSec: 120,
       wordsPerMinute: 150,

@@ -107,7 +107,16 @@ const DirectBriefInputFields = {
   aspectRatio: AspectRatioSchema.optional(),
 };
 
+/** TASK-146 slice 6: `off` auto-passes the SCRIPT_REVIEW gate. `outline` and `script` make it wait for the user. */
+export const ScriptOutlineApprovalSchema = z.enum(["off", "outline", "script"]);
+export type ScriptOutlineApproval = z.infer<typeof ScriptOutlineApprovalSchema>;
+/** Single source for the SCRIPT_REVIEW off rule: true when the gate passes at once without waiting for the user. */
+export function scriptReviewAutoPasses(approval: ScriptOutlineApproval | undefined): boolean {
+  return (approval ?? "off") === "off";
+}
+
 export const ProjectSettingsSchema = z.object({
+  scriptOutlineApproval: ScriptOutlineApprovalSchema.default("off"),
   stageExecution: StageExecutionSettingsSchema.optional(),
   agentWaitMinutes: AgentWaitMinutesSchema.optional(),
   market: MarketCodeSchema.optional(),
@@ -162,6 +171,7 @@ export const ProjectSettingsSchema = z.object({
 export type ProjectSettings = z.infer<typeof ProjectSettingsSchema>;
 
 export const ProjectSettingsInputSchema = z.object({
+  scriptOutlineApproval: ScriptOutlineApprovalSchema.optional(),
   market: MarketCodeSchema.optional(),
   language: z.string().optional(),
   targetDurationSec: z.number().int().min(30).max(1800).optional(),

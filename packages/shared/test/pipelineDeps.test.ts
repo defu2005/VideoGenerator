@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { PIPELINE_STAGES, type PipelineStage } from "../src/enums.js";
-import { STAGE_DEPENDS, STAGE_ORDER, dependentStages } from "../src/pipeline.js";
+import { GATES, STAGE_DEPENDS, STAGE_ORDER, dependentStages } from "../src/pipeline.js";
 
 describe("stage dependency graph", () => {
   it("lists every stage and has no cycle", () => {
@@ -47,5 +47,22 @@ describe("stage dependency graph", () => {
     for (const stage of STAGE_ORDER.slice(STAGE_ORDER.indexOf("SCRIPT") + 1)) {
       expect(dependents).toContain(stage);
     }
+  });
+});
+
+describe("TASK-146 slice 6 commit A: SCRIPT_REVIEW gate", () => {
+  it("sits between SCRIPT and SCENE_PLAN, is a gate, and gates SCENE_PLAN", () => {
+    const order = STAGE_ORDER as readonly string[];
+    expect(order.indexOf("SCRIPT_REVIEW")).toBe(order.indexOf("SCRIPT") + 1);
+    expect(order.indexOf("SCENE_PLAN")).toBe(order.indexOf("SCRIPT_REVIEW") + 1);
+    expect(GATES).toContain("SCRIPT_REVIEW");
+    expect(STAGE_DEPENDS.SCRIPT_REVIEW).toEqual(["SCRIPT"]);
+    expect(STAGE_DEPENDS.SCENE_PLAN).toEqual(["SCRIPT_REVIEW"]);
+  });
+
+  it("rerunning SCRIPT reaches the gate and everything after it", () => {
+    const dependents = dependentStages("SCRIPT");
+    expect(dependents).toContain("SCRIPT_REVIEW");
+    expect(dependents).toContain("SCENE_PLAN");
   });
 });

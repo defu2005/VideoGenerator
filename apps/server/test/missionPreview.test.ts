@@ -11,8 +11,13 @@ function db() {
   add("manual", "MANUAL", {});
   add("auto", "AUTO", {});
   add("auto-render", "AUTO", { autoRender: true });
+  add("manual-script", "MANUAL", { scriptOutlineApproval: "script" });
   return sqlite;
 }
+
+// The default (off) script review passes at once, so only the other gates are checked for stopping.
+const stopsExceptScriptReview = (gates: { gate: string; stopsForUser: boolean }[]) =>
+  gates.filter((gate) => gate.gate !== "SCRIPT_REVIEW").every((gate) => gate.stopsForUser);
 
 describe("mission gate preview", () => {
   it("a planning mission with no projects says gates follow each project's mode", () => {
@@ -22,8 +27,14 @@ describe("mission gate preview", () => {
     expect(preview.alwaysStops.length).toBeGreaterThan(0);
   });
 
-  it("a MANUAL project stops at every gate", () => {
+  it("a MANUAL project stops at every gate except script review, which is off by default", () => {
     const [project] = missionPreview(db(), { projectIds: ["manual"] }).projects;
+    expect(stopsExceptScriptReview(project!.gates)).toBe(true);
+    expect(project!.gates.find((gate) => gate.gate === "SCRIPT_REVIEW")?.stopsForUser).toBe(false);
+  });
+
+  it("a MANUAL project with script outline approval set to script stops at every gate", () => {
+    const [project] = missionPreview(db(), { projectIds: ["manual-script"] }).projects;
     expect(project!.gates.every((gate) => gate.stopsForUser)).toBe(true);
   });
 
@@ -45,7 +56,7 @@ describe("mission gate preview", () => {
     sqlite.exec("CREATE TABLE app_settings (key TEXT PRIMARY KEY, value TEXT, updated_at TEXT)");
     sqlite.prepare("INSERT INTO app_settings (key, value, updated_at) VALUES ('autonomy.app', ?, '')").run(JSON.stringify({ level: "autonomous" }));
     const [project] = missionPreview(sqlite, { projectIds: ["manual"] }).projects;
-    expect(project!.gates.every((gate) => gate.stopsForUser)).toBe(true);
+    expect(stopsExceptScriptReview(project!.gates)).toBe(true);
   });
 
   it("skips a project id that no longer exists", () => {

@@ -1,5 +1,5 @@
 import type Database from "better-sqlite3";
-import { dependentStages, GATES, LLM_TASKS, PROTECTED_PROJECT_ID, STAGE_ORDER, resolveBudget, resolveStageExecution, storyModeForProject, type PipelineStage, type Project, type ProjectRun } from "@vg/shared";
+import { dependentStages, GATES, LLM_TASKS, PROTECTED_PROJECT_ID, STAGE_ORDER, resolveBudget, resolveStageExecution, scriptReviewAutoPasses, storyModeForProject, type PipelineStage, type Project, type ProjectRun } from "@vg/shared";
 import { defaultWorkspaceId } from "../auth/workspaces.js";
 import type { PipelineOrchestrator } from "../pipeline/orchestrator.js";
 import { readAppVersion } from "../render/appVersion.js";
@@ -84,7 +84,12 @@ export class ProjectPlacement {
       // Control hosts agent fallback so the existing handoff and approval rules still run.
       return [stage, mode === "app_then_agent" ? "agent" : mode];
     }));
-    const automaticGates = new Set<PipelineStage>(project.mode === "AUTO" ? GATES.filter((gate) => gate !== "FINAL_APPROVAL" || project.settings.autoRender) : []);
+    // SCRIPT_REVIEW is automatic only when off (it passes at once in any mode); outline and script wait for the user.
+    const scriptReviewOff = scriptReviewAutoPasses(project.settings.scriptOutlineApproval);
+    const automaticGates = new Set<PipelineStage>(GATES.filter((gate) => {
+      if (gate === "SCRIPT_REVIEW") return scriptReviewOff;
+      return project.mode === "AUTO" && (gate !== "FINAL_APPROVAL" || project.settings.autoRender);
+    }));
     const stageNeeds = this.deps.needs(project);
     const ideal = planProjectSegment({ states, executors, automaticGates, stageNeeds, capabilities: new Set(["project", ...Object.values(stageNeeds).flat()]) });
     if (!ideal.fromStage || ready.some((stage) => ideal.stopBefore.includes(stage))) {
@@ -149,7 +154,9 @@ export class ProjectPlacement {
     const project = orchestrator.repository.getProject(run.projectId);
     if (!project) return;
     const held = new Set(run.stopBefore);
+    const scriptReviewOff = scriptReviewAutoPasses(project.settings.scriptOutlineApproval);
     for (const gate of GATES) {
+      if (gate === "SCRIPT_REVIEW" && scriptReviewOff) continue;
       if ([...held].some((stage) => stage === gate || dependentStages(stage).includes(gate))) continue;
       if (project.mode !== "AUTO" || (gate === "FINAL_APPROVAL" && !project.settings.autoRender)) {
         const state = orchestrator.repository.getStage(project.id, gate).state;

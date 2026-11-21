@@ -17,6 +17,7 @@ export type StageState = z.infer<typeof StageStateSchema>;
 export const STAGE_ORDER: readonly PipelineStage[] = [
   "RESEARCH",
   "SCRIPT",
+  "SCRIPT_REVIEW",
   "SCENE_PLAN",
   "VISUAL_SEARCH",
   "VISUAL_REVIEW",
@@ -30,6 +31,7 @@ export const STAGE_ORDER: readonly PipelineStage[] = [
 ];
 
 export const GATES: readonly PipelineStage[] = [
+  "SCRIPT_REVIEW",
   "VISUAL_REVIEW",
   "MUSIC_REVIEW",
   "FINAL_APPROVAL",
@@ -53,7 +55,8 @@ export const STAGE_DEPENDS: Record<PipelineStage, readonly PipelineStage[]> = {
   TOPIC: [],
   RESEARCH: [],
   SCRIPT: ["RESEARCH"],
-  SCENE_PLAN: ["SCRIPT"],
+  SCRIPT_REVIEW: ["SCRIPT"],
+  SCENE_PLAN: ["SCRIPT_REVIEW"],
   VISUAL_SEARCH: ["SCENE_PLAN"],
   VISUAL_REVIEW: ["VISUAL_SEARCH"],
   VOICE: ["SCENE_PLAN"],

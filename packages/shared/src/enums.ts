@@ -17,6 +17,7 @@ export const PIPELINE_STAGES = [
   "TOPIC",
   "RESEARCH",
   "SCRIPT",
+  "SCRIPT_REVIEW",
   "SCENE_PLAN",
   "VISUAL_SEARCH",
   "VISUAL_REVIEW",

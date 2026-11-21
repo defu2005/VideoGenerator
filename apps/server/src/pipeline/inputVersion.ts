@@ -11,7 +11,8 @@ import { PROJECT_TABLES, projectTableRows, projectTableJsonColumns, isProjectAss
 
 const projectColumns = new Set(["id", "topic", "title", "description", "profile_id", "mode", "kind", "parent_project_id", "settings"]);
 const timestamps = new Set(["createdat", "updatedat", "checkedat", "downloadedat", "reviewedat", "discardedat"]);
-export const runtimeSettings = new Set(["stageTimeouts", "onOverdue", "agentWaitMinutes", "stageExecution", "knowledgeRev", "formatReason", "userSet"]);
+// scriptOutlineApproval is runtime: flipping the review setting must not stale a finished SCRIPT (TASK-146 slice 6).
+export const runtimeSettings = new Set(["stageTimeouts", "onOverdue", "agentWaitMinutes", "stageExecution", "knowledgeRev", "formatReason", "userSet", "scriptOutlineApproval"]);
 const tables = PROJECT_TABLES.filter(({ owner }) => owner !== "control").map((entry) => {
   const columns = Object.values(getTableColumns(entry.table));
   const key = [...columns.filter((column) => column.primary).map((column) => column.name),

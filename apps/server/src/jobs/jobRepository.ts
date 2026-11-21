@@ -188,10 +188,16 @@ export class JobRepository {
 
   ensureStages(projectId: string): void {
     const insert = this.sqlite.prepare(
-      "INSERT OR IGNORE INTO project_stages (project_id, stage, state, progress, message, job_id, updated_at, error) VALUES (?, ?, 'PENDING', 0, NULL, NULL, ?, NULL)",
+      "INSERT OR IGNORE INTO project_stages (project_id, stage, state, progress, message, job_id, updated_at, error) VALUES (?, ?, ?, ?, NULL, NULL, ?, NULL)",
     );
     const timestamp = this.now().toISOString();
-    for (const stage of STAGE_ORDER) insert.run(projectId, stage, timestamp);
+    // TASK-146 slice 6: a project created before SCRIPT_REVIEW existed gets its row here. A finished SCRIPT counts as
+    // passed, so an in-flight project never waits on a gate it has already cleared. Insert-only: an existing row is never rewritten.
+    const script = this.sqlite.prepare("SELECT state FROM project_stages WHERE project_id = ? AND stage = 'SCRIPT'")
+      .get(projectId) as { state: string } | undefined;
+    const passed = script && (script.state === "DONE" || script.state === "SKIPPED") ? script.state : null;
+    insert.run(projectId, "SCRIPT_REVIEW", passed ?? "PENDING", passed ? 100 : 0, timestamp);
+    for (const stage of STAGE_ORDER) insert.run(projectId, stage, "PENDING", 0, timestamp);
   }
 
   getStages(projectId: string): StageRecord[] {
@@ -199,7 +205,12 @@ export class JobRepository {
     const rows = this.sqlite.prepare(
       "SELECT * FROM project_stages WHERE project_id = ? ORDER BY rowid",
     ).all(projectId) as StageRow[];
-    return rows.map((row) => this.toStage(row));
+    // Display order follows STAGE_ORDER, not insert order: a late-inserted row (SCRIPT_REVIEW backfill) must not land last.
+    const position = (stage: string) => {
+      const index = STAGE_ORDER.indexOf(stage as PipelineStage);
+      return index < 0 ? STAGE_ORDER.length : index;
+    };
+    return [...rows].sort((a, b) => position(a.stage) - position(b.stage)).map((row) => this.toStage(row));
   }
 
   getStage(projectId: string, stage: PipelineStage): StageRecord {
