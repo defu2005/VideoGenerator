@@ -35,7 +35,7 @@ Câu hỏi:
 
 - `fileGc.ts:60–70`: constructor nhận tham số thứ 7 `artifacts?`; nếu thiếu thì `this.artifacts = artifacts ?? new ArtifactService(db, this.now)`.
 - `app.ts:255–256`: `new FileGc(database.sqlite, config.DATA_DIR, undefined, undefined, () => …, (work) => …)` truyền sáu tham số, **không truyền `artifacts`**, nên instance được tạo trong constructor và sống suốt vòng đời server.
-- `app.ts:257`: cùng `fileGc` được truyền vào `createProjectService`, nên các lượt GC do project service kích hoạt dùng chung instance và chung cache.
+- `app.ts:257`: `fileGc` được truyền vào `createProjectService`. Suy luận: các lượt GC do project service kích hoạt dùng chung instance và chung cache. Chưa đọc các lời gọi trong `createProjectService`, nên đây không phải điều đã xác nhận.
 - `fileGc.ts:304` và `:406` gọi `collectReferences(..., this.artifacts)`.
 - `references.ts:165`: chỉ khi không truyền registry thì mới tạo instance mới cho lượt đó.
 
@@ -46,6 +46,8 @@ Trong các route đã đọc, lượt GC chỉ đăng ký file pending khi có m
 - `run_uploads` / `run_checkpoints` của run GRANTED, RUNNING hoặc PAUSED_AT_GATE (`:126`).
 
 Job SUCCEEDED thì `node_uploads` của nó bị bỏ ở `:125`, nên path pending không vào `graph` qua route đó và không được `registerSync`. Ngoại lệ đã đọc: một row đang hoạt động (ví dụ `run_uploads` đã `have` đến file pending) trỏ cùng path. Chưa kiểm tra `jobs` và `renders` (không có lọc), nên không khẳng định "chỉ khi" cho toàn bộ đường đi.
+
+**Route chưa lọc đã tìm thấy khi đọc (chưa đo):** checkpoint apply (`runCheckpoint.ts:98–106`) ghi đường dẫn đã resolve vào các row content. Mã ghi lại mọi cột có khóa khớp `isProjectAssetPath`, và giá trị được thay bằng `resolveFile(run, value)`. Ví dụ `subtitle_tracks.srt_path` (bảng này nằm ở dòng 35 trong `PROJECT_TABLES`, trước renders ở dòng 40). Route này không đi qua bộ lọc `:122–126`. Nếu một row như vậy trỏ tới pending, nó có thể (a) đưa pending vào `graph` ngoài các route đã đọc, và (b) đảo thứ tự Q2 vì bảng trước renders có path ref tới pending. Chưa đo.
 
 Khớp với pre-assert trong `runSnapshotRepointsPending.test.ts` (dòng 110–111): GC khi job A còn RUNNING thì đăng ký pending của A. Test xanh 2/2. Đây là bằng chứng gián tiếp, không phải phép đo riêng cho TASK-169.
 
@@ -80,7 +82,9 @@ Rút nhánh cache của `b2fad9d` **không áp dụng** cho đường GC. `b2fad
 2. Giả thuyết "kẹt ở pending" ghi rõ điều kiện cần, đánh dấu chưa xác lập, và nêu các writer instance mới vẫn repoint.
 3. Điều kiện đảo thứ tự đã sửa: là một bảng **trước** renders (dòng <40) có path ref tới pending, không phải một row versions.
 4. Câu "chỉ khi" của Q1 đã thu hẹp về các route đã đọc; `jobs` và `renders` chưa kiểm tra.
-5. Đã xác nhận `FileGc` constructor (`fileGc.ts:60–70`) và `app.ts:255` không truyền `artifacts`, và `app.ts:257` truyền cùng instance cho project service.
+5. Đã xác nhận `FileGc` constructor (`fileGc.ts:60–70`) và `app.ts:255` không truyền `artifacts`. `app.ts:257` truyền `fileGc` vào project service; việc các lượt GC dùng chung instance là suy luận, chưa đọc các lời gọi trong `createProjectService`.
+6. Ghi nhận của advisor (lượt rà soát đầu): mọi `PROJECT_TABLES` đều được duyệt, và chỉ năm bảng có lọc ở `references.ts:122–126`. Ghi nhận này chưa thay đổi kết luận Q1, vì `jobs` và `renders` vẫn chưa được kiểm tra.
+7. Thêm route checkpoint apply (`runCheckpoint.ts:98–106`) vào phần Q1 như một route chưa lọc đã tìm thấy, chưa đo.
 
 ## Ghi chú
 
