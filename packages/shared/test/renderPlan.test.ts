@@ -217,6 +217,44 @@ describe("buildFinalPlan", () => {
   });
 });
 
+// TASK-146 slice 5 commit A pin: the whole music chain for a fixture with no beat data, asserted exactly.
+// Any later change to the chain for scenes without beats must turn this red.
+describe("music chain pin (TASK-146 slice 5 commit A)", () => {
+  it("keeps the exact [music] chain when no scene carries a beat", () => {
+    const scenes = [
+      scene(),
+      scene({ sceneId: "s2", order: 1, startSec: 3, endSec: 5, voice: null }),
+      scene({ sceneId: "s3", order: 2, startSec: 5, endSec: 8, voice: { trackId: "t3", path: "voice/s3.mp3", startSec: 5.1, durationSec: 2 } }),
+    ];
+    const music = {
+      candidateId: "m",
+      title: "Calm",
+      path: "music/a.mp3",
+      sourceDurationSec: 4,
+      loop: true,
+      startOffsetSec: 1,
+      volume: 0.2,
+      fadeInSec: 2,
+      fadeOutSec: 3,
+      duckingDb: -12,
+      licenseKind: null,
+    };
+    const plan = buildFinalPlan({
+      totalDurationSec: 8,
+      scenes,
+      music,
+      concatListPath: "/r/clips.txt",
+      resolvePath: (path) => `/p/${path}`,
+      assFileName: null,
+    });
+    const duck = duckVolumeExpr(voiceIntervals(scenes), -12);
+    expect(duck).not.toBeNull();
+    expect(plan.filter).toContain(
+      `[3:a]atrim=start=1,asetpts=PTS-STARTPTS,aresample=48000,aformat=sample_fmts=fltp:channel_layouts=stereo,atrim=0:8,volume=0.2,volume='${duck}':eval=frame,afade=t=in:st=0:d=2,afade=t=out:st=5:d=3[music]`,
+    );
+  });
+});
+
 describe("helpers", () => {
   it("writes concat lines with forward slashes and escaped quotes", () => {
     expect(concatListText(["C:\\a\\b.mp4", "/x/it's.mp4"])).toBe("file 'C:/a/b.mp4'\nfile '/x/it'\\''s.mp4'\n");
