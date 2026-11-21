@@ -11,7 +11,7 @@ Trạng thái: thêm test (`apps/server/test/leaseRetryAfterMissingLink.test.ts`
 - **Khóa `node_uploads` là `(job_id, lease_id, name)` (`apps/server/src/db/schema.ts:2101`).** Hàng của lease cũ còn nguyên, lease mới không thấy chúng.
 - **`artifacts.locate` (`apps/server/src/node/artifactService.ts:63–70`):** file thiếu thì trả `undefined` và không xóa hàng cũ.
 - **Ghi output (`leaseService.ts:521–552`):** `receiveOutput` ghi qua `saveVerified` vào đường dẫn của lease mới. `remember` chỉ được gọi từ `register` (`artifactService.ts:25`) và `registerSync` (`:48`), nên upload mới không làm mới hàng `artifacts` cũ.
-- **Re-lease (đọc mã):** lease RENDER ghi lại `pending/<job>.json` (`leaseService.ts:371`), nên `readPending` không lỗi sau `discard`.
+- **Re-lease (đọc mã):** lease RENDER ghi lại `pending/<job>.json` (`leaseService.ts:371`), nên `readPending` không lỗi sau `discard`. Đo gián tiếp trong T1: `haveOutputs` và `receiveOutput` dưới lease mới đều gọi `readPending` và thành công.
 
 ## Test
 
@@ -28,17 +28,17 @@ Cả hai test dùng chuỗi TASK-162 đến ENOENT: A SUCCEEDED khi có GC lúc 
 - Không gửi `/fail`, không heartbeat. Advance `NODE_LEASE_SEC × 1000 + 1000`, rồi gọi `nodes.sweep()` thật.
 - Kỳ vọng: `QUEUED`, `attempt` = 2, `error.code` = `NODE_LOST`, `error.retryable` = true, `lease_id` NULL, `pending/<B>.json` đã xóa (qua `onReleased`), hàng lease cũ còn nguyên.
 
-Kỳ vọng được viết trong file trước lần chạy đầu. Lần chạy đầu: 2/2 xanh. Không sửa assertion nào sau lần chạy đó.
+Kỳ vọng được viết trong file trước lần chạy đầu. Lần chạy đầu: 2/2 xanh. Sau đó thêm một khẳng định trước: `existsSync(s.pendingJson(jobB.id)) === true` ngay sau ENOENT trong `reachEnoent`, để hai khẳng định "pending json đã xóa" không xanh do sai đường dẫn. Chạy lại: 2/2 xanh. Không khẳng định nào khác bị sửa.
 
 ## Kết quả
 
-- `leaseRetryAfterMissingLink.test.ts`: 2/2 xanh ở lần chạy đầu.
+- `leaseRetryAfterMissingLink.test.ts`: 2/2 xanh ở lần chạy đầu; 2/2 xanh sau khi thêm khẳng định trước (lần chạy hiện tại).
 - `npx tsc --noEmit` (apps/server): exit 0.
 - Hồi quy 8 file (7 file của TASK-162 cộng test mới): 48/48 xanh.
 
 ## Mutant
 
-Sửa bản sao bằng `sed`, chạy test, khôi phục từ bản sao. `git diff --quiet -- apps/server/src` xác nhận `src/` byte-identical với HEAD sau khi khôi phục.
+Sửa bản sao bằng `sed`, chạy test, khôi phục bằng `cp` từ bản sao lưu lấy trước khi mutant. `cmp` xác nhận từng file (`artifactService.ts`, `leaseService.ts`, `nodeService.ts`) khớp bản sao lưu sau khi khôi phục.
 
 | Mutant | Thay đổi | Kết quả |
 |---|---|---|
@@ -50,7 +50,7 @@ Sửa bản sao bằng `sed`, chạy test, khôi phục từ bản sao. `git dif
 
 - **Phía agent:** chỉ đọc mã (500 đến `/fail`, và không biết node có render lại hay chỉ upload lại). Không đo.
 - **Fixture và thời gian giả:** stub render, mock `remoteBundle`, advance 25 giờ và advance theo backoff.
-- **Không đo hết attempt (`FAILED`):** chỉ đọc mã (`orchestrator.ts:799–809`). Không dựng chuỗi lỗi lặp lại, vì mỗi lần re-lease upload lại bytes và không link file đã mất, nên không tạo ra kịch bản severity thực.
+- **Không đo hết attempt (`FAILED`):** chỉ đọc mã. Nếu ENOENT xảy ra khi `attempt == maxAttempts` (sau các lần retry khác không liên quan), `/fail` hoặc sweep đưa B sang `FAILED` terminal (`orchestrator.ts:799`, `:828`). Đây là đọc mã, chưa đo; TASK-164 sẽ đo kịch bản này.
 - **Chưa đo GC chạy sau khi A hoàn tất**, và GC có làm mới hàng `artifacts` (qua `remember` upsert khi `references.ts:172` đăng ký lại file) trong lúc B đang RUNNING hay không. Có thể đưa job thứ ba vào chuỗi. Chưa đo.
 - **Hàng lease cũ** còn tới khi job kết thúc và cleanup sau 24 giờ (nhánh d, không đụng file). Đọc mã, chưa đo.
 - **`/fail` đến muộn sau khi lease đã hết hạn:** `holding` live sẽ từ chối. Đọc mã, chưa đo.
@@ -58,4 +58,4 @@ Sửa bản sao bằng `sed`, chạy test, khôi phục từ bản sao. `git dif
 
 ## Kết luận ngắn
 
-Với fixture, ENOENT của B không làm job treo. B được re-queue một lần (`attempt` 2), qua `/fail` hoặc qua hết hạn lease. Re-lease upload lại bytes và hoàn tất. Chi phí là một attempt trong `maxAttempts` = 3. Hàng `artifacts` cũ vẫn trỏ tới file đã xóa. Không gây lỗi trong đường này, vì `locate` trả `undefined` và job upload lại. Hệ quả của việc GC làm mới hàng đó chưa được đo.
+Với fixture, ENOENT của B không làm job treo. B được re-queue một lần (`attempt` 2), qua `/fail` hoặc qua hết hạn lease. Re-lease upload lại bytes và hoàn tất. Chi phí là một attempt, khi còn attempt trong `maxAttempts` = 3. Nếu hết attempt, B thành `FAILED` (đọc mã, chưa đo; xem TASK-164). Hàng `artifacts` cũ vẫn trỏ tới file đã xóa. Không gây lỗi trong đường này, vì `locate` trả `undefined` và job upload lại. Hệ quả của việc GC làm mới hàng đó chưa được đo.

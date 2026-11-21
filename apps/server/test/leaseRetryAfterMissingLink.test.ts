@@ -139,6 +139,7 @@ async function reachEnoent(s: ReturnType<typeof setup>) {
   const error = await s.leases.complete(rowB, jobB.id, s.completeBody(leaseB.leaseId)).then(() => undefined, (e: unknown) => e);
   expect(error).toMatchObject({ code: "ENOENT" });
   expect(s.harness.repository.getJob(jobB.id)!.status).toBe("RUNNING");
+  expect(existsSync(s.pendingJson(jobB.id))).toBe(true);
   return { realA, rowB, jobB, leaseB };
 }
 
