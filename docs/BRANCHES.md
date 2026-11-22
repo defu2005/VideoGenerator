@@ -32,6 +32,7 @@ powershell -File deploy/product/stop.ps1      # dừng cả hai và tiến trìn
 - Log nằm trong `.product\api.log`, `.product\api.err.log`, `.product\web.log`.
 - `start.ps1` từ chối chạy nếu thư mục không ở nhánh `product`, nếu chưa build, hoặc nếu cổng đã bị chiếm.
 - Tùy chọn: `-ApiPort`, `-WebPort`, `-NoWorker` (không chạy hàng việc nền, dùng khi chỉ xem), `-DataDir` (chạy thử trên bản sao DB).
+- **Node phải là 24** (ABI 137) khi chạy product, vì `better-sqlite3` trong `node_modules` đã build cho Node 24. Máy có Node 26 làm API chết lúc mở DB với `ERR_DLOPEN_FAILED`. Đưa Node 24 lên đầu PATH trước khi chạy `start.ps1`, ví dụ: `$env:PATH = "<thư mục Node 24>;" + $env:PATH`. Kiểm tra binding bằng `node -e "new (require('better-sqlite3'))(':memory:')"`; `require` một mình không đủ.
 - Lần đầu chuyển sang product: dừng mọi `npm run dev` còn chạy trên `data\` thật (khởi động trước 2026-11-17), rồi mới `start.ps1`. Không bao giờ để dev và product cùng chạy trên `data\`.
 
 ### Kết nối agent và MCP với product
