@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { SaveScriptInput } from "@vg/shared";
-import { getScript, rescoreScript, saveScript, switchScriptHook } from "../services/scriptApi";
+import { editScriptOutline, getScript, rescoreScript, saveScript, switchScriptHook, type OutlineEditInput } from "../services/scriptApi";
 import { projectKeys } from "./useProjects";
 
 export const scriptKeys = {
@@ -28,6 +28,13 @@ export function useScript(projectId: string) {
       void queryClient.invalidateQueries({ queryKey: projectKeys.detail(projectId) });
     },
   });
+  const outlineMutation = useMutation({
+    mutationFn: (edit: OutlineEditInput) => editScriptOutline(projectId, edit),
+    onSuccess: (data) => {
+      queryClient.setQueryData(scriptKeys.detail(projectId), data);
+      void queryClient.invalidateQueries({ queryKey: projectKeys.detail(projectId) });
+    },
+  });
   const critiqueMutation = useMutation({
     mutationFn: () => rescoreScript(projectId),
     onSuccess: (data) => {
@@ -41,6 +48,8 @@ export function useScript(projectId: string) {
     isSaving: mutation.isPending,
     switchHook: hookMutation.mutateAsync,
     isSwitchingHook: hookMutation.isPending,
+    editOutline: outlineMutation.mutateAsync,
+    isEditingOutline: outlineMutation.isPending,
     rescore: critiqueMutation.mutateAsync,
     isRescoring: critiqueMutation.isPending,
   };

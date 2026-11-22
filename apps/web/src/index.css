@@ -1544,6 +1544,10 @@ fieldset.form-row > legend {
 .outline-approval-panel { display: grid; gap: 8px; margin: 12px 0; padding: 12px; border: 1px solid #f0d28a; border-radius: 8px; background: #fff8e6; }
 .outline-approval-panel p { margin: 0; }
 .outline-approval-panel .button { justify-self: start; }
+.outline-edit-form { display: grid; gap: 6px; justify-items: start; }
+.outline-edit-form .outline-edit-input { width: 100%; }
+.outline-edit-input { box-sizing: border-box; width: 100%; padding: 6px 8px; font: inherit; border: 1px solid #d9c27a; border-radius: 6px; background: #fff; }
+.beat-moment .outline-edit-input { margin-top: 4px; }
 .coming-soon { display: grid; min-height: 250px; justify-items: center; align-content: center; gap: 8px; }
 .coming-soon h2 { margin: 0; font-size: 16px; }
 .coming-soon p:not(.eyebrow) { margin: 0; color: #8b95a5; font-size: 11px; }

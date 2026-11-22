@@ -157,6 +157,10 @@ export function ScriptTab({ project }: { project: Project }) {
       outlineAwaiting={outlineAwaiting}
       onApproveOutline={approveOutline}
       isApprovingOutline={pipeline.isMutating}
+      onEditOutline={async (edit) => {
+        await scriptQuery.editOutline(edit);
+      }}
+      isEditingOutline={scriptQuery.isEditingOutline}
       isSwitchingHook={scriptQuery.isSwitchingHook}
       isRescoring={scriptQuery.isRescoring}
     />

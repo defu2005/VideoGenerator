@@ -1,6 +1,15 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { ScriptDraftPayload, ScriptCriterion } from "@vg/shared";
 import { SCRIPT_CRITERION_WEIGHTS } from "@vg/shared";
+import type { OutlineEditInput } from "../../services/scriptApi";
+
+// Matches the server limit for centralQuestion and concreteMoment (TASK-146).
+const OUTLINE_TEXT_MAX = 4000;
+
+function fitsOutlineText(text: string): boolean {
+  const trimmed = text.trim();
+  return trimmed.length > 0 && trimmed.length <= OUTLINE_TEXT_MAX;
+}
 
 const CRITERION_LABELS: Record<ScriptCriterion, string> = {
   structure: "Cấu trúc (20%)",
@@ -20,6 +29,8 @@ export function ScriptDraftPanel({
   isSwitchingHook = false,
   isRescoring = false,
   isApprovingOutline = false,
+  onEditOutline,
+  isEditingOutline = false,
 }: {
   draft: ScriptDraftPayload;
   onSwitchHook: (hookId: string) => Promise<void>;
@@ -30,10 +41,29 @@ export function ScriptDraftPanel({
   isSwitchingHook?: boolean;
   isRescoring?: boolean;
   isApprovingOutline?: boolean;
+  onEditOutline?: (edit: OutlineEditInput) => Promise<void>;
+  isEditingOutline?: boolean;
 }) {
   const [actionError, setActionError] = useState("");
   const critique = draft.critique;
   const outline = draft.outline;
+  // TASK-146: while parked, the central question and each beat's concrete moment can be edited and saved before approval.
+  const editable = outlineAwaiting && Boolean(onEditOutline) && Boolean(outline);
+  const outlineKey = outline ? JSON.stringify(outline) : "";
+  const [centralDraft, setCentralDraft] = useState(outline?.centralQuestion ?? "");
+  const [momentDrafts, setMomentDrafts] = useState<Record<string, string>>(() =>
+    Object.fromEntries((outline?.beats ?? []).map((beat) => [beat.id, beat.concreteMoment])));
+  // A saved or refetched outline replaces the drafts, so the form shows what the server holds.
+  useEffect(() => {
+    setCentralDraft(outline?.centralQuestion ?? "");
+    setMomentDrafts(Object.fromEntries((outline?.beats ?? []).map((beat) => [beat.id, beat.concreteMoment])));
+  }, [outlineKey]);
+  const centralChanged = centralDraft.trim() !== (outline?.centralQuestion ?? "").trim();
+  const changedBeats = (outline?.beats ?? []).filter((beat) =>
+    (momentDrafts[beat.id] ?? beat.concreteMoment).trim() !== beat.concreteMoment.trim());
+  const outlineDirty = centralChanged || changedBeats.length > 0;
+  const outlineInvalid = (centralChanged && !fitsOutlineText(centralDraft))
+    || changedBeats.some((beat) => !fitsOutlineText(momentDrafts[beat.id] ?? ""));
   // Hook switch and rescore are blocked while an outline is parked or being written; the server answers 409 OUTLINE_PENDING.
   const outlinePending = draft.phase === "outline_ready" || draft.phase === "outline_approved";
 
@@ -74,6 +104,27 @@ export function ScriptDraftPanel({
     }
   };
 
+  const handleDiscardOutline = () => {
+    setCentralDraft(outline?.centralQuestion ?? "");
+    setMomentDrafts(Object.fromEntries((outline?.beats ?? []).map((beat) => [beat.id, beat.concreteMoment])));
+    setActionError("");
+  };
+
+  const handleSaveOutline = async () => {
+    if (!onEditOutline || !outlineDirty || outlineInvalid) return;
+    const edit: OutlineEditInput = {};
+    if (centralChanged) edit.centralQuestion = centralDraft.trim();
+    if (changedBeats.length > 0) {
+      edit.beats = changedBeats.map((beat) => ({ id: beat.id, concreteMoment: (momentDrafts[beat.id] ?? "").trim() }));
+    }
+    setActionError("");
+    try {
+      await onEditOutline(edit);
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : "Lưu dàn ý thất bại");
+    }
+  };
+
   return (
     <section className="panel script-draft-panel" aria-label="Dàn ý & chấm điểm">
       {outline && (
@@ -95,11 +146,43 @@ export function ScriptDraftPanel({
             <strong>Dàn ý đang chờ bạn duyệt.</strong> Kịch bản chỉ được viết sau khi bạn duyệt dàn ý.
             Trong lúc chờ, không đổi hook và không chấm lại.
           </p>
+          {editable && (
+            <div className="outline-edit-form">
+              <textarea
+                className="outline-edit-input"
+                aria-label="Câu hỏi trung tâm"
+                rows={2}
+                value={centralDraft}
+                disabled={isEditingOutline || isApprovingOutline}
+                onChange={(event) => setCentralDraft(event.target.value)}
+              />
+              <button
+                className="button button-secondary"
+                type="button"
+                disabled={!outlineDirty || outlineInvalid || isEditingOutline || isApprovingOutline}
+                onClick={() => void handleSaveOutline()}
+              >
+                {isEditingOutline ? "Đang lưu..." : "Lưu sửa dàn ý"}
+              </button>
+              {outlineDirty && (
+                <button
+                  className="button button-secondary"
+                  type="button"
+                  disabled={isEditingOutline || isApprovingOutline}
+                  onClick={handleDiscardOutline}
+                >
+                  Hoàn tác
+                </button>
+              )}
+              {outlineInvalid && <small role="status">Nội dung không được trống và tối đa {OUTLINE_TEXT_MAX} ký tự.</small>}
+              {!outlineInvalid && outlineDirty && <small role="status">Có thay đổi chưa lưu. Lưu trước khi duyệt.</small>}
+            </div>
+          )}
           {onApproveOutline && (
             <button
               className="button button-primary"
               type="button"
-              disabled={isApprovingOutline}
+              disabled={isApprovingOutline || isEditingOutline || outlineDirty}
               onClick={() => void handleApproveOutline()}
             >
               {isApprovingOutline ? "Đang duyệt..." : "Duyệt dàn ý"}
@@ -242,14 +325,28 @@ export function ScriptDraftPanel({
         <div className="draft-beats-section">
           <h3>Nhịp kể (Beats)</h3>
           <ol className="beats-list">
-            {outline.beats.map((beat) => (
+            {outline.beats.map((beat, index) => (
               <li key={beat.id} className="beat-item">
                 <div className="beat-title">
                   <strong>{beat.sectionKey}</strong> ({beat.targetSec}s) &mdash; {beat.purpose}
                 </div>
                 <div className="beat-details">
                   <span className="beat-emotion">Cảm xúc: {beat.emotion}</span>
-                  <p className="beat-moment"><em>Khoảnh khắc:</em> {beat.concreteMoment}</p>
+                  {editable ? (
+                    <div className="beat-moment">
+                      <em>Khoảnh khắc:</em>
+                      <textarea
+                        className="outline-edit-input"
+                        aria-label={`Khoảnh khắc nhịp ${index + 1}`}
+                        rows={2}
+                        value={momentDrafts[beat.id] ?? beat.concreteMoment}
+                        disabled={isEditingOutline || isApprovingOutline}
+                        onChange={(event) => setMomentDrafts((prev) => ({ ...prev, [beat.id]: event.target.value }))}
+                      />
+                    </div>
+                  ) : (
+                    <p className="beat-moment"><em>Khoảnh khắc:</em> {beat.concreteMoment}</p>
+                  )}
                   {beat.opensLoops.length > 0 && (
                     <span className="loop-tag open-loop">Mở loop: {beat.opensLoops.join(", ")}</span>
                   )}

@@ -1,4 +1,4 @@
-import { render, screen, fireEvent } from "@testing-library/react";
+import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { ScriptDraftPanel } from "./ScriptDraftPanel";
 import type { ScriptDraftPayload } from "@vg/shared";
@@ -110,5 +110,68 @@ describe("ScriptDraftPanel", () => {
     const rescoreBtn = screen.getByRole("button", { name: "Chấm lại" });
     fireEvent.click(rescoreBtn);
     expect(handleRescore).toHaveBeenCalled();
+  });
+
+  // TASK-146 outline editing (written, not run: no-test rule in force).
+  it("shows no outline editors unless the outline is parked and an edit handler is given", () => {
+    render(<ScriptDraftPanel draft={mockDraft} onSwitchHook={vi.fn()} onRescore={vi.fn()} outlineAwaiting onApproveOutline={vi.fn()} />);
+    expect(screen.queryByRole("textbox", { name: "Câu hỏi trung tâm" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Lưu sửa dàn ý" })).toBeNull();
+  });
+
+  it("saves only the changed central question and holds Approve until the edit is saved", async () => {
+    const handleEdit = vi.fn().mockResolvedValue(undefined);
+    const handleApprove = vi.fn().mockResolvedValue(undefined);
+    render(
+      <ScriptDraftPanel
+        draft={mockDraft}
+        onSwitchHook={vi.fn()}
+        onRescore={vi.fn()}
+        outlineAwaiting
+        onApproveOutline={handleApprove}
+        onEditOutline={handleEdit}
+      />
+    );
+    const save = screen.getByRole("button", { name: "Lưu sửa dàn ý" }) as HTMLButtonElement;
+    const approve = screen.getByRole("button", { name: "Duyệt dàn ý" }) as HTMLButtonElement;
+    expect(save.disabled).toBe(true);
+    expect(approve.disabled).toBe(false);
+
+    fireEvent.change(screen.getByRole("textbox", { name: "Câu hỏi trung tâm" }), { target: { value: "Câu hỏi mới?" } });
+    expect(save.disabled).toBe(false);
+    expect(approve.disabled).toBe(true);
+
+    fireEvent.click(save);
+    await waitFor(() => expect(handleEdit).toHaveBeenCalledWith({ centralQuestion: "Câu hỏi mới?" }));
+  });
+
+  it("resets unsaved drafts to the server outline when a refetched outline arrives", () => {
+    const panelProps = { onSwitchHook: vi.fn(), onRescore: vi.fn(), outlineAwaiting: true, onApproveOutline: vi.fn(), onEditOutline: vi.fn() };
+    const { rerender } = render(<ScriptDraftPanel draft={mockDraft} {...panelProps} />);
+    fireEvent.change(screen.getByRole("textbox", { name: "Câu hỏi trung tâm" }), { target: { value: "Nháp chưa lưu" } });
+    expect(screen.getByRole("button", { name: "Hoàn tác" })).toBeTruthy();
+
+    const refetched = { ...mockDraft, outline: { ...mockDraft.outline!, centralQuestion: "Câu hỏi mới?" } };
+    rerender(<ScriptDraftPanel draft={refetched} {...panelProps} />);
+    expect((screen.getByRole("textbox", { name: "Câu hỏi trung tâm" }) as HTMLTextAreaElement).value).toBe("Câu hỏi mới?");
+    expect((screen.getByRole("button", { name: "Lưu sửa dàn ý" }) as HTMLButtonElement).disabled).toBe(true);
+    expect((screen.getByRole("button", { name: "Duyệt dàn ý" }) as HTMLButtonElement).disabled).toBe(false);
+  });
+
+  it("sends only the beat whose concrete moment changed", async () => {
+    const handleEdit = vi.fn().mockResolvedValue(undefined);
+    render(
+      <ScriptDraftPanel
+        draft={mockDraft}
+        onSwitchHook={vi.fn()}
+        onRescore={vi.fn()}
+        outlineAwaiting
+        onApproveOutline={vi.fn()}
+        onEditOutline={handleEdit}
+      />
+    );
+    fireEvent.change(screen.getByRole("textbox", { name: "Khoảnh khắc nhịp 1" }), { target: { value: "Khoảnh khắc sửa" } });
+    fireEvent.click(screen.getByRole("button", { name: "Lưu sửa dàn ý" }));
+    await waitFor(() => expect(handleEdit).toHaveBeenCalledWith({ beats: [{ id: "b1", concreteMoment: "Khoảnh khắc sửa" }] }));
   });
 });

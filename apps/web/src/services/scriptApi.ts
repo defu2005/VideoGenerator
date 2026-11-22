@@ -19,6 +19,19 @@ export function switchScriptHook(projectId: string, hookId: string): Promise<Scr
   });
 }
 
+// TASK-146: only the central question and beat concrete moments are editable while the outline is parked.
+export type OutlineEditInput = {
+  centralQuestion?: string;
+  beats?: { id: string; concreteMoment: string }[];
+};
+
+export function editScriptOutline(projectId: string, edit: OutlineEditInput): Promise<ScriptData> {
+  return apiRequest<ScriptData>(`/projects/${projectId}/script/outline`, {
+    method: "POST",
+    body: JSON.stringify(edit),
+  });
+}
+
 export function rescoreScript(projectId: string): Promise<ScriptData> {
   return apiRequest<ScriptData>(`/projects/${projectId}/script/critique`, {
     method: "POST",
