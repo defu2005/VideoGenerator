@@ -93,6 +93,7 @@ npm run build
 
 - Không sửa migration đã có trong `apps/server/drizzle/meta/_journal.json`. Sai thì thêm migration mới.
 - Chỉ thêm: bảng mới, cột mới cho phép NULL hoặc có giá trị mặc định. Đổi tên, xóa cột hoặc đổi kiểu cần một guide riêng, ghi rõ cách quay lại, và Claude duyệt trước khi promote.
+- Migration 0084 và 0096 (rebuild bảng): guide quay lại tại `docs/migrations/rollback-0084-0096.md`.
 
 ## Quy tắc docs (bắt buộc ở cả hai nhánh)
 
