@@ -74,6 +74,15 @@ npm run build
 - Nếu bản mới đã chạy migration, code cũ vẫn chạy được khi migration chỉ thêm bảng hoặc cột (quy tắc migration bên dưới).
 - Nếu không chạy được: dừng product, chép file sao lưu thành `data\app.db` (xóa `app.db-wal`, `app.db-shm` cũ), rồi `start.ps1`.
 
+## CI (kiểm tra tự động trên GitHub)
+
+- File `.github/workflows/ci.yml`. Chạy khi push lên `dev`, `master`, `product`, khi mở pull request, hoặc chạy tay. Không dùng secret, quyền chỉ đọc (`contents: read`), không deploy gì.
+- Job `test` (Linux, Node 22 như `deploy/docker/Dockerfile`): `npm ci`, thêm file native Linux của Rollup (bước "Add Linux Rollup native binary", vì `package-lock.json` ghi trên Windows thiếu entry này), rồi `npm run typecheck`, `npm test`, `npm run build`.
+- Job `docker`: chỉ build `deploy/docker/Dockerfile`, không push.
+- CI chưa từng chạy cho đến khi người dùng push. Lần chạy đầu sẽ chạy mọi test chưa từng chạy trên Linux, nên có thể đỏ. Lần đó là xác nhận thật đầu tiên, và không chứng minh gì cho Windows.
+- Không có CD tự động. Cả hai đường đưa lên máy thật đều thủ công: `deploy/product/promote.ps1` (bản product trên Windows, chạy migration trên DB thật) và `deploy/install.sh` (Docker trên máy đích). Bước 1 của "Đưa tính năng từ dev lên product" (test, typecheck, build đạt) có thể được đáp ứng bằng một lần CI xanh trên đúng commit đó.
+- Lockfile đúng nên được sinh lại trên Linux để không cần bước thêm rollup. Việc này cần cài và chạy test, nên là quyết định của người dùng.
+
 ## Dev
 
 - `npm run dev` trong checkout chính dùng `data-dev\`. Lần đầu tạo tài khoản: `npm run reset-password`.

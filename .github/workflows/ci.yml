@@ -1,0 +1,57 @@
+name: CI
+
+# Runs on push to the three branches, on pull requests and on demand.
+# No secrets are used. This workflow does not deploy anything.
+on:
+  push:
+    branches: [dev, master, product]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: typecheck, test, build (Linux)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          # Same major as deploy/docker/Dockerfile (node:22-bookworm-slim).
+          node-version: 22
+          cache: npm
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund
+      # The lockfile was written on Windows and has no linux-x64 entry for Rollup's
+      # native binary. Fetch that one tarball and extract it, as deploy/docker/Dockerfile
+      # does. Do not run npm install here: it re-resolves the lockfile.
+      - name: Add Linux Rollup native binary
+        run: |
+          mkdir -p "$RUNNER_TEMP/rollup-linux"
+          cd "$RUNNER_TEMP/rollup-linux"
+          npm pack --silent @rollup/rollup-linux-x64-gnu@4.67.4
+          mkdir -p "$GITHUB_WORKSPACE/node_modules/@rollup/rollup-linux-x64-gnu"
+          tar -xzf rollup-rollup-linux-x64-gnu-4.67.4.tgz -C "$GITHUB_WORKSPACE/node_modules/@rollup/rollup-linux-x64-gnu" --strip-components=1
+          node -e "require(process.argv[1])" "$GITHUB_WORKSPACE/node_modules/@rollup/rollup-linux-x64-gnu/package.json"
+      - name: Typecheck
+        run: npm run typecheck
+      - name: Test
+        run: npm test
+      - name: Build
+        run: npm run build
+
+  docker:
+    name: Docker image builds (no push)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+      - name: Build deploy image
+        run: docker build -f deploy/docker/Dockerfile -t vg:ci .
