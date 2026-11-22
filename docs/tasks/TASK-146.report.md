@@ -66,13 +66,38 @@ Commits: server `1137c54`, web `5e73cac`. Written under the no-test rule, so no 
 - **Limits, not fixed:**
   - Hooks are not regenerated after an edit.
   - A SCRIPT re-run while parked overwrites the outline (`scriptExecutor.ts` ~280–290); that path does not check the refusal.
-  - The active-job guard assumes a real park leaves no active job: `completeJob` sets SUCCEEDED before the park branch (`orchestrator.ts` ~770 and ~789–794). `stageExecutor.ts:17` says the orchestrator "holds the job open", which conflicts with this. The first permitted run settles it. If the 200-case tests fail on this guard, remove it; the stage and phase check still covers the case.
+  - The active-job guard assumes a real park leaves no active job: `completeJob` sets SUCCEEDED before the park branch (`orchestrator.ts` ~770 and ~789–794). `stageExecutor.ts:17` says the orchestrator "holds the job open", which conflicts with this. The first permitted run settles it. If the outline-editing tests fail on this guard, remove it; the stage and phase check still covers the case.
   - Reopen after an approved edit is not built.
   - The route is not in MCP (`apps/mcp/src/apiClient.ts` ~153 has the hook sibling) or in agent tools (`apps/server/src/registry/tools/pipelineActions.ts` ~213). The spec asks for UI only.
   - `ScriptTab`'s leave-page guard tracks only the script `dirty` flag, so unsaved outline edits are not guarded.
   - No test covers the `ScriptTab` wiring or the `useScript` mutation.
   - The edit form sits inside the `role="status"` approval panel.
   - The CSS is not checked in a browser.
+
+## Reopen scoping and parked-rerun risk (2026-11-22, read only, no code)
+
+Facts read from code, for the advisor. Nothing here is changed or tested.
+
+- **Spec line 95** (`docs/cursor/TASK-146.md`): "A rerun of SCRIPT resets `SCRIPT_REVIEW`. An edit to an approved outline reopens it." The first half is handled by `markStaleFrom` and the SCRIPT path in `orchestrator.ts` ~317 and ~235. The second half is not built.
+- **Job during `outline_approved`:** `approveOutline` (`orchestrator.ts` 361–383) sets SCRIPT PENDING, then calls `continueAll` only when `project.mode !== "MANUAL"` (line 376). In MANUAL mode, phase `outline_approved` exists with no active job, and the user must press run. `scriptService.save` checks only for an active job (`scriptService.ts` ~299), so in MANUAL mode a user save is allowed during `outline_approved`.
+- **Helper:** `markStaleFrom(repository, projectId, stage)` (`apps/server/src/pipeline/invalidation.ts`) marks downstream DONE stages STALE. No helper resets SCRIPT_REVIEW or reopens an approved outline.
+- **Rerun overwrites a saved script:** the completed-script write at `scriptExecutor.ts:632` is `INSERT INTO scripts … ON CONFLICT(project_id) DO UPDATE SET … origin = 'AGENT', edited = false`. Its guards (lines 76 and 85) apply only to the revise and merged-source shortcuts, not to a full run. The `DELETE` at ~675 targets `script_drafts`, not `scripts`.
+- **No confirm for SCRIPT:** `api/pipeline.ts` 53–63 requires `confirmOverwrite` only for SCENE_PLAN and the run-all path, not for SCRIPT. `resetScriptReviseRound` runs on every SCRIPT run.
+- **Re-queue entry points while SCRIPT is parked (WAITING_USER):**
+  - `orchestrator.runStage` (`orchestrator.ts` 182–239) has no state check for SCRIPT. `assertCanStart` (~1248) fails only on another non-side active job, and none exists while parked.
+  - API: `POST` run in `api/pipeline.ts` ~64 calls `runStage`.
+  - Web: `ScriptTab.tsx` 253 "Regenerate script" is disabled only by `!canGenerateScript || USER`. It does not check `outlinePending`, unlike the "Let the AI write it" button at line 218. It is shown when `data.script` exists, so it is reachable while parked after an earlier script exists. `PipelinePanel.tsx` 66–71 `canRunStage` checks `stageBlocked` and dependencies, but not whether SCRIPT is WAITING_USER. `stageBlocked` (`apps/web/src/features/pipeline/activeJobs.ts`) is false with no active job, so the per-row Run for SCRIPT is enabled while parked. The run-all button is disabled at `PipelinePanel.tsx:78` by `waitingAtGate`.
+  - Agent and MCP guard for approve only: `registry/tools/pipelineActions.ts` 101–117 (`outlineWaiting`) covers approval; the run path (lines 63–77) has no such check.
+  - Agent and MCP: `apps/server/src/registry/tools/pipelineActions.ts` 77 and 123 call `runStage`. `apps/server/src/operator/repairActions.ts` 61 and 149 call `runStage` / `runStageThenContinue` for SCRIPT.
+  - Effect: a re-queued SCRIPT re-enters the park branch (`scriptExecutor.ts` 277–298, `ON CONFLICT DO UPDATE outline = excluded.outline`). It overwrites the user's outline edits, and the phase stays `outline_ready`. Those edits are lost silently.
+- **Consequence for reopen:** a reopen that reruns SCRIPT would discard a hand-edited script unless the rerun is guarded. The same is already true of "Regenerate script" today. This is a pre-existing gap, not a reopen-only risk.
+- **Open for the advisor:** whether to add a guard (reject or confirm SCRIPT runs while `outline_ready`, and confirm before overwriting an `edited` script), and whether the reopen should reuse the resume cache key (`scriptExecutor.ts` 216–265 compares `input_hash`; `scriptService.ts` 561 and 730 rewrite the draft `input_hash`, so a reopened draft may fail the match).
+
+## Deviations recorded 2026-11-22 (by advisor decision)
+
+- **Slice 4b, skipped:** the override-with-reason, emotion and visual-intent parts of `docs/cursor/TASK-146.md` lines 70–71. Reasons: the director answer schema has no motion field; emotion is not stored on timeline scenes; visual intent would add prompt budget; prompt changes cannot be judged without a render. The skip clause in the spec (TASK-141 not done) does not apply, because `docs/tasks/TASK-141.done` exists. This is a deviation the user may reverse.
+- **`musicSegments` wiring, not built by decision:** one track only (2026-11-21). A multi-track mode is needed first.
+- **`capSec` limit, deferred:** see handoff; no work until tests are allowed.
 
 ## Test run (once, after the user's permission, 2026-11-22)
 

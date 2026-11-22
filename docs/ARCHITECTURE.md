@@ -360,7 +360,7 @@ Chưa đối chiếu lại (từ v0.2 mục 11). Đã kiểm trong code: embeddi
 - **Agent:** agent không có tool nộp dàn ý (`script_submit_outline` chưa có). Việc duyệt cổng là của người dùng.
 - **Web:** `StageStepper.tsx` có nhãn "Duyệt kịch bản" cho `SCRIPT_REVIEW`. `ScriptTab.tsx` có nút "Duyệt kịch bản" gửi `approve` cho stage `SCRIPT_REVIEW` khi cổng đang chờ. `PipelinePanel` (chỉ ở tab tổng quan) có nút Approve chung cho cùng stage. Chưa kiểm thử, chưa chạy.
 - **Sửa dàn ý khi chờ duyệt:** `ScriptService.editOutline` và `POST /api/projects/:id/script/outline` (`apps/server/src/api/script.ts`) cho sửa câu hỏi trung tâm và khoảnh khắc cụ thể của từng nhịp. Chỉ được khi SCRIPT ở `WAITING_USER`, phase `outline_ready`, không có job đang chạy; ngoài ra trả 409 `INVALID_PIPELINE_STATE`. Nhịp không tồn tại trả 404 `BEAT_NOT_FOUND` trước khi ghi. Dàn ý sửa đổi làm đổi khoá cache khi viết lại (`scriptExecutor.ts`). Không chạy lại hook và không mở lại dàn ý đã duyệt. Web: `ScriptDraftPanel.tsx`. Chưa kiểm thử.
-- **Chưa kiểm thử:** từ khi có quy tắc không chạy test, không test, typecheck hay build nào đã chạy. Toàn bộ suite và typecheck gốc chưa chạy trên cây cuối cùng. Xem `docs/tasks/TASK-146.report.md`.
+- **Kiểm thử:** quy tắc không chạy test có hiệu lực từ 2026-11-22. Lần chạy duy nhất được phép, cùng ngày: bốn bộ kiểm thử (shared, server, MCP, web) đều đạt; typecheck gốc đạt sau `c5014a5`. Suite server chạy trước `c5014a5`; sau đó chỉ chạy lại `tsc` của server. **Chưa kiểm thử:** `1137c54` và `5e73cac` (sửa dàn ý); ba file test sửa dàn ý chưa chạy. Xem `docs/tasks/TASK-146.report.md`.
 
 ### 9.7 Nhịp kể, chuyển động và nhạc (TASK-146, các lát 1–5)
 
