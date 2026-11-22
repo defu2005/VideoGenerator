@@ -365,6 +365,7 @@ Chưa đối chiếu lại (từ v0.2 mục 11). Đã kiểm trong code: embeddi
 
 - **Nhịp trên cảnh:** `beatPurpose`, `emotion`, `visualIntent`, `factIds` được sao chép khi lập cảnh (`packages/shared/src/scenes/planScenes.ts`, `beatFields`). Cảnh đầu tiên của mỗi phần dẫn bằng `visualIntent` trong truy vấn ảnh. Kiểm tra thị giác và khoá kết quả (`visualVerdict`) cũng đọc nhịp (`apps/server/src/timeline/sceneBeats.ts`). Bản dịch lấy nhịp từ kịch bản gốc (`translationService`).
 - **Chuyển động theo nhịp:** `BEAT_MOTION` và `applyBeatMotion` (`packages/shared/src/motion/beatMotion.ts`) được gọi trong `packages/shared/src/edit/plan.ts`. Cảnh đầu mỗi nhịp đổi sang chuyển động của nhịp, trừ khi trùng pan cùng chiều với cảnh liền kề hoặc punch_in quá gần (`strongMoveEverySec`). Cảnh mà LLM đã chọn chuyển động thì giữ nguyên. `COMPOSE_RENDER_VERSION` là 3 (`packages/shared/src/compose/schema.ts`).
+- **Chưa có:** hệ số tốc độ theo cảm xúc (spec `docs/cursor/TASK-146.md` dòng 65). `applyBeatMotion` và `presetMotion` không nhận cảm xúc; `BeatScene` trong `edit/plan.ts` không có trường cảm xúc; preset được dựng ở hai nơi (`compose/render/still.ts`, `preview/shotRenderer.ts`), nên đổi một chỗ sẽ làm preview lệch render. Tốc độ thật cần thiết kế easing hoặc số frame, và chỉ kiểm được bằng render.
 
 Bảng `BEAT_MOTION` (đúng như mã trong `beatMotion.ts`):
 

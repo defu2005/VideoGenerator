@@ -13,6 +13,7 @@ import { ResearchPanel } from "./ResearchPanel";
 import { ScriptEditor } from "./ScriptEditor";
 import { ScriptDraftPanel } from "./ScriptDraftPanel";
 import { GuidelineFindings } from "../guidelines/GuidelineFindings";
+import { stageBlocked } from "../pipeline/activeJobs";
 
 function emptyScript(title: string): Script {
   return {
@@ -198,7 +199,7 @@ export function ScriptTab({ project }: { project: Project }) {
       {scriptReviewAwaiting && !outlinePending && (
         <div className="outline-approval-panel" role="status">
           <p><strong>Kịch bản đang chờ bạn duyệt.</strong> Bạn có thể đọc hoặc sửa lời thoại trước khi duyệt.</p>
-          <button className="button button-primary" type="button" disabled={pipeline.isMutating} onClick={() => void approveScriptReview()}>
+          <button className="button button-primary" type="button" disabled={pipeline.isMutating || stageBlocked("SCRIPT_REVIEW", pipeline.data)} onClick={() => void approveScriptReview()}>
             {pipeline.isMutating ? "Đang duyệt..." : "Duyệt kịch bản"}
           </button>
         </div>
