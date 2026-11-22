@@ -50,9 +50,10 @@ All TASK-146 commits on `dev`: `git log --oneline --grep="TASK-146"`. Latest gro
 8. `CreateProjectDialog`: when customize is off, the setting is not sent. The channel default applies through the server seed (checked by reading, see above).
 9. The CSS rule for `outline-approval-panel` was added in `apps/web/src/index.css` (not checked visually).
 10. The second-approve assertion in `apps/server/test/task146OutlineApi.test.ts` is pinned to 409 and `INVALID_PIPELINE_STATE` (the `invalid()` path). Passed in the full server suite (2026-11-22).
-11. `script_submit_outline` is not implemented. Grep for `submit_outline` in `apps/` and `packages/` found nothing.
+11. `script_submit_outline` is not implemented. Grep for `submit_outline` in `apps/` and `packages/` found nothing. It is not in the TASK-146 spec (`docs/cursor/TASK-146.md`). It appears as an optional agent tool in `docs/cursor/TASK-147.md:110`, deferred with TASK-147d (`docs/tasks/TASK-147d.done`), and in `docs/ARCHITECTURE.md:360`. So it is a TASK-147d item, not a TASK-146 spec item.
 12. MCP tool descriptions for gates and the fleet/node routing rule ("the gate is never leased to a worker") were not checked or changed. The grep for `approve_gate` in `apps/` shows `supervision/leases.ts` lists `approve_gate: project()`; the "never leased to a worker" rule text was not found in `apps/server/src/supervision` (grep for "never leased", "worker", "node" found no such rule), so it stays unverified.
 13. Cache behaviour when SCRIPT is re-run while parked with LLM cache on: report only, not analysed.
+14. Backfill for projects created before SCRIPT_REVIEW existed (spec `docs/cursor/TASK-146.md` line 94) is built: `apps/server/src/jobs/jobRepository.ts:194–199` (`ensureStages`). A DONE or SKIPPED SCRIPT gives the gate passed; otherwise PENDING. An existing row is never rewritten. Covered by `apps/server/test/scriptReviewGate.test.ts` lines 49–70 (three tests), which passed in the full server suite on 2026-11-22.
 
 ## Test run (once, after the user's permission, 2026-11-22)
 
@@ -68,7 +69,7 @@ Run in this order, each once, exit codes read directly:
 
 Not run: root `npm run build` (outside the permission given; it writes `dist` for server, MCP and web). Web browser check of the outline panel and the `SCRIPT_REVIEW` label (outside the permission given).
 
-Still owed (decisions or outside the permission): slice 4b (decision); `musicSegments` wiring (no caller); outline editing (not built); `script_submit_outline` (not built).
+Still owed (decisions or outside the permission): slice 4b (decision); `musicSegments` wiring (no caller); outline editing (not built); `script_submit_outline` (not built; an optional TASK-147d agent tool, not a TASK-146 spec item).
 
 ## Coverage gaps (no test reaches these)
 
