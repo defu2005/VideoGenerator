@@ -194,6 +194,7 @@ export class ScriptService {
       engine_mode: string;
       input_hash: string;
       updated_at: string;
+      phase: string | null;
     } | undefined;
 
     let draft: ScriptDraftPayload | null = null;
@@ -267,6 +268,7 @@ export class ScriptService {
           engineMode: draftRow.engine_mode as "off" | "lite" | "full",
           inputHash: draftRow.input_hash,
           updatedAt: draftRow.updated_at,
+          phase: draftRow.phase === "outline_ready" || draftRow.phase === "outline_approved" || draftRow.phase === "done" ? draftRow.phase : null,
         });
       } catch {
         draft = null;
@@ -540,8 +542,11 @@ export class ScriptService {
     });
     } catch (error) {
       // The LLM call was paid for even when the commit is discarded; keep its usage visible.
-      if (paidCall && error instanceof AppError && error.code === "CONCURRENT_MODIFICATION") {
-        this.recordJob({ projectId, scope: "switchHook", status: "FAILED", message: "Switch hook discarded: script changed during the call", provider: paidCall.provider, model: paidCall.model, usage: paidCall.usage, error });
+      if (paidCall && error instanceof AppError && (error.code === "CONCURRENT_MODIFICATION" || error.code === "OUTLINE_PENDING")) {
+        const message = error.code === "OUTLINE_PENDING"
+          ? "Switch hook discarded: outline awaiting approval"
+          : "Switch hook discarded: script changed during the call";
+        this.recordJob({ projectId, scope: "switchHook", status: "FAILED", message, provider: paidCall.provider, model: paidCall.model, usage: paidCall.usage, error });
       }
       throw error;
     }
@@ -716,12 +721,14 @@ export class ScriptService {
       });
     } catch (error) {
       // The LLM call was paid for even when the commit is discarded; keep its usage visible.
-      if (error instanceof AppError && error.code === "CONCURRENT_MODIFICATION") {
+      if (error instanceof AppError && (error.code === "CONCURRENT_MODIFICATION" || error.code === "OUTLINE_PENDING")) {
         this.recordJob({
           projectId,
           scope: "rescoreCritique",
           status: "FAILED",
-          message: "Rescore discarded: script changed concurrently",
+          message: error.code === "OUTLINE_PENDING"
+            ? "Rescore discarded: outline awaiting approval"
+            : "Rescore discarded: script changed concurrently",
           provider: evaluated.provider,
           model: evaluated.model,
           usage: evaluated.usage,

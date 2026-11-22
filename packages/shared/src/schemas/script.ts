@@ -170,6 +170,8 @@ export const ScriptDraftPayloadSchema = z.object({
     scores: ScriptScoresSchema,
   }).strict()).optional(),
   critiqueStale: z.boolean().default(false),
+  // TASK-146: outline_ready = parked for the outline approval; outline_approved = approved, resuming; done = finished from an approved outline.
+  phase: z.enum(["outline_ready", "outline_approved", "done"]).nullable().optional(),
   engineMode: z.enum(["off", "lite", "full"]),
   inputHash: z.string(),
   updatedAt: z.string(),

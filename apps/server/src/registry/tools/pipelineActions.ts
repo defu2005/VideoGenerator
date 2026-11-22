@@ -96,7 +96,12 @@ export const pipelineActionsToolDefs: AssistantToolDef[] = [
     },
     execute: async (args, ctx) => {
       const parsed = approveGateArgs.parse(args);
-      if (ctx.gated) {
+      // TASK-146: approving a parked outline is not the finished script, so the quality and repair gates do not apply to it.
+      // Also requires the SCRIPT stage to be WAITING_USER, so a stale outline_ready cannot skip the hold on a finished script.
+      const outlineWaiting = parsed.gate === "SCRIPT"
+        && (ctx.sqlite.prepare("SELECT phase FROM script_drafts WHERE project_id = ?").get(parsed.projectId) as { phase: string | null } | undefined)?.phase === "outline_ready"
+        && (ctx.sqlite.prepare("SELECT state FROM project_stages WHERE project_id = ? AND stage = 'SCRIPT'").get(parsed.projectId) as { state: string } | undefined)?.state === "WAITING_USER";
+      if (ctx.gated && !outlineWaiting) {
         // TASK-121: with the `retries` grant a failed quality gate is repaired by the agent, not handed to the user.
         const repair = await import("../../operator/qualityRepair.js");
         const repairGate = repair.repairGateFor(parsed.gate);
@@ -109,7 +114,7 @@ export const pipelineActionsToolDefs: AssistantToolDef[] = [
           if (outcome.status === "passed") return ctx.orchestrator.approveGate(parsed.projectId, parsed.gate);
         }
       }
-      if (ctx.gated && parsed.gate === "SCRIPT") {
+      if (ctx.gated && parsed.gate === "SCRIPT" && !outlineWaiting) {
         const input = scriptGateInputs(ctx.sqlite, parsed.projectId);
         const decision = scriptGateDecision(input);
         if (decision === "revise") {

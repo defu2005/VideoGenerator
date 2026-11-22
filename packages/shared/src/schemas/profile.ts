@@ -11,7 +11,7 @@ import {
   ProfileLlmSettingsInputSchema,
   ProfileLlmSettingsSchema,
 } from "./llm.js";
-import { VideoBriefSettingsInputSchema, VideoBriefSettingsSchema } from "./project.js";
+import { ScriptOutlineApprovalSchema, VideoBriefSettingsInputSchema, VideoBriefSettingsSchema } from "./project.js";
 import { ProfileTranslationsSchema } from "./translation.js";
 import {
   ProfileTrendSettingsInputSchema,
@@ -84,6 +84,8 @@ const VoiceSettingsSchema = z.object({
 export const ProfileDefaultBriefSchema = VideoBriefSettingsSchema.extend({
   mode: AutonomyModeSchema.default("ASSISTED"),
   autoRender: z.boolean().default(false),
+  // TASK-146: stored with the channel default so it survives the parse on save and read.
+  scriptOutlineApproval: ScriptOutlineApprovalSchema.optional(),
 });
 export type ProfileDefaultBrief = z.infer<typeof ProfileDefaultBriefSchema>;
 
@@ -94,6 +96,8 @@ export const ProfileDefaultBriefInputSchema = z.object({
   aspectRatio: z.enum(["16:9", "9:16", "1:1"]).optional(),
   mode: AutonomyModeSchema.optional(),
   autoRender: z.boolean().optional(),
+  // TASK-146: channel default for the outline approval step (projects inherit it when created).
+  scriptOutlineApproval: ScriptOutlineApprovalSchema.optional(),
 }).strict();
 
 export const HexColorSchema = z.string().regex(/^#[0-9A-Fa-f]{6}$/, "Must be a hex color like #3B82F6");
