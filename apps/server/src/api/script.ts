@@ -4,12 +4,15 @@ import {
   ResearchNotesSchema,
   StoredResearchNotesSchema,
   SaveScriptInputSchema,
+  StoryBeatSchema,
+  StoryOutlineSchema,
   ScriptDataSchema,
   ScriptSchema,
   storyModeForProject,
 } from "@vg/shared";
 import { z } from "zod";
 import type { FastifyInstance } from "fastify";
+import { AppError } from "../lib/errors.js";
 import { ScriptService } from "../services/scriptService.js";
 import type { ProjectService } from "../services/projectService.js";
 import { requireProject } from "../services/projectService.js";
@@ -24,6 +27,14 @@ import type Database from "better-sqlite3";
 
 const ParamsSchema = z.object({ id: z.string().uuid() }).strict();
 const SwitchHookBodySchema = z.object({ hookId: z.string().min(1) }).strict();
+// TASK-146: only the central question and beat concrete moments are editable; every other key is rejected.
+const OutlineEditBodySchema = z.object({
+  centralQuestion: StoryOutlineSchema.shape.centralQuestion.optional(),
+  beats: z.array(z.object({
+    id: StoryBeatSchema.shape.id,
+    concreteMoment: StoryBeatSchema.shape.concreteMoment,
+  }).strict()).min(1).max(80).optional(),
+}).strict();
 const PromptParamsSchema = z.object({
   id: z.string().uuid(),
   stage: z.enum(["RESEARCH", "SCRIPT", "STORY"]),
@@ -99,6 +110,21 @@ export function registerScriptRoutes(
     const { id } = ParamsSchema.parse(request.params);
     const { hookId } = SwitchHookBodySchema.parse(request.body);
     return service.switchHook(id, hookId);
+  });
+
+  app.post("/api/projects/:id/script/outline", {
+    schema: {
+      params: ParamsSchema,
+      body: OutlineEditBodySchema,
+      response: { 200: ScriptDataSchema, 400: ApiErrorSchema, 404: ApiErrorSchema, 409: ApiErrorSchema },
+    },
+  }, async (request) => {
+    const { id } = ParamsSchema.parse(request.params);
+    const edit = OutlineEditBodySchema.parse(request.body);
+    if (edit.centralQuestion === undefined && edit.beats === undefined) {
+      throw new AppError(400, "NOTHING_TO_EDIT", "Send centralQuestion, beats, or both.");
+    }
+    return service.editOutline(id, edit);
   });
 
   app.post("/api/projects/:id/script/critique", {

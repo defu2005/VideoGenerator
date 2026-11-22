@@ -53,6 +53,12 @@ function isOutlinePending(phase: string | null | undefined): boolean {
   return phase === "outline_ready" || phase === "outline_approved";
 }
 
+/** TASK-146: the only outline fields a user may edit while it is parked. */
+export type OutlineEdit = {
+  centralQuestion?: string;
+  beats?: { id: string; concreteMoment: string }[];
+};
+
 function isolateFirstSentence(originalNarration: string, candidateRevisedSentence: string): string {
   const match = originalNarration.match(/^([\s\S]*?[.!?])(\s+[\s\S]*)$/);
   if (!match) {
@@ -354,6 +360,42 @@ export class ScriptService {
       );
       enqueueIndex(this.sqlite,{scope:"source",kind:"research",sourceId:projectId});
       this.orchestrator.completeByUser(projectId, "RESEARCH", { invalidate: changed });
+      return this.get(projectId);
+    });
+  }
+
+  /** TASK-146: the user edits a parked outline's central question and beat concrete moments. Only the outline JSON and updated_at change. */
+  editOutline(projectId: string, edit: OutlineEdit): ScriptData {
+    return this.repository.atomic(() => {
+      const project = this.repository.getProject(projectId);
+      if (!project) throw new AppError(404, "PROJECT_NOT_FOUND", "Project not found");
+      if (this.repository.getActiveJob(projectId)) {
+        throw new AppError(409, "INVALID_PIPELINE_STATE", "A job is already active for this project.");
+      }
+      const draftRow = this.sqlite.prepare("SELECT outline, phase FROM script_drafts WHERE project_id = ?")
+        .get(projectId) as { outline: string | null; phase: string | null } | undefined;
+      const stage = this.repository.getStage(projectId, "SCRIPT");
+      if (stage.state !== "WAITING_USER" || draftRow?.phase !== "outline_ready" || !draftRow.outline) {
+        throw new AppError(409, "INVALID_PIPELINE_STATE", "The outline is not waiting for approval.");
+      }
+      const outline = StoryOutlineSchema.parse(JSON.parse(draftRow.outline));
+      const patched: StoryOutline = { ...outline };
+      if (edit.centralQuestion !== undefined) patched.centralQuestion = edit.centralQuestion;
+      if (edit.beats) {
+        for (const beat of edit.beats) {
+          if (!outline.beats.some((b) => b.id === beat.id)) {
+            throw new AppError(404, "BEAT_NOT_FOUND", `Beat "${beat.id}" not found`);
+          }
+        }
+        const replacements = new Map(edit.beats.map((b) => [b.id, b.concreteMoment]));
+        patched.beats = outline.beats.map((b) => (replacements.has(b.id) ? { ...b, concreteMoment: replacements.get(b.id)! } : b));
+      }
+      const checked = StoryOutlineSchema.parse(patched);
+      const changes = this.sqlite.prepare("UPDATE script_drafts SET outline = ?, updated_at = ? WHERE project_id = ? AND phase = 'outline_ready'")
+        .run(JSON.stringify(checked), new Date().toISOString(), projectId).changes;
+      if (changes !== 1) {
+        throw new AppError(409, "INVALID_PIPELINE_STATE", "The outline is not waiting for approval.");
+      }
       return this.get(projectId);
     });
   }

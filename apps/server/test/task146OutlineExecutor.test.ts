@@ -185,3 +185,32 @@ describe("TASK-146 outline mode: hook switch and rescore wait while the outline 
     expect(draftOf(harness)?.input_hash).toBe("parked-hash");
   });
 });
+
+describe("TASK-146 outline editing: approval resumes narration with the edited outline", () => {
+  const EDITED_QUESTION = "Câu hỏi đã được người dùng sửa?";
+  const EDITED_MOMENT = "Khoảnh khắc đã được người dùng sửa";
+
+  it("park, edit the central question and one beat moment, approve, then the narration prompt carries both edits", async () => {
+    const fixture = setup();
+    const { harness, executor, generate, registry, counts } = fixture;
+    await executor.run(contextFor(harness, { canPark: true }).context);
+    // The direct executor run leaves its job queued; finish it so the service sees no active job.
+    harness.sqlite.prepare("UPDATE jobs SET status = 'SUCCEEDED' WHERE status IN ('QUEUED', 'RUNNING')").run();
+    harness.repository.updateStage(harness.projectId, "SCRIPT", { state: "WAITING_USER", progress: 0, message: "Outline ready for review", jobId: null, error: null });
+    const parked = JSON.parse(draftOf(harness)!.outline!) as { beats: { id: string }[] };
+    const service = new ScriptService(harness.sqlite, harness.repository, harness.orchestrator, harness.config, registry);
+    service.editOutline(harness.projectId, { centralQuestion: EDITED_QUESTION, beats: [{ id: parked.beats[0]!.id, concreteMoment: EDITED_MOMENT }] });
+    // Approval moves the phase; the approve path itself is covered by task146OutlineApi.test.ts.
+    harness.sqlite.prepare("UPDATE script_drafts SET phase = 'outline_approved' WHERE project_id = ?").run(harness.projectId);
+    generate.mockClear();
+
+    const result = await executor.run(contextFor(harness).context);
+    expect(result.waitForUser).toBeUndefined();
+    expect(counts().outline).toBe(0);
+    const writerPayloads = generate.mock.calls
+      .filter((call) => String(call[0].system ?? "").includes(WRITER_MARK))
+      .map((call) => JSON.stringify(call[0]));
+    expect(writerPayloads.length).toBeGreaterThan(0);
+    expect(writerPayloads.some((payload) => payload.includes(EDITED_QUESTION) && payload.includes(EDITED_MOMENT))).toBe(true);
+  });
+});
