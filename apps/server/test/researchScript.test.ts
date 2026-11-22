@@ -172,6 +172,41 @@ describe("research and script stages", () => {
     expect(generate).toHaveBeenCalledTimes(1);
   });
 
+  it("a merged SCRIPT run clears a parked outline so the finished draft is not pending", async () => {
+    const harness = makeHarness({
+      LLM_DEFAULT_PROVIDER: "mock",
+      LLM_ENABLE_MOCK: true,
+      FAKE_STAGE_DELAY_MS: 0,
+    });
+    const registry = new LlmProviderRegistry(harness.config);
+    const provider = registry.get("mock")!;
+    const generate = vi.spyOn(provider, "generate");
+    const initialProject = harness.repository.getProject(harness.projectId)!;
+    harness.sqlite.prepare("UPDATE projects SET settings = ? WHERE id = ?")
+      .run(JSON.stringify({
+        ...initialProject.settings,
+        budget: { mode: "ECO" },
+        style: "documentary",
+        tone: "serious",
+        audience: "students",
+        platform: "youtube_shorts",
+        aspectRatio: "9:16",
+      }), harness.projectId);
+    harness.sqlite.prepare(
+      `INSERT INTO script_drafts (project_id, outline, hook_candidates, critique, critique_history, engine_mode, input_hash, updated_at, phase)
+       VALUES (?, '{}', '{"candidates":[],"chosenHookId":null,"hookAssessments":[]}', NULL, NULL, 'off', 'parked-hash', ?, 'outline_ready')`,
+    ).run(harness.projectId, new Date().toISOString());
+    harness.executors.set("RESEARCH", new ResearchExecutor(harness.sqlite, registry, harness.config));
+    harness.executors.set("SCRIPT", new ScriptExecutor(harness.sqlite, registry, harness.config));
+    harness.orchestrator.runAll(harness.projectId);
+    await drainUntilGate(harness);
+    const scriptJob = harness.repository.listJobs(harness.projectId, 20).find((job) => job.stage === "SCRIPT");
+    expect(scriptJob?.message).toContain("Script from merged call");
+    expect(harness.sqlite.prepare("SELECT phase FROM script_drafts WHERE project_id = ?").get(harness.projectId))
+      .toEqual({ phase: null });
+    expect(generate).toHaveBeenCalledTimes(1);
+  });
+
   it.each([
     ["ECO", 1],
     ["BALANCED", 5],
