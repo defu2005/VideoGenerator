@@ -156,6 +156,7 @@ export function CreateProjectDialog({ open, onClose }: { open: boolean; onClose:
         mode,
         language: profile.language,
         autoRender,
+        scriptOutlineApproval: profile.defaultBrief.scriptOutlineApproval ?? "off",
         voice: profile.voice?.voice ?? "",
         rate: profile.voice?.rate ?? "+0%",
         aspectRatio: briefSettings.aspectRatio,
@@ -253,6 +254,7 @@ export function CreateProjectDialog({ open, onClose }: { open: boolean; onClose:
       }
       if (Object.keys(llmSettings).length) settings.llm = llmSettings;
       if (draft.autoRender) settings.autoRender = true;
+      settings.scriptOutlineApproval = draft.scriptOutlineApproval;
       if (Object.keys(settings).length) payload.settings = settings;
     }
     const guidelines = guidelineSettingsFromDraft(guidelineDraft);

@@ -29,6 +29,7 @@ function draftFromProject(project: Project): ProjectDraft {
     ttsModel: project.settings.voice?.model ?? "",
     ttsStyle: project.settings.voice?.style ?? "",
     autoRender: project.settings.autoRender,
+    scriptOutlineApproval: project.settings.scriptOutlineApproval,
   };
 }
 

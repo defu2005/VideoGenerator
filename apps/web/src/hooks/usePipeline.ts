@@ -90,6 +90,10 @@ export function usePipeline(projectId: string) {
           void queryClient.invalidateQueries({ queryKey: scriptKeys.detail(projectId) });
           void queryClient.invalidateQueries({ queryKey: ["project-jobs", projectId] });
         }
+        if (event.data.stage === "SCRIPT" && event.data.state === "WAITING_USER") {
+          // TASK-146: a parked outline arrives as the script draft (phase outline_ready), which the script query must reload.
+          void queryClient.invalidateQueries({ queryKey: scriptKeys.detail(projectId) });
+        }
         queryClient.setQueryData<PipelineState>(pipelineKeys.detail(projectId), (current) => {
           if (!current) return current;
           const record = event.data;

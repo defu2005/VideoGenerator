@@ -81,6 +81,8 @@ export function ScriptTab({ project }: { project: Project }) {
   const scriptRecord = stages.find((stage) => stage.stage === "SCRIPT");
   const researchRecord = stages.find((stage) => stage.stage === "RESEARCH");
   const waitingForScript = [researchRecord, scriptRecord].find((stage) => stage?.state === "WAITING_USER");
+  // TASK-146: the outline approval panel shows only when SCRIPT is parked on the outline, never on draft phase alone.
+  const outlineAwaiting = scriptRecord?.state === "WAITING_USER" && data.draft?.phase === "outline_ready";
   const showClaudeHint = project.settings.stageExecutors.script === "USER" || waitingForScript !== undefined;
   const claudePrompt = `Viết script cho project "${project.title}" (id ${project.id}) bằng Video Agent`;
   const scriptPosition = STAGE_ORDER.indexOf("SCRIPT");
@@ -101,6 +103,16 @@ export function ScriptTab({ project }: { project: Project }) {
       setActionError(error instanceof ApiRequestError ? error.message : error instanceof Error ? error.message : "Pipeline action failed");
     }
   };
+  const approveOutline = async () => {
+    setActionError("");
+    try {
+      await pipeline.action({ type: "approve", stage: "SCRIPT" });
+      // The draft phase moves to outline_approved on the server; the script query does not follow the pipeline cache.
+      void scriptQuery.refetch();
+    } catch (error) {
+      setActionError(error instanceof ApiRequestError ? error.message : error instanceof Error ? error.message : "Duyệt dàn ý thất bại");
+    }
+  };
   const save = async (script: Script) => {
     try {
       await scriptQuery.save(script);
@@ -119,6 +131,25 @@ export function ScriptTab({ project }: { project: Project }) {
       setCopyStatus(error instanceof Error ? `Copy failed: ${error.message}` : "Copy failed");
     }
   };
+
+  // A parked outline has no script yet, so the panel renders both with and without a script.
+  const outlinePending = data.draft?.phase === "outline_ready" || data.draft?.phase === "outline_approved";
+  const draftPanel = data.draft ? (
+    <ScriptDraftPanel
+      draft={data.draft}
+      onSwitchHook={async (hookId) => {
+        await scriptQuery.switchHook(hookId);
+      }}
+      onRescore={async () => {
+        await scriptQuery.rescore();
+      }}
+      outlineAwaiting={outlineAwaiting}
+      onApproveOutline={approveOutline}
+      isApprovingOutline={pipeline.isMutating}
+      isSwitchingHook={scriptQuery.isSwitchingHook}
+      isRescoring={scriptQuery.isRescoring}
+    />
+  ) : null;
 
   return (
     <div className="script-workspace">
@@ -154,13 +185,14 @@ export function ScriptTab({ project }: { project: Project }) {
         </section>
       )}
       {actionError && <p className="request-error" role="alert">{actionError}</p>}
+      {!data.script && !editing && draftPanel}
       {!data.script && !editing && (
         <section className="panel script-empty-state">
           <p className="eyebrow">YOUR VIDEO SCRIPT</p>
           <h2>Choose how to create your script</h2>
           <p>Let the AI research the topic and draft a script, or write your own and use zero LLM tokens.</p>
           <div className="script-empty-actions">
-            <button className="button button-primary" type="button" disabled={active || pipeline.isMutating} onClick={() => void run()}>
+            <button className="button button-primary" type="button" disabled={active || pipeline.isMutating || outlinePending} onClick={() => void run()}>
               Let the AI write it
             </button>
             <button className="button button-secondary" type="button" onClick={() => {
@@ -172,7 +204,7 @@ export function ScriptTab({ project }: { project: Project }) {
           <button
             className="text-button"
             type="button"
-            disabled={active || pipeline.isMutating || project.settings.stageExecutors.script === "USER"}
+            disabled={active || pipeline.isMutating || outlinePending || project.settings.stageExecutors.script === "USER"}
             onClick={() => void run("RESEARCH")}
           >
             Generate research
@@ -202,19 +234,7 @@ export function ScriptTab({ project }: { project: Project }) {
             {project.settings.stageExecutors.script === "USER" && <small>AI research and script generation are disabled for the USER executor.</small>}
             {data.stale && <span className="stale-note">Script inputs have changed; regenerate or review the script.</span>}
           </div>
-          {data.draft && (
-            <ScriptDraftPanel
-              draft={data.draft}
-              onSwitchHook={async (hookId) => {
-                await scriptQuery.switchHook(hookId);
-              }}
-              onRescore={async () => {
-                await scriptQuery.rescore();
-              }}
-              isSwitchingHook={scriptQuery.isSwitchingHook}
-              isRescoring={scriptQuery.isRescoring}
-            />
-          )}
+          {draftPanel}
           <ScriptEditor
             key={`${data.script?.version ?? "empty"}-${draftKey}`}
             initialValue={data.script?.data ?? emptyScript(project.title)}

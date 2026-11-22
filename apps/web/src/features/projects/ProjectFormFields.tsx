@@ -28,6 +28,7 @@ export type ProjectDraft = {
   ttsModel: string;
   ttsStyle: string;
   autoRender: boolean;
+  scriptOutlineApproval: "off" | "outline" | "script";
 };
 
 export const DEFAULT_PROJECT_DRAFT: ProjectDraft = {
@@ -51,6 +52,7 @@ export const DEFAULT_PROJECT_DRAFT: ProjectDraft = {
   ttsModel: "",
   ttsStyle: "",
   autoRender: false,
+  scriptOutlineApproval: "off",
 };
 
 export function settingsFromDraft(draft: ProjectDraft): ProjectSettingsInput {
@@ -83,6 +85,7 @@ export function settingsFromDraft(draft: ProjectDraft): ProjectSettingsInput {
       },
     } : {}),
     autoRender: draft.autoRender,
+    scriptOutlineApproval: draft.scriptOutlineApproval,
   };
 }
 
@@ -410,6 +413,14 @@ export function ProjectFormFields({
           <label className="checkbox-field">
             <input type="checkbox" checked={draft.autoRender} onChange={(event) => onChange("autoRender", event.target.checked)} />
             Automatically render after final approval
+          </label>
+          <label>
+            Duyệt kịch bản trước khi qua bước sau
+            <select aria-label="Duyệt kịch bản" value={draft.scriptOutlineApproval} onChange={(event) => onChange("scriptOutlineApproval", event.target.value)}>
+              <option value="off">Tắt: chạy tự động, không chờ duyệt</option>
+              <option value="outline">Duyệt dàn ý trước khi viết (không duyệt kịch bản sau)</option>
+              <option value="script">Duyệt kịch bản sau khi viết</option>
+            </select>
           </label>
         </div>
       )}

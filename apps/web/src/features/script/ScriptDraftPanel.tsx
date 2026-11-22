@@ -15,18 +15,27 @@ export function ScriptDraftPanel({
   draft,
   onSwitchHook,
   onRescore,
+  onApproveOutline,
+  outlineAwaiting = false,
   isSwitchingHook = false,
   isRescoring = false,
+  isApprovingOutline = false,
 }: {
   draft: ScriptDraftPayload;
   onSwitchHook: (hookId: string) => Promise<void>;
   onRescore: () => Promise<void>;
+  onApproveOutline?: () => Promise<void>;
+  // True only when the SCRIPT stage is WAITING_USER and the draft phase is outline_ready (TASK-146).
+  outlineAwaiting?: boolean;
   isSwitchingHook?: boolean;
   isRescoring?: boolean;
+  isApprovingOutline?: boolean;
 }) {
   const [actionError, setActionError] = useState("");
   const critique = draft.critique;
   const outline = draft.outline;
+  // Hook switch and rescore are blocked while an outline is parked or being written; the server answers 409 OUTLINE_PENDING.
+  const outlinePending = draft.phase === "outline_ready" || draft.phase === "outline_approved";
 
   const scrollToSection = (sectionId: string) => {
     const el = document.getElementById(`section-${sectionId}`) || document.getElementById(sectionId);
@@ -55,6 +64,16 @@ export function ScriptDraftPanel({
     }
   };
 
+  const handleApproveOutline = async () => {
+    if (!onApproveOutline) return;
+    setActionError("");
+    try {
+      await onApproveOutline();
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : "Duyệt dàn ý thất bại");
+    }
+  };
+
   return (
     <section className="panel script-draft-panel" aria-label="Dàn ý & chấm điểm">
       {outline && (
@@ -68,6 +87,29 @@ export function ScriptDraftPanel({
             Khung: <strong>{outline.framework}</strong> ({draft.engineMode})
           </div>
         </div>
+      )}
+
+      {outlineAwaiting && (
+        <div className="outline-approval-panel" role="status">
+          <p>
+            <strong>Dàn ý đang chờ bạn duyệt.</strong> Kịch bản chỉ được viết sau khi bạn duyệt dàn ý.
+            Trong lúc chờ, không đổi hook và không chấm lại.
+          </p>
+          {onApproveOutline && (
+            <button
+              className="button button-primary"
+              type="button"
+              disabled={isApprovingOutline}
+              onClick={() => void handleApproveOutline()}
+            >
+              {isApprovingOutline ? "Đang duyệt..." : "Duyệt dàn ý"}
+            </button>
+          )}
+        </div>
+      )}
+
+      {!outlineAwaiting && draft.phase === "outline_approved" && (
+        <p className="pipeline-mode-hint" role="status">Dàn ý đã được duyệt. Đang viết kịch bản; đổi hook và chấm lại sẽ bật lại sau khi xong.</p>
       )}
 
       {actionError && <p className="request-error" role="alert">{actionError}</p>}
@@ -90,7 +132,7 @@ export function ScriptDraftPanel({
               <button
                 className="button button-secondary"
                 type="button"
-                disabled={isRescoring}
+                disabled={isRescoring || outlinePending}
                 onClick={() => void handleRescore()}
               >
                 {isRescoring ? "Đang chấm..." : "Chấm lại"}
@@ -173,7 +215,7 @@ export function ScriptDraftPanel({
                       <button
                         className="button button-sm button-secondary"
                         type="button"
-                        disabled={isSwitchingHook}
+                        disabled={isSwitchingHook || outlinePending}
                         onClick={() => void handleHookSwitch(candidate.id)}
                       >
                         {isSwitchingHook ? "Đang đổi..." : "Dùng hook này"}
