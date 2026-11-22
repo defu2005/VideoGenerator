@@ -120,10 +120,17 @@ export function visitProjectFileReferences(
     }
   };
   for (const [key, value] of Object.entries(row)) {
-    // A corrupt serialized reference cannot prove that a file is unused.
     if (json.has(key) && typeof value === "string") {
-      try { walk(JSON.parse(value), key); }
-      catch { throw new Error(`Invalid file-reference JSON in ${getTableName(table)}.${key}`); }
+      let parsed: unknown;
+      try { parsed = JSON.parse(value); }
+      catch {
+        // A JSON-looking value that does not parse may hide a reference, so it cannot prove a file is unused.
+        // Plain scalars (timestamps such as change.schedule.* stamps) are not serialized references: walk them as text.
+        if (/^\s*[[{]/.test(value)) throw new Error(`Invalid file-reference JSON in ${getTableName(table)}.${key}`);
+        walk(value, key);
+        continue;
+      }
+      walk(parsed, key);
     } else walk(value, key);
   }
 }
