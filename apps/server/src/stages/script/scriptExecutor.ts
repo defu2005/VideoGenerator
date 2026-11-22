@@ -130,6 +130,8 @@ export class ScriptExecutor implements StageExecutor {
         const mergedMessage = durationCheck.warning
           ? `Script from merged call (0 tokens); ${durationCheck.warning}`
           : "Script from merged call (0 tokens)";
+        // A parked outline cannot survive a merged script: clear the pending phase so switchHook and rescore are not refused on a DONE script.
+        this.sqlite.prepare("UPDATE script_drafts SET phase = NULL WHERE project_id = ? AND phase = 'outline_ready'").run(project.id);
         context.reportProgress(100, mergedMessage);
         return { message: mergedMessage };
       } catch (error) {
