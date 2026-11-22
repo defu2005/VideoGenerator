@@ -208,6 +208,15 @@ describe("script_writer agent submit gate (TASK-147d)", () => {
     expect(h.stub.calls).toHaveLength(0);
   });
 
+  it("refuses a submit whose leased job is not SCRIPT, before any LLM call or write", async () => {
+    // TASK-146 stage fence: a lease on another stage's job of the same project must not write the SCRIPT draft.
+    const h = setup();
+    h.sqlite.prepare("UPDATE jobs SET stage = 'RESEARCH' WHERE id = ?").run(h.job.id);
+    expect(await codeOf(() => h.submit())).toBe("STAGE_TOOL_MISMATCH");
+    expect(h.stub.calls).toHaveLength(0);
+    expect(h.scriptRow()?.origin).not.toBe("agent");
+  });
+
   it("complete rejects a row written by another lease", async () => {
     const h = setup();
     await h.submit();

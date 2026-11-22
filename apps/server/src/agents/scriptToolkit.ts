@@ -279,6 +279,8 @@ export class AgentScriptToolkit {
    */
   async submit(agent: TrustedAgent, jobId: string, leaseId: string, input: unknown) {
     const pre = this.stages.withLease(agent, jobId, leaseId, (job) => {
+      // A lease on another stage's job of the same project must not write the SCRIPT draft (it would drop a parked outline).
+      if (job.stage !== "SCRIPT") throw new AppError(422, "STAGE_TOOL_MISMATCH", "Bộ công cụ này chỉ nhận việc viết kịch bản.");
       const project = this.projectOf(job);
       const edited = this.sqlite.prepare("SELECT edited FROM scripts WHERE project_id = ?").get(project.id) as { edited: number } | undefined;
       if (edited?.edited) throw new AppError(409, "SCRIPT_EDITED", "Kịch bản đã được người dùng sửa; không ghi đè bằng bản của agent.");
