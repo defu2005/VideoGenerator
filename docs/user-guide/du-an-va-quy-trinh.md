@@ -113,7 +113,7 @@ Cài đặt **Duyệt kịch bản** nằm trên form tạo hoặc sửa dự á
 
 Lưu ý:
 
-- Bảng duyệt dàn ý hiện chỉ có nút duyệt. Chưa sửa được câu hỏi trung tâm hay khoảnh khắc của từng beat ở bước này.
+- Khi dàn ý đang chờ duyệt, bạn sửa được câu hỏi trung tâm và khoảnh khắc cụ thể của từng nhịp ngay trên bảng. Bấm **Lưu sửa dàn ý** để lưu; nút **Duyệt dàn ý** bị khoá khi còn thay đổi chưa lưu. **Hoàn tác** bỏ các sửa chưa lưu. Sau khi đã duyệt, dàn ý không mở lại để sửa trong bản này.
 - Đổi cài đặt khi dự án đang chạy không làm bước SCRIPT đã xong thành cũ.
 - Agent không duyệt thay bạn. Cổng này chỉ do bạn duyệt, như các cổng khác.
 
