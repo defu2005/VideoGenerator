@@ -1,6 +1,9 @@
 import { enqueueIndex } from "../../retrieval/service.js";
 import { FORMAT_RECIPE_IDS, ResearchNotesSchema, StoredResearchNotesSchema, fallbackFormat, missingRequiredSections, resolveBudget, resolveFormat, ScriptSchema, guidelineRulesFor, storyModeForProject, storyEngineForProject, dedupeSeams, lintNarration, prioritizeNarrationLint, type GuidelineFindingDraft, type LlmCallUsage, type Script } from "@vg/shared";
 import { runStoryEngine, type StoryEngineResult } from "./storyEngine.js";
+import { createHash } from "node:crypto";
+
+type ResumeOutline = NonNullable<Parameters<typeof runStoryEngine>[0]["resumeOutline"]>;
 
 /** At most this many `[lint]` notes are stored in review_notes (cap of 8 stays). */
 const MAX_LINT_NOTES = 3;
@@ -191,6 +194,7 @@ export class ScriptExecutor implements StageExecutor {
       let model = "";
       const engineMode = storyEngineForProject(project);
       let draftData: Extract<StoryEngineResult, { fallback: false }>["draft"] | null = null;
+      let resumeOutline: ResumeOutline | undefined;
       let engineFallbackNote: string | null = null;
       let engineQualityScore: number | null = null;
       let engineBlockingFacts = 0;
@@ -214,6 +218,23 @@ export class ScriptExecutor implements StageExecutor {
         const inputHash = scriptInputHash(project, applicableResearch?.input_hash);
 
         if (engineMode !== "off") {
+          // TASK-146 outline mode: an outline the user approved resumes here; no approval, or changed inputs, parks again.
+          const draftRow = this.sqlite.prepare("SELECT phase, outline, hook_candidates, input_hash FROM script_drafts WHERE project_id = ?")
+            .get(project.id) as { phase: string | null; outline: string | null; hook_candidates: string | null; input_hash: string | null } | undefined;
+          if (draftRow?.phase === "outline_approved" && draftRow.input_hash === inputHash && draftRow.outline && draftRow.hook_candidates) {
+            try {
+              const stored = JSON.parse(draftRow.hook_candidates) as { candidates?: unknown };
+              if (Array.isArray(stored.candidates)) {
+                resumeOutline = {
+                  outline: JSON.parse(draftRow.outline) as ResumeOutline["outline"],
+                  hookCandidates: stored.candidates as ResumeOutline["hookCandidates"],
+                };
+              }
+            } catch {
+              resumeOutline = undefined;
+            }
+          }
+          const outlineMode = (project.settings.scriptOutlineApproval ?? "off") === "outline";
           const engineResult = await runStoryEngine({
             project,
             applicableResearch: research,
@@ -229,7 +250,18 @@ export class ScriptExecutor implements StageExecutor {
             config: this.config,
             appRouting,
             inputHash,
-            cacheKeyExtra: inputHash,
+            // A resumed outline changes the narration, critic and rewrite keys; the key stays unchanged for every other run.
+            cacheKeyExtra: resumeOutline
+              ? `${inputHash}:approved:${createHash("sha256").update(JSON.stringify(resumeOutline)).digest("hex").slice(0, 16)}`
+              : inputHash,
+            parkAfterOutline: outlineMode && context.canPark === true,
+            resumeOutline,
+          }).catch((error: unknown) => {
+            // A stale approval must not block every retry: clear it so the next attempt parks a fresh outline.
+            if (error instanceof StageError && error.code === "APPROVED_OUTLINE_INVALID") {
+              this.sqlite.prepare("UPDATE script_drafts SET phase = NULL WHERE project_id = ? AND phase = 'outline_approved'").run(project.id);
+            }
+            throw error;
           });
 
           spentUsage.llmCalls += engineResult.spentCalls;
@@ -242,6 +274,42 @@ export class ScriptExecutor implements StageExecutor {
           }
 
           if (!engineResult.fallback) {
+            if (engineResult.parked) {
+              // TASK-146 outline mode: stop after the outline and hooks; SCRIPT resumes from narration once the user approves.
+              this.sqlite.prepare(
+                `INSERT INTO script_drafts (project_id, outline, hook_candidates, critique, critique_history, engine_mode, input_hash, updated_at, phase)
+                 VALUES (?, ?, ?, NULL, NULL, ?, ?, ?, 'outline_ready')
+                 ON CONFLICT(project_id) DO UPDATE SET
+                   outline = excluded.outline,
+                   hook_candidates = excluded.hook_candidates,
+                   critique = NULL,
+                   critique_history = NULL,
+                   engine_mode = excluded.engine_mode,
+                   input_hash = excluded.input_hash,
+                   updated_at = excluded.updated_at,
+                   phase = 'outline_ready'`,
+              ).run(
+                project.id,
+                JSON.stringify(engineResult.outline),
+                JSON.stringify({ candidates: engineResult.hookCandidates, chosenHookId: null, hookAssessments: [] }),
+                engineMode,
+                inputHash,
+                new Date().toISOString(),
+              );
+              context.recordUsage({
+                ...spentUsage,
+                costUsd: spentCost,
+                ...(engineResult.provider ? { provider: engineResult.provider } : {}),
+                ...(engineResult.model ? { model: engineResult.model } : {}),
+                ...(spentUsage.tokensUnknown ? { tokensUnknown: true } : {}),
+                features,
+                calls: spentUsage.calls,
+              });
+              usageRecorded = true;
+              const parkedMessage = "Outline ready for review";
+              context.reportProgress(90, parkedMessage);
+              return { message: parkedMessage, waitForUser: parkedMessage };
+            }
             script = engineResult.script;
             provider = engineResult.provider;
             model = engineResult.model;
@@ -577,8 +645,8 @@ export class ScriptExecutor implements StageExecutor {
       );
       if (draftData) {
         this.sqlite.prepare(
-          `INSERT INTO script_drafts (project_id, outline, hook_candidates, critique, critique_history, engine_mode, input_hash, updated_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+          `INSERT INTO script_drafts (project_id, outline, hook_candidates, critique, critique_history, engine_mode, input_hash, updated_at, phase)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
            ON CONFLICT(project_id) DO UPDATE SET
              outline = excluded.outline,
              hook_candidates = excluded.hook_candidates,
@@ -586,7 +654,8 @@ export class ScriptExecutor implements StageExecutor {
              critique_history = excluded.critique_history,
              engine_mode = excluded.engine_mode,
              input_hash = excluded.input_hash,
-             updated_at = excluded.updated_at`,
+             updated_at = excluded.updated_at,
+             phase = excluded.phase`,
         ).run(
           project.id,
           JSON.stringify(draftData.outline),
@@ -600,6 +669,7 @@ export class ScriptExecutor implements StageExecutor {
           engineMode,
           inputHash,
           new Date().toISOString(),
+          resumeOutline ? "outline_approved" : null,
         );
       } else {
         this.sqlite.prepare("DELETE FROM script_drafts WHERE project_id = ?").run(project.id);

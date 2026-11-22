@@ -38,7 +38,7 @@ import {
   type StoryOutline,
 } from "@vg/shared";
 import type { AppConfig } from "../../lib/config.js";
-import type { StageContext } from "../../pipeline/stageExecutor.js";
+import { StageError, type StageContext } from "../../pipeline/stageExecutor.js";
 import type { LlmCache } from "../../providers/llm/cache.js";
 import { estimateLlmCost } from "../../providers/llm/pricing.js";
 import type { LlmProviderRegistry, ResolvedLlmRoute } from "../../providers/llm/registry.js";
@@ -52,6 +52,22 @@ import { formatGuidance, projectRecipe } from "./prompt.js";
 export type StoryEngineResult =
   | {
       fallback: false;
+      /** TASK-146 outline mode: the run stopped after the outline and hooks, for the user to approve. */
+      parked: true;
+      outline: StoryOutline;
+      hookCandidates: HookCandidate[];
+      provider: string;
+      model: string;
+      spentCost: number;
+      spentCalls: number;
+      spentInputTokens: number;
+      spentOutputTokens: number;
+      callUsages: LlmCallUsage[];
+      featureCounts: Record<string, number>;
+    }
+  | {
+      fallback: false;
+      parked: false;
       script: Script;
       provider: string;
       model: string;
@@ -100,6 +116,10 @@ export async function runStoryEngine(params: {
   appRouting?: Parameters<LlmProviderRegistry["resolveTask"]>[2];
   inputHash: string;
   cacheKeyExtra: string;
+  /** TASK-146 outline mode: stop after step 1 (outline + hooks) and return them as `parked`. */
+  parkAfterOutline?: boolean;
+  /** TASK-146 outline mode: an approved outline resumes from step 2 (no outline call); it is validated again. */
+  resumeOutline?: { outline: StoryOutline; hookCandidates: HookCandidate[] };
 }): Promise<StoryEngineResult> {
   const {
     project,
@@ -117,6 +137,8 @@ export async function runStoryEngine(params: {
     appRouting,
     inputHash,
     cacheKeyExtra,
+    parkAfterOutline,
+    resumeOutline,
   } = params;
 
   let spentCost = 0;
@@ -207,7 +229,25 @@ export async function runStoryEngine(params: {
   let primaryProvider = outlineRoute.provider.id;
   let primaryModel = outlineRoute.model;
 
-  try {
+  if (resumeOutline) {
+    // An approved outline is trusted only after it passes the same checks as a fresh one. Failing here throws:
+    // it must not drop into the single-pass fallback below, which would ignore the approval.
+    const shape = StoryOutlineResponseSchema.safeParse({ outline: resumeOutline.outline, hooks: resumeOutline.hookCandidates });
+    // Both failures are typed so the executor can clear the stale approval; the next attempt then parks a fresh outline.
+    if (!shape.success) {
+      const issue = shape.error.issues[0];
+      throw new StageError(`Approved outline is no longer valid: ${issue ? `${issue.path.join(".")}: ${issue.message}` : "malformed outline"}`, "APPROVED_OUTLINE_INVALID", true);
+    }
+    const resumed = shape.data;
+    const resumeErrors = validateStoryOutline(
+      resumed,
+      recipe,
+      applicableResearch ?? { summary: project.topic, keyFacts: [], timeline: [], angles: [], outline: [], cautions: [] },
+      project.settings.targetDurationSec,
+    );
+    if (resumeErrors.length > 0) throw new StageError(`Approved outline is no longer valid: ${resumeErrors[0]}`, "APPROVED_OUTLINE_INVALID", true);
+    outlineResult = resumed;
+  } else try {
     const generatedOutline = await generateRoutedStructured({
       registry,
       route: outlineRoute,
@@ -297,6 +337,23 @@ export async function runStoryEngine(params: {
     return {
       fallback: true,
       fallbackNote: `[engine-fallback] Story outline generation failed (${error instanceof Error ? error.message : "error"}); fell back to single pass`,
+      spentCost,
+      spentCalls,
+      spentInputTokens,
+      spentOutputTokens,
+      callUsages,
+      featureCounts,
+    };
+  }
+
+  if (parkAfterOutline && !resumeOutline) {
+    return {
+      fallback: false,
+      parked: true,
+      outline: outlineResult.outline,
+      hookCandidates: outlineResult.hooks,
+      provider: primaryProvider,
+      model: primaryModel,
       spentCost,
       spentCalls,
       spentInputTokens,
@@ -754,6 +811,7 @@ export async function runStoryEngine(params: {
 
   return {
     fallback: false,
+    parked: false,
     script: finalWithDurations,
     provider: primaryProvider,
     model: primaryModel,

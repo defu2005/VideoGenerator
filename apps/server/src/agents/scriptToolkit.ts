@@ -346,7 +346,7 @@ export class AgentScriptToolkit {
       this.sqlite.prepare(
         `INSERT INTO script_drafts (project_id, outline, hook_candidates, critique, critique_history, engine_mode, input_hash, updated_at, author)
          VALUES (?, NULL, NULL, ?, ?, ?, ?, ?, ?)
-         ON CONFLICT(project_id) DO UPDATE SET outline = NULL, hook_candidates = NULL, critique = excluded.critique, critique_history = excluded.critique_history,
+         ON CONFLICT(project_id) DO UPDATE SET outline = NULL, hook_candidates = NULL, phase = NULL, critique = excluded.critique, critique_history = excluded.critique_history,
            engine_mode = excluded.engine_mode, input_hash = excluded.input_hash, updated_at = excluded.updated_at, author = excluded.author`,
       ).run(
         project.id,

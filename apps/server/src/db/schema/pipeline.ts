@@ -253,6 +253,8 @@ export const scriptDrafts = sqliteTable("script_drafts", {
   updatedAt: text("updated_at").notNull(),
   /** TASK-147d: "agent:<instance>" when an agent wrote the draft; null when the app did. */
   author: text("author"),
+  /** TASK-146 outline mode: "outline_ready" while parked for approval, "outline_approved" on resume, "done" after finish; null when never parked. */
+  phase: text("phase"),
 });
 
 export const scenes = sqliteTable("scenes", {

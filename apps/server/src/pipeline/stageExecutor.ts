@@ -5,6 +5,8 @@ export interface StageContext {
   project: Project;
   job: Job;
   signal: AbortSignal;
+  /** TASK-146: true only when the runner forwards `StageResult.waitForUser` to the orchestrator (the worker does). */
+  canPark?: boolean;
   reportProgress(pct: number, message?: string): void;
   recordUsage(usage: Partial<JobUsage>): void;
   /** TASK-125: optional facts for the overdue checker (child process alive, LLM call in flight, quota wait). */
@@ -12,7 +14,8 @@ export interface StageContext {
   logger: FastifyBaseLogger;
 }
 
-export type StageResult = { outputHash?: string; message?: string; renderId?: string };
+/** `waitForUser`: the executor parked the stage for the user (TASK-146 outline mode); the orchestrator holds the job open. */
+export type StageResult = { outputHash?: string; message?: string; renderId?: string; waitForUser?: string };
 
 export interface StageExecutor {
   stage: PipelineStage;

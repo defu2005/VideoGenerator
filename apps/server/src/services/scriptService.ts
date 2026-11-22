@@ -48,6 +48,11 @@ import { generateRoutedStructured } from "../providers/llm/structured.js";
 import { estimateLlmCost } from "../providers/llm/pricing.js";
 import { LlmError } from "../providers/llm/types.js";
 
+/** TASK-146: the outline is parked for approval or approved and still resuming. Hook and rescore writes must wait. */
+function isOutlinePending(phase: string | null | undefined): boolean {
+  return phase === "outline_ready" || phase === "outline_approved";
+}
+
 function isolateFirstSentence(originalNarration: string, candidateRevisedSentence: string): string {
   const match = originalNarration.match(/^([\s\S]*?[.!?])(\s+[\s\S]*)$/);
   if (!match) {
@@ -368,8 +373,11 @@ export class ScriptService {
       engine_mode: string;
       input_hash: string;
       updated_at: string;
+      phase: string | null;
     } | undefined;
     if (!draftRow || !draftRow.hook_candidates) throw new AppError(404, "DRAFT_NOT_FOUND", "Draft not found");
+    // TASK-146: while an outline awaits approval (or is approved and not yet finished), a hook switch would rewrite the draft hash and break the resume.
+    if (isOutlinePending(draftRow.phase)) throw new AppError(409, "OUTLINE_PENDING", "The outline is awaiting approval; hooks cannot be switched yet");
 
     let candidates: HookCandidate[] = [];
     let existingAssessments: HookAssessment[] | undefined = undefined;
@@ -483,6 +491,9 @@ export class ScriptService {
       if (!latest || latest.version !== originalVersion || scriptContentHash(JSON.parse(latest.data)) !== originalHash) {
         throw new AppError(409, "CONCURRENT_MODIFICATION", "Script was modified concurrently during hook switch");
       }
+      // Approval can land during the paid call above, so the phase is checked again inside the transaction.
+      const latestDraft = this.sqlite.prepare("SELECT phase FROM script_drafts WHERE project_id = ?").get(projectId) as { phase: string | null } | undefined;
+      if (isOutlinePending(latestDraft?.phase)) throw new AppError(409, "OUTLINE_PENDING", "The outline is awaiting approval; hooks cannot be switched yet");
 
       const version = originalVersion + 1;
       const research = this.sqlite.prepare("SELECT input_hash FROM research_notes WHERE project_id = ?").get(projectId) as { input_hash: string } | undefined;
@@ -566,7 +577,9 @@ export class ScriptService {
       engine_mode: string;
       input_hash: string;
       updated_at: string;
+      phase: string | null;
     } | undefined;
+    if (isOutlinePending(draftRow?.phase)) throw new AppError(409, "OUTLINE_PENDING", "The outline is awaiting approval; rescoring must wait");
 
     const researchRow = this.sqlite.prepare("SELECT data FROM research_notes WHERE project_id = ?").get(projectId) as { data: string } | undefined;
     const research = researchRow ? JSON.parse(researchRow.data) as ResearchNotes : undefined;
@@ -655,6 +668,9 @@ export class ScriptService {
       if (!latest || latest.version !== originalVersion || scriptContentHash(JSON.parse(latest.data)) !== originalHash) {
         throw new AppError(409, "CONCURRENT_MODIFICATION", "Script was modified concurrently during rescore");
       }
+      // Approval can land during the critic call above, so the phase is checked again inside the transaction.
+      const latestDraft = this.sqlite.prepare("SELECT phase FROM script_drafts WHERE project_id = ?").get(projectId) as { phase: string | null } | undefined;
+      if (isOutlinePending(latestDraft?.phase)) throw new AppError(409, "OUTLINE_PENDING", "The outline is awaiting approval; rescoring must wait");
 
       this.sqlite.prepare(
         "UPDATE scripts SET quality_score = ?, blocking_facts = ? WHERE project_id = ?",

@@ -497,6 +497,7 @@ export class JobWorker {
       },
       recordUsage: (usage: Partial<import("@vg/shared").JobUsage>) => this.orchestrator.recordUsage(job.id, usage),
       reportActivity: throttledActivity,
+      canPark: true,
     };
 
     try {
@@ -505,8 +506,9 @@ export class JobWorker {
         timeoutPromise,
       ]);
       if (this.stopping) return;
-      if (this.agentStages?.afterLocal(job)) return;
-      this.orchestrator.completeJob(job.id, result.message, result.renderId);
+      // A parked job (waitForUser) is not finished, so the agent after-local hook waits for the real completion.
+      if (!result.waitForUser && this.agentStages?.afterLocal(job)) return;
+      this.orchestrator.completeJob(job.id, result.message, result.renderId, result.waitForUser);
     } catch (error) {
       if (this.stopping) return;
       if (timedOut) {

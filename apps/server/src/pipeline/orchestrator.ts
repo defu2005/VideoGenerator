@@ -312,6 +312,8 @@ export class PipelineOrchestrator {
         jobId: null,
         error: null,
       });
+      // A user-written script replaces any parked outline, so the next SCRIPT run starts fresh.
+      if (stage === "SCRIPT") this.repository.sqlite.prepare("UPDATE script_drafts SET phase = NULL WHERE project_id = ?").run(projectId);
       if (options.invalidate !== false) markStaleFrom(this.repository, projectId, stage);
       if (this.repository.getRunMode(projectId) === "ALL") {
         this.repository.updateProject(projectId, { stage });
@@ -325,6 +327,11 @@ export class PipelineOrchestrator {
   }
 
   approveGate(projectId: string, gate: PipelineStage): PipelineState {
+    if (gate === "SCRIPT") {
+      // TASK-146 outline mode: SCRIPT parks for the outline, and approving it resumes SCRIPT from narration.
+      this.repository.atomic(() => this.approveOutline(projectId));
+      return this.requirePipeline(projectId);
+    }
     this.repository.atomic(() => {
       const project = this.requireProject(projectId);
       if (!GATES.includes(gate) || this.repository.getStage(projectId, gate).state !== "WAITING_USER") {
@@ -348,6 +355,61 @@ export class PipelineOrchestrator {
       }
     });
     return this.requirePipeline(projectId);
+  }
+
+  /** Approve a parked outline: SCRIPT resumes from narration with the stored outline (phase outline_approved). */
+  private approveOutline(projectId: string): void {
+    const project = this.requireProject(projectId);
+    if (this.repository.getStage(projectId, "SCRIPT").state !== "WAITING_USER" || this.scriptDraftPhase(projectId) !== "outline_ready") {
+      this.invalid("SCRIPT is not waiting for outline approval.");
+    }
+    const approval = this.canApprove(project, "SCRIPT_REVIEW");
+    if (!approval.allowed) this.invalid(approval.message);
+    this.repository.sqlite.prepare("UPDATE script_drafts SET phase = 'outline_approved' WHERE project_id = ?").run(projectId);
+    this.repository.updateStage(projectId, "SCRIPT", {
+      state: "PENDING",
+      progress: 0,
+      message: "Outline approved",
+      jobId: null,
+      error: null,
+    });
+    if (project.mode !== "MANUAL") {
+      this.repository.setRunMode(projectId, "ALL");
+      this.continueAll(projectId);
+    } else {
+      this.repository.setRunMode(projectId, null);
+      this.updateProjectStatus(projectId, "SCRIPT");
+    }
+  }
+
+  private scriptDraftPhase(projectId: string): string | null {
+    const row = this.repository.sqlite.prepare("SELECT phase FROM script_drafts WHERE project_id = ?").get(projectId) as { phase: string | null } | undefined;
+    return row?.phase ?? null;
+  }
+
+  /** True when this SCRIPT run resumed an approved outline; the draft phase moves to done in the same transaction. */
+  private finishApprovedOutline(projectId: string): boolean {
+    const changes = this.repository.sqlite.prepare("UPDATE script_drafts SET phase = 'done' WHERE project_id = ? AND phase = 'outline_approved'").run(projectId).changes;
+    return changes > 0;
+  }
+
+  /** The approved outline already was the review: SCRIPT_REVIEW passes with it, so the full script does not stop twice. */
+  private passScriptReviewAfterOutline(projectId: string): void {
+    // The setting may have changed while the outline was parked: "off" follows the off rule, "script" keeps the gate for the user.
+    if (this.requireProject(projectId).settings.scriptOutlineApproval !== "outline") {
+      this.passOffScriptReview(projectId);
+      return;
+    }
+    const gate = this.repository.getStage(projectId, "SCRIPT_REVIEW").state;
+    if (gate !== "PENDING" && gate !== "STALE") return;
+    this.repository.updateStage(projectId, "SCRIPT_REVIEW", {
+      state: "DONE",
+      inputVersion: this.inputVersions.inputVersion(projectId, "SCRIPT_REVIEW"),
+      progress: 100,
+      message: "Approved with the outline",
+      jobId: null,
+      error: null,
+    });
   }
 
   cancel(projectId: string, stage?: PipelineStage): PipelineState {
@@ -688,13 +750,14 @@ export class PipelineOrchestrator {
     }
   }
 
-  completeJob(jobId: string, message?: string, renderId?: string): void {
+  completeJob(jobId: string, message?: string, renderId?: string, waitMessage?: string): void {
     this.flushUsage(jobId);
     this.repository.atomic(() => {
       const job = this.repository.getJob(jobId);
       if (!job || job.status !== "RUNNING") return;
       const finishedAt = this.now().toISOString();
-      const profileId = this.breakerProfile(job);
+      // A parked job (outline mode) is not a finished attempt: no breaker success for it.
+      const profileId = waitMessage ? undefined : this.breakerProfile(job);
       if (profileId) this.recordBreakerResult(profileId, job, true);
       const inputVersion = isSideJobStage(job.stage) ? undefined : this.inputVersions.inputVersion(job.projectId, job.stage);
       const inputsChanged = !!inputVersion && (!!job.invalidatedAt || (!!job.inputVersion && job.inputVersion !== inputVersion));
@@ -723,6 +786,12 @@ export class PipelineOrchestrator {
         }
         return;
       }
+      if (waitMessage && job.stage === "SCRIPT") {
+        // The executor parked the outline for approval: the job is closed, the stage waits for the user.
+        this.waitForUser(job.projectId, "SCRIPT", waitMessage);
+        this.logger.info({ jobId, projectId: job.projectId, stage: job.stage, attempt: job.attempt }, "Script outline waiting for approval");
+        return;
+      }
       if (!isSideJobStage(job.stage)) this.recordStageQuality(job, finishedAt);
       this.publishStageCompletion(job.projectId, job.stage);
       if (isSideJobStage(job.stage)) {
@@ -737,7 +806,10 @@ export class PipelineOrchestrator {
         message: message ?? `${job.stage} completed`,
         error: null,
       });
-      if (job.stage === "SCRIPT") this.passOffScriptReview(job.projectId);
+      if (job.stage === "SCRIPT") {
+        if (this.finishApprovedOutline(job.projectId)) this.passScriptReviewAfterOutline(job.projectId);
+        else this.passOffScriptReview(job.projectId);
+      }
       const runMode = this.repository.getRunMode(job.projectId);
       if (runMode === "ALL") {
         this.repository.updateProject(job.projectId, { stage: job.stage });
@@ -1200,10 +1272,12 @@ export class PipelineOrchestrator {
    * waiting_approval only when a person must act.
    * AUTO / automation projects: a gate that should have passed and stopped is an unexpected auto stop → attention.
    * SCRIPT_REVIEW reaches here only when the user asked for it, so it always gets the approval notice.
+   * SCRIPT parks for the outline (TASK-146 outline mode) only when the user asked for it, so it is expected too.
    */
   private emitWaitingApproval(project: Project, gate: PipelineStage): void {
     const link = `${this.webBaseUrl()}/projects/${project.id}`;
-    const isAuto = gate !== "SCRIPT_REVIEW" && (project.mode === "AUTO" || Boolean(project.settings.autoRender));
+    const expectedStop = gate === "SCRIPT_REVIEW" || gate === "SCRIPT";
+    const isAuto = !expectedStop && (project.mode === "AUTO" || Boolean(project.settings.autoRender));
     const detail = this.repository.getStage(project.id, gate).message ?? undefined;
     if (isAuto) {
       safeNotify(this.notifications, {

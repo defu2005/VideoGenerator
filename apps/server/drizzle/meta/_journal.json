@@ -729,6 +729,13 @@
       "when": 1795198452556,
       "tag": "0103_acceptance_result",
       "breakpoints": true
+    },
+    {
+      "idx": 104,
+      "version": "6",
+      "when": 1795333610890,
+      "tag": "0104_script_draft_phase",
+      "breakpoints": true
     }
   ]
 }

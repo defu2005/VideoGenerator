@@ -1,0 +1,1 @@
+ALTER TABLE `script_drafts` ADD `phase` text;
