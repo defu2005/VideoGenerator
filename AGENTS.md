@@ -14,6 +14,18 @@ Short version of the rules:
 - Two branches (read `docs/BRANCHES.md`): `dev` is this checkout, where all coding happens, and its dev server uses the sandbox `data-dev/`. `product` is the worktree `../videoGenerator-product`, which runs the real app on `data/` (API 3100, web 5100). Never edit the product worktree. Code reaches it only through `deploy/product/promote.ps1` after review. Never point a dev server at the real `data/`.
 - Every feature, in either branch, needs docs before it is done or promoted (README rule 12). Users need the user guide section, the `featureMap` entry and a changelog line. Operating agents need the tool descriptions and a skill in `.agents/skills/`. Developers need the `ARCHITECTURE.md` changes. Never edit a migration that is already in the journal.
 
+## Delivery first (applies to every task)
+
+Goal: ship working software to the user as fast as possible.
+- Ship the smallest slice that works for the user. One task per commit.
+- Block only on data loss, secrets or security, wrong output on real data, or a red gate. Everything else is technical debt.
+- Debt is not fixed inside the current task. Add one line to `docs/TECH-DEBT.md`: what, `file:line`, risk, and a deadline if there is one.
+- A check that cannot change the ship decision is skipped, or logged as debt.
+- Before a destructive step, copy the files and proceed. Do not prove safety exhaustively first.
+- Run the gate (typecheck, build, tests) once per batch, not after every edit.
+- Debt with a date becomes the next task before that date.
+- Reports to the user are five lines at most: shipped, not shipped, debt added.
+
 ## Mandatory rule: advisor-first execution (required, applies to every task)
 
 **Advisor = brain. Executor = hands.**
