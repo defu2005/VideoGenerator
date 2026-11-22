@@ -59,6 +59,12 @@ Dự án đã qua gate giọng/hình và cần render; render lỗi; muốn xem 
 - Thiếu ảnh hoặc giọng: quay lại `video-hinh-anh-va-giong`.
 - Render thất bại lặp lại: đọc `video-xu-ly-su-co`, không bấm thử liên tục.
 
+## Chuyển động theo nhịp kể (TASK-146)
+
+- Cảnh đầu mỗi nhịp có chuyển động theo nhịp (`BEAT_MOTION`, trong `edit/plan.ts`). Cảnh mà LLM đã chọn chuyển động thì giữ nguyên.
+- Nhạc có đường âm lượng theo nhịp (`musicCurveExpr`): giảm dưới tension và reflection, hạ nhẹ trước reveal, nâng ở payoff. Đường này nhân với ducking giọng.
+- Chưa có: nhạc theo từng đoạn cảm xúc cho chế độ nhiều bản nhạc (`musicSegments` chưa được gọi). Director chưa nhận nhịp nên chưa có lý do override để đọc.
+
 ## Không được làm
 
 - Không tạo mã tham gia, không thu hồi máy worker, không đổi phiên bản mục tiêu; không có tool cho việc đó.

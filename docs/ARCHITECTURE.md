@@ -349,6 +349,43 @@ Nguyên tắc: code giữ sự thật (đo, kiểm, giới hạn), agent chọn 
 
 Chưa đối chiếu lại (từ v0.2 mục 11). Đã kiểm trong code: embedding gửi tối đa 32 văn bản mỗi lần gọi (`apps/server/src/retrieval/embeddings.ts:49`, `indexer.ts:159`); đoạn tri thức đưa vào prompt nằm trong khối `<kien_thuc_kenh untrusted="true">` với `contentType: "untrusted_context_data"` (`retrieval/context.ts:29`). Các bảng `retrieval_chunks`, `retrieval_uses`, `retrieval_exclusions`, job `retrieval_index`, dự phòng từ khóa khi lỗi hay hết quota, và quy tắc không lập chỉ mục dự án được bảo vệ chưa đối chiếu lại.
 
+### 9.6 Cổng duyệt dàn ý (TASK-146)
+
+- **Cài đặt:** `scriptOutlineApproval` = `off` | `outline` | `script`, mặc định `off` (`packages/shared/src/schemas/project.ts`). Có trên form dự án. Mặc định theo kênh nằm trong `ProfileDefaultBriefSchema` và chỉ đi qua API; trang hồ sơ chưa có ô chọn. Đổi cài đặt là đầu vào lúc chạy (`runtimeSettings` trong `apps/server/src/pipeline/inputVersion.ts`), nên không làm SCRIPT đã xong thành cũ. `BriefSettings` không có trường này; brief không có ô chọn.
+- **Cổng `SCRIPT_REVIEW`:** nằm sau SCRIPT và trước SCENE_PLAN trong `STAGE_ORDER` và `GATES`. Với `off`, `scriptReviewAutoPasses` trả đúng và orchestrator đánh dấu cổng đạt kèm ghi chú hệ thống, không chờ, không thông báo (`orchestrator.ts`, nhánh `SCRIPT_REVIEW`).
+- **Mức `outline`:** `scriptExecutor` dừng sau dàn ý và hook. Bản nháp ở `script_drafts.phase = outline_ready`; SCRIPT vào `WAITING_USER`. `orchestrator.approveOutline` đặt phase `outline_approved` rồi đưa SCRIPT về PENDING để viết lời dẫn. Khi viết xong, `finishApprovedOutline` đặt phase `done` và `passScriptReviewAfterOutline` đánh dấu `SCRIPT_REVIEW` đạt.
+- **Mức `script`:** SCRIPT chạy đủ rồi cổng chờ người duyệt, cùng API và thông báo với các cổng khác.
+- **Khoá khi chờ duyệt:** khi phase là `outline_ready`, đổi hook (`switchHook`) và chấm lại (`rescoreCritique`) bị từ chối bằng `OUTLINE_PENDING`, kiểm lại bên trong giao dịch. Nếu lượt gọi LLM đã trả tiền mà kết quả bị bỏ, app ghi một job FAILED với `llmCalls: 1` (TASK-145).
+- **Phạm vi duyệt:** duyệt dàn ý là `approve_gate` với `gate: "SCRIPT"` (web `ScriptTab.tsx` gửi `pipeline.action({ type: "approve", stage: "SCRIPT" })`; `orchestrator.approveGate` chuyển SCRIPT sang `approveOutline`). Chỉ hợp lệ khi SCRIPT ở `WAITING_USER` và phase là `outline_ready`; nếu không, báo lỗi. Nghi ngờ hồi quy: mọi lần duyệt gate SCRIPT đều đi qua nhánh này, kể cả khi không ở chế độ dàn ý (xem báo cáo TASK-146). Ở mức `script`, cổng cần duyệt là `SCRIPT_REVIEW`. Trong lúc chờ dàn ý, quy tắc sửa chất lượng và giữ cổng kịch bản bị bỏ qua (`pipelineActions.ts`, biến `outlineWaiting`). Gate không chạy trên dự án được bảo vệ.
+- **Agent:** agent không có tool nộp dàn ý (`script_submit_outline` chưa có). Việc duyệt cổng là của người dùng.
+- **Web:** không có nhãn cho `SCRIPT_REVIEW` trong `apps/web/src`; luồng duyệt ở mức `script` trên web chưa được kiểm.
+- **Chưa kiểm thử:** từ khi có quy tắc không chạy test, không test, typecheck hay build nào đã chạy. Toàn bộ suite và typecheck gốc chưa chạy trên cây cuối cùng. Xem `docs/tasks/TASK-146.report.md`.
+
+### 9.7 Nhịp kể, chuyển động và nhạc (TASK-146, các lát 1–5)
+
+- **Nhịp trên cảnh:** `beatPurpose`, `emotion`, `visualIntent`, `factIds` được sao chép khi lập cảnh (`packages/shared/src/scenes/planScenes.ts`, `beatFields`). Cảnh đầu tiên của mỗi phần dẫn bằng `visualIntent` trong truy vấn ảnh. Kiểm tra thị giác và khoá kết quả (`visualVerdict`) cũng đọc nhịp (`apps/server/src/timeline/sceneBeats.ts`). Bản dịch lấy nhịp từ kịch bản gốc (`translationService`).
+- **Chuyển động theo nhịp:** `BEAT_MOTION` và `applyBeatMotion` (`packages/shared/src/motion/beatMotion.ts`) được gọi trong `packages/shared/src/edit/plan.ts`. Cảnh đầu mỗi nhịp đổi sang chuyển động của nhịp, trừ khi trùng pan cùng chiều với cảnh liền kề hoặc punch_in quá gần (`strongMoveEverySec`). Cảnh mà LLM đã chọn chuyển động thì giữ nguyên. `COMPOSE_RENDER_VERSION` là 3 (`packages/shared/src/compose/schema.ts`).
+
+Bảng `BEAT_MOTION` (đúng như mã trong `beatMotion.ts`):
+
+| Nhịp | Chuyển động |
+|---|---|
+| hook | punch_in |
+| setup | pan_right |
+| tension | push_in |
+| reveal | punch_in |
+| evidence | push_in |
+| explanation | static |
+| payoff | pull_out |
+| reflection | pull_out |
+| transition | null (giữ vòng chuyển động) |
+| cta | static |
+
+Lệch so với spec TASK-146 (§3): `evidence` không có highlight hay chú thích đồ họa; `reveal` không có cắt cứng hay kiểm soát dissolve; `payoff` kéo ra ngay, không giữ trước; `reflection` không có dissolve hay cảnh dài hơn; `transition` là null thay vì theo preset; `tension` chưa rút ngắn cảnh về cuối nhịp; chưa có hệ số tốc độ theo cảm xúc. Tương tác với bảng `FREQUENCY` chưa được kiểm.
+- **Đường nhạc theo nhịp:** `musicCurveExpr` (`packages/shared/src/render/plan.ts`) tạo đường âm lượng theo nhịp: giảm dưới `tension` và `reflection`, hạ nhẹ trước `reveal`, nâng ở `payoff`. Đường này nhân thêm với ducking giọng. Mặc định vẫn là một bản nhạc.
+- **Chưa nối:** `musicSegments` (`packages/shared/src/music/segments.ts`) là hàm thuần, chưa có lời gọi trong pipeline. Vì vậy chưa có truy vấn nhạc theo từng đoạn cho chế độ nhiều bản nhạc.
+- **Chưa làm (lát 4):** director chưa nhận nhịp hay lý do override. `compose/director` không có tham chiếu nhịp. Spec ghi "chờ TASK-141", nhưng TASK-141 đã có `.done`; xem báo cáo để quyết định.
+
 ## 10. Render và sau render
 
 - Xem trước nhanh dùng cùng timeline, compose plan, template và biến GSAP ở độ phân giải thấp. Chromium lấy khung đúng thời điểm của shot; FFmpeg xử lý footage, ảnh tĩnh, ghép sheet và encode đoạn tối đa ba giây. Cache lưu facts cùng sidecar đo chữ.

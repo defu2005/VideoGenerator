@@ -437,6 +437,16 @@ export const featureMap: readonly FeatureEntry[] = [
     sinceTask: "TASK-145",
   },
   {
+    key: "outline-approval",
+    nameVi: "Duyệt dàn ý trước khi làm hình",
+    areaVi: "Quy trình",
+    summaryVi: "Cài đặt Duyệt kịch bản: Tắt (chạy tự động), Duyệt dàn ý trước khi viết (dừng sau dàn ý để bạn duyệt trước khi viết lời dẫn), hoặc Duyệt kịch bản sau khi viết.",
+    webRoutes: ["/projects/:id/script"],
+    docPage: "docs/user-guide/du-an-va-quy-trinh.md",
+    docAnchor: "duyet-dan-y",
+    sinceTask: "TASK-146",
+  },
+  {
     key: "project-scenes",
     nameVi: "Cảnh",
     areaVi: "Quy trình",

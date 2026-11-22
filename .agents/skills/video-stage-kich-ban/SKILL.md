@@ -82,6 +82,7 @@ Gọi `get_script_draft` với `projectId` để đọc:
    - 6 tiêu chí: cấu trúc (`structure`), mở đầu (`hook`), độ chính xác (`accuracy`), đọc tự nhiên (`ttsNatural`), dễ hình dung (`visualizable`), tính độc đáo (`originality`).
    - Cờ cảnh báo: `hookPaidOff` (kết bài có đền đáp lời hứa mở đầu không) và `unclosedLoops` (danh sách vòng tò mò chưa được đóng).
    - Danh sách lỗi từng phần (`sectionIssues`) kèm gợi ý sửa.
+4. **Dàn ý chờ duyệt (TASK-146):** khi dự án có `scriptOutlineApproval = outline` và bản nháp ở `phase = outline_ready`, dàn ý đang chờ người dùng duyệt trên tab Script. Đọc để tóm tắt cho người dùng; không tự đề xuất sửa beat, câu hỏi trung tâm hay hook thay họ. Việc duyệt là của người dùng.
 
 ## Đọc ghi chú [lint]
 

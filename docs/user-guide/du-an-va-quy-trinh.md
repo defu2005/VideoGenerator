@@ -103,6 +103,20 @@ Khi chạy chế độ ngân sách **BALANCED** hoặc **QUALITY** / **MAX**, b�
 4. **Giữ chắc khung kịch bản:**
    - Kịch bản giữ nguyên thứ tự các phần để bước phân cảnh và ghép giọng tiếp theo không bị lệch. Khi sửa tay, nên đảm bảo trả lời được câu hỏi mở đầu và đóng hết các ý còn dang dở trước phần outro.
 
+### Duyệt dàn ý trước khi làm hình {#duyet-dan-y}
+
+Cài đặt **Duyệt kịch bản** nằm trên form tạo hoặc sửa dự án, mục "Duyệt kịch bản trước khi qua bước sau". Hồ sơ kênh có mặc định cho cài đặt này, nhưng hiện chỉ đặt qua API; trang hồ sơ chưa có ô chọn. Có ba lựa chọn:
+
+- **Tắt: chạy tự động, không chờ duyệt** (mặc định): app không dừng. Cổng SCRIPT_REVIEW tự đạt, không chờ và không thông báo. Dự án chạy như trước.
+- **Duyệt dàn ý trước khi viết (không duyệt kịch bản sau)**: app dừng sau dàn ý và hook. Tab **Script** hiện bảng **Duyệt dàn ý** với nút **Duyệt dàn ý**. Khi bạn duyệt, app viết lời dẫn từ dàn ý đó. Trong lúc dàn ý còn chờ duyệt, app từ chối đổi hook và chấm lại điểm.
+- **Duyệt kịch bản sau khi viết**: app viết đủ kịch bản rồi dừng ở cổng để bạn duyệt. Bạn có thể sửa lời thoại trong trình soạn thảo trước khi duyệt.
+
+Lưu ý:
+
+- Bảng duyệt dàn ý hiện chỉ có nút duyệt. Chưa sửa được câu hỏi trung tâm hay khoảnh khắc của từng beat ở bước này.
+- Đổi cài đặt khi dự án đang chạy không làm bước SCRIPT đã xong thành cũ.
+- Agent không duyệt thay bạn. Cổng này chỉ do bạn duyệt, như các cổng khác.
+
 ## Cảnh {#canh}
 
 Dùng để xem storyboard. Tab **Scenes**.
@@ -125,6 +139,8 @@ Dùng để ghép hình, giọng, nhạc và phụ đề trước khi xuất fil
 4. Cổng cuối: **Approve All**.
 
 Chưa có timeline thì tab **Render** báo cần hoàn tất Timeline trước. **Approve All** cho phép render, chưa xuất file. Xuất file là nút **Render**.
+
+Theo nhịp kể (TASK-146): cảnh đầu mỗi nhịp có một chuyển động máy quay theo mục đích của nhịp (ví dụ đẩy vào ở căng thẳng, kéo ra ở kết quả). Nhạc giảm nhẹ ở đoạn căng thẳng và suy ngẫm, nâng ở đoạn kết. Khi nhiều bản nhạc chưa được nối theo đoạn, nhạc vẫn là một bản.
 
 ## Chat duyệt {#chat-duyet}
 

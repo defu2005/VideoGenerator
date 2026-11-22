@@ -1,5 +1,12 @@
 # Nhật ký thay đổi {#nhat-ky}
 
+## TASK-146
+
+- **Cổng duyệt dàn ý:** cài đặt Duyệt kịch bản theo dự án trên form dự án (Tắt: chạy tự động, không chờ duyệt; Duyệt dàn ý trước khi viết; Duyệt kịch bản sau khi viết). Mặc định theo kênh chỉ qua API, chưa có ô trên trang hồ sơ. Duyệt dàn ý dừng sau dàn ý để bạn duyệt trước khi viết lời dẫn; Duyệt kịch bản sau khi viết dừng sau khi có kịch bản đầy đủ. Xem [Duyệt dàn ý trước khi làm hình](du-an-va-quy-trinh.md#duyet-dan-y).
+- **Mặc định không đổi:** chế độ Tắt tự đạt cổng duyệt kịch bản, không chờ và không thông báo.
+- **Nhịp kể trên video:** cảnh đầu mỗi nhịp có chuyển động theo nhịp, và nhạc giảm hoặc nâng theo cảm xúc của nhịp (một bản nhạc mặc định). Truy vấn ảnh bắt đầu bằng ý hình của nhịp.
+- **Chưa có:** nhạc theo từng đoạn cảm xúc cho chế độ nhiều bản nhạc; director chưa nhận nhịp; tool agent `script_submit_outline` chưa có; chưa sửa được dàn ý; chưa có hệ số tốc độ theo cảm xúc cho chuyển động.
+
 ## TASK-148d
 
 - **Gợi ý truy vấn ảnh theo kênh:** agent tìm ảnh nhận các truy vấn đã đạt cho cùng chủ đề và cùng kênh (profile) của dự án. Kênh khác không thấy gợi ý của nhau. Công cụ `visual_cache_query` chỉ gợi ý cho dự án không gắn kênh.
