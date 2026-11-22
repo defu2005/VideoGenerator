@@ -128,7 +128,7 @@ export async function planProject(input: {
   const use = emptyFootageUse();
   const directives = input.directives ?? directivesForRecipe(input.recipeId, input.genres);
   const spans = await director.directScenes(prepared.map((item) => ({
-    scene: { sceneId: item.scene.sceneId, index: item.index, count: prepared.length, text: item.text, durationSec: item.scene.durationSec },
+    scene: { sceneId: item.scene.sceneId, index: item.index, count: prepared.length, text: item.text, durationSec: item.scene.durationSec, ...(item.scene.beat ? { beat: item.scene.beat } : {}) },
     words: item.words,
     recipeId: input.recipeId,
     directives,

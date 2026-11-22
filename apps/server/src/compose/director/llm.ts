@@ -72,7 +72,10 @@ const VARIANT_RULES = [
   "Change a look only when another one clearly fits the narration better. To do so, answer with {\"scenes\":[…],\"variants\":{\"<id>\":\"b\"}} instead of the bare array; variants is optional and a letter that is not offered is ignored.",
 ].join("\n");
 
-const HEADER = (language: string, aspect: string, recipe: string, directives: GenreDirectives, withVariants: boolean) => [
+/** TASK-146 4a: sent only when some scene has a story beat. Context only; the hard limits do not change. */
+const BEAT_RULE = "b, when present, is the story purpose of the scene's beat (hook, setup, reveal, evidence, tension, explanation, payoff, reflection, transition or cta). It is context only: the hard limits above stay the same, and no purpose maps to a kind.";
+
+const HEADER = (language: string, aspect: string, recipe: string, directives: GenreDirectives, withVariants: boolean, withBeats: boolean) => [
   `You improve the shot plan of a narrated video. Video language: ${language}. Aspect: ${aspect}. Format: ${recipe}.`,
   "Each line below is one scene as JSON: sceneId; n = number of words; f = 1 when stock footage is available; s = number of still images; text = the narration (word i is the i-th space-separated token, counted from 0; \"…\" marks trimmed text); rule = the current plan as [kind, wordStart, wordEnd] with k = kinetic_text, c = chart, f = footage, s = still, m = map, v = compare, q = quote_full, l = list_full. A chart in the plan is followed by its payload.",
   "Change a scene only when the change clearly makes the video better: put a kinetic_text on the line viewers must remember, a chart where the narration compares numbers, footage on spoken description. Keep the plan where it is already good.",
@@ -83,6 +86,7 @@ const HEADER = (language: string, aspect: string, recipe: string, directives: Ge
   "[{\"sceneId\":\"…\",\"spans\":[{\"kind\":\"footage\",\"words\":[0,9]},{\"kind\":\"kinetic_text\",\"words\":[9,14],\"payload\":{\"lines\":[\"…\"],\"emphasis\":[0],\"style\":\"bold\"}},{\"kind\":\"chart\",\"words\":[14,22],\"payload\":{\"chart\":\"bar\",\"title\":\"…\",\"labels\":[\"…\",\"…\"],\"values\":[1,2],\"unit\":\"%\"}}]}]",
   "kinetic_text style is bold, typewriter or stack; chart is bar, line or pie.",
   ...(withVariants ? [VARIANT_RULES] : []),
+  ...(withBeats ? [BEAT_RULE] : []),
 ].join("\n");
 
 function trimText(input: DirectorInput, maxChars: number): string {
@@ -127,7 +131,7 @@ export function buildDirectorPrompt(
 ): string {
   const first = inputs[0];
   const directives = first ? directivesOf(first) : directivesForRecipe("");
-  const header = HEADER(options.language ?? "vi", first?.aspect ?? "16:9", first?.recipeId ?? directives.genreId, directives, variants.length > 0);
+  const header = HEADER(options.language ?? "vi", first?.aspect ?? "16:9", first?.recipeId ?? directives.genreId, directives, variants.length > 0, inputs.some((input) => Boolean(input.scene.beat)));
   const line = (input: DirectorInput, index: number, text: string) => {
     const own = variants.filter((item) => item.shotId.startsWith(`${input.scene.sceneId}#`));
     return JSON.stringify({
@@ -137,6 +141,7 @@ export function buildDirectorPrompt(
       s: input.stills.length,
       text,
       rule: compactRule(rule[index] ?? []),
+      ...(input.scene.beat ? { b: input.scene.beat.purpose } : {}),
       ...(own.length > 0 ? { v: own.map((item) => ({ id: item.shotId, o: item.options.slice(0, LETTERS.length).map((option, i) => `${LETTERS[i]}:${option.key}`) })) } : {}),
     });
   };

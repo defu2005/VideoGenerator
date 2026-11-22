@@ -1,8 +1,9 @@
-import { directivesForRecipe, type AspectRatio, type GenreDirectives, type KindSpan, type SceneWord } from "@vg/shared";
+import { directivesForRecipe, type AspectRatio, type GenreDirectives, type KindSpan, type SceneWord, type TimelineScene } from "@vg/shared";
 import type { FootageHit } from "../providers/footage/types.js";
 
 export type DirectorInput = {
-  scene: { sceneId: string; index: number; count: number; text: string; durationSec: number };
+  /** TASK-146 4a: the story beat of the scene's section, set only when the script has one. The prompt reads it as context. */
+  scene: { sceneId: string; index: number; count: number; text: string; durationSec: number; beat?: NonNullable<TimelineScene["beat"]> };
   words: SceneWord[];
   /** Kept for the prompt and the logs. The director reads `directives`, never this id. */
   recipeId: string;
