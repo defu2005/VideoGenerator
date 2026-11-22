@@ -123,14 +123,26 @@ Facts read from code before the guard was written. Where the guard changed a fac
     3. An app-run SCRIPT job handed to an agent after approval (`stageService.ts` 69, 77, 83: config, error or quota, and reason) runs with phase `outline_approved`. The agent brief carries no outline, so the approved outline and its edits are dropped. The upsert sets phase NULL, so `finishApprovedOutline` (826) returns false and `passOffScriptReview` runs. This is the same gate outcome as the engine-off path above. **Recorded limit, no code; owner TASK-147d.**
   - **`outline_approved` window (closed by design, 2026-11-22):** `assertScriptNotParked` checks only `outline_ready`, and that is correct. In MANUAL, a SCRIPT run in `outline_approved` is how the approved outline is finished (`approveOutline`, `orchestrator.ts` 377–399), and the test in the guard file asserts it is not refused.
   - **Parked-run canPark (accepted known limit):** a mismatched SCRIPT run after approval re-parks, because `canPark` is true from the worker (`apps/server/src/jobs/worker.ts` 500) and `parkAfterOutline` is still true (`scriptExecutor.ts` 257). The saved outline edits are then replaced without the guard's confirm. Known limit, described above.
-  - **Other unguarded writers of `projects.settings`, listed, NOT read:** `projectService.ts` 453, `jobRepository.ts` 182, `projectRunner.ts` 133, `scriptExecutor.ts` 180 (format pick) and the `treatmentStore`, `knowledge/service`, `stageTimeoutOverrides` and `stageTimeoutPlan` writers. Each may change a hash input; none is checked here.
+  - **`projects.settings` writers, read 2026-11-22 (test: writes a `scriptInputHash` field AND can run while SCRIPT is parked):**
+    - `projectService.ts` `updateProject` (308–382): YES and YES. This is the known project-field limit above.
+    - `projectService.ts` `setArchived` (453): writes `archivedAt` only. No.
+    - `jobRepository.ts` `updateProject` (174–183): the generic settings write. Its callers are the rows here: `runCheckpoint.ts` 135, `routeAssign.ts` 88 and `modelAdvisor.ts` 781 (llm only).
+    - `runCheckpoint.ts` 135: the schema allows only `format`, `formatReason` and `treatment` (`runCheckpoint.ts` 24), and only on a SCRIPT DONE checkpoint. No hash field. No.
+    - `projectRunner.ts` 300 feeds that checkpoint. No.
+    - `treatmentStore.ts` 34: writes `treatment` only. No.
+    - `scriptExecutor.ts` 181–182: writes `format` and `formatReason`, inside a SCRIPT run. No.
+    - `knowledge/service.ts` 201: writes `knowledgeRev` only. No.
+    - `stageTimeoutOverrides.ts` 35 and `stageTimeoutPlan.ts` 72: write `stageTimeouts` only. No.
+    - Result: the only YES writer is `updateProject`, which is the known limit. The rest are recorded as not affecting the hash.
   - **`assertCanStart` (`orchestrator.ts` 1264–1272)** checks only active jobs, not stage state. A parked SCRIPT has no job (`jobId` null), so RESEARCH passes. Confirmed by read.
   - Entry points for a RESEARCH run: ScriptTab "Generate research" (`ScriptTab.tsx` 262, disabled by `active`, `isMutating` and `USER`, not by `outlinePending`), the PipelinePanel RESEARCH row, `repairActions.ts` 58, and agent `run_pipeline` with RESEARCH. Needs an advisor decision before any code.
 - **Read, hash rewrites during approval (2026-11-22):** `switchHook` and `rescoreCritique` refuse in both `outline_ready` and `outline_approved` (`scriptService.ts` 420–424, 539–540, 627–629, 719–720, through `isOutlinePending`). `editOutline` (`scriptService.ts` 368–400) updates only `outline`, and only in `outline_ready`. So no app path rewrites `input_hash` during approval except the upstream change above.
 - **Test fixture, read 2026-11-22:** `createPipelineHarness` (`apps/server/test/pipelineFixtures.ts`) accepts `mode` and `scriptOutlineApproval` (the latter goes into project settings) and returns `sqlite`, `repository`, `orchestrator`, `projectId` and `close`. Not run.
-- **Still open:**
-  - Advisor decision (2026-11-22): no RESEARCH guard and no project-field guard in this task. Open and recorded: the merged-mode RESEARCH overwrite while parked, the project-field and `researchMode`/`budget` edits that re-park and drop saved outline edits, the unread `projects.settings` writers listed above, and the agent-approved-outline loss (item 3 of the agent write path). Code changes this round: the merged early-return phase clear (`12157fa`) and the SCRIPT stage fence in `scriptToolkit.ts` (uncommitted until the advisor decides). Both are written and not run; the one final test run is still reserved for the user's permission.
-  - Test gap: the merged early-return clear has no test yet (see above). Everything in this section is written, not run.
+- **Known limits (decided, advisor 2026-11-22; no code in this task):**
+  - No RESEARCH guard and no project-field guard. The project-field and `researchMode`/`budget` edits (`updateProject`) can re-park SCRIPT and drop saved outline edits. The merged-mode RESEARCH overwrite while parked is also recorded here.
+  - The agent-approved-outline loss on handoff (item 3 of the agent write path). Owner TASK-147d.
+- **Open:**
+  - Tests, written and not run: the stage fence (`agentScriptToolkit.test.ts`, "refuses a submit whose leased job is not SCRIPT"; the fence test keeps its `STAGE_TOOL_MISMATCH` expectation because `holding` and `project` do not check the stage), the merged early-return clear (`12157fa`, no test at all), and the guard tests. The one final test run is reserved for the user's permission.
   - The reopen design (above). "Regenerate script" in `ScriptTab` is still shown while parked, but it now hits the same refusal and confirm.
   - Pre-existing, out of scope for this slice, kept recorded: a rerun of SCRIPT overwrites a hand-edited `scripts` row with `edited = false` (`scriptExecutor.ts:632`). Whether to confirm before that overwrite is not decided.
 

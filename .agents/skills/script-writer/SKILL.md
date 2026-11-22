@@ -37,7 +37,7 @@ tools:
    - `409 SCRIPT_EDITED`: người dùng đã sửa kịch bản trong app, không ghi đè. Gọi `stage_release` với `reason` đúng là `cannot_do` để việc chuyển về app.
    - `422 SCRIPT_AGENT_INVALID` từ `stage_complete`: đọc `problems`. Nếu có mục "không khớp đầu vào" thì gọi `stage_release` với `reason` là `research_changed`; các trường hợp khác gọi `stage_release` với `reason` là `cannot_do`.
    - `409 LEASE_LOST`: dừng ghi ngay.
-   - `422 STAGE_TOOL_MISMATCH`: việc đang giữ không phải viết kịch bản; không ghi gì. Gọi `stage_release` với `reason` là `cannot_do`.
+   - `422 STAGE_TOOL_MISMATCH`: không ghi gì; dùng công cụ đúng với stage đang giữ.
 
 ## Quy tắc
 
