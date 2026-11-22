@@ -113,6 +113,15 @@ export function ScriptTab({ project }: { project: Project }) {
       setActionError(error instanceof ApiRequestError ? error.message : error instanceof Error ? error.message : "Duyệt dàn ý thất bại");
     }
   };
+  // Script mode: the SCRIPT_REVIEW gate approves the written script (outline mode never leaves this gate waiting).
+  const approveScriptReview = async () => {
+    setActionError("");
+    try {
+      await pipeline.action({ type: "approve", stage: "SCRIPT_REVIEW" });
+    } catch (error) {
+      setActionError(error instanceof ApiRequestError ? error.message : error instanceof Error ? error.message : "Duyệt kịch bản thất bại");
+    }
+  };
   const save = async (script: Script) => {
     try {
       await scriptQuery.save(script);
@@ -134,6 +143,7 @@ export function ScriptTab({ project }: { project: Project }) {
 
   // A parked outline has no script yet, so the panel renders both with and without a script.
   const outlinePending = data.draft?.phase === "outline_ready" || data.draft?.phase === "outline_approved";
+  const scriptReviewAwaiting = stages.find((stage) => stage.stage === "SCRIPT_REVIEW")?.state === "WAITING_USER";
   const draftPanel = data.draft ? (
     <ScriptDraftPanel
       draft={data.draft}
@@ -185,6 +195,14 @@ export function ScriptTab({ project }: { project: Project }) {
         </section>
       )}
       {actionError && <p className="request-error" role="alert">{actionError}</p>}
+      {scriptReviewAwaiting && !outlinePending && (
+        <div className="outline-approval-panel" role="status">
+          <p><strong>Kịch bản đang chờ bạn duyệt.</strong> Bạn có thể đọc hoặc sửa lời thoại trước khi duyệt.</p>
+          <button className="button button-primary" type="button" disabled={pipeline.isMutating} onClick={() => void approveScriptReview()}>
+            {pipeline.isMutating ? "Đang duyệt..." : "Duyệt kịch bản"}
+          </button>
+        </div>
+      )}
       {!data.script && !editing && draftPanel}
       {!data.script && !editing && (
         <section className="panel script-empty-state">

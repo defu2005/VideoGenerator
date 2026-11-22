@@ -4,6 +4,7 @@ import { Link } from "react-router-dom";
 const SHORT: Record<string, string> = {
   RESEARCH: "Nghiên cứu",
   SCRIPT: "Kịch bản",
+  SCRIPT_REVIEW: "Duyệt kịch bản",
   SCENE_PLAN: "Phân cảnh",
   VISUAL_SEARCH: "Tìm ảnh",
   VISUAL_REVIEW: "Duyệt ảnh",
@@ -20,6 +21,7 @@ const NEXT: Record<string, { tab: string; label: string }> = {
   TOPIC: { tab: "overview", label: "Xem tổng quan" },
   RESEARCH: { tab: "script", label: "Mở nghiên cứu" },
   SCRIPT: { tab: "script", label: "Mở kịch bản" },
+  SCRIPT_REVIEW: { tab: "script", label: "Duyệt kịch bản" },
   SCENE_PLAN: { tab: "scenes", label: "Mở phân cảnh" },
   VISUAL_SEARCH: { tab: "visuals", label: "Mở hình ảnh" },
   VISUAL_REVIEW: { tab: "visuals", label: "Duyệt hình ảnh" },

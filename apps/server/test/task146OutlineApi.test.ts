@@ -68,7 +68,9 @@ describe("TASK-146 outline approval over HTTP", () => {
     const { project, sqlite } = await parkedOutline();
     await app.inject({ method: "POST", url: `/api/projects/${project.id}/pipeline/gates/SCRIPT/approve` });
     const second = await app.inject({ method: "POST", url: `/api/projects/${project.id}/pipeline/gates/SCRIPT/approve` });
-    expect(second.statusCode).toBeGreaterThanOrEqual(400);
+    // orchestrator.invalid(): AppError 409 INVALID_PIPELINE_STATE, since SCRIPT is no longer WAITING_USER and the phase is outline_approved.
+    expect({ status: second.statusCode, body: second.body }).toMatchObject({ status: 409 });
+    expect(second.body).toContain("INVALID_PIPELINE_STATE");
     const phase = (sqlite.prepare("SELECT phase FROM script_drafts WHERE project_id = ?").get(project.id) as { phase: string }).phase;
     expect(phase).toBe("outline_approved");
     sqlite.close();

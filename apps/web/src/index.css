@@ -1541,6 +1541,9 @@ fieldset.form-row > legend {
 .stage-error { color: #bd3f4b; }
 .stage-actions { display: flex; justify-content: flex-end; margin-top: 8px; }
 .stage-actions .button { min-height: 29px; font-size: 10px; }
+.outline-approval-panel { display: grid; gap: 8px; margin: 12px 0; padding: 12px; border: 1px solid #f0d28a; border-radius: 8px; background: #fff8e6; }
+.outline-approval-panel p { margin: 0; }
+.outline-approval-panel .button { justify-self: start; }
 .coming-soon { display: grid; min-height: 250px; justify-items: center; align-content: center; gap: 8px; }
 .coming-soon h2 { margin: 0; font-size: 16px; }
 .coming-soon p:not(.eyebrow) { margin: 0; color: #8b95a5; font-size: 11px; }
