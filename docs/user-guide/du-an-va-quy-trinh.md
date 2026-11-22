@@ -109,7 +109,7 @@ Cài đặt **Duyệt kịch bản** nằm trên form tạo hoặc sửa dự á
 
 - **Tắt: chạy tự động, không chờ duyệt** (mặc định): app không dừng. Cổng SCRIPT_REVIEW tự đạt, không chờ và không thông báo. Dự án chạy như trước.
 - **Duyệt dàn ý trước khi viết (không duyệt kịch bản sau)**: app dừng sau dàn ý và hook. Tab **Script** hiện bảng **Duyệt dàn ý** với nút **Duyệt dàn ý**. Khi bạn duyệt, app viết lời dẫn từ dàn ý đó. Trong lúc dàn ý còn chờ duyệt, app từ chối đổi hook và chấm lại điểm.
-- **Duyệt kịch bản sau khi viết**: app viết đủ kịch bản rồi dừng ở cổng để bạn duyệt. Bạn có thể sửa lời thoại trong trình soạn thảo trước khi duyệt.
+- **Duyệt kịch bản sau khi viết**: app viết đủ kịch bản rồi dừng ở cổng để bạn duyệt. Bạn có thể sửa lời thoại trong trình soạn thảo trước khi duyệt. Nút **Duyệt kịch bản** nằm trên tab **Script**, phía trên phần kịch bản.
 
 Lưu ý:
 
