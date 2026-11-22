@@ -39,6 +39,7 @@ powershell -File deploy/product/stop.ps1      # dừng cả hai và tiến trìn
 
 - MCP `video-agent` đọc khóa nội bộ trong `data\secrets\local-services.key` của checkout chính. Bản product dùng cùng `data\`, nên khóa khớp.
 - Đặt `VG_API_URL=http://127.0.0.1:3100` cho MCP khi điều khiển product. Không đặt thì MCP gọi `3001`, tức bản dev.
+- `/api/health` có trường `mcp.up`. Nó là `false` khi không đặt `VG_MCP_HEALTH_URL` (Windows product hiện không đặt, chỉ `deploy/docker/compose.control.yml` đặt `http://mcp:3002/health`), và cũng `false` khi URL đã đặt nhưng không trả lời. Vì vậy `false` trên product Windows nghĩa là "không theo dõi MCP", không phải MCP hỏng.
 - Đường dẫn OAuth callback của nền tảng theo cổng API: product là `http://127.0.0.1:3100/api/oauth/<nền tảng>/callback`. Khi nối thêm tài khoản Facebook, Instagram hoặc YouTube mới, thêm URI này vào ứng dụng của nền tảng. Tài khoản đã nối không cần làm lại.
 
 ## Đưa tính năng từ dev lên product
