@@ -82,7 +82,7 @@ Gọi `get_script_draft` với `projectId` để đọc:
    - 6 tiêu chí: cấu trúc (`structure`), mở đầu (`hook`), độ chính xác (`accuracy`), đọc tự nhiên (`ttsNatural`), dễ hình dung (`visualizable`), tính độc đáo (`originality`).
    - Cờ cảnh báo: `hookPaidOff` (kết bài có đền đáp lời hứa mở đầu không) và `unclosedLoops` (danh sách vòng tò mò chưa được đóng).
    - Danh sách lỗi từng phần (`sectionIssues`) kèm gợi ý sửa.
-4. **Dàn ý chờ duyệt (TASK-146):** khi dự án có `scriptOutlineApproval = outline` và bản nháp ở `phase = outline_ready`, dàn ý đang chờ người dùng duyệt trên tab Script. Đọc để tóm tắt cho người dùng; không tự đề xuất sửa beat, câu hỏi trung tâm hay hook thay họ. Người dùng có thể tự sửa câu hỏi trung tâm và khoảnh khắc từng nhịp trên tab Script trước khi duyệt (`POST /api/projects/:id/script/outline`); agent không có tool để nộp dàn ý. Việc duyệt và sửa là của người dùng.
+4. **Dàn ý chờ duyệt (TASK-146):** khi dự án có `scriptOutlineApproval = outline` và bản nháp ở `phase = outline_ready`, dàn ý đang chờ người dùng duyệt trên tab Script. Đọc để tóm tắt cho người dùng; không tự đề xuất sửa beat, câu hỏi trung tâm hay hook thay họ. Người dùng có thể tự sửa câu hỏi trung tâm và khoảnh khắc từng nhịp trên tab Script trước khi duyệt (`POST /api/projects/:id/script/outline`); agent không có tool để nộp dàn ý. Việc duyệt và sửa là của người dùng. Khi dàn ý đang chờ duyệt, `run_pipeline` với `stage: SCRIPT` và `repair_script` bị từ chối với `SCRIPT_OUTLINE_PENDING`: không ép chạy lại, báo người dùng để họ duyệt hoặc tự chạy lại và xác nhận ghi đè.
 
 ## Đọc ghi chú [lint]
 
@@ -105,9 +105,9 @@ Gọi `get_script_draft` với `projectId` để đọc:
    - **Muốn đổi cách mở đầu:** Nếu người dùng muốn hook khác hoặc hook hiện tại điểm tò mò thấp, đề xuất `switch_script_hook` với một trong các `hookCandidates` còn lại. Thao tác này tự động viết lại phần 1 cho ăn khớp mà không mất các phần sau.
    - **Người dùng đã sửa tay kịch bản:** Đề xuất `rescore_script` để cập nhật bảng điểm critique và kiểm tra xem có vòng lặp nào bị vỡ không.
    - **Có `blocking_facts`:** không tự sửa sự thật. Báo người dùng các ý cần xác minh.
-   - **Điểm thấp hoặc nhiều ghi chú `[lint]` cần sửa:** gọi `repair_script` (có rủi ro `confirm`, tạo việc chờ duyệt).
+   - **Điểm thấp hoặc nhiều ghi chú `[lint]` cần sửa:** gọi `repair_script` (có rủi ro `confirm`, tạo việc chờ duyệt). Không chạy được khi dàn ý đang chờ duyệt (`SCRIPT_OUTLINE_PENDING`).
    - **Đã sửa hai lần mà vẫn kém:** kiểm tra RESEARCH bằng skill `video-stage-nghien-cuu`. Nghiên cứu nghèo thì sửa kịch bản cũng không cứu được.
-   - **Lỗi định dạng hoặc lỗi model:** gọi `run_pipeline` với `stage: SCRIPT` một lần. Nếu vẫn lỗi, xem skill `video-mo-hinh-ai`.
+   - **Lỗi định dạng hoặc lỗi model:** gọi `run_pipeline` với `stage: SCRIPT` một lần (trừ khi dàn ý đang chờ duyệt, khi đó bị từ chối, xem mục 4). Nếu vẫn lỗi, xem skill `video-mo-hinh-ai`.
 5. **Khi nào phải chuyển tiếp cho người dùng (Escalate):**
    - Điểm chính xác `accuracy` < 3 hoặc có `blocking_facts`: có nguy cơ sai sự thật nghiêm trọng, dừng lại báo người dùng xác nhận thông tin.
    - `hookPaidOff` là `false` sau khi đã sửa: kịch bản mở đầu một đằng kết một nẻo, cần người dùng duyệt hoặc sửa tay kết bài.
@@ -126,6 +126,7 @@ Gọi `get_script_draft` với `projectId` để đọc:
 | Mã | Ý nghĩa | Cách xử lý |
 |---|---|---|
 | `SCRIPT_MISSING` | Bước sau cần kịch bản mà chưa có | Chạy SCRIPT trước |
+| `SCRIPT_OUTLINE_PENDING` | Dàn ý đang chờ duyệt; chạy SCRIPT sẽ ghi đè dàn ý (kể cả bản người dùng đã sửa) | Chờ người dùng duyệt hoặc tự chạy lại và xác nhận. Agent không ép |
 | `LLM_INVALID_OUTPUT` | Model trả sai định dạng | Chạy lại một lần |
 | `LLM_UNAVAILABLE` | Không gọi được model nào | Xem `get_llm_health` qua skill `video-mo-hinh-ai` |
 | `LLM_LIMIT_TOO_SMALL` | Giới hạn token quá nhỏ cho độ dài video | Báo người dùng chỉnh giới hạn |

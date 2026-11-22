@@ -40,7 +40,7 @@ Làm video mới, xem tiến độ, duyệt các gate (kịch bản, hình ảnh
 
 1. Xem danh sách bằng `list_projects`, chi tiết bằng `get_project`, từng bước bằng `get_pipeline`.
 2. Tạo mới bằng `create_project` (chủ đề, hồ sơ kênh, kiểu video). Không đoán hồ sơ; hỏi nếu thiếu.
-3. Chạy bằng `run_pipeline`. Đây là việc `confirm`: thành thẻ chờ duyệt, người dùng bấm duyệt.
+3. Chạy bằng `run_pipeline`. Đây là việc `confirm`: thành thẻ chờ duyệt, người dùng bấm duyệt. Riêng SCRIPT khi dàn ý đang chờ duyệt (`SCRIPT_OUTLINE_PENDING`) thì bị từ chối: chờ người dùng duyệt, không ép chạy lại (xem `video-stage-kich-ban`).
 4. Tại gate, đọc nội dung bước vừa xong rồi mới đề xuất `approve_gate`. Người dùng duyệt thẻ.
 5. Bước FAILED: đọc `get_events` và mã lỗi trước (xem `video-xu-ly-su-co`), sửa nguyên nhân rồi mới chạy lại (`retry_stage` qua MCP).
 6. Kịch bản kém: `repair_script`. Cảnh kém: `repair_scene`. Cả hai chỉ sửa phần bị đánh dấu.
