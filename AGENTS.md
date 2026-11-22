@@ -3,7 +3,7 @@
 Before any implementation work in this repo, read `docs/cursor/README.md`. It holds the project facts, the rules you must follow, the commands and the done checklist. Each upcoming task has its own guide in `docs/cursor/TASK-*.md`, and the README table gives the order.
 
 Short version of the rules:
-- Do not commit or push.
+- Do not commit or push unless the advisor decides it (user rule, 2026-11-22).
 - Do not touch `.env`, `.claude/`, `data/` or `scripts/`.
 - Add no new npm dependencies unless the guide allows it.
 - Open source first: build on the open-source projects that the guide names. Copy code only from permissive licences and keep the attribution. If you find a better project the guide did not list, report it instead of adding it (README rule 11).
@@ -25,6 +25,7 @@ Goal: ship working software to the user as fast as possible.
 - Run the gate (typecheck, build, tests) once per batch, not after every edit.
 - Debt with a date becomes the next task before that date.
 - Reports to the user are five lines at most: shipped, not shipped, debt added.
+- Advisor consultation is never skipped for speed. When the two compete, the advisor call wins.
 
 ## Mandatory rule: advisor-first execution (required, applies to every task)
 
