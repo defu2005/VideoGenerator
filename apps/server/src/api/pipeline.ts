@@ -60,8 +60,13 @@ export function registerPipelineRoutes(
         "This scene plan contains user edits. Confirm overwrite before regenerating it.",
       );
     }
-    if (stage === "SCRIPT") resetScriptReviseRound(repository.sqlite, id);
-    const pipeline = stage === undefined ? orchestrator.runAll(id) : orchestrator.runStage(id, stage);
+    if (stage === "SCRIPT") {
+      orchestrator.assertScriptNotParked(id, confirmOverwrite === true);
+      resetScriptReviseRound(repository.sqlite, id);
+    }
+    const pipeline = stage === undefined
+      ? orchestrator.runAll(id)
+      : orchestrator.runStage(id, stage, { confirmOverwrite: confirmOverwrite === true });
     return reply.code(202).send(pipeline);
   });
 

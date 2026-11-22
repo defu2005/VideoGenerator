@@ -96,11 +96,21 @@ export function ScriptTab({ project }: { project: Project }) {
   const lastScriptJob = scriptJobs.find((job) => job.stage === "SCRIPT");
   const scriptReviewEnabled = resolveBudget(project).scriptReview;
 
-  const run = async (stage?: "RESEARCH" | "SCRIPT") => {
+  const run = async (stage?: "RESEARCH" | "SCRIPT", confirmOverwrite = false) => {
     setActionError("");
     try {
-      await pipeline.action({ type: "run", ...(stage ? { stage } : {}) });
+      await pipeline.action({ type: "run", ...(stage ? { stage } : {}), ...(confirmOverwrite ? { confirmOverwrite: true } : {}) });
     } catch (error) {
+      // TASK-146: the server refuses to replace a parked outline without the user's confirmation.
+      if (error instanceof ApiRequestError && error.code === "SCRIPT_OUTLINE_PENDING" && !confirmOverwrite) {
+        const accepted = await ask({
+          title: "Ghi đè dàn ý đang chờ duyệt?",
+          message: "Chạy lại kịch bản sẽ thay dàn ý đang chờ, kể cả phần bạn đã sửa và lưu. Không hoàn tác được.",
+          confirmLabel: "Ghi đè",
+        });
+        if (accepted) await run(stage, true);
+        return;
+      }
       setActionError(error instanceof ApiRequestError ? error.message : error instanceof Error ? error.message : "Pipeline action failed");
     }
   };

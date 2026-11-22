@@ -5,6 +5,7 @@ import { ApiRequestError, apiRequest } from "../../services/apiClient";
 import { usePipeline } from "../../hooks/usePipeline";
 import { ErrorState } from "../../components/ErrorState";
 import { useToast } from "../../components/ui/Toast";
+import { useConfirm } from "../../components/useConfirm";
 import { Spinner } from "../../components/Spinner";
 import { pipelineJobs, stageBlocked } from "./activeJobs";
 import { StageRow } from "./StageRow";
@@ -25,6 +26,7 @@ export function PipelinePanel({ projectId, project }: { projectId: string; proje
     staleTime: 15_000,
   });
   const toast = useToast();
+  const { ask, dialog: confirmDialog } = useConfirm();
   const [actionError, setActionError] = useState("");
 
   if (pipeline.isPending) return <section className="panel pipeline-card"><Spinner label="Đang tải quy trình" /></section>;
@@ -58,6 +60,16 @@ export function PipelinePanel({ projectId, project }: { projectId: string; proje
             : "Đã xếp bước chạy";
       toast.success(message);
     } catch (error) {
+      // TASK-146: the server refuses to replace a parked outline without the user's confirmation.
+      if (error instanceof ApiRequestError && error.code === "SCRIPT_OUTLINE_PENDING" && action.type === "run" && !action.confirmOverwrite) {
+        const accepted = await ask({
+          title: "Ghi đè dàn ý đang chờ duyệt?",
+          message: "Chạy lại kịch bản sẽ thay dàn ý đang chờ, kể cả phần bạn đã sửa và lưu. Không hoàn tác được.",
+          confirmLabel: "Ghi đè",
+        });
+        if (accepted) await perform({ ...action, confirmOverwrite: true });
+        return;
+      }
       const message = error instanceof ApiRequestError ? error.message : error instanceof Error ? error.message : "Pipeline action failed";
       setActionError(message);
       toast.error(message);
@@ -138,6 +150,7 @@ export function PipelinePanel({ projectId, project }: { projectId: string; proje
           );
         })}
       </ol>
+      {confirmDialog}
     </section>
   );
 }

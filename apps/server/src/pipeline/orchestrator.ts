@@ -179,12 +179,28 @@ export class PipelineOrchestrator {
     return this.requirePipeline(projectId);
   }
 
-  runStage(projectId: string, stage: PipelineStage): PipelineState {
+  /**
+   * TASK-146: a SCRIPT run overwrites a parked outline (SCRIPT waiting, draft phase outline_ready), including the
+   * user's saved edits. Only a run that carries confirmOverwrite may do it; agents and repair actions never pass it.
+   */
+  assertScriptNotParked(projectId: string, confirmOverwrite: boolean): void {
+    if (confirmOverwrite) return;
+    if (this.repository.getStage(projectId, "SCRIPT").state !== "WAITING_USER") return;
+    if (this.scriptDraftPhase(projectId) !== "outline_ready") return;
+    throw new AppError(
+      409,
+      "SCRIPT_OUTLINE_PENDING",
+      "The script outline is waiting for approval. Running SCRIPT now replaces it, including your saved edits. Confirm to continue.",
+    );
+  }
+
+  runStage(projectId: string, stage: PipelineStage, options: { confirmOverwrite?: boolean } = {}): PipelineState {
     this.repository.atomic(() => {
       const project = this.requireProject(projectId);
       if (project.kind === "clip") this.invalid("Dự án clip không chạy pipeline.");
       this.repository.ensureStages(projectId);
       this.assertCanStart(projectId, stage);
+      if (stage === "SCRIPT") this.assertScriptNotParked(projectId, options.confirmOverwrite === true);
       const position = STAGE_ORDER.indexOf(stage);
       if (position < 0) this.invalid(`${stage} is not a runnable pipeline stage.`);
       if (isGate(stage)) this.invalid(`Review stage ${stage} must be approved, not run.`);
