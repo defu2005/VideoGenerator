@@ -193,7 +193,7 @@ export class ScriptExecutor implements StageExecutor {
       let provider = "";
       let model = "";
       const engineMode = storyEngineForProject(project);
-      let draftData: Extract<StoryEngineResult, { fallback: false }>["draft"] | null = null;
+      let draftData: Extract<StoryEngineResult, { fallback: false; parked: false }>["draft"] | null = null;
       let resumeOutline: ResumeOutline | undefined;
       let engineFallbackNote: string | null = null;
       let engineQualityScore: number | null = null;

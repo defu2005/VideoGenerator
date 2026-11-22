@@ -244,6 +244,10 @@ async function main() {
       engineTokens = engineRes.spentInputTokens + engineRes.spentOutputTokens;
       engineCritiqueScore = 50;
     } else {
+      // TASK-146: outline mode parks the engine for approval. The bench runs with the default (off), so a parked result is an error here.
+      if (engineRes.parked) {
+        throw new Error("bench: story engine parked for outline approval; bench needs scriptOutlineApproval off");
+      }
       engineScript = engineRes.script;
       engineTokens = engineRes.spentInputTokens + engineRes.spentOutputTokens;
       engineCritiqueScore = engineRes.draft.critique.total;
