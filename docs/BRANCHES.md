@@ -46,7 +46,7 @@ powershell -File deploy/product/stop.ps1      # dừng cả hai và tiến trìn
 
 Chỉ làm sau khi tính năng đã review xong (report `.done`, Claude review đạt) và đã commit trên `dev`.
 
-1. Trên `dev`: chạy đủ bộ test (`npm test`), `npm run typecheck`, `npm run build`. Tất cả đạt.
+1. Trên `dev`: chạy đủ bộ test (`npm test`), `npm run typecheck`, `npm run build`. Tất cả đạt. Bộ test của `apps/server` chạy bằng Node 24 (ABI 137, cùng binding `better-sqlite3` với bản product). Trên Node 26 suite này lỗi `better_sqlite3.node` hàng loạt. Gọi trực tiếp: `"<thư mục Node 24>\node.exe" node_modules\vitest\vitest.mjs run` trong `apps/server`. Đừng dùng `npx` để chọn Node: `npx` dùng node đi kèm chính nó.
 2. Kiểm tra docs của tính năng (mục "Quy tắc docs" bên dưới).
 3. Commit trên `dev`.
 4. Trong thư mục product:
