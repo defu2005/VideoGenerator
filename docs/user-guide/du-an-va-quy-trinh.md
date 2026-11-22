@@ -113,7 +113,7 @@ Cài đặt **Duyệt kịch bản** nằm trên form tạo hoặc sửa dự á
 
 Lưu ý:
 
-- Khi dàn ý đang chờ duyệt, bạn sửa được câu hỏi trung tâm và khoảnh khắc cụ thể của từng nhịp ngay trên bảng. Bấm **Lưu sửa dàn ý** để lưu; nút **Duyệt dàn ý** bị khoá khi còn thay đổi chưa lưu. **Hoàn tác** bỏ các sửa chưa lưu. Sau khi đã duyệt, dàn ý không mở lại để sửa trong bản này. **Cảnh báo:** khi dàn ý đang chờ duyệt, nút **Regenerate script** (khi dự án đã có kịch bản) và nút chạy bước SCRIPT trên dòng pipeline vẫn bấm được. Chạy lại SCRIPT lúc đó sẽ ghi đè dàn ý đang chờ, kể cả phần bạn đã sửa và lưu; hiện chưa có hộp xác nhận. Muốn giữ bản sửa, đừng bấm hai nút này trước khi duyệt.
+- Khi dàn ý đang chờ duyệt, bạn sửa được câu hỏi trung tâm và khoảnh khắc cụ thể của từng nhịp ngay trên bảng. Bấm **Lưu sửa dàn ý** để lưu; nút **Duyệt dàn ý** bị khoá khi còn thay đổi chưa lưu. **Hoàn tác** bỏ các sửa chưa lưu. Sau khi đã duyệt, dàn ý không mở lại để sửa trong bản này. **Cảnh báo:** khi dàn ý đang chờ duyệt, nút **Regenerate script** (khi dự án đã có kịch bản) và nút chạy bước SCRIPT trên dòng pipeline vẫn bấm được. Chạy lại SCRIPT lúc đó sẽ ghi đè dàn ý đang chờ, kể cả phần bạn đã sửa và lưu; hiện chưa có hộp xác nhận. Muốn giữ bản sửa, đừng bấm hai nút này trước khi duyệt. Bấm **Write my own script** rồi lưu kịch bản tay cũng kết thúc bước SCRIPT: dàn ý đang chờ bị bỏ, không cần duyệt.
 - Đổi cài đặt khi dự án đang chạy không làm bước SCRIPT đã xong thành cũ.
 - Agent không duyệt thay bạn. Cổng này chỉ do bạn duyệt, như các cổng khác.
 
